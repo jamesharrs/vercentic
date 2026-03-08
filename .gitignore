@@ -21,6 +21,8 @@ portal-renderer/dist/
 
 # Data (live DB - exclude from repo, seed instead)
 data/talentos.json
+!data/.gitkeep
+!data/talentos.sample.json
 
 # Patch/migration scripts (not needed in repo)
 patch-app.js

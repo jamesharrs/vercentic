@@ -12,11 +12,17 @@ let store = {
 
 function loadStore() {
   try {
+    // Ensure data directory exists (important on Railway/cloud)
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     if (fs.existsSync(DB_PATH)) {
       const loaded = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
       store = { ...store, ...loaded };
+    } else {
+      // Bootstrap empty DB file
+      fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+      console.log('Created fresh data store at', DB_PATH);
     }
-  } catch(e) { console.log('Starting fresh store'); }
+  } catch(e) { console.log('Starting fresh store:', e.message); }
 }
 
 function saveStore() {
