@@ -144,8 +144,8 @@ const EquipmentStep = ({ portal, onNext, onBack }) => {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:28 }}>
         {items.map(item => (
           <div key={item.id} onClick={() => toggle(item.id)}
-            style={{ background:'#fff', borderRadius:14, border:`2px solid ${selected[item.id] ? c.primary : '#E8ECF8'}`,
-              padding:'16px', cursor:'pointer', transition:'all .15s', background: selected[item.id] ? `${c.primary}08` : '#fff' }}>
+            style={{ background: selected[item.id] ? `${c.primary}08` : '#fff', borderRadius:14, border:`2px solid ${selected[item.id] ? c.primary : '#E8ECF8'}`,
+              padding:'16px', cursor:'pointer', transition:'all .15s' }}>
             <div style={{ fontSize:28, marginBottom:8 }}>{item.icon}</div>
             <div style={{ fontSize:13, fontWeight:700, color:'#0F1729', marginBottom:2 }}>{item.label}</div>
             <div style={{ fontSize:11, color:'#9DA8C7' }}>{item.desc}</div>
