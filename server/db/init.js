@@ -2,7 +2,9 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = path.join(__dirname, '../../data/talentos.json');
+// Allow Railway Volume path override via env var (set DATA_PATH=/data in Railway Variables)
+const DATA_DIR = process.env.DATA_PATH || path.join(__dirname, '../../data');
+const DB_PATH  = path.join(DATA_DIR, 'talentos.json');
 
 let store = {
   environments: [], objects: [], fields: [], records: [],
