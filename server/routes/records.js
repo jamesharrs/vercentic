@@ -56,9 +56,19 @@ router.post('/', (req, res) => {
 router.patch('/:id', (req, res) => {
   const record = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!record) return res.status(404).json({error:'Not found'});
-  const { data, updated_by } = req.body;
-  const updated = update('records', r=>r.id===req.params.id, {data:{...record.data,...data}});
-  insert('activity', {id:uuidv4(),environment_id:record.environment_id,record_id:record.id,object_id:record.object_id,action:'updated',actor:updated_by||null,changes:data,created_at:new Date().toISOString()});
+  const { data, updated_by, field_changes } = req.body;
+  const updated = update('records', r=>r.id===req.params.id, {data:{...record.data,...data},updated_at:new Date().toISOString()});
+  // If frontend sends rich field_changes array, log one event per field; otherwise log a generic updated event
+  if (field_changes && Array.isArray(field_changes) && field_changes.length > 0) {
+    for (const fc of field_changes) {
+      insert('activity', {id:uuidv4(),environment_id:record.environment_id,record_id:record.id,object_id:record.object_id,
+        action:'field_changed',actor:updated_by||null,
+        changes:{ field_key:fc.field_key, field_name:fc.field_name, old_value:fc.old_value, new_value:fc.new_value },
+        created_at:new Date().toISOString()});
+    }
+  } else {
+    insert('activity', {id:uuidv4(),environment_id:record.environment_id,record_id:record.id,object_id:record.object_id,action:'updated',actor:updated_by||null,changes:data,created_at:new Date().toISOString()});
+  }
   res.json(updated);
 });
 

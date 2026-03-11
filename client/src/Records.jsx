@@ -101,9 +101,9 @@ const Inp = ({ label, value, onChange, placeholder, type="text", disabled, multi
   <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
     {label && <label style={{ fontSize:12, fontWeight:600, color:C.text2 }}>{label}</label>}
     {multiline
-      ? <textarea rows={rows} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
+      ? <textarea rows={rows} value={value ?? ""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
           style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:disabled?"#f9fafb":C.surface, resize:"vertical", ...style }}/>
-      : <input type={type} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
+      : <input type={type} value={value ?? ""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
           style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:disabled?"#f9fafb":C.surface, width:"100%", boxSizing:"border-box", ...style }}/>
     }
   </div>
@@ -112,7 +112,7 @@ const Inp = ({ label, value, onChange, placeholder, type="text", disabled, multi
 const Sel = ({ label, value, onChange, options }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
     {label && <label style={{ fontSize:12, fontWeight:600, color:C.text2 }}>{label}</label>}
-    <select value={value||""} onChange={e=>onChange(e.target.value)}
+    <select value={value ?? ""} onChange={e=>onChange(e.target.value)}
       style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", background:C.surface, color:C.text1 }}>
       <option value="">— Select —</option>
       {options.map(o => <option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
@@ -596,13 +596,37 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   useEffect(() => { load(); setEditing({}); setTab("fields"); }, [record.id, load]);
 
-  const handleFieldEdit = (key, value) => setEditing(e=>({...e,[key]:value}));
-  const handleSaveField = async (key) => {
+  // Click-based types save immediately when value changes; text types wait for explicit save
+  const CLICK_SAVE_TYPES = ["select","multi_select","boolean","rating"];
+
+  const handleFieldEdit = (key, value, fieldType) => {
+    setEditing(e=>({...e,[key]:value}));
+    // For click-based types, save immediately
+    if (CLICK_SAVE_TYPES.includes(fieldType)) {
+      handleSaveFieldValue(key, record.data?.[key], value);
+    }
+  };
+
+  const handleSaveFieldValue = async (key, oldValue, newValue) => {
+    const oldStr = oldValue === null || oldValue === undefined ? "" : String(oldValue);
+    const newStr = newValue === null || newValue === undefined ? "" : String(newValue);
+    if (oldStr === newStr) { setEditing(e=>{ const n={...e}; delete n[key]; return n; }); return; }
     setSaving(true);
-    const updated = await api.patch(`/records/${record.id}`, { data: { [key]: editing[key] } });
+    const fieldDef = fields.find(f=>f.api_key===key);
+    const updated = await api.patch(`/records/${record.id}`, {
+      data: { [key]: newValue },
+      updated_by: "Admin",
+      field_changes: [{ field_key:key, field_name:fieldDef?.name||key, old_value:oldValue, new_value:newValue }]
+    });
     onUpdate(updated);
     setEditing(e=>{ const n={...e}; delete n[key]; return n; });
     setSaving(false);
+    load();
+  };
+
+  const handleSaveField = async (key, oldValue) => {
+    if (!editing.hasOwnProperty(key)) return;
+    await handleSaveFieldValue(key, oldValue, editing[key]);
   };
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
@@ -638,7 +662,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
 
   // ── Shared field panel (used in both slide-out tab and full-page left col) ──
-  const FieldsPanel = () => (
+  // Defined as JSX variable (not a component) so React never creates a new component
+  // boundary here — critical for inline editing state to survive re-renders
+  const fieldsPanelJSX = (
     <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
       {fieldSections.map(section => (
         <div key={section.label} style={{ marginBottom:20 }}>
@@ -646,28 +672,46 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <div style={{ background:"#f8f9fc", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}` }}>
             {section.fs.map((field,i) => {
               const isEditing = editing.hasOwnProperty(field.api_key);
-              const val = isEditing ? editing[field.api_key] : record.data?.[field.api_key];
+              const originalVal = record.data?.[field.api_key];
+              const val = isEditing ? editing[field.api_key] : originalVal;
+              const READONLY_KEYS = ["id","created_at","updated_at"];
+              const isReadonly = READONLY_KEYS.includes(field.api_key);
+              const isClickSave = CLICK_SAVE_TYPES.includes(field.field_type);
               return (
                 <div key={field.id}
                   style={{ display:"flex", alignItems:isEditing?"flex-start":"center", gap:12, padding:"11px 14px", borderBottom:i<section.fs.length-1?`1px solid ${C.border}`:"none", background:isEditing?"#fafbff":"transparent", transition:"background .1s" }}
-                  onMouseEnter={e=>{ if(!isEditing) { e.currentTarget.style.background="#f0f4ff"; const btn=e.currentTarget.querySelector(".edit-hint"); if(btn) btn.style.opacity=1; }}}
+                  onMouseEnter={e=>{ if(!isEditing&&!isReadonly) { e.currentTarget.style.background="#f0f4ff"; const btn=e.currentTarget.querySelector(".edit-hint"); if(btn) btn.style.opacity=1; }}}
                   onMouseLeave={e=>{ e.currentTarget.style.background=isEditing?"#fafbff":"transparent"; const btn=e.currentTarget.querySelector(".edit-hint"); if(btn) btn.style.opacity=0; }}>
                   <div style={{ width:130, fontSize:12, fontWeight:600, color:C.text3, flexShrink:0 }}>{field.name}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ flex:1, minWidth:0 }}
+                    onKeyDown={e=>{ if(isEditing && !isClickSave){ if(e.key==="Enter"&&field.field_type!=="textarea"&&field.field_type!=="rich_text") handleSaveField(field.api_key, originalVal); if(e.key==="Escape") setEditing(prev=>{const n={...prev};delete n[field.api_key];return n;}); }}}>
                     {isEditing
-                      ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key,v)}/>
-                      : <div onClick={()=>!field.is_system&&handleFieldEdit(field.api_key,val)} style={{ cursor:field.is_system?"default":"text", minHeight:22 }}>
+                      ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)}/>
+                      : <div onClick={()=>!isReadonly&&setEditing(e=>({...e,[field.api_key]:originalVal}))} style={{ cursor:isReadonly?"default":"text", minHeight:22 }}>
                           <FieldValue field={field} value={val}/>
                         </div>
                     }
                   </div>
-                  {isEditing ? (
-                    <div style={{ display:"flex", gap:4, flexShrink:0 }}>
-                      <Btn sz="sm" onClick={()=>handleSaveField(field.api_key)} disabled={saving}>Save</Btn>
-                      <Btn v="ghost" sz="sm" icon="x" onClick={()=>setEditing(e=>{const n={...e};delete n[field.api_key];return n;})}/>
+                  {isEditing && !isClickSave ? (
+                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                      <button onClick={()=>handleSaveField(field.api_key, originalVal)}
+                        style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 10px", borderRadius:7, border:`1.5px solid ${C.accent}`, background:C.accentLight, color:C.accent, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F }}>
+                        <Ic n="check" s={12} c={C.accent}/> Save
+                      </button>
+                      <button onClick={()=>setEditing(e=>{const n={...e};delete n[field.api_key];return n;})}
+                        style={{ background:"none", border:`1px solid ${C.border}`, cursor:"pointer", color:C.text3, padding:"5px 8px", display:"flex", alignItems:"center", borderRadius:7, fontFamily:F }}
+                        title="Cancel">
+                        <Ic n="x" s={12} c={C.text3}/>
+                      </button>
                     </div>
-                  ) : !field.is_system && (
-                    <button className="edit-hint" onClick={()=>handleFieldEdit(field.api_key,val)}
+                  ) : isEditing && isClickSave ? (
+                    <button onClick={()=>setEditing(e=>{const n={...e};delete n[field.api_key];return n;})}
+                      style={{ background:"none", border:`1px solid ${C.border}`, cursor:"pointer", color:C.text3, padding:"5px 8px", display:"flex", alignItems:"center", borderRadius:7, fontFamily:F, flexShrink:0 }}
+                      title="Close">
+                      <Ic n="x" s={12} c={C.text3}/>
+                    </button>
+                  ) : !isReadonly && (
+                    <button className="edit-hint" onClick={()=>setEditing(e=>({...e,[field.api_key]:originalVal}))}
                       style={{ background:"none", border:"none", cursor:"pointer", color:C.accent, opacity:0, padding:"3px 6px", display:"flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600, borderRadius:6, transition:"opacity .1s", flexShrink:0, fontFamily:F }}>
                       <Ic n="edit" s={12} c={C.accent}/> Edit
                     </button>
@@ -748,25 +792,54 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       <div>
         {activity.length===0
           ? <div style={{ textAlign:"center", padding:"28px 0", color:C.text3, fontSize:13 }}>No activity yet</div>
-          : activity.map(event=>(
-            <div key={event.id} style={{ display:"flex", gap:12, marginBottom:14 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:event.action==="created"?"#f0fdf4":C.accentLight, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <Ic n={event.action==="created"?"plus":"edit"} s={12} c={event.action==="created"?"#16a34a":C.accent}/>
-              </div>
-              <div style={{ flex:1, paddingTop:4 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C.text1, textTransform:"capitalize" }}>{event.action}</div>
-                {event.actor && <div style={{ fontSize:11, color:C.text3 }}>by {event.actor}</div>}
-                <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{new Date(event.created_at).toLocaleString()}</div>
-                {event.changes && Object.keys(event.changes).length>0 && (
-                  <div style={{ marginTop:6, background:"#f8f9fc", borderRadius:8, padding:"8px 10px" }}>
-                    {Object.entries(event.changes).slice(0,5).map(([k,v])=>(
-                      <div key={k} style={{ fontSize:11, color:C.text2 }}><strong>{k}:</strong> {String(v)?.slice(0,60)}</div>
-                    ))}
+          : activity.map(event=>{
+            const isFieldChange = event.action==="field_changed";
+            const isCreated = event.action==="created";
+            const ch = event.changes||{};
+            const iconName = isCreated?"plus":isFieldChange?"edit":"activity";
+            const iconColor = isCreated?"#16a34a":isFieldChange?C.accent:"#6366f1";
+            const iconBg = isCreated?"#f0fdf4":isFieldChange?C.accentLight:"#eef2ff";
+            const formatVal = v => {
+              if(v===null||v===undefined||v==="") return <em style={{color:C.text3}}>empty</em>;
+              if(Array.isArray(v)) return v.join(", ")||<em style={{color:C.text3}}>empty</em>;
+              return String(v);
+            };
+            return (
+              <div key={event.id} style={{ display:"flex", gap:10, marginBottom:16, paddingBottom:16, borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ width:30, height:30, borderRadius:"50%", background:iconBg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2 }}>
+                  <Ic n={iconName} s={13} c={iconColor}/>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:2 }}>
+                    {event.actor
+                      ? <><Avatar name={event.actor} size={18} color={C.accent}/><span style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{event.actor}</span></>
+                      : <span style={{ fontSize:12, fontWeight:700, color:C.text1 }}>System</span>
+                    }
+                    <span style={{ fontSize:12, color:C.text3 }}>
+                      {isFieldChange ? `updated ${ch.field_name||ch.field_key}` : isCreated ? "created this record" : "updated this record"}
+                    </span>
+                    <span style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>
+                      {new Date(event.created_at).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+                    </span>
                   </div>
-                )}
+                  {isFieldChange && (
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, padding:"7px 10px", background:"#f8f9fc", borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, flexWrap:"wrap" }}>
+                      <span style={{ color:C.text3, padding:"2px 7px", borderRadius:6, background:"#fee2e2", color:"#b91c1c", fontWeight:500, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{formatVal(ch.old_value)}</span>
+                      <span style={{ color:C.text3 }}>→</span>
+                      <span style={{ color:C.text3, padding:"2px 7px", borderRadius:6, background:"#dcfce7", color:"#15803d", fontWeight:500, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{formatVal(ch.new_value)}</span>
+                    </div>
+                  )}
+                  {!isFieldChange && !isCreated && ch && Object.keys(ch).length>0 && (
+                    <div style={{ marginTop:6, background:"#f8f9fc", borderRadius:8, padding:"6px 10px", fontSize:11, color:C.text2 }}>
+                      {Object.entries(ch).slice(0,3).map(([k,v])=>(
+                        <div key={k}><strong>{k}:</strong> {String(v)?.slice(0,60)}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         }
       </div>
     );
@@ -855,7 +928,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           ))}
         </div>
         <div style={{ flex:1, overflow:"auto", padding:"24px" }}>
-          {tab==="fields"  && <FieldsPanel/>}
+          {tab==="fields"  && fieldsPanelJSX}
           {tab!=="fields"  && <PanelContent id={tab}/>}
         </div>
       </div>
@@ -1072,7 +1145,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               <span style={{ fontSize:11, color:C.text3 }}>Click any field to edit</span>
             </div>
             <div style={{ padding:"16px" }}>
-              <FieldsPanel/>
+              {fieldsPanelJSX}
             </div>
           </div>
         </div>
