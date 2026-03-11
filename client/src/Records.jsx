@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
-import { RecordPipelinePanel, LinkedRecordsPanel } from "./Workflows.jsx";
+import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 
 const api = {
   get:    p     => fetch(`/api${p}`).then(r=>r.json()),
@@ -1032,6 +1032,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden", background:"#F4F6FB" }}>
       <FunctionalityBar/>
+      {/* Full-width Linked People widget — only shown on non-Person objects */}
+      {objectName !== "Person" && (
+        <div style={{ flexShrink:0, borderBottom:`1px solid ${C.border}` }}>
+          <PeoplePipelineWidget record={record} objectId={record.object_id} environment={environment} onNavigate={onNavigate}/>
+        </div>
+      )}
       {/* 2-col body */}
       <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", userSelect:draggingCol.current?"none":"auto" }}>
 

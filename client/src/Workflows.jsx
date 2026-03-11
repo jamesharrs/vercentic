@@ -317,7 +317,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
                 {[
                   { value:"automation",  label:"⚡ Automation",    desc:"Run automated steps on records" },
                   { value:"pipeline",    label:"📋 Record Pipeline", desc:"Drive a record's status/stage" },
-                  { value:"people_link", label:"🔗 People Pipeline", desc:"Link people to records with stages" },
+                  { value:"people_link", label:"👥 Linked Person", desc:"Define stages for people linked to this record" },
                 ].map(t => (
                   <button key={t.value} onClick={()=>setWfType(t.value)}
                     style={{ flex:1, padding:"10px 12px", borderRadius:10, border:`2px solid ${wfType===t.value?C.accent:C.border}`,
@@ -617,7 +617,7 @@ export default function WorkflowsPage({ environment }) {
                     <span style={{ fontSize: 15, fontWeight: 700, color: C.text1 }}>{wf.name}</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color, background: `${color}15`, padding: "2px 8px", borderRadius: 99 }}>{objName(wf.object_id)}</span>
                     {wf.workflow_type === "pipeline"    && <span style={{ fontSize:11, color:"#0ca678", background:"#ecfdf5", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>📋 Pipeline</span>}
-                    {wf.workflow_type === "people_link" && <span style={{ fontSize:11, color:"#7c3aed", background:"#f5f3ff", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>🔗 People</span>}
+                    {wf.workflow_type === "people_link" && <span style={{ fontSize:11, color:"#7c3aed", background:"#f5f3ff", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>👥 Linked Person</span>}
                     {!wf.active && <span style={{ fontSize: 11, color: C.text3, background: "#f3f4f6", padding: "2px 8px", borderRadius: 99 }}>Inactive</span>}
                   </div>
                   {wf.description && <div style={{ fontSize: 12, color: C.text3, marginBottom: 6 }}>{wf.description}</div>}
@@ -679,37 +679,27 @@ export default function WorkflowsPage({ environment }) {
 
 
 // ─── RecordPipelinePanel ──────────────────────────────────────────────────────
-// On an object record (e.g. Job): shows two sections
-//   1. Record Pipeline  — drives the record's own status
-//   2. People Pipeline  — stage track with counts; click stage → inline list; add person
+// Shown inside the Pipeline panel on any object record.
+// Only handles Record Pipeline (drives the record's own status through stages).
+// People linking is handled by PeoplePipelineWidget at the top of the record page.
 export function RecordPipelinePanel({ record, objectId, environment, objectName, onNavigate }) {
-  const [tab, setTab]                   = useState("pipeline");
   const [assignments, setAssignments]   = useState([]);
   const [allWorkflows, setAllWorkflows] = useState([]);
-  const [peopleLinks, setPeopleLinks]   = useState([]);
-  const [personRecords, setPersonRecords] = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [selectedStage, setSelectedStage] = useState(null); // stage id or "__all__"
-  const [addingPerson, setAddingPerson] = useState(false);
-  const [personSearch, setPersonSearch] = useState("");
   const [saving, setSaving]             = useState(false);
   const [stageSaved, setStageSaved]     = useState(false);
 
-  const pipelineWf   = assignments.find(a => a.type === "pipeline")?.workflow;
-  const peopleLinkWf = assignments.find(a => a.type === "people_link")?.workflow;
-  const plSteps      = peopleLinkWf?.steps || [];
+  const pipelineWf = assignments.find(a => a.type === "pipeline")?.workflow;
 
   const load = async () => {
     if (!record?.id || !environment?.id) return;
     setLoading(true);
-    const [asgn, wfs, links] = await Promise.all([
+    const [asgn, wfs] = await Promise.all([
       api.get(`/workflows/assignments?record_id=${record.id}`),
       api.get(`/workflows?environment_id=${environment.id}`),
-      api.get(`/workflows/people-links?target_record_id=${record.id}`),
     ]);
     setAssignments(Array.isArray(asgn) ? asgn : []);
     setAllWorkflows(Array.isArray(wfs)  ? wfs  : []);
-    setPeopleLinks(Array.isArray(links) ? links : []);
     setLoading(false);
   };
 
@@ -729,6 +719,105 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
     setTimeout(() => setStageSaved(false), 1800);
   };
 
+  const pipelineOptions = allWorkflows.filter(w => w.workflow_type === "pipeline" && w.object_id === objectId && !w.deleted_at);
+
+  if (loading) return <div style={{ padding:"20px 0", textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>;
+
+  const tabStyle = (active) => ({
+    padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight: active ? 700 : 500,
+    border:`1.5px solid ${active ? C.accent : C.border}`,
+    background: active ? C.accentLight : "transparent",
+    color: active ? C.accent : C.text2, cursor:"pointer", fontFamily:F, transition:"all .1s",
+  });
+
+  return (
+    <div style={{ fontFamily:F, display:"flex", flexDirection:"column", gap:14 }}>
+      <div style={{ fontSize:12, color:C.text3 }}>Assign a pipeline to drive this record's status through defined stages.</div>
+      <div>
+        <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:"uppercase", letterSpacing:".06em" }}>Pipeline Workflow</div>
+        <select value={pipelineWf?.id||""} onChange={e=>assignWorkflow("pipeline", e.target.value)} disabled={saving}
+          style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${C.border}`, borderRadius:9, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+          <option value="">— None —</option>
+          {pipelineOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        {pipelineOptions.length === 0 && (
+          <div style={{ fontSize:11, color:C.text3, marginTop:6 }}>No pipeline workflows yet — create one in Settings → Workflows with type "Record Pipeline".</div>
+        )}
+      </div>
+      {pipelineWf?.steps?.length > 0 && (
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:8, textTransform:"uppercase", letterSpacing:".06em" }}>
+            Current Stage {stageSaved && <span style={{ color:C.green, fontWeight:600, textTransform:"none", marginLeft:6 }}>✓ Saved</span>}
+          </div>
+          <div style={{ display:"flex", borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.border}` }}>
+            {pipelineWf.steps.map((step, i) => {
+              const isCurrent = record.data?.status === step.name;
+              const stageIdx  = pipelineWf.steps.findIndex(s => s.name === record.data?.status);
+              const isPast    = stageIdx > i;
+              return (
+                <button key={step.id} onClick={() => setRecordStage(step.name)}
+                  style={{ flex:1, padding:"10px 4px", background: isCurrent ? C.accent : isPast ? `${C.accent}22` : "#f9fafb",
+                    border:"none", borderRight: i < pipelineWf.steps.length-1 ? `1px solid ${C.border}` : "none",
+                    color: isCurrent ? "white" : isPast ? C.accent : C.text3,
+                    cursor:"pointer", fontFamily:F, fontSize:11, fontWeight: isCurrent ? 700 : 500,
+                    textAlign:"center", transition:"all .12s", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                  <span style={{ width:7, height:7, borderRadius:"50%", background: isCurrent?"white": isPast?C.accent:C.border }}/>
+                  <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%", padding:"0 2px" }}>
+                    {step.name||`Stage ${i+1}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PeoplePipelineWidget ─────────────────────────────────────────────────────
+// Shown at the TOP of any non-Person object record (e.g. Job).
+// Displays the Linked Person workflow stage track with counts; clicking a stage
+// expands an inline list of people in that stage. Workflow selector shown if
+// multiple Linked Person workflows are available for this object.
+export function PeoplePipelineWidget({ record, objectId, environment, onNavigate }) {
+  const [assignments, setAssignments]     = useState([]);
+  const [allWorkflows, setAllWorkflows]   = useState([]);
+  const [peopleLinks, setPeopleLinks]     = useState([]);
+  const [personRecords, setPersonRecords] = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [selectedStage, setSelectedStage] = useState(null);
+  const [addingPerson, setAddingPerson]   = useState(false);
+  const [personSearch, setPersonSearch]   = useState("");
+  const [saving, setSaving]               = useState(false);
+
+  const peopleLinkWf = assignments.find(a => a.type === "people_link")?.workflow;
+  const plSteps      = peopleLinkWf?.steps || [];
+  const hasStages    = plSteps.length > 0;
+
+  const load = async () => {
+    if (!record?.id || !environment?.id) return;
+    setLoading(true);
+    const [asgn, wfs, links] = await Promise.all([
+      api.get(`/workflows/assignments?record_id=${record.id}`),
+      api.get(`/workflows?environment_id=${environment.id}`),
+      api.get(`/workflows/people-links?target_record_id=${record.id}`),
+    ]);
+    setAssignments(Array.isArray(asgn) ? asgn : []);
+    setAllWorkflows(Array.isArray(wfs)  ? wfs  : []);
+    setPeopleLinks(Array.isArray(links) ? links : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [record?.id, environment?.id]);
+
+  const assignWorkflow = async (workflow_id) => {
+    setSaving(true);
+    await api.put("/workflows/assignments", { record_id: record.id, workflow_id: workflow_id || null, type: "people_link" });
+    await load();
+    setSaving(false);
+  };
+
   const loadPersonRecords = async () => {
     const objs = await api.get(`/objects?environment_id=${environment.id}`);
     const personObj = (Array.isArray(objs) ? objs : []).find(o => o.name === "Person");
@@ -738,6 +827,7 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
   };
 
   const openAddPerson = async () => {
+    if (!hasStages) return;
     await loadPersonRecords();
     setPersonSearch("");
     setAddingPerson(true);
@@ -745,8 +835,7 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
 
   const linkPerson = async (personRecordId) => {
     const firstStep = plSteps[0];
-    const existing = peopleLinks.find(l => l.person_record_id === personRecordId);
-    if (existing) { setAddingPerson(false); return; }
+    if (peopleLinks.find(l => l.person_record_id === personRecordId)) { setAddingPerson(false); return; }
     await api.post("/workflows/people-links", {
       person_record_id: personRecordId,
       target_record_id: record.id,
@@ -769,239 +858,148 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
     if (!confirm("Remove this person from the pipeline?")) return;
     await api.delete(`/workflows/people-links/${linkId}`);
     setPeopleLinks(ls => ls.filter(l => l.id !== linkId));
+    if (peopleLinks.length <= 1) setSelectedStage(null);
   };
 
-  const pLabel = (p) => {
-    const d = p.person_data || {};
-    return [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || p.person_record_id?.slice(0,8);
-  };
-  const pSub = (p) => { const d = p.person_data || {}; return d.current_title || d.email || ""; };
-  const pInit = (p) => pLabel(p).charAt(0).toUpperCase();
+  const pLabel = (p) => { const d = p.person_data || {}; return [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || p.person_record_id?.slice(0,8); };
+  const pSub   = (p) => { const d = p.person_data || {}; return d.current_title || d.email || ""; };
+  const pInit  = (p) => pLabel(p).charAt(0).toUpperCase();
 
-  // People counts per stage
-  const countByStage = plSteps.reduce((acc, s) => {
-    acc[s.id] = peopleLinks.filter(l => l.stage_id === s.id).length;
-    return acc;
-  }, {});
-  const unstagedCount = peopleLinks.filter(l => !l.stage_id || !plSteps.find(s => s.id === l.stage_id)).length;
-
-  // People shown in selected stage
-  const visiblePeople = selectedStage === "__all__"
-    ? peopleLinks
-    : selectedStage
-      ? peopleLinks.filter(l => l.stage_id === selectedStage)
-      : [];
-
+  const countByStage = plSteps.reduce((acc, s) => { acc[s.id] = peopleLinks.filter(l => l.stage_id === s.id).length; return acc; }, {});
+  const visiblePeople = selectedStage === "__all__" ? peopleLinks : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage) : [];
   const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
   const filteredPersons = personRecords.filter(r => {
     if (linkedIds.has(r.id)) return false;
     if (!personSearch) return true;
     const d = r.data || {};
-    return [d.first_name, d.last_name, d.email].filter(Boolean).join(" ").toLowerCase()
-      .includes(personSearch.toLowerCase());
+    return [d.first_name, d.last_name, d.email].filter(Boolean).join(" ").toLowerCase().includes(personSearch.toLowerCase());
   });
 
-  const pipelineOptions   = allWorkflows.filter(w => w.workflow_type === "pipeline"    && w.object_id === objectId && !w.deleted_at);
   const peopleLinkOptions = allWorkflows.filter(w => w.workflow_type === "people_link" && w.object_id === objectId && !w.deleted_at);
 
-  if (loading) return <div style={{ padding:"20px 0", textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>;
+  // Don't render anything if no Linked Person workflows exist for this object type
+  if (!loading && peopleLinkOptions.length === 0) return null;
 
-  const tabStyle = (active) => ({
-    padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight: active ? 700 : 500,
-    border:`1.5px solid ${active ? C.accent : C.border}`,
-    background: active ? C.accentLight : "transparent",
-    color: active ? C.accent : C.text2, cursor:"pointer", fontFamily:F, transition:"all .1s",
-  });
+  if (loading) return (
+    <div style={{ padding:"14px 20px", background:"white", fontFamily:F, color:C.text3, fontSize:13 }}>
+      Loading…
+    </div>
+  );
 
   return (
-    <div style={{ fontFamily:F, display:"flex", flexDirection:"column", gap:16 }}>
-      {/* Tabs */}
-      <div style={{ display:"flex", gap:6 }}>
-        <button style={tabStyle(tab==="pipeline")} onClick={()=>setTab("pipeline")}>📋 Record Pipeline</button>
-        <button style={tabStyle(tab==="people")} onClick={()=>setTab("people")}>
-          🔗 People Pipeline
+    <div style={{ fontFamily:F, background:"white" }}>
+      {/* Header bar */}
+      <div style={{ padding:"10px 20px", display:"flex", alignItems:"center", gap:10, borderBottom: (hasStages || !peopleLinkWf) ? `1px solid ${C.border}` : "none" }}>
+        <span style={{ fontSize:13, fontWeight:800, color:C.text1 }}>
+          👥 Linked People
           {peopleLinks.length > 0 && (
-            <span style={{ marginLeft:6, background: tab==="people" ? C.accent : "#9ca3af", color:"white",
-              fontSize:10, fontWeight:700, borderRadius:99, padding:"1px 6px" }}>
-              {peopleLinks.length}
-            </span>
+            <span style={{ marginLeft:8, fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff",
+              padding:"2px 8px", borderRadius:99 }}>{peopleLinks.length}</span>
           )}
+        </span>
+        {/* Workflow selector — shown whenever there are options */}
+        <select value={peopleLinkWf?.id||""} onChange={e=>assignWorkflow(e.target.value)} disabled={saving}
+          style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:12,
+            fontFamily:F, outline:"none", background:"white", color:C.text2, maxWidth:200 }}>
+          <option value="">— Select workflow —</option>
+          {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        <div style={{ flex:1 }}/>
+        {/* Add person button — gated on having stages */}
+        <button onClick={openAddPerson}
+          disabled={!hasStages}
+          title={hasStages ? "Add a person" : "Assign a Linked Person workflow with stages first"}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+            border:`1.5px solid ${hasStages ? "#7c3aed" : C.border}`,
+            background: hasStages ? "#f5f3ff" : "#f9fafb",
+            color: hasStages ? "#7c3aed" : C.text3,
+            fontSize:12, fontWeight:700, cursor: hasStages ? "pointer" : "not-allowed", fontFamily:F, whiteSpace:"nowrap" }}>
+          <Ic n="plus" s={12}/> Add Person
         </button>
       </div>
 
-      {/* ══ RECORD PIPELINE TAB ══ */}
-      {tab === "pipeline" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div style={{ fontSize:12, color:C.text3 }}>Assign a pipeline to drive this record's status through defined stages.</div>
-          <div>
-            <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:"uppercase", letterSpacing:".06em" }}>Pipeline Workflow</div>
-            <select value={pipelineWf?.id||""} onChange={e=>assignWorkflow("pipeline", e.target.value)} disabled={saving}
-              style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${C.border}`, borderRadius:9, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
-              <option value="">— None —</option>
-              {pipelineOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-            {pipelineOptions.length === 0 && (
-              <div style={{ fontSize:11, color:C.text3, marginTop:6 }}>No pipeline workflows yet — create one in Settings → Workflows with type "Record Pipeline".</div>
-            )}
-          </div>
-          {pipelineWf?.steps?.length > 0 && (
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:8, textTransform:"uppercase", letterSpacing:".06em" }}>
-                Current Stage {stageSaved && <span style={{ color:C.green, fontWeight:600, textTransform:"none", marginLeft:6 }}>✓ Saved</span>}
-              </div>
-              <div style={{ display:"flex", borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.border}` }}>
-                {pipelineWf.steps.map((step, i) => {
-                  const isCurrent = record.data?.status === step.name;
-                  const stageIdx  = pipelineWf.steps.findIndex(s => s.name === record.data?.status);
-                  const isPast    = stageIdx > i;
-                  return (
-                    <button key={step.id} onClick={() => setRecordStage(step.name)}
-                      style={{ flex:1, padding:"10px 4px", background: isCurrent ? C.accent : isPast ? `${C.accent}22` : "#f9fafb",
-                        border:"none", borderRight: i < pipelineWf.steps.length-1 ? `1px solid ${C.border}` : "none",
-                        color: isCurrent ? "white" : isPast ? C.accent : C.text3,
-                        cursor:"pointer", fontFamily:F, fontSize:11, fontWeight: isCurrent ? 700 : 500,
-                        textAlign:"center", transition:"all .12s", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                      <span style={{ width:7, height:7, borderRadius:"50%", background: isCurrent?"white": isPast?C.accent:C.border }}/>
-                      <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%", padding:"0 2px" }}>
-                        {step.name||`Stage ${i+1}`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+      {/* No workflow assigned */}
+      {!peopleLinkWf && (
+        <div style={{ padding:"14px 20px", color:C.text3, fontSize:12 }}>
+          Select a Linked Person workflow above to start tracking people through stages on this record.
         </div>
       )}
 
-      {/* ══ PEOPLE PIPELINE TAB ══ */}
-      {tab === "people" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      {/* Workflow assigned but no stages */}
+      {peopleLinkWf && !hasStages && (
+        <div style={{ padding:"14px 20px", color:C.text3, fontSize:12 }}>
+          The workflow <strong style={{ color:C.text2 }}>{peopleLinkWf.name}</strong> has no stages yet — add stages in Settings → Workflows to start linking people.
+        </div>
+      )}
 
-          {/* Workflow picker row */}
-          <div style={{ display:"flex", alignItems:"flex-end", gap:10 }}>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:"uppercase", letterSpacing:".06em" }}>People Pipeline Workflow</div>
-              <select value={peopleLinkWf?.id||""} onChange={e=>assignWorkflow("people_link", e.target.value)} disabled={saving}
-                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${C.border}`, borderRadius:9, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
-                <option value="">— None —</option>
-                {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-              {peopleLinkOptions.length === 0 && (
-                <div style={{ fontSize:11, color:C.text3, marginTop:5 }}>No people pipeline workflows yet — create one with type "People Pipeline".</div>
-              )}
-            </div>
-            <button onClick={openAddPerson}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 14px", borderRadius:9,
-                border:`1.5px solid #7c3aed`,
-                background:"#f5f3ff",
-                color:"#7c3aed",
-                fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
-              <Ic n="plus" s={13}/> Add Person
+      {/* Stage track + inline expand */}
+      {hasStages && (
+        <div>
+          {/* Stage track */}
+          <div style={{ display:"flex", background:"#faf5ff", borderBottom: selectedStage ? `1px solid #e9d5ff` : "none" }}>
+            {plSteps.map((step, i) => {
+              const count    = countByStage[step.id] || 0;
+              const isActive = selectedStage === step.id;
+              return (
+                <button key={step.id}
+                  onClick={() => setSelectedStage(isActive ? null : step.id)}
+                  style={{ flex:1, padding:"14px 6px 10px",
+                    background: isActive ? "#7c3aed" : "transparent",
+                    border:"none",
+                    borderRight: i < plSteps.length-1 ? `1px solid ${isActive ? "#9d5aff" : "#e9d5ff"}` : "none",
+                    cursor:"pointer", fontFamily:F, transition:"background .12s",
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
+                  <span style={{ fontSize:24, fontWeight:900, color: isActive ? "white" : "#7c3aed", lineHeight:1 }}>{count}</span>
+                  <span style={{ fontSize:10, fontWeight: isActive ? 700 : 500,
+                    color: isActive ? "rgba(255,255,255,.9)" : "#9d5aff",
+                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%", padding:"0 4px" }}>
+                    {step.name || `Stage ${i+1}`}
+                  </span>
+                  <span style={{ fontSize:8, color: isActive ? "rgba(255,255,255,.6)" : "#c4b5fd", lineHeight:1 }}>
+                    {isActive ? "▲" : "▼"}
+                  </span>
+                </button>
+              );
+            })}
+            {/* All button */}
+            <button onClick={() => setSelectedStage(selectedStage==="__all__" ? null : "__all__")}
+              style={{ padding:"14px 16px 10px",
+                background: selectedStage==="__all__" ? C.text2 : "transparent",
+                border:"none", borderLeft:`1px solid #e9d5ff`,
+                cursor:"pointer", fontFamily:F, transition:"background .12s",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
+              <span style={{ fontSize:24, fontWeight:900, color: selectedStage==="__all__" ? "white" : C.text3, lineHeight:1 }}>{peopleLinks.length}</span>
+              <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? "rgba(255,255,255,.8)" : C.text3 }}>All</span>
+              <span style={{ fontSize:8, color: selectedStage==="__all__" ? "rgba(255,255,255,.5)" : "#d1d5db", lineHeight:1 }}>
+                {selectedStage==="__all__" ? "▲" : "▼"}
+              </span>
             </button>
           </div>
 
-          {/* ── Stage visualisation: counts + click to expand ── */}
-          {plSteps.length > 0 && (
-            <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
-              {/* Stage track */}
-              <div style={{ display:"flex", borderRadius:10, overflow:"hidden", border:`1.5px solid #e9d5ff`, background:"#faf5ff" }}>
-                {plSteps.map((step, i) => {
-                  const count    = countByStage[step.id] || 0;
-                  const isActive = selectedStage === step.id;
-                  return (
-                    <button key={step.id}
-                      onClick={() => setSelectedStage(isActive ? null : step.id)}
-                      style={{ flex:1, padding:"12px 6px 10px",
-                        background: isActive ? "#7c3aed" : "transparent",
-                        border:"none",
-                        borderRight: i < plSteps.length-1 ? `1px solid ${isActive ? "#9d5aff" : "#e9d5ff"}` : "none",
-                        cursor:"pointer", fontFamily:F, transition:"background .12s",
-                        display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
-                      <span style={{ fontSize:22, fontWeight:900, color: isActive ? "white" : "#7c3aed", lineHeight:1 }}>{count}</span>
-                      <span style={{ fontSize:10, fontWeight: isActive ? 700 : 500,
-                        color: isActive ? "rgba(255,255,255,.9)" : "#9d5aff",
-                        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%", padding:"0 4px" }}>
-                        {step.name || `Stage ${i+1}`}
-                      </span>
-                      {/* Expand caret */}
-                      <span style={{ fontSize:8, color: isActive ? "rgba(255,255,255,.7)" : "#c4b5fd", lineHeight:1, marginTop:2 }}>
-                        {isActive ? "▲" : "▼"}
-                      </span>
-                    </button>
-                  );
-                })}
-                {/* All pill */}
-                <button onClick={() => setSelectedStage(selectedStage==="__all__" ? null : "__all__")}
-                  style={{ padding:"12px 14px 10px",
-                    background: selectedStage==="__all__" ? C.text2 : "transparent",
-                    border:"none", borderLeft:`1px solid #e9d5ff`,
-                    cursor:"pointer", fontFamily:F, transition:"background .12s",
-                    display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
-                  <span style={{ fontSize:22, fontWeight:900, color: selectedStage==="__all__" ? "white" : C.text3, lineHeight:1 }}>{peopleLinks.length}</span>
-                  <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? "rgba(255,255,255,.8)" : C.text3 }}>All</span>
-                  <span style={{ fontSize:8, color: selectedStage==="__all__" ? "rgba(255,255,255,.6)" : "#d1d5db", lineHeight:1, marginTop:2 }}>
-                    {selectedStage==="__all__" ? "▲" : "▼"}
-                  </span>
+          {/* Inline expanded people list */}
+          {selectedStage && (
+            <div style={{ padding:"12px 14px 10px", display:"flex", flexDirection:"column", gap:8, background:"white" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:"#7c3aed", flex:1 }}>
+                  {selectedStage === "__all__"
+                    ? `All — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
+                    : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
+                </span>
+                <button onClick={openAddPerson}
+                  style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"2px 6px" }}>
+                  + Add
                 </button>
               </div>
-
-              {/* Inline expanded list — slides in below the track */}
-              {selectedStage && (
-                <div style={{ border:`1.5px solid #e9d5ff`, borderTop:"none", borderRadius:"0 0 10px 10px",
-                  background:"white", padding:"12px 12px 10px", display:"flex", flexDirection:"column", gap:8 }}>
-                  {/* Header row */}
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-                    <span style={{ fontSize:11, fontWeight:700, color:"#7c3aed", flex:1 }}>
-                      {selectedStage === "__all__"
-                        ? `All People — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
-                        : `${plSteps.find(s=>s.id===selectedStage)?.name || "Stage"} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
-                    </span>
-                    <button onClick={openAddPerson}
-                      style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"2px 6px" }}>
-                      + Add
-                    </button>
-                  </div>
-
-                  {visiblePeople.length === 0 && (
-                    <div style={{ textAlign:"center", padding:"16px 0", color:"#c4b5fd", fontSize:12 }}>
-                      No people in this stage yet.
-                    </div>
-                  )}
-
-                  {visiblePeople.map(link => (
-                    <PipelinePersonRow key={link.id} link={link} steps={plSteps}
-                      label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
-                      onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
-                  ))}
-                </div>
+              {visiblePeople.length === 0 && (
+                <div style={{ textAlign:"center", padding:"14px 0", color:"#c4b5fd", fontSize:12 }}>No people in this stage yet.</div>
               )}
-            </div>
-          )}
-
-          {/* Empty state: no workflow assigned and no people yet */}
-          {!peopleLinkWf && peopleLinks.length === 0 && (
-            <div style={{ textAlign:"center", padding:"28px 0", color:C.text3, fontSize:12 }}>
-              <div style={{ fontSize:28, marginBottom:8 }}>👥</div>
-              <div style={{ fontWeight:600, marginBottom:4, color:C.text2 }}>No people pipeline yet</div>
-              <div>Select a People Pipeline above to start tracking candidates through stages.</div>
-            </div>
-          )}
-
-          {/* No steps defined — just show all people in a flat list */}
-          {plSteps.length === 0 && peopleLinks.length > 0 && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.text2, textTransform:"uppercase", letterSpacing:".06em" }}>
-                All People ({peopleLinks.length})
-              </div>
-              {peopleLinks.map(link => (
-                <PipelinePersonRow key={link.id} link={link} steps={[]}
+              {visiblePeople.map(link => (
+                <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
                   onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
               ))}
             </div>
           )}
-
         </div>
       )}
 
@@ -1045,7 +1043,7 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
                       <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{label}</div>
                       {d.current_title && <div style={{ fontSize:11, color:C.text3 }}>{d.current_title}</div>}
                     </div>
-                    <span style={{ fontSize:11, color:C.accent, fontWeight:600 }}>+ Add</span>
+                    <span style={{ fontSize:11, color:"#7c3aed", fontWeight:600 }}>+ Add</span>
                   </div>
                 );
               })}
@@ -1056,7 +1054,6 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
     </div>
   );
 }
-
 // ─── PipelinePersonRow ────────────────────────────────────────────────────────
 function PipelinePersonRow({ link, steps, label, subtitle, initial, onMove, onRemove, onNavigate }) {
   const currentIdx  = steps.findIndex(s => s.id === link.stage_id);
@@ -1165,7 +1162,6 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
   useEffect(() => { load(); }, [record?.id, environment?.id]);
 
   const loadRecordsForLinking = async () => {
-    // Load all non-person records the person isn't already linked to
     const nonPersonObjs = allObjects.filter(o => o.name !== "Person");
     const results = [];
     for (const obj of nonPersonObjs) {
@@ -1184,13 +1180,15 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
   const linkToRecord = async (targetRecord) => {
     const existing = links.find(l => l.target_record_id === targetRecord.id);
     if (existing) { setAddingLink(false); return; }
-    // Find if the target record has a people_link workflow assigned
+    // Require the target to have a Linked Person workflow with at least one stage
     const assignments = await api.get(`/workflows/assignments?record_id=${targetRecord.id}`);
     const plAssignment = (Array.isArray(assignments) ? assignments : []).find(a => a.type === "people_link");
-    let firstStep = null;
-    if (plAssignment?.workflow?.steps?.length) {
-      firstStep = plAssignment.workflow.steps[0];
+    const wfSteps = plAssignment?.workflow?.steps || [];
+    if (!plAssignment || wfSteps.length === 0) {
+      alert(`"${recLabel(targetRecord)}" doesn't have a Linked Person workflow with stages assigned. Set one up in that record's Pipeline panel first.`);
+      return;
     }
+    const firstStep = wfSteps[0];
     await api.post("/workflows/people-links", {
       person_record_id: record.id,
       target_record_id: targetRecord.id,
