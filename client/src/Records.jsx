@@ -976,7 +976,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
       {/* RIGHT: action buttons */}
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"0 16px", flex:1 }}>
-        {/* Communicate dropdown */}
+        {/* Communicate dropdown — only on Person records */}
+        {objectName === "Person" && (
         <div style={{ position:"relative" }}>
           <button
             onClick={()=>setShowCommMenu(v=>!v)}
@@ -1009,6 +1010,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             </div>
           )}
         </div>
+        )} {/* end Person-only communicate */}
 
         {/* Spacer */}
         <div style={{ flex:1 }}/>

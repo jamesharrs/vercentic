@@ -888,33 +888,32 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   return (
     <div style={{ fontFamily:F, background:"white" }}>
-      {/* Header bar */}
-      <div style={{ padding:"10px 20px", display:"flex", alignItems:"center", gap:10, borderBottom: (hasStages || !peopleLinkWf) ? `1px solid ${C.border}` : "none" }}>
-        <span style={{ fontSize:13, fontWeight:800, color:C.text1 }}>
-          👥 Linked People
+      {/* Header bar — slim, integrated */}
+      <div style={{ padding:"8px 20px", display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ fontSize:12, fontWeight:700, color:"#7c3aed", letterSpacing:".02em", display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ fontSize:14 }}>👥</span> Linked People
           {peopleLinks.length > 0 && (
-            <span style={{ marginLeft:8, fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff",
-              padding:"2px 8px", borderRadius:99 }}>{peopleLinks.length}</span>
+            <span style={{ fontSize:10, fontWeight:700, color:"white", background:"#7c3aed",
+              padding:"1px 7px", borderRadius:99, lineHeight:"18px" }}>{peopleLinks.length}</span>
           )}
         </span>
-        {/* Workflow selector — shown whenever there are options */}
+        {/* Workflow selector */}
         <select value={peopleLinkWf?.id||""} onChange={e=>assignWorkflow(e.target.value)} disabled={saving}
-          style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:12,
+          style={{ padding:"4px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
             fontFamily:F, outline:"none", background:"white", color:C.text2, maxWidth:200 }}>
           <option value="">— Select workflow —</option>
           {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
         <div style={{ flex:1 }}/>
-        {/* Add person button — gated on having stages */}
         <button onClick={openAddPerson}
           disabled={!hasStages}
           title={hasStages ? "Add a person" : "Assign a Linked Person workflow with stages first"}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:7,
             border:`1.5px solid ${hasStages ? "#7c3aed" : C.border}`,
             background: hasStages ? "#f5f3ff" : "#f9fafb",
             color: hasStages ? "#7c3aed" : C.text3,
             fontSize:12, fontWeight:700, cursor: hasStages ? "pointer" : "not-allowed", fontFamily:F, whiteSpace:"nowrap" }}>
-          <Ic n="plus" s={12}/> Add Person
+          <Ic n="plus" s={11}/> Add Person
         </button>
       </div>
 
@@ -932,47 +931,40 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         </div>
       )}
 
-      {/* Stage track + inline expand */}
+      {/* Stage track */}
       {hasStages && (
         <div>
-          {/* Stage track */}
-          <div style={{ display:"flex", background:"#faf5ff", borderBottom: selectedStage ? `1px solid #e9d5ff` : "none" }}>
+          <div style={{ display:"flex", borderTop:`1px solid #f3f0ff` }}>
             {plSteps.map((step, i) => {
               const count    = countByStage[step.id] || 0;
               const isActive = selectedStage === step.id;
               return (
                 <button key={step.id}
                   onClick={() => setSelectedStage(isActive ? null : step.id)}
-                  style={{ flex:1, padding:"14px 6px 10px",
+                  style={{ flex:1, padding:"10px 4px 8px",
                     background: isActive ? "#7c3aed" : "transparent",
                     border:"none",
-                    borderRight: i < plSteps.length-1 ? `1px solid ${isActive ? "#9d5aff" : "#e9d5ff"}` : "none",
+                    borderRight: i < plSteps.length-1 ? `1px solid ${isActive ? "#9d5aff" : "#ede9fe"}` : "none",
                     cursor:"pointer", fontFamily:F, transition:"background .12s",
-                    display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
-                  <span style={{ fontSize:24, fontWeight:900, color: isActive ? "white" : "#7c3aed", lineHeight:1 }}>{count}</span>
-                  <span style={{ fontSize:10, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? "rgba(255,255,255,.9)" : "#9d5aff",
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                  <span style={{ fontSize:17, fontWeight:800, color: isActive ? "white" : "#7c3aed", lineHeight:1 }}>{count}</span>
+                  <span style={{ fontSize:10, fontWeight: isActive ? 600 : 400,
+                    color: isActive ? "rgba(255,255,255,.85)" : "#a78bfa",
                     whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%", padding:"0 4px" }}>
                     {step.name || `Stage ${i+1}`}
-                  </span>
-                  <span style={{ fontSize:8, color: isActive ? "rgba(255,255,255,.6)" : "#c4b5fd", lineHeight:1 }}>
-                    {isActive ? "▲" : "▼"}
                   </span>
                 </button>
               );
             })}
-            {/* All button */}
+            {/* All */}
             <button onClick={() => setSelectedStage(selectedStage==="__all__" ? null : "__all__")}
-              style={{ padding:"14px 16px 10px",
-                background: selectedStage==="__all__" ? C.text2 : "transparent",
-                border:"none", borderLeft:`1px solid #e9d5ff`,
+              style={{ padding:"10px 16px 8px",
+                background: selectedStage==="__all__" ? "#374151" : "transparent",
+                border:"none", borderLeft:`1px solid #ede9fe`,
                 cursor:"pointer", fontFamily:F, transition:"background .12s",
-                display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
-              <span style={{ fontSize:24, fontWeight:900, color: selectedStage==="__all__" ? "white" : C.text3, lineHeight:1 }}>{peopleLinks.length}</span>
-              <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? "rgba(255,255,255,.8)" : C.text3 }}>All</span>
-              <span style={{ fontSize:8, color: selectedStage==="__all__" ? "rgba(255,255,255,.5)" : "#d1d5db", lineHeight:1 }}>
-                {selectedStage==="__all__" ? "▲" : "▼"}
-              </span>
+                display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+              <span style={{ fontSize:17, fontWeight:800, color: selectedStage==="__all__" ? "white" : C.text3, lineHeight:1 }}>{peopleLinks.length}</span>
+              <span style={{ fontSize:10, color: selectedStage==="__all__" ? "rgba(255,255,255,.75)" : C.text3 }}>All</span>
             </button>
           </div>
 
