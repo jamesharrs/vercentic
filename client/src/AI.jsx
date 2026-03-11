@@ -75,7 +75,7 @@ const ScoreRing = ({ score, size=52 }) => {
 };
 
 /* ─── Matching Engine ────────────────────────────────────────────────────── */
-const matchCandidateToJob = (candidate, job) => {
+export const matchCandidateToJob = (candidate, job) => {
   let score = 0;
   const reasons = [];
   const gaps = [];

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { matchCandidateToJob } from "./AI.jsx";
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const C = {
@@ -866,7 +867,25 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const pInit  = (p) => pLabel(p).charAt(0).toUpperCase();
 
   const countByStage = plSteps.reduce((acc, s) => { acc[s.id] = peopleLinks.filter(l => l.stage_id === s.id).length; return acc; }, {});
-  const visiblePeople = selectedStage === "__all__" ? peopleLinks : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage) : [];
+
+  // Compute AI match scores for each person against the linked record (if it's a job-like object)
+  const matchScores = useMemo(() => {
+    const scores = {};
+    peopleLinks.forEach(link => {
+      if (link.person_data && record) {
+        // person_data is already the flat data object; wrap it so matchCandidateToJob can find .data
+        const personRecord = { data: link.person_data };
+        const result = matchCandidateToJob(personRecord, record);
+        scores[link.id] = result;
+      }
+    });
+    return scores;
+  }, [peopleLinks, record]);
+
+  const visiblePeople = useMemo(() => {
+    const base = selectedStage === "__all__" ? peopleLinks : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage) : [];
+    return [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
+  }, [selectedStage, peopleLinks, matchScores]);
   const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
   const filteredPersons = personRecords.filter(r => {
     if (linkedIds.has(r.id)) return false;
@@ -988,6 +1007,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               {visiblePeople.map(link => (
                 <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
+                  matchScore={matchScores[link.id]}
+                  personData={link.person_data}
                   onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
               ))}
             </div>
@@ -1047,11 +1068,24 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   );
 }
 // ─── PipelinePersonRow ────────────────────────────────────────────────────────
-function PipelinePersonRow({ link, steps, label, subtitle, initial, onMove, onRemove, onNavigate }) {
+function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, personData, onMove, onRemove, onNavigate }) {
   const currentIdx  = steps.findIndex(s => s.id === link.stage_id);
   const currentStep = steps[currentIdx] || steps[0];
   const prevStep    = currentIdx > 0 ? steps[currentIdx - 1] : null;
   const nextStep    = currentIdx >= 0 && currentIdx < steps.length - 1 ? steps[currentIdx + 1] : null;
+
+  const score = matchScore?.score ?? null;
+  const location = personData?.location || null;
+
+  // Score colour
+  const scoreColor = score === null ? "#9ca3af"
+    : score >= 75 ? "#059669"
+    : score >= 50 ? "#d97706"
+    : "#dc2626";
+  const scoreBg = score === null ? "#f3f4f6"
+    : score >= 75 ? "#ecfdf5"
+    : score >= 50 ? "#fffbeb"
+    : "#fef2f2";
 
   return (
     <div style={{ background:"#faf5ff", border:`1px solid #e9d5ff`, borderRadius:10,
@@ -1061,10 +1095,29 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, onMove, onRe
         display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
         <span style={{ color:"white", fontSize:11, fontWeight:700 }}>{initial}</span>
       </div>
-      {/* Name */}
+
+      {/* Match score badge */}
+      {score !== null && (
+        <div title={matchScore?.reasons?.join(" · ")||"Match score"}
+          style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0,
+            background:scoreBg, border:`1px solid ${scoreColor}22`, borderRadius:8,
+            padding:"3px 7px", minWidth:38, cursor:"default" }}>
+          <span style={{ fontSize:13, fontWeight:800, color:scoreColor, lineHeight:1 }}>{score}%</span>
+          <span style={{ fontSize:9, color:scoreColor, fontWeight:600, opacity:0.8, lineHeight:1, marginTop:1 }}>match</span>
+        </div>
+      )}
+
+      {/* Name + location */}
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</div>
-        {subtitle && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{subtitle}</div>}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:1, flexWrap:"wrap" }}>
+          {subtitle && <span style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{subtitle}</span>}
+          {location && (
+            <span style={{ fontSize:10, color:"#7c3aed", background:"#ede9fe", borderRadius:20, padding:"1px 6px", fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
+              📍 {location}
+            </span>
+          )}
+        </div>
       </div>
       {/* Stage controls */}
       {steps.length > 0 && (
