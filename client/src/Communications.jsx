@@ -480,7 +480,7 @@ export default function CommunicationsPanel({ record, environment, externalCompo
                       ))}
                     </div>
                     <div style={{ fontWeight:700, fontSize:14, color:C.text1, marginBottom:6 }}>No communications yet</div>
-                    <div style={{ fontSize:12, color:C.text3, lineHeight:1.6 }}>Use the <strong>Communicate</strong> button in the toolbar above<br/>to send an email, SMS, WhatsApp or log a call.</div>
+                    <div style={{ fontSize:12, color:C.text3, lineHeight:1.6 }}>Use the <strong>Communicate</strong> button<br/>to send an email, SMS, WhatsApp or log a call.</div>
                   </>
               }
             </div>

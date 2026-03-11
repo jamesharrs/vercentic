@@ -956,22 +956,42 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   const FunctionalityBar = () => (
     <div style={{ display:"flex", alignItems:"center", gap:0, background:C.surface,
-      borderBottom:`1px solid ${C.border}`, flexShrink:0, position:"relative", zIndex:50 }}>
+      borderBottom:`1px solid ${C.border}`, flexShrink:0, position:"relative", zIndex:50, minHeight:58 }}>
 
-      {/* LEFT: back + name breadcrumb — fixed, never scrolls away */}
-      <div style={{ display:"flex", alignItems:"center", gap:0, borderRight:`1px solid ${C.border}`, padding:"0 16px", height:46, flexShrink:0 }}>
+      {/* LEFT: back crumb + avatar + name + subtitle + pills */}
+      <div style={{ display:"flex", alignItems:"center", gap:0, borderRight:`1px solid ${C.border}`, padding:"0 16px", minHeight:58, flexShrink:0, maxWidth:"50%" }}>
+        {/* Back link */}
         <button onClick={onClose}
           style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none",
-            cursor:"pointer", color:C.text3, fontSize:12, fontWeight:600, fontFamily:F, padding:"4px 0" }}
+            cursor:"pointer", color:C.text3, fontSize:12, fontWeight:600, fontFamily:F, padding:"4px 0", flexShrink:0 }}
           onMouseEnter={e=>e.currentTarget.style.color=C.accent}
           onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
           <Ic n="arrowLeft" s={13}/> {objectName}s
         </button>
-        <span style={{ margin:"0 8px", color:C.border, fontSize:16 }}>/</span>
-        <span style={{ fontSize:13, fontWeight:700, color:C.text1, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{title}</span>
-        {status && statusField && (
-          <span style={{ marginLeft:8 }}><Badge color={STATUS_COLORS[status]||C.accent} light>{status}</Badge></span>
-        )}
+        <span style={{ margin:"0 8px", color:C.border, fontSize:16, flexShrink:0 }}>/</span>
+        {/* Avatar */}
+        <div style={{ position:"relative", flexShrink:0, marginRight:10, cursor:"pointer" }}
+          onClick={()=>photoInputRef.current?.click()} title="Click to upload photo">
+          {photoUrl
+            ? <img src={photoUrl} style={{ width:32, height:32, borderRadius:8, objectFit:"cover" }}/>
+            : <Avatar name={title} color={objectColor} size={32}/>
+          }
+          <input ref={photoInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoUpload}/>
+        </div>
+        {/* Name + subtitle + pills */}
+        <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <span style={{ fontSize:14, fontWeight:800, color:C.text1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:220 }}>{title}</span>
+            {status && statusField && (
+              <Badge color={STATUS_COLORS[status]||C.accent} light>{status}</Badge>
+            )}
+            <span style={{ padding:"2px 8px", borderRadius:20, background:`rgba(${r},${g},${b},0.12)`, color:objectColor, fontWeight:700, fontSize:10, whiteSpace:"nowrap" }}>{objectName}</span>
+            <span style={{ padding:"2px 8px", borderRadius:20, background:"#f3f4f6", color:C.text3, fontWeight:500, fontSize:10, whiteSpace:"nowrap" }}>
+              Added {new Date(record.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
+            </span>
+          </div>
+          {subtitle && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:340 }}>{subtitle}</div>}
+        </div>
       </div>
 
       {/* RIGHT: action buttons */}
@@ -1043,45 +1063,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       {/* 2-col body */}
       <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", userSelect:draggingCol.current?"none":"auto" }}>
 
-        {/* LEFT COL — Identity card + Fields */}
-        <div style={{ width:`${leftPct}%`, flexShrink:0, background:C.surface, display:"flex", flexDirection:"column", overflow:"auto" }}>
-          {/* Identity card — tinted with record colour */}
-          <div style={{ padding:"20px 20px 16px", borderBottom:`1px solid ${cardBorder}`, background:cardBg }}>
-            {/* Avatar row with photo upload */}
-            <div style={{ display:"flex", alignItems:"flex-start", gap:14, marginBottom:14 }}>
-              {/* Clickable avatar with photo upload */}
-              <div style={{ position:"relative", flexShrink:0 }} onClick={()=>photoInputRef.current?.click()} title="Click to upload photo">
-                {photoUrl
-                  ? <img src={photoUrl} style={{ width:56, height:56, borderRadius:14, objectFit:"cover", border:`2px solid ${cardBorder}` }}/>
-                  : <Avatar name={title} color={objectColor} size={56}/>
-                }
-                <div style={{ position:"absolute", inset:0, borderRadius:14, background:"rgba(0,0,0,0)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background .15s" }}
-                  onMouseEnter={e=>e.currentTarget.style.background="rgba(0,0,0,0.35)"}
-                  onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0)"}>
-                  <Ic n="edit" s={14} c="#fff"/>
-                </div>
-                <input ref={photoInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoUpload}/>
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:18, fontWeight:800, color:C.text1, lineHeight:1.2, wordBreak:"break-word" }}>{title}</div>
-                {subtitle && <div style={{ fontSize:13, color:C.text3, marginTop:3 }}>{subtitle}</div>}
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
-                  <div style={{ padding:"4px 10px", borderRadius:20, background:`rgba(${r},${g},${b},0.15)`, color:objectColor, fontWeight:700, fontSize:11 }}>{objectName}</div>
-                  <div style={{ padding:"4px 10px", borderRadius:20, background:`rgba(${r},${g},${b},0.07)`, color:C.text3, fontWeight:600, fontSize:11 }}>
-                    Added {new Date(record.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Fields section */}
-          <div style={{ flex:1, overflow:"auto" }}>
-            <div style={{ padding:"14px 20px 6px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:`1px solid ${C.border}` }}>
-              <span style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em" }}>Profile Fields</span>
+        {/* LEFT COL — Fields as panel card */}
+        <div style={{ width:`${leftPct}%`, flexShrink:0, background:"#F4F6FB", display:"flex", flexDirection:"column", overflow:"auto", padding:"16px 0 24px 16px" }}>
+          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", borderBottom:`1px solid ${C.border}` }}>
+              <Ic n="edit" s={14} c={C.accent}/>
+              <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>Profile Fields</span>
               <span style={{ fontSize:11, color:C.text3 }}>Click any field to edit</span>
             </div>
-            <div style={{ padding:"16px 20px 24px" }}>
+            <div style={{ padding:"16px" }}>
               <FieldsPanel/>
             </div>
           </div>
