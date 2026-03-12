@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 
 const API = "/api";
 const F = "'DM Sans', -apple-system, sans-serif";
@@ -146,28 +147,83 @@ function OrgNode({ unit, allUnits, allUsers, depth=0, onUpdate, onDelete, onAddC
 }
 
 function AssignUserDropdown({ unitId, allUsers, onAssign }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]     = useState(false);
+  const [search, setSearch] = useState("");
+  const [pos, setPos]       = useState({ top:0, left:0 });
+  const btnRef              = useRef(null);
+
   const unassigned = allUsers.filter(u => !u.org_unit_id && u.status !== 'deactivated');
+
+  const handleOpen = () => {
+    if (open) { setOpen(false); return; }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left });
+    setSearch("");
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (!btnRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const filtered = unassigned.filter(u =>
+    !search || `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase())
+  );
+
   if (unassigned.length === 0) return (
     <div style={{ fontSize:11, color:C.text3, marginTop:8, fontStyle:"italic" }}>All active users assigned</div>
   );
+
   return (
-    <div style={{ marginTop:8, position:"relative" }}>
-      <Btn size="sm" variant="secondary" onClick={()=>setOpen(p=>!p)}>+ Assign User</Btn>
-      {open && (
-        <div style={{ position:"absolute", top:"100%", left:0, zIndex:50, background:C.surface,
-          border:`1px solid ${C.border}`, borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.1)", minWidth:220, marginTop:4 }}>
-          {unassigned.map(u => (
-            <div key={u.id} onClick={()=>{ onAssign(unitId, u.id); setOpen(false); }}
-              style={{ padding:"8px 12px", cursor:"pointer", fontSize:13, color:C.text1, borderBottom:`1px solid ${C.border}` }}
-              onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              {u.first_name} {u.last_name} <span style={{ color:C.text3, fontSize:11 }}>({u.email})</span>
-            </div>
-          ))}
-        </div>
+    <>
+      <div style={{ marginTop:8 }}>
+        <button ref={btnRef} onClick={handleOpen}
+          style={{ fontFamily:F, border:`1px solid ${C.border}`, cursor:"pointer", borderRadius:8,
+            fontWeight:600, display:"inline-flex", alignItems:"center", gap:6,
+            padding:"5px 10px", fontSize:12, background:C.accentLight, color:C.accent }}>
+          + Assign User
+        </button>
+      </div>
+      {open && ReactDOM.createPortal(
+        <div style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:9999,
+          background:C.surface, border:`1px solid ${C.border}`, borderRadius:12,
+          boxShadow:"0 12px 40px rgba(0,0,0,0.15)", width:260, overflow:"hidden" }}>
+          <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}` }}>
+            <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="Search users…"
+              style={{ width:"100%", boxSizing:"border-box", padding:"5px 8px",
+                borderRadius:7, border:`1px solid ${C.border}`, fontSize:12,
+                fontFamily:F, outline:"none", color:C.text1 }}/>
+          </div>
+          <div style={{ maxHeight:220, overflowY:"auto" }}>
+            {filtered.length === 0 && (
+              <div style={{ padding:"12px", fontSize:12, color:C.text3, textAlign:"center", fontStyle:"italic" }}>No matches</div>
+            )}
+            {filtered.map(u => (
+              <div key={u.id} onClick={()=>{ onAssign(unitId, u.id); setOpen(false); }}
+                style={{ padding:"8px 12px", cursor:"pointer", borderBottom:`1px solid ${C.border}`,
+                  display:"flex", alignItems:"center", gap:8 }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{ width:28, height:28, borderRadius:8, background:C.accentLight,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:11, fontWeight:800, color:C.accent, flexShrink:0 }}>
+                  {u.first_name?.[0]}{u.last_name?.[0]}
+                </div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{u.first_name} {u.last_name}</div>
+                  <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
