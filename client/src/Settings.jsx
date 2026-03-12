@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 
 import SuperAdminSection from "./SuperAdmin.jsx";
 import OrgChart from "./OrgChart.jsx";
@@ -237,63 +238,107 @@ const UsersSection = () => {
 };
 
 const OrgUnitCell = ({ userId, orgUnitId, orgUnits, onChanged }) => {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [search, setSearch]   = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [pos, setPos]         = useState({ top:0, left:0 });
+  const btnRef                = useRef(null);
   const unit = orgUnits.find(u => u.id === orgUnitId);
+
+  // Position the popup relative to the button on open
+  const handleOpen = () => {
+    if (open) { setOpen(false); return; }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left });
+    setSearch("");
+    setOpen(true);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (!btnRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const assign = async (unitId) => {
     setSaving(true);
-    if (unitId) {
-      await api.patch(`/org-units/${unitId}/assign-user`, { user_id: userId });
-    } else {
-      await api.patch(`/org-units/unassign-user/${userId}`, {});
-    }
+    if (unitId) await api.patch(`/org-units/${unitId}/assign-user`, { user_id: userId });
+    else        await api.patch(`/org-units/unassign-user/${userId}`, {});
     setSaving(false);
     setOpen(false);
     onChanged();
   };
 
+  const filtered = orgUnits.filter(u =>
+    !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.type.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div style={{ position:"relative", display:"inline-block" }}>
-      <button onClick={() => setOpen(p=>!p)} disabled={saving}
+    <>
+      <button ref={btnRef} onClick={handleOpen} disabled={saving}
         style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px", borderRadius:6,
           border:`1px solid ${unit ? unit.color+"40" : C.border}`,
           background: unit ? unit.color+"12" : "transparent",
           color: unit ? unit.color : C.text3, fontSize:11, fontWeight:600,
           cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
-        {saving ? "…" : unit ? `${unit.name}` : "Unassigned"}
+        {saving ? "…" : unit ? unit.name : "Unassigned"}
         <Ic n="chevronDown" s={10}/>
       </button>
-      {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:200,
-          background:C.surface, border:`1px solid ${C.border}`, borderRadius:10,
-          boxShadow:"0 8px 24px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden" }}>
-          <div onClick={() => assign(null)}
-            style={{ padding:"8px 12px", fontSize:12, color:C.text3, cursor:"pointer",
-              borderBottom:`1px solid ${C.border}`, fontStyle:"italic" }}
-            onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
-            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-            Unassigned
+
+      {open && typeof document !== "undefined" && ReactDOM.createPortal(
+        <div style={{ position:"fixed", top: pos.top, left: pos.left, zIndex:9999,
+          background:C.surface, border:`1px solid ${C.border}`, borderRadius:12,
+          boxShadow:"0 12px 40px rgba(0,0,0,0.15)", width:240, overflow:"hidden" }}>
+          {/* Search */}
+          <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ position:"relative" }}>
+              <Ic n="search" s={12} c={C.text3} style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)" }}/>
+              <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+                placeholder="Search org units…"
+                style={{ width:"100%", boxSizing:"border-box", padding:"5px 8px 5px 26px",
+                  borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F,
+                  outline:"none", color:C.text1 }}/>
+            </div>
           </div>
-          {orgUnits.map(ou => (
-            <div key={ou.id} onClick={() => assign(ou.id)}
-              style={{ padding:"8px 12px", fontSize:12, color:C.text1, cursor:"pointer",
-                background: ou.id === orgUnitId ? C.accentLight : "transparent",
-                borderBottom:`1px solid ${C.border}` }}
+          {/* Options */}
+          <div style={{ maxHeight:220, overflowY:"auto" }}>
+            <div onClick={() => assign(null)}
+              style={{ padding:"8px 12px", fontSize:12, color:C.text3, cursor:"pointer",
+                borderBottom:`1px solid ${C.border}`, fontStyle:"italic",
+                background: !orgUnitId ? C.accentLight : "transparent" }}
               onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
-              onMouseLeave={e=>e.currentTarget.style.background=ou.id===orgUnitId?C.accentLight:"transparent"}>
-              <span style={{ fontWeight:600, color: ou.color }}>{ou.name}</span>
-              <span style={{ color:C.text3, marginLeft:6, fontSize:10 }}>{ou.type}</span>
+              onMouseLeave={e=>e.currentTarget.style.background=!orgUnitId?C.accentLight:"transparent"}>
+              — Unassigned
             </div>
-          ))}
-          {orgUnits.length === 0 && (
-            <div style={{ padding:"10px 12px", fontSize:12, color:C.text3, fontStyle:"italic" }}>
-              No org units created yet
-            </div>
-          )}
-        </div>
+            {filtered.length === 0 && (
+              <div style={{ padding:"12px", fontSize:12, color:C.text3, textAlign:"center", fontStyle:"italic" }}>
+                No matches
+              </div>
+            )}
+            {filtered.map(ou => (
+              <div key={ou.id} onClick={() => assign(ou.id)}
+                style={{ padding:"8px 12px", fontSize:12, cursor:"pointer",
+                  background: ou.id === orgUnitId ? C.accentLight : "transparent",
+                  borderBottom:`1px solid ${C.border}`,
+                  display:"flex", alignItems:"center", gap:8 }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+                onMouseLeave={e=>e.currentTarget.style.background=ou.id===orgUnitId?C.accentLight:"transparent"}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:ou.color, flexShrink:0 }}/>
+                <div>
+                  <div style={{ fontWeight:600, color:C.text1 }}>{ou.name}</div>
+                  <div style={{ fontSize:10, color:C.text3 }}>{ou.type}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
