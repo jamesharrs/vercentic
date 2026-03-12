@@ -115,8 +115,9 @@ const StatusBadge = ({status}) => {
 
 // ── Users Section ─────────────────────────────────────────────────────────────
 const UsersSection = () => {
-  const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
+  const [users, setUsers]     = useState([]);
+  const [roles, setRoles]     = useState([]);
+  const [orgUnits, setOrgUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [editUser, setEditUser] = useState(null);
@@ -124,9 +125,19 @@ const UsersSection = () => {
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
-    const [u, r] = await Promise.all([api.get("/users"), api.get("/roles")]);
+    const [u, r, envs] = await Promise.all([
+      api.get("/users"),
+      api.get("/roles"),
+      api.get("/environments"),
+    ]);
     setUsers(Array.isArray(u) ? u : []);
     setRoles(Array.isArray(r) ? r : []);
+    // Fetch org units for the first environment
+    const envId = Array.isArray(envs) && envs[0]?.id;
+    if (envId) {
+      const ou = await api.get(`/org-units?environment_id=${envId}`);
+      setOrgUnits(Array.isArray(ou) ? ou : []);
+    }
     setLoading(false);
   }, []);
 
@@ -177,7 +188,7 @@ const UsersSection = () => {
           <table style={{width:"100%",borderCollapse:"collapse",marginTop:16}}>
             <thead>
               <tr style={{borderBottom:`2px solid ${C.border}`}}>
-                {["User","Role","Status","Last Login",""].map(h=>(
+                {["User","Role","Org Unit","Status","Last Login",""].map(h=>(
                   <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:C.text3,letterSpacing:"0.05em",textTransform:"uppercase"}}>{h}</th>
                 ))}
               </tr>
@@ -199,6 +210,9 @@ const UsersSection = () => {
                   <td style={{padding:"12px 12px"}}>
                     {u.role ? <Badge color={u.role.color||C.accent} light>{u.role.name}</Badge> : <span style={{color:C.text3,fontSize:12}}>—</span>}
                   </td>
+                  <td style={{padding:"12px 12px"}}>
+                    <OrgUnitCell userId={u.id} orgUnitId={u.org_unit_id} orgUnits={orgUnits} onChanged={load}/>
+                  </td>
                   <td style={{padding:"12px 12px"}}><StatusBadge status={u.status}/></td>
                   <td style={{padding:"12px 12px",fontSize:12,color:C.text3}}>{u.last_login ? new Date(u.last_login).toLocaleDateString() : "Never"}</td>
                   <td style={{padding:"12px 12px"}}>
@@ -215,14 +229,75 @@ const UsersSection = () => {
         )}
       </Card>
 
-      {showInvite && <InviteUserModal roles={roles} onSave={handleInvite} onClose={()=>setShowInvite(false)}/>}
-      {editUser && <EditUserModal user={editUser} roles={roles} onSave={(updates)=>handleUpdate(editUser.id,updates)} onClose={()=>setEditUser(null)}/>}
+      {showInvite && <InviteUserModal roles={roles} orgUnits={orgUnits} onSave={handleInvite} onClose={()=>setShowInvite(false)}/>}
+      {editUser && <EditUserModal user={editUser} roles={roles} orgUnits={orgUnits} onSave={(updates)=>handleUpdate(editUser.id,updates)} onClose={()=>setEditUser(null)}/>}
       {resetUser && <ResetPasswordModal user={resetUser} onSave={(pw)=>handleResetPassword(resetUser.id,pw)} onClose={()=>setResetUser(null)}/>}
     </div>
   );
 };
 
-const InviteUserModal = ({roles,onSave,onClose}) => {
+const OrgUnitCell = ({ userId, orgUnitId, orgUnits, onChanged }) => {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const unit = orgUnits.find(u => u.id === orgUnitId);
+
+  const assign = async (unitId) => {
+    setSaving(true);
+    if (unitId) {
+      await api.patch(`/org-units/${unitId}/assign-user`, { user_id: userId });
+    } else {
+      await api.patch(`/org-units/unassign-user/${userId}`, {});
+    }
+    setSaving(false);
+    setOpen(false);
+    onChanged();
+  };
+
+  return (
+    <div style={{ position:"relative", display:"inline-block" }}>
+      <button onClick={() => setOpen(p=>!p)} disabled={saving}
+        style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px", borderRadius:6,
+          border:`1px solid ${unit ? unit.color+"40" : C.border}`,
+          background: unit ? unit.color+"12" : "transparent",
+          color: unit ? unit.color : C.text3, fontSize:11, fontWeight:600,
+          cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
+        {saving ? "…" : unit ? `${unit.name}` : "Unassigned"}
+        <Ic n="chevronDown" s={10}/>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:200,
+          background:C.surface, border:`1px solid ${C.border}`, borderRadius:10,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden" }}>
+          <div onClick={() => assign(null)}
+            style={{ padding:"8px 12px", fontSize:12, color:C.text3, cursor:"pointer",
+              borderBottom:`1px solid ${C.border}`, fontStyle:"italic" }}
+            onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            Unassigned
+          </div>
+          {orgUnits.map(ou => (
+            <div key={ou.id} onClick={() => assign(ou.id)}
+              style={{ padding:"8px 12px", fontSize:12, color:C.text1, cursor:"pointer",
+                background: ou.id === orgUnitId ? C.accentLight : "transparent",
+                borderBottom:`1px solid ${C.border}` }}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+              onMouseLeave={e=>e.currentTarget.style.background=ou.id===orgUnitId?C.accentLight:"transparent"}>
+              <span style={{ fontWeight:600, color: ou.color }}>{ou.name}</span>
+              <span style={{ color:C.text3, marginLeft:6, fontSize:10 }}>{ou.type}</span>
+            </div>
+          ))}
+          {orgUnits.length === 0 && (
+            <div style={{ padding:"10px 12px", fontSize:12, color:C.text3, fontStyle:"italic" }}>
+              No org units created yet
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const InviteUserModal = ({roles, orgUnits, onSave, onClose}) => {
   const [form,setForm] = useState({email:"",first_name:"",last_name:"",role_id:roles[0]?.id||""});
   const [saving,setSaving] = useState(false);
   const [result,setResult] = useState(null);
@@ -270,8 +345,8 @@ const InviteUserModal = ({roles,onSave,onClose}) => {
   );
 };
 
-const EditUserModal = ({user,roles,onSave,onClose}) => {
-  const [form,setForm] = useState({first_name:user.first_name,last_name:user.last_name,role_id:user.role_id,status:user.status});
+const EditUserModal = ({user, roles, orgUnits, onSave, onClose}) => {
+  const [form,setForm] = useState({first_name:user.first_name, last_name:user.last_name, role_id:user.role_id, status:user.status, org_unit_id:user.org_unit_id||""});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   return (
     <Modal title={`Edit: ${user.first_name} ${user.last_name}`} onClose={onClose}>
@@ -281,6 +356,8 @@ const EditUserModal = ({user,roles,onSave,onClose}) => {
           <Inp label="Last Name" value={form.last_name} onChange={v=>set("last_name",v)}/>
         </div>
         <Sel label="Role" value={form.role_id} onChange={v=>set("role_id",v)} options={roles.map(r=>({value:r.id,label:r.name}))}/>
+        <Sel label="Org Unit" value={form.org_unit_id} onChange={v=>set("org_unit_id",v)}
+          options={[{value:"",label:"Unassigned"},...orgUnits.map(o=>({value:o.id,label:`${o.name} (${o.type})`}))]}/>
         <Sel label="Status" value={form.status} onChange={v=>set("status",v)} options={["active","invited","deactivated"].map(s=>({value:s,label:s.charAt(0).toUpperCase()+s.slice(1)}))}/>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:8,borderTop:`1px solid ${C.border}`}}>
           <Btn v="secondary" onClick={onClose}>Cancel</Btn>

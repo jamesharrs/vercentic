@@ -44,13 +44,14 @@ router.post('/', (req, res) => {
 
 // PATCH update user
 router.patch('/:id', (req, res) => {
-  const { first_name, last_name, role_id, status, mfa_enabled } = req.body;
+  const { first_name, last_name, role_id, status, mfa_enabled, org_unit_id } = req.body;
   const updates = {};
-  if (first_name !== undefined) updates.first_name = first_name;
-  if (last_name !== undefined) updates.last_name = last_name;
-  if (role_id !== undefined) updates.role_id = role_id;
-  if (status !== undefined) updates.status = status;
-  if (mfa_enabled !== undefined) updates.mfa_enabled = mfa_enabled;
+  if (first_name   !== undefined) updates.first_name   = first_name;
+  if (last_name    !== undefined) updates.last_name    = last_name;
+  if (role_id      !== undefined) updates.role_id      = role_id;
+  if (status       !== undefined) updates.status       = status;
+  if (mfa_enabled  !== undefined) updates.mfa_enabled  = mfa_enabled;
+  if (org_unit_id  !== undefined) updates.org_unit_id  = org_unit_id || null;
   const u = update('users', x => x.id === req.params.id, updates);
   if (!u) return res.status(404).json({ error: 'Not found' });
   insert('audit_log', { id:uuidv4(), action:'user.updated', actor:'system', target_id:u.id, target_type:'user', details:updates, created_at:new Date().toISOString() });
