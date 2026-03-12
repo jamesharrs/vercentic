@@ -565,6 +565,188 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
 
 /* ─── Record Detail (slide-in panel + full-page 2-col layout) ─────────────── */
 
+/* ─── User Panel — shows linked platform user on a Person record ─────────── */
+const STATUS_COLOR = { active:"#0CAF77", invited:"#F79009", deactivated:"#EF4444" };
+const STATUS_BG    = { active:"#ECFDF5", invited:"#FFF7ED", deactivated:"#FEF2F2" };
+
+function UserPanel({ record }) {
+  const email = record?.data?.email;
+  const [user,    setUser]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [roles,   setRoles]   = useState([]);
+  const [form,    setForm]    = useState({});
+  const [saving,  setSaving]  = useState(false);
+  const [creating,setCreating]= useState(false);
+  const [createForm,setCreateForm] = useState({ first_name:"", last_name:"", email: email||"", role_id:"" });
+
+  const load = async () => {
+    setLoading(true);
+    const [r, rs] = await Promise.all([
+      email ? api.get(`/users/by-email/${encodeURIComponent(email)}`).catch(()=>null) : Promise.resolve(null),
+      api.get("/roles").catch(()=>[]),
+    ]);
+    setUser(r && !r.error ? r : null);
+    setRoles(Array.isArray(rs) ? rs : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [email]);
+
+  const startEdit = () => {
+    setForm({ first_name: user.first_name, last_name: user.last_name, role_id: user.role_id, status: user.status });
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    await api.patch(`/users/${user.id}`, form);
+    await load();
+    setEditing(false);
+    setSaving(false);
+  };
+
+  const handleCreate = async () => {
+    if (!createForm.first_name || !createForm.last_name || !createForm.role_id) return;
+    setSaving(true);
+    const res = await api.post("/users", { ...createForm, email: email || createForm.email });
+    setSaving(false);
+    if (res.error) { alert(res.error); return; }
+    setCreating(false);
+    await load();
+  };
+
+  if (loading) return <div style={{ padding:"12px 0", color:C.text3, fontSize:13 }}>Loading…</div>;
+
+  // ── No linked user ──
+  if (!user) return (
+    <div>
+      <div style={{ textAlign:"center", padding:"20px 0 16px", color:C.text3, fontSize:13 }}>
+        {email ? `No platform user found for ${email}` : "No email on this record"}
+      </div>
+      {email && !creating && (
+        <button onClick={()=>setCreating(true)}
+          style={{ width:"100%", padding:"9px", borderRadius:9, border:`1.5px dashed ${C.accent}`, background:C.accentLight,
+            color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          + Invite as platform user
+        </button>
+      )}
+      {creating && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {[["First name","first_name"],["Last name","last_name"]].map(([lbl,key])=>(
+            <div key={key}>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:3 }}>{lbl.toUpperCase()}</div>
+              <input value={createForm[key]} onChange={e=>setCreateForm(p=>({...p,[key]:e.target.value}))}
+                style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", borderRadius:8,
+                  border:`1px solid ${C.border}`, fontSize:13, fontFamily:F }}/>
+            </div>
+          ))}
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:3 }}>ROLE</div>
+            <select value={createForm.role_id} onChange={e=>setCreateForm(p=>({...p,role_id:e.target.value}))}
+              style={{ width:"100%", padding:"7px 9px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F }}>
+              <option value="">Select role…</option>
+              {roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display:"flex", gap:8, marginTop:4 }}>
+            <button onClick={handleCreate} disabled={saving||!createForm.first_name||!createForm.last_name||!createForm.role_id}
+              style={{ flex:1, padding:"8px", borderRadius:8, border:"none", background:C.accent, color:"#fff",
+                fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, opacity:saving?0.6:1 }}>
+              {saving ? "Inviting…" : "Send Invite"}
+            </button>
+            <button onClick={()=>setCreating(false)}
+              style={{ padding:"8px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent",
+                fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Linked user — view mode ──
+  const roleName = roles.find(r=>r.id===user.role_id)?.name || user.role?.name || "—";
+
+  if (editing) return (
+    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      {[["First name","first_name"],["Last name","last_name"]].map(([lbl,key])=>(
+        <div key={key}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:3 }}>{lbl.toUpperCase()}</div>
+          <input value={form[key]||""} onChange={e=>setForm(p=>({...p,[key]:e.target.value}))}
+            style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", borderRadius:8,
+              border:`1px solid ${C.border}`, fontSize:13, fontFamily:F }}/>
+        </div>
+      ))}
+      <div>
+        <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:3 }}>ROLE</div>
+        <select value={form.role_id||""} onChange={e=>setForm(p=>({...p,role_id:e.target.value}))}
+          style={{ width:"100%", padding:"7px 9px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F }}>
+          {roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:3 }}>STATUS</div>
+        <select value={form.status||""} onChange={e=>setForm(p=>({...p,status:e.target.value}))}
+          style={{ width:"100%", padding:"7px 9px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F }}>
+          {["active","invited","deactivated"].map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div style={{ display:"flex", gap:8, marginTop:4 }}>
+        <button onClick={save} disabled={saving}
+          style={{ flex:1, padding:"8px", borderRadius:8, border:"none", background:C.accent, color:"#fff",
+            fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, opacity:saving?0.6:1 }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button onClick={()=>setEditing(false)}
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent",
+            fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* User card */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+        <div style={{ width:44, height:44, borderRadius:12, background:C.accentLight, display:"flex",
+          alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:C.accent, flexShrink:0 }}>
+          {user.first_name?.[0]}{user.last_name?.[0]}
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:700, fontSize:14, color:C.text1 }}>{user.first_name} {user.last_name}</div>
+          <div style={{ fontSize:12, color:C.text3 }}>{user.email}</div>
+        </div>
+        <button onClick={startEdit} title="Edit user"
+          style={{ background:C.accentLight, border:"none", borderRadius:8, padding:"6px 8px",
+            cursor:"pointer", display:"flex", alignItems:"center", color:C.accent }}>
+          <Ic n="edit" s={14}/>
+        </button>
+      </div>
+
+      {/* Fields */}
+      {[
+        ["Role",       <span style={{ fontWeight:600, color:C.text1 }}>{roleName}</span>],
+        ["Status",     <span style={{ padding:"2px 9px", borderRadius:99, fontSize:11, fontWeight:700,
+                          background: STATUS_BG[user.status]||"#f3f4f6",
+                          color: STATUS_COLOR[user.status]||C.text2 }}>{user.status}</span>],
+        ["Last login", user.last_login ? new Date(user.last_login).toLocaleString() : <em style={{color:C.text3}}>Never</em>],
+        ["Login count",user.login_count || 0],
+        ["MFA",        user.mfa_enabled ? "✅ Enabled" : "Not enabled"],
+      ].map(([label, val]) => (
+        <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+          padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+          <span style={{ color:C.text3, fontWeight:500 }}>{label}</span>
+          <span style={{ color:C.text2 }}>{val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Panel registry — future: load custom panels from object config (Settings > Objects > Panels)
 export const PANEL_META = {
   comms:       { icon:"mail",          label:"Communications", defaultOpen:true  },
@@ -574,11 +756,13 @@ export const PANEL_META = {
   workflows:   { icon:"layers",        label:"Pipeline",  defaultOpen:false },
   linked:      { icon:"link",          label:"Linked Records", defaultOpen:true },
   match:       { icon:"sparkles",      label:"AI Match",  defaultOpen:false },
+  user:        { icon:"user",          label:"Platform User",  defaultOpen:true },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
   const base = ["comms","notes","attachments","activity","workflows"];
   if (objectName === "Person") base.splice(1, 0, "linked"); // after comms
+  if (objectName === "Person") base.push("user");           // Platform User at end
   if (["Person","Job"].includes(objectName)) base.push("match");
   return base;
 };
@@ -591,7 +775,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [activity, setActivity] = useState([]);
   const [newNote, setNewNote]   = useState("");
   const [saving, setSaving]     = useState(false);
-  const [openPanels, setOpenPanels] = useState({comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false});
+  const [openPanels, setOpenPanels] = useState({comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,user:true});
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
   const [showCommMenu, setShowCommMenu] = useState(false);
   const [draggingPanel, setDraggingPanel] = useState(null);
@@ -861,6 +1045,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     if (id==="workflows") return <RecordWorkflows record={record} objectId={record.object_id} environment={environment} objectName={objectName} onNavigate={onNavigate}/>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate}/>;
+    if (id==="user")   return <UserPanel record={record}/>;
 
     if (id==="match") return (
       <div style={{ margin:"-16px" }}>

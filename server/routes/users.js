@@ -120,3 +120,11 @@ router.get('/me/:id', (req, res) => {
   const permissions = query('permissions', p => p.role_id === u.role_id && p.allowed);
   res.json({ ...u, password_hash: undefined, role, permissions });
 });
+
+// GET /api/users/by-email/:email — find user linked to a Person record
+router.get('/by-email/:email', (req, res) => {
+  const u = findOne('users', u => u.email === decodeURIComponent(req.params.email));
+  if (!u) return res.status(404).json({ error: 'Not found' });
+  const role = findOne('roles', r => r.id === u.role_id);
+  res.json({ ...u, password_hash: undefined, role });
+});
