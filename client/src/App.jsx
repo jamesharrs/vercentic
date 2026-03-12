@@ -1175,7 +1175,7 @@ function App() {
             sessionStorage.setItem("talentos_search_query", q);
             sessionStorage.setItem("talentos_autosearch", "1");
           }
-        }} />
+        }} onNavigateToRecord={(recordId, objectId) => openRecord(recordId, objectId)} />
         {/* Page content */}
         <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: "auto" }}>
         {loading ? (
