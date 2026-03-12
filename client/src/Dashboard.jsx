@@ -239,16 +239,45 @@ export default function Dashboard({environment,onNavigate}) {
       <div style={{display:"flex",gap:16,marginBottom:20,flexWrap:"wrap"}}>
         <StatCard label="Total Candidates" value={peopleCount} sub={`${activePeople} active`}   icon="users"     color={C.accent} trend={12}
           onClick={() => onNavigate?.("people")}
-          onReport={() => openReport("people", { groupBy:"status", view:"bar", chartX:"status", chartY:"_count", name:"Candidates by Status" })}/>
+          onReport={() => openReport("people", {
+            groupBy:"status", view:"bar", chartX:"status", chartY:"_count",
+            name:"Candidates by Status",
+            formulas:[
+              { label:"Total Candidates", expr:"COUNT()" },
+              { label:"Active Rate %",    expr:"ROUND(AVG(status),0)" },
+            ]
+          })}/>
         <StatCard label="Open Jobs"        value={openJobs}    sub={`${jobsCount} total roles`} icon="briefcase" color={C.green}  trend={5}
           onClick={() => goToFiltered("jobs", "status", "Status", "Open")}
-          onReport={() => openReport("jobs", { filters:[{field:"status",op:"eq",value:"Open"}], groupBy:"department", view:"bar", chartX:"department", chartY:"_count", name:"Open Jobs by Department" })}/>
+          onReport={() => openReport("jobs", {
+            filters:[{field:"status",op:"eq",value:"Open"}],
+            groupBy:"department", view:"bar", chartX:"department", chartY:"_count",
+            name:"Open Jobs by Department",
+            formulas:[
+              { label:"Open Jobs",        expr:"COUNT()" },
+              { label:"Salary Max",       expr:"MAX(salary_max)" },
+              { label:"Salary Min",       expr:"MIN(salary_min)" },
+              { label:"Salary Spread",    expr:"DIFF(salary_max,salary_min)" },
+            ]
+          })}/>
         <StatCard label="Talent Pools"     value={poolsCount}  sub="curated pipelines"          icon="layers"    color={C.purple} trend={2}
           onClick={() => onNavigate?.("talent-pools")}
-          onReport={() => openReport("talent-pools", { groupBy:"category", view:"pie", chartX:"category", chartY:"_count", name:"Pools by Category" })}/>
+          onReport={() => openReport("talent-pools", {
+            groupBy:"category", view:"pie", chartX:"category", chartY:"_count",
+            name:"Pools by Category",
+            formulas:[
+              { label:"Total Pools", expr:"COUNT()" },
+            ]
+          })}/>
         <StatCard label="Placements"       value={placedCount} sub="this environment"           icon="check"     color={C.amber}  trend={8}
           onClick={() => goToFiltered("people", "status", "Status", "Placed")}
-          onReport={() => openReport("people", { filters:[{field:"status",op:"eq",value:"Placed"}], view:"table", name:"All Placements" })}/>
+          onReport={() => openReport("people", {
+            filters:[{field:"status",op:"eq",value:"Placed"}], view:"table",
+            name:"All Placements",
+            formulas:[
+              { label:"Total Placed",  expr:"COUNT()" },
+            ]
+          })}/>
       </div>
 
       {/* Charts row */}

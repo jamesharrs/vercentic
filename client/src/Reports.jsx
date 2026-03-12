@@ -273,7 +273,8 @@ export default function Reports({ envId, initialReport }) {
     setView(initialReport.view || "bar");
     setChartX(initialReport.chartX || initialReport.groupBy || "");
     setChartY(initialReport.chartY || "_count");
-    setPanel("builder");
+    // If the preset ships with formulas, land on the formula panel so they're immediately visible
+    setPanel(initialReport.formulas?.length ? "formula" : "builder");
     setRan(false);
     setRows([]);
   }, [initialReport, objects]);
@@ -400,9 +401,13 @@ export default function Reports({ envId, initialReport }) {
         {/* Tabs */}
         <div style={{ display:'flex', borderBottom:`1px solid ${BORDER}`, flexWrap:'wrap' }}>
           {['builder','templates','saved','formula'].map(p => (
-            <button key={p} onClick={() => setPanel(p)} style={{ flex:1, padding:'9px 0', border:'none', cursor:'pointer', fontSize:11, fontWeight:700,
-              background: panel===p ? LIGHT : 'transparent', color: panel===p ? ACCENT : MID, letterSpacing:'0.04em', textTransform:'uppercase', fontFamily:'inherit', minWidth:60 }}>
-              {p==='builder' ? '⚙' : p==='templates' ? '⭐' : p==='saved' ? '📋' : '∑'}
+            <button key={p} onClick={() => setPanel(p)} style={{ flex:1, padding:'9px 4px', border:'none', cursor:'pointer', fontSize:10, fontWeight:700,
+              background: panel===p ? LIGHT : 'transparent', color: panel===p ? ACCENT : MID, letterSpacing:'0.04em', textTransform:'uppercase', fontFamily:'inherit', minWidth:50,
+              position:'relative' }}>
+              {p==='builder' ? 'Build' : p==='templates' ? 'Templates' : p==='saved' ? 'Saved' : '∑ Formulas'}
+              {p==='formula' && formulas.length > 0 && (
+                <span style={{ position:'absolute', top:4, right:4, width:6, height:6, borderRadius:'50%', background:ACCENT }}/>
+              )}
             </button>
           ))}
         </div>
