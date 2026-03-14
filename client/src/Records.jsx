@@ -669,8 +669,101 @@ const FilterBar = ({ fields, filters, onChange }) => {
   );
 };
 
-/* ─── Table View ───────────────────────────────────────────────────────────── */
-const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile }) => {
+/* ─── Bulk Action Bar ─────────────────────────────────────────────────────── */
+const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit }) => {
+  const [showEditPicker, setShowEditPicker] = useState(false);
+  const [editFieldId,    setEditFieldId]    = useState("");
+  const [editValue,      setEditValue]      = useState("");
+  const [confirming,     setConfirming]     = useState(false);
+
+  const editableFields = fields.filter(f => !["id"].includes(f.api_key));
+  const chosenField    = editableFields.find(f => f.id === editFieldId);
+
+  const handleBulkEdit = () => {
+    if (!editFieldId) return;
+    onEdit(editFieldId, editValue);
+    setShowEditPicker(false);
+    setEditFieldId(""); setEditValue("");
+  };
+
+  const selSt = { padding:"5px 9px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:"white" };
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", background:"#1e293b",
+      borderRadius:10, marginBottom:10, flexWrap:"wrap" }}>
+      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>{count} selected</span>
+      <div style={{ display:"flex", gap:6, marginLeft:4 }}>
+        <button onClick={onSelectAll}
+          style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.1)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          Select all {total}
+        </button>
+        <button onClick={onClearAll}
+          style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          Clear
+        </button>
+      </div>
+      <div style={{ flex:1 }}/>
+      {/* Bulk edit */}
+      <div style={{ position:"relative" }}>
+        <button onClick={() => setShowEditPicker(s => !s)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.12)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="edit" s={12} c="white"/> Edit fields
+        </button>
+        {showEditPicker && (
+          <div style={{ position:"absolute", bottom:"calc(100% + 6px)", right:0, zIndex:500, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>Set field on {count} records</div>
+            <select value={editFieldId} onChange={e => { setEditFieldId(e.target.value); setEditValue(""); }} style={selSt}>
+              <option value="">Choose field…</option>
+              {editableFields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {chosenField && (
+              chosenField.field_type === "select" ? (
+                <select value={editValue} onChange={e => setEditValue(e.target.value)} style={selSt}>
+                  <option value="">— clear —</option>
+                  {(chosenField.options||[]).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : chosenField.field_type === "boolean" ? (
+                <select value={editValue} onChange={e => setEditValue(e.target.value)} style={selSt}>
+                  <option value="">— clear —</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              ) : (
+                <input value={editValue} onChange={e => setEditValue(e.target.value)}
+                  placeholder={`New value for ${chosenField.name}…`}
+                  style={{...selSt, width:"100%", boxSizing:"border-box"}}/>
+              )
+            )}
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => { setShowEditPicker(false); setEditFieldId(""); setEditValue(""); }}
+                style={{ flex:1, padding:"6px", borderRadius:7, border:`1px solid ${C.border}`, background:"transparent", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
+              <button onClick={handleBulkEdit} disabled={!editFieldId}
+                style={{ flex:2, padding:"6px", borderRadius:7, border:"none", background:C.accent, color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:!editFieldId?0.5:1 }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Bulk delete */}
+      {!confirming ? (
+        <button onClick={() => setConfirming(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.15)", color:"#fca5a5", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="trash" s={12} c="#fca5a5"/> Delete {count}
+        </button>
+      ) : (
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Sure?</span>
+          <button onClick={() => { onDelete(); setConfirming(false); }}
+            style={{ padding:"5px 12px", borderRadius:7, border:"none", background:"#ef4444", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F }}>Yes, delete</button>
+          <button onClick={() => setConfirming(false)}
+            style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ─── Table View ──────────────────────────────────────────────────────────── */
+const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll }) => {
   // Use visibleFieldIds if provided, otherwise fall back to show_in_list
   const listFields = visibleFieldIds
     ? visibleFieldIds.map(id => fields.find(f => f.id === id)).filter(Boolean)
@@ -689,7 +782,14 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
       <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
         <thead>
           <tr style={{ background:"#f8f9fc", borderBottom:`2px solid ${C.border}` }}>
-            <th style={{ width:36, padding:"10px 12px" }}/>
+            <th style={{ width:36, padding:"10px 12px" }}>
+              <input type="checkbox"
+                checked={selectedIds?.size > 0 && selectedIds?.size === records.length}
+                ref={el => { if (el) el.indeterminate = selectedIds?.size > 0 && selectedIds?.size < records.length; }}
+                onChange={onToggleAll}
+                style={{ width:15, height:15, cursor:"pointer", accentColor:C.accent }}/>
+            </th>
+            <th style={{ width:36, padding:"10px 8px" }}/>
             {listFields.map(f=>(
               <th key={f.id} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{f.name}</th>
             ))}
@@ -699,10 +799,17 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
         <tbody>
           {records.map(record => {
             const title = recordTitle(record, fields);
+            const isSelected = selectedIds?.has(record.id);
             return (
-              <tr key={record.id} style={{ borderBottom:`1px solid ${C.border}`, transition:"background .1s" }}
-                onMouseEnter={e=>e.currentTarget.style.background="#f8f9fc"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{ padding:"12px 12px", cursor:"pointer" }} onClick={()=>onProfile(record)}>
+              <tr key={record.id}
+                style={{ borderBottom:`1px solid ${C.border}`, transition:"background .1s", background: isSelected ? `${C.accent}08` : "transparent" }}
+                onMouseEnter={e=>{ if(!isSelected) e.currentTarget.style.background="#f8f9fc"; }}
+                onMouseLeave={e=>{ if(!isSelected) e.currentTarget.style.background="transparent"; }}>
+                <td style={{ padding:"12px 12px" }}>
+                  <input type="checkbox" checked={!!isSelected} onChange={() => onToggleSelect(record.id)}
+                    style={{ width:15, height:15, cursor:"pointer", accentColor:C.accent }}/>
+                </td>
+                <td style={{ padding:"12px 8px", cursor:"pointer", width:36 }} onClick={()=>onProfile(record)}>
                   <Avatar name={title} color={objectColor} size={28}/>
                 </td>
                 {listFields.map((f,fi)=>(
@@ -2024,6 +2131,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [showColPicker, setShowColPicker]     = useState(false);
   // Advanced filters
   const [activeFilters, setActiveFilters]     = useState([]);
+  // Bulk selection
+  const [selectedIds, setSelectedIds]         = useState(new Set());
   // Saved views
   const [showViewsMenu, setShowViewsMenu]     = useState(false);
   const [showExport,    setShowExport]        = useState(false);
@@ -2049,7 +2158,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [selected, setSelected] = useState(null);   // slide-out panel only
   const [showForm, setShowForm] = useState(false);
 
-  // Auto-open create modal when triggered from top bar Create button
+  // Clear selection when records change
+  useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
   useEffect(() => {
     if (autoCreate) { setShowForm(true); onAutoCreateConsumed?.(); }
   }, [autoCreate]);
@@ -2131,6 +2241,27 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const handleStatusChange = async (id, status) => {
     const updated = await api.patch(`/records/${id}`, { data:{ status }, updated_by:"Admin" });
     setRecords(rs => rs.map(r => r.id===id ? updated : r));
+  };
+
+  const handleBulkDelete = async () => {
+    await Promise.all([...selectedIds].map(id => api.del(`/records/${id}`)));
+    setSelectedIds(new Set());
+    load();
+  };
+
+  const handleBulkEdit = async (fieldId, value) => {
+    const field = fields.find(f => f.id === fieldId);
+    if (!field) return;
+    let coerced = value;
+    if (field.field_type === "boolean")  coerced = value === "true";
+    if (field.field_type === "number" || field.field_type === "currency") coerced = parseFloat(value) || 0;
+    await Promise.all([...selectedIds].map(id => {
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+      return api.patch(`/records/${id}`, { data: { ...rec.data, [field.api_key]: coerced }, updated_by: "Admin" });
+    }));
+    setSelectedIds(new Set());
+    load();
   };
 
   // Apply advanced filters on top of the loaded records
@@ -2323,6 +2454,19 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         </div>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          total={displayedRecords.length}
+          fields={fields}
+          onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
+          onClearAll={() => setSelectedIds(new Set())}
+          onDelete={handleBulkDelete}
+          onEdit={handleBulkEdit}
+        />
+      )}
+
       {/* Content */}
       <div style={{ flex:1, background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden" }}>
         {loading ? (
@@ -2332,7 +2476,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             onProfile={r=>onOpenRecord?.(r.id, object.id)}
             onSelect={r=>{setSelected(r);}}
             onEdit={can("edit") ? r=>setEditRecord(r) : null}
-            onDelete={can("delete") ? handleDelete : null}/>
+            onDelete={can("delete") ? handleDelete : null}
+            selectedIds={selectedIds}
+            onToggleSelect={id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })}
+            onToggleAll={() => setSelectedIds(prev => prev.size === displayedRecords.length ? new Set() : new Set(displayedRecords.map(r => r.id)))}/>
         )}
       </div>
 
