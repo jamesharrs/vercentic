@@ -532,12 +532,14 @@ function PersonPanel({ person, relationships, allPeople, onClose, onOpenRecord }
 }
 
 // ── Open Role creation modal ──────────────────────────────────────────────────
-function OpenRoleModal({ defaultDept, onSave, onClose }) {
-  const [title, setTitle]   = useState("");
-  const [dept,  setDept]    = useState(defaultDept || "");
-  const [loc,   setLoc]     = useState("");
-  const [empType, setEmpType] = useState("Full-time");
-  const [saving, setSaving] = useState(false);
+function OpenRoleModal({ defaultDept, workflows, onSave, onClose }) {
+  const [title,       setTitle]       = useState("");
+  const [dept,        setDept]        = useState(defaultDept || "");
+  const [loc,         setLoc]         = useState("");
+  const [empType,     setEmpType]     = useState("Full-time");
+  const [jobWorkflow, setJobWorkflow] = useState("");
+  const [pplWorkflow, setPplWorkflow] = useState("");
+  const [saving,      setSaving]      = useState(false);
   const DEPTS = ["Engineering","Product","Design","Sales","Marketing","HR","Finance","Operations","Legal","Other"];
   const EMPS  = ["Full-time","Part-time","Contract","Internship","Freelance"];
 
@@ -545,7 +547,11 @@ function OpenRoleModal({ defaultDept, onSave, onClose }) {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      await onSave({ job_title: title.trim(), department: dept, location: loc, employment_type: empType });
+      await onSave({
+        job_title: title.trim(), department: dept, location: loc, employment_type: empType,
+        ...(jobWorkflow && { workflow_id: jobWorkflow }),
+        ...(pplWorkflow && { people_workflow_id: pplWorkflow }),
+      });
     } catch(e) {
       console.error("Failed to create role:", e);
       setSaving(false);
@@ -555,10 +561,10 @@ function OpenRoleModal({ defaultDept, onSave, onClose }) {
   };
 
   return ReactDOM.createPortal(
-    <div onClick={onClose}
+    <div onClick={onClose} onMouseDown={e=>e.stopPropagation()}
       style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(15,23,41,0.35)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()}
+      <div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}
         style={{ background:"#fff", border:`1.5px solid ${C.amber}`, borderRadius:16,
           boxShadow:"0 20px 60px rgba(0,0,0,0.22)", width:320, overflow:"hidden", fontFamily:F }}>
         <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${C.border}`,
@@ -603,6 +609,27 @@ function OpenRoleModal({ defaultDept, onSave, onClose }) {
               style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:8,
                 border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none" }}/>
           </div>
+          {/* Workflow selectors */}
+          {workflows?.length > 0 && <>
+            <div>
+              <label style={{ fontSize:10, fontWeight:700, color:C.text3, display:"block", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Job Workflow</label>
+              <select value={jobWorkflow} onChange={e=>setJobWorkflow(e.target.value)}
+                style={{ width:"100%", padding:"7px 8px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F }}>
+                <option value="">— None —</option>
+                {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+              <div style={{ fontSize:10, color:C.text3, marginTop:3 }}>Workflow to apply to this job record</div>
+            </div>
+            <div>
+              <label style={{ fontSize:10, fontWeight:700, color:C.text3, display:"block", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>People Workflow</label>
+              <select value={pplWorkflow} onChange={e=>setPplWorkflow(e.target.value)}
+                style={{ width:"100%", padding:"7px 8px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F }}>
+                <option value="">— None —</option>
+                {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+              <div style={{ fontSize:10, color:C.text3, marginTop:3 }}>Workflow to apply to linked people</div>
+            </div>
+          </>}
           <div style={{ display:"flex", gap:8, marginTop:2 }}>
             <button onClick={onClose}
               style={{ flex:1, padding:"9px", borderRadius:8, border:`1px solid ${C.border}`,
@@ -917,6 +944,7 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
                   : { anchorEl: e.currentTarget, personId: node.id, dir: "above", defaultDept: d.department });
               }}
               style={plusBtnStyle(true)}
+              data-export-hide="1"
               onMouseEnter={e=>{ e.currentTarget.style.opacity="1"; e.currentTarget.style.transform="scale(1.2)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.opacity="0.75"; e.currentTarget.style.transform="scale(1)"; }}
             >+</div>
@@ -929,6 +957,7 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
                   : { anchorEl: e.currentTarget, personId: node.id, dir: "below", defaultDept: d.department });
               }}
               style={plusBtnStyle(false)}
+              data-export-hide="1"
               onMouseEnter={e=>{ e.currentTarget.style.opacity="1"; e.currentTarget.style.transform="scale(1.2)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.opacity="0.75"; e.currentTarget.style.transform="scale(1)"; }}
             >+</div>
@@ -1008,6 +1037,7 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
 // ── Main export ────────────────────────────────────────────────────────────────
 export default function OrgChart({ environment }) {
   const [activeFilters, setActiveFilters] = useState(["reports_to","dotted_line_to","interim_manager_of"]);
+  const [showVacancies, setShowVacancies] = useState(true);
   const [viewMode, setViewMode]           = useState("structure");
   const [peopleSearch, setPeopleSearch]   = useState("");
   const [deptFilter, setDeptFilter]       = useState("all");
@@ -1354,31 +1384,61 @@ export default function OrgChart({ environment }) {
     const container = zp.canvasRef.current;
     if (!container) return;
 
-    // Fit the full chart before capturing
+    // Fit before capturing
     handleFit();
-    await new Promise(r => setTimeout(r, 200)); // allow render
+    await new Promise(r => setTimeout(r, 250));
+
+    // Hide + buttons during capture
+    const plusBtns = container.querySelectorAll('[data-export-hide]');
+    plusBtns.forEach(el => { el.style.visibility = 'hidden'; });
 
     try {
       const canvas = await html2canvas(container, {
         backgroundColor: C.bg,
-        scale: 2, // retina quality
+        scale: 2,
         useCORS: true,
         logging: false,
       });
 
-      const imgData = canvas.toDataURL("image/png");
-      const imgW = canvas.width;
-      const imgH = canvas.height;
+      // Build title
+      const deptLabel  = deptFilter !== "all" ? deptFilter : "All Departments";
+      const viewLabel  = viewMode === "people" ? "People" : "Structure";
+      const title      = `Org Chart — ${viewLabel}${deptFilter !== "all" ? ` · ${deptLabel}` : ""}`;
+      const dateLabel  = new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" });
 
-      // Landscape PDF sized to the content
-      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [imgW / 2, imgH / 2] });
-      pdf.addImage(imgData, "PNG", 0, 0, imgW / 2, imgH / 2);
+      const TITLE_H  = 40; // px in PDF units
+      const imgW     = canvas.width  / 2;
+      const imgH     = canvas.height / 2;
+      const pdfW     = imgW;
+      const pdfH     = imgH + TITLE_H;
 
-      const deptLabel = deptFilter !== "all" ? `-${deptFilter}` : "";
-      const viewLabel = viewMode === "people" ? "people" : "structure";
-      pdf.save(`orgchart-${viewLabel}${deptLabel}-${new Date().toISOString().slice(0,10)}.pdf`);
+      const pdf = new jsPDF({ orientation: pdfW > pdfH ? "landscape" : "portrait", unit: "px", format: [pdfW, pdfH] });
+
+      // Title bar
+      pdf.setFillColor(15, 23, 41);
+      pdf.rect(0, 0, pdfW, TITLE_H, 'F');
+
+      // Title text
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(14);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(title, 16, TITLE_H / 2 + 5);
+
+      // Date (right-aligned)
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(180, 190, 210);
+      pdf.text(dateLabel, pdfW - 16, TITLE_H / 2 + 4, { align: "right" });
+
+      // Chart image
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, TITLE_H, imgW, imgH);
+
+      const filename = `orgchart-${viewMode}${deptFilter !== "all" ? `-${deptFilter}` : ""}-${new Date().toISOString().slice(0,10)}.pdf`;
+      pdf.save(filename);
     } catch(e) {
       console.error("PDF export failed:", e);
+    } finally {
+      plusBtns.forEach(el => { el.style.visibility = ''; });
     }
   }, [handleFit, viewMode, deptFilter]);
 
@@ -1489,7 +1549,7 @@ export default function OrgChart({ environment }) {
             </div>
           )}
 
-          {/* Relationship filters (people view only) */}
+          {/* Relationship filters + vacancies toggle (people view only) */}
           {isDrilled && (
             <div style={{ display:"flex", gap:5 }}>
               {Object.entries(REL_META).filter(([k])=>k!=="manages").map(([type, meta])=>(
@@ -1501,6 +1561,14 @@ export default function OrgChart({ environment }) {
                   {meta.label}
                 </button>
               ))}
+              <button onClick={() => setShowVacancies(v => !v)}
+                style={{ padding:"5px 9px", borderRadius:7,
+                  border:`1px solid ${showVacancies ? C.amber : C.border}`,
+                  background: showVacancies ? `${C.amber}12` : "transparent",
+                  color: showVacancies ? C.amber : C.text3,
+                  fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all 0.15s" }}>
+                💼 Vacancies
+              </button>
             </div>
           )}
 
@@ -1563,7 +1631,7 @@ export default function OrgChart({ environment }) {
           <CanvasWrapper zoom={zp.zoom} pan={zp.pan} panRef={zp.panRef} canvasRef={zp.canvasRef}
             handlePanStart={zp.handlePanStart} handleWheel={zp.handleWheel} selectedPanel={hasPanel}>
             {isDrilled
-              ? <PeopleCanvas people={scopedPeople} openJobs={scopedJobs} relationships={relationships} activeFilters={activeFilters}
+              ? <PeopleCanvas people={scopedPeople} openJobs={showVacancies ? scopedJobs : []} relationships={relationships} activeFilters={activeFilters}
                   selectedId={selectedId} onSelect={setSelectedId} onPanStart={zp.handlePanStart}
                   onAddRelationship={handleAddRelationship} onOpenRecord={openPersonRecord}
                   onCreateOpenRole={handleCreateOpenRole} deptFilter={deptFilter}/>
