@@ -315,9 +315,366 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose }) => {
   );
 };
 
+/* ─── Saved Lists ────────────────────────────────────────────────────────────── */
+const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, currentVisibleFieldIds, currentViewMode, fields, onLoad, onClose }) => {
+  const [views, setViews]       = useState([]);
+  const [saving, setSaving]     = useState(false);
+  const [showSave, setShowSave] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saveShared, setSaveShared] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const ref = useRef(null);
+
+  const load = useCallback(async () => {
+    const res = await api.get(`/saved-views?object_id=${objectId}&environment_id=${environmentId}&user_id=${encodeURIComponent(userId || "")}`);
+    setViews(Array.isArray(res) ? res : []);
+  }, [objectId, environmentId, userId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [onClose]);
+
+  const handleSave = async () => {
+    if (!saveName.trim()) return;
+    setSaving(true);
+    await api.post("/saved-views", {
+      name: saveName.trim(),
+      object_id: objectId,
+      environment_id: environmentId,
+      created_by: userId || "unknown",
+      is_shared: saveShared,
+      filters: currentFilters,
+      visible_field_ids: currentVisibleFieldIds || [],
+      view_mode: currentViewMode,
+    });
+    setSaving(false);
+    setSaveName("");
+    setSaveShared(false);
+    setShowSave(false);
+    load();
+  };
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    await api.del(`/saved-views/${id}`);
+    setDeleting(null);
+    load();
+  };
+
+  const handleToggleShare = async (view) => {
+    await api.patch(`/saved-views/${view.id}`, { is_shared: !view.is_shared });
+    load();
+  };
+
+  const ibs = { padding:"6px 9px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:"white", width:"100%", boxSizing:"border-box" };
+
+  return (
+    <div ref={ref} style={{ position:"absolute", top:"100%", right:0, zIndex:350, marginTop:4,
+      background:C.surface, border:`1px solid ${C.border}`, borderRadius:12,
+      boxShadow:"0 8px 28px rgba(0,0,0,.13)", minWidth:280, maxHeight:480, display:"flex", flexDirection:"column" }}>
+
+      {/* Header */}
+      <div style={{ padding:"10px 14px 8px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em" }}>Saved Lists</span>
+        <button onClick={() => setShowSave(s => !s)}
+          style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 9px", borderRadius:7, border:`1px solid ${C.accent}`,
+            background: showSave ? C.accentLight : "transparent", color:C.accent, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F }}>
+          <Ic n="plus" s={11}/> Save current list
+        </button>
+      </div>
+
+      {/* Save form */}
+      {showSave && (
+        <div style={{ padding:"10px 14px", borderBottom:`1px solid ${C.border}`, display:"flex", flexDirection:"column", gap:8, background:"#f8f9fc" }}>
+          <input value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="View name…" style={ibs} autoFocus
+            onKeyDown={e => e.key === "Enter" && handleSave()}/>
+          <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, color:C.text2, userSelect:"none" }}>
+            <div onClick={() => setSaveShared(s => !s)}
+              style={{ width:32, height:18, borderRadius:9, background: saveShared ? C.accent : "#d1d5db", position:"relative", transition:"background .2s", cursor:"pointer", flexShrink:0 }}>
+              <div style={{ position:"absolute", top:2, left: saveShared ? 16 : 2, width:14, height:14, borderRadius:"50%", background:"white", transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
+            </div>
+            <span>Share with all users</span>
+          </label>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={() => { setShowSave(false); setSaveName(""); }} style={{ flex:1, padding:"5px", borderRadius:7, border:`1px solid ${C.border}`, background:"transparent", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving || !saveName.trim()} style={{ flex:2, padding:"5px", borderRadius:7, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:(!saveName.trim()||saving)?0.5:1 }}>
+              {saving ? "Saving…" : "Save list"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Views list */}
+      <div style={{ flex:1, overflowY:"auto" }}>
+        {views.length === 0 ? (
+          <div style={{ padding:"20px 14px", textAlign:"center", fontSize:12, color:C.text3, fontStyle:"italic" }}>No saved lists yet</div>
+        ) : views.map(view => (
+          <div key={view.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px",
+            borderBottom:`1px solid ${C.border}`, cursor:"pointer", transition:"background .1s" }}
+            onMouseEnter={e => e.currentTarget.style.background="#f8f9fc"}
+            onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+            {/* Load button */}
+            <div onClick={() => { onLoad(view); onClose(); }} style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{view.name}</div>
+              <div style={{ fontSize:10, color:C.text3, marginTop:1, display:"flex", alignItems:"center", gap:6 }}>
+                <span>Table</span>
+                {view.filters?.length > 0 && <span>· {view.filters.length} filter{view.filters.length !== 1 ? "s" : ""}</span>}
+                {view.is_shared && <span style={{ color:"#0ca678", fontWeight:600 }}>· Shared</span>}
+                {!view.is_shared && <span style={{ color:C.text3 }}>· Private</span>}
+              </div>
+            </div>
+            {/* Actions */}
+            <div style={{ display:"flex", gap:2, flexShrink:0 }}>
+              {view.created_by === (userId || "unknown") && (
+                <button onClick={e => { e.stopPropagation(); handleToggleShare(view); }}
+                  title={view.is_shared ? "Make private" : "Share with team"}
+                  style={{ background:"none", border:"none", cursor:"pointer", padding:4, borderRadius:5, color: view.is_shared ? "#0ca678" : C.text3, display:"flex" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>
+                  </svg>
+                </button>
+              )}
+              {view.created_by === (userId || "unknown") && (
+                <button onClick={e => { e.stopPropagation(); handleDelete(view.id); }}
+                  style={{ background:"none", border:"none", cursor:"pointer", padding:4, borderRadius:5, color: deleting===view.id ? "#ef4444" : C.text3, display:"flex" }}
+                  disabled={deleting===view.id}>
+                  <Ic n="trash" s={12}/>
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ─── Column Picker Dropdown ───────────────────────────────────────────────── */
+const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [onClose]);
+
+  const toggleField = (id) => {
+    if (visibleIds.includes(id)) {
+      if (visibleIds.length <= 1) return; // always show at least 1
+      onChange(visibleIds.filter(x => x !== id));
+    } else {
+      onChange([...visibleIds, id]);
+    }
+  };
+
+  return (
+    <div ref={ref} style={{ position:"absolute", top:"100%", right:0, zIndex:300, marginTop:4,
+      background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.12)",
+      minWidth:220, maxHeight:360, overflowY:"auto", padding:"8px 0" }}>
+      <div style={{ padding:"6px 14px 8px", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:`1px solid ${C.border}`, marginBottom:4 }}>
+        Columns
+      </div>
+      {fields.map(f => {
+        const on = visibleIds.includes(f.id);
+        return (
+          <div key={f.id} onClick={() => toggleField(f.id)}
+            style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 14px", cursor:"pointer",
+              background: on ? C.accentLight : "transparent", transition:"background .1s" }}
+            onMouseEnter={e => !on && (e.currentTarget.style.background="#f8f9fc")}
+            onMouseLeave={e => !on && (e.currentTarget.style.background="transparent")}>
+            <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${on?C.accent:C.border}`,
+              background: on ? C.accent : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .1s" }}>
+              {on && <Ic n="check" s={10} c="white"/>}
+            </div>
+            <span style={{ fontSize:13, fontWeight: on?600:400, color: on?C.accent:C.text1 }}>{f.name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ─── Filter Bar ─────────────────────────────────────────────────────────────── */
+const FILTER_OPS = {
+  text:    ["contains","does not contain","is","is not","is empty","is not empty"],
+  number:  ["=","≠","<",">","≤","≥","is empty","is not empty"],
+  date:    ["is","is before","is after","is empty","is not empty"],
+  select:  ["is","is not","is empty","is not empty"],
+  multi_select: ["includes","excludes","is empty","is not empty"],
+  boolean: ["is true","is false"],
+};
+
+const getOpsForField = (f) => {
+  if (!f) return FILTER_OPS.text;
+  if (f.field_type === "select") return FILTER_OPS.select;
+  if (f.field_type === "multi_select") return FILTER_OPS.multi_select;
+  if (f.field_type === "boolean") return FILTER_OPS.boolean;
+  if (["number","currency","rating"].includes(f.field_type)) return FILTER_OPS.number;
+  if (f.field_type === "date") return FILTER_OPS.date;
+  return FILTER_OPS.text;
+};
+
+const applyFilters = (records, filters, fields) => {
+  if (!filters.length) return records;
+  return records.filter(record => filters.every(filt => {
+    const field = fields.find(f => f.id === filt.fieldId);
+    if (!field) return true;
+    const rawVal = record.data?.[field.api_key];
+    const op = filt.op;
+    const fv = filt.value;
+    if (op === "is empty") return rawVal === null || rawVal === undefined || rawVal === "" || (Array.isArray(rawVal) && rawVal.length === 0);
+    if (op === "is not empty") return rawVal !== null && rawVal !== undefined && rawVal !== "" && !(Array.isArray(rawVal) && rawVal.length === 0);
+    if (op === "is true") return rawVal === true;
+    if (op === "is false") return rawVal === false || rawVal === undefined || rawVal === null;
+    const strVal = String(rawVal ?? "").toLowerCase();
+    const strFv = String(fv ?? "").toLowerCase();
+    switch (op) {
+      case "contains": return strVal.includes(strFv);
+      case "does not contain": return !strVal.includes(strFv);
+      case "is": return strVal === strFv;
+      case "is not": return strVal !== strFv;
+      case "=": return Number(rawVal) === Number(fv);
+      case "≠": return Number(rawVal) !== Number(fv);
+      case "<": return Number(rawVal) < Number(fv);
+      case ">": return Number(rawVal) > Number(fv);
+      case "≤": return Number(rawVal) <= Number(fv);
+      case "≥": return Number(rawVal) >= Number(fv);
+      case "is before": return new Date(rawVal) < new Date(fv);
+      case "is after": return new Date(rawVal) > new Date(fv);
+      case "includes": return Array.isArray(rawVal) ? rawVal.some(v => String(v).toLowerCase() === strFv) : strVal === strFv;
+      case "excludes": return Array.isArray(rawVal) ? !rawVal.some(v => String(v).toLowerCase() === strFv) : strVal !== strFv;
+      default: return true;
+    }
+  }));
+};
+
+const FilterBar = ({ fields, filters, onChange }) => {
+  const [adding, setAdding] = useState(false);
+  const [draftField, setDraftField] = useState("");
+  const [draftOp, setDraftOp]       = useState("");
+  const [draftVal, setDraftVal]     = useState("");
+  const addRef = useRef(null);
+
+  // sync first field when fields load or change
+  useEffect(() => {
+    if (fields.length && !draftField) {
+      setDraftField(fields[0].id);
+    }
+  }, [fields]);
+
+  // reset draft op when field changes
+  useEffect(() => {
+    const f = fields.find(x => x.id === draftField);
+    setDraftOp(getOpsForField(f)[0] || "");
+    setDraftVal("");
+  }, [draftField]);
+
+  useEffect(() => {
+    const h = e => { if (addRef.current && !addRef.current.contains(e.target)) setAdding(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const draftFieldObj = fields.find(f => f.id === draftField);
+  const noValueOps = ["is empty","is not empty","is true","is false"];
+  const needsValue = !noValueOps.includes(draftOp);
+
+  const handleAdd = () => {
+    if (!draftField || !draftOp) return;
+    onChange([...filters, { id: Date.now()+"", fieldId: draftField, op: draftOp, value: draftVal }]);
+    setAdding(false);
+    setDraftVal("");
+  };
+
+  const removeFilter = (id) => onChange(filters.filter(f => f.id !== id));
+
+  const selectSt = { padding:"6px 9px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:"white" };
+
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+      {/* Active filter chips */}
+      {filters.map(filt => {
+        const field = fields.find(f => f.id === filt.fieldId);
+        return (
+          <div key={filt.id} style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 8px 4px 10px",
+            borderRadius:20, background:C.accentLight, border:`1.5px solid ${C.accent}`, fontSize:12, color:C.accent, fontWeight:600, whiteSpace:"nowrap" }}>
+            <span style={{ color:C.text2, fontWeight:400 }}>{field?.name}</span>
+            <span style={{ color:C.text3, fontWeight:400 }}>{filt.op}</span>
+            {filt.value && <span style={{ fontStyle:"italic" }}>{filt.value}</span>}
+            <button onClick={() => removeFilter(filt.id)}
+              style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 2px", display:"flex", color:C.accent, opacity:0.6 }}
+              onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
+              <Ic n="x" s={11} c={C.accent}/>
+            </button>
+          </div>
+        );
+      })}
+
+      {/* Add filter popover */}
+      <div ref={addRef} style={{ position:"relative" }}>
+        <button onClick={() => setAdding(a => !a)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8,
+            border:`1px dashed ${C.border}`, background:"transparent", fontSize:12, fontWeight:600,
+            cursor:"pointer", fontFamily:F, color:C.text3, transition:"all .12s" }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text3;}}>
+          <Ic n="plus" s={12}/> Add filter
+        </button>
+        {adding && (
+          <div style={{ position:"absolute", top:"100%", left:0, zIndex:400, marginTop:6,
+            background:C.surface, border:`1px solid ${C.border}`, borderRadius:12,
+            boxShadow:"0 8px 24px rgba(0,0,0,.12)", padding:"14px", display:"flex", flexDirection:"column", gap:8, minWidth:320 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:2 }}>Add filter</div>
+            {/* Field */}
+            <select value={draftField} onChange={e => setDraftField(e.target.value)} style={selectSt}>
+              {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {/* Operator */}
+            <select value={draftOp} onChange={e => setDraftOp(e.target.value)} style={selectSt}>
+              {getOpsForField(draftFieldObj).map(op => <option key={op} value={op}>{op}</option>)}
+            </select>
+            {/* Value */}
+            {needsValue && (
+              draftFieldObj?.field_type === "select" ? (
+                <select value={draftVal} onChange={e => setDraftVal(e.target.value)} style={selectSt}>
+                  <option value="">— Any —</option>
+                  {(draftFieldObj.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : draftFieldObj?.field_type === "multi_select" ? (
+                <select value={draftVal} onChange={e => setDraftVal(e.target.value)} style={selectSt}>
+                  <option value="">— Any —</option>
+                  {(draftFieldObj.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : draftFieldObj?.field_type === "date" ? (
+                <input type="date" value={draftVal} onChange={e => setDraftVal(e.target.value)} style={{...selectSt, width:"100%", boxSizing:"border-box"}}/>
+              ) : (
+                <input value={draftVal} onChange={e => setDraftVal(e.target.value)}
+                  placeholder="Value…" style={{...selectSt, width:"100%", boxSizing:"border-box"}}
+                  onKeyDown={e => e.key === "Enter" && handleAdd()}/>
+              )
+            )}
+            <div style={{ display:"flex", gap:6, justifyContent:"flex-end", marginTop:2 }}>
+              <button onClick={() => setAdding(false)} style={{ padding:"5px 12px", borderRadius:7, border:`1px solid ${C.border}`, background:"transparent", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
+              <button onClick={handleAdd} style={{ padding:"5px 14px", borderRadius:7, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─── Table View ───────────────────────────────────────────────────────────── */
-const TableView = ({ records, fields, objectColor, onSelect, onEdit, onDelete, onProfile }) => {
-  const listFields = fields.filter(f=>f.show_in_list).slice(0,6);
+const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile }) => {
+  // Use visibleFieldIds if provided, otherwise fall back to show_in_list
+  const listFields = visibleFieldIds
+    ? visibleFieldIds.map(id => fields.find(f => f.id === id)).filter(Boolean)
+    : fields.filter(f => f.show_in_list).slice(0, 6);
 
   if (records.length===0) return (
     <div style={{ textAlign:"center", padding:"80px 40px", color:C.text3 }}>
@@ -746,6 +1103,192 @@ function PlatformUserSection({ record }) {
   );
 }
 
+// ── ReportingPanel — formal relationships on Person records ──────────────────
+const REL_TYPES = [
+  { value:"reports_to",         label:"Reports to",       inverse:"manages" },
+  { value:"manages",            label:"Manages",          inverse:"reports_to" },
+  { value:"dotted_line_to",     label:"Dotted-line to",   inverse:null },
+  { value:"interim_manager_of", label:"Interim manager of", inverse:null },
+];
+const REL_COLORS = {
+  reports_to:"#4361EE", manages:"#0CAF77",
+  dotted_line_to:"#7C3AED", interim_manager_of:"#F79009",
+};
+
+function ReportingPanel({ record, environment }) {
+  const [rels, setRels]         = useState([]);
+  const [allPeople, setAllPeople] = useState([]);
+  const [adding, setAdding]     = useState(false);
+  const [form, setForm]         = useState({ type:"reports_to", to_record_id:"" });
+  const [search, setSearch]     = useState("");
+  const [saving, setSaving]     = useState(false);
+
+  const load = useCallback(async () => {
+    if (!record?.id || !environment?.id) return;
+    const [r, pplObj] = await Promise.all([
+      fetch(`/api/relationships?environment_id=${environment.id}&record_id=${record.id}`).then(r=>r.json()),
+      fetch(`/api/objects?environment_id=${environment.id}`).then(r=>r.json()),
+    ]);
+    setRels(Array.isArray(r) ? r : []);
+    // Find people objects with relationships enabled
+    const personObj = (Array.isArray(pplObj) ? pplObj : []).find(o => o.slug === "people");
+    if (personObj) {
+      const ppl = await fetch(`/api/records?object_id=${personObj.id}&environment_id=${environment.id}&limit=200`).then(r=>r.json());
+      setAllPeople(Array.isArray(ppl?.records) ? ppl.records : []);
+    }
+  }, [record?.id, environment?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const personName = (id) => {
+    const p = allPeople.find(p => p.id === id);
+    if (!p) return "Unknown";
+    const d = p.data || {};
+    return [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || "Unnamed";
+  };
+
+  const personTitle = (id) => {
+    const p = allPeople.find(p => p.id === id);
+    return p?.data?.job_title || p?.data?.current_title || "";
+  };
+
+  const handleAdd = async () => {
+    if (!form.to_record_id) return;
+    setSaving(true);
+    await fetch("/api/relationships", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ from_record_id: record.id, to_record_id: form.to_record_id,
+        type: form.type, environment_id: environment.id }),
+    });
+    setAdding(false); setForm({ type:"reports_to", to_record_id:"" }); setSearch("");
+    setSaving(false); load();
+  };
+
+  const handleDelete = async (id) => {
+    await fetch(`/api/relationships/${id}`, { method:"DELETE" });
+    load();
+  };
+
+  // Group rels: from this person (outgoing) and to this person (incoming)
+  const outgoing = rels.filter(r => r.from_record_id === record.id);
+  const incoming = rels.filter(r => r.to_record_id === record.id);
+
+  const filtered = allPeople.filter(p => p.id !== record.id && (
+    !search || personName(p.id).toLowerCase().includes(search.toLowerCase()) ||
+    (p.data?.email||"").toLowerCase().includes(search.toLowerCase())
+  ));
+
+  const RelRow = ({ rel, dir }) => {
+    const otherId = dir === "out" ? rel.to_record_id : rel.from_record_id;
+    const typeLabel = dir === "out"
+      ? REL_TYPES.find(t => t.value === rel.type)?.label || rel.type
+      : REL_TYPES.find(t => t.value === rel.type)?.label
+          ? (REL_TYPES.find(t => t.value === rel.type).inverse
+            ? REL_TYPES.find(t => t.value === REL_TYPES.find(x=>x.value===rel.type).inverse)?.label || rel.inverse_type
+            : REL_TYPES.find(t => t.value === rel.type)?.label)
+          : rel.type;
+    const color = REL_COLORS[rel.type] || "#4361EE";
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px",
+        borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ width:28, height:28, borderRadius:8, background:`${color}18`,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:12, fontWeight:800, color, flexShrink:0 }}>
+          {personName(otherId).split(" ").map(w=>w[0]).join("").slice(0,2)}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:C.text1,
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {personName(otherId)}
+          </div>
+          <div style={{ fontSize:10, color:C.text3 }}>
+            {personTitle(otherId) && <span>{personTitle(otherId)} · </span>}
+            <span style={{ color }}>{typeLabel}</span>
+          </div>
+        </div>
+        <button onClick={() => handleDelete(rel.id)}
+          style={{ background:"none", border:"none", cursor:"pointer", color:C.text3,
+            fontSize:16, padding:"2px 4px", borderRadius:4, lineHeight:1 }}
+          title="Remove relationship">×</button>
+      </div>
+    );
+  };
+
+  const hasAny = outgoing.length > 0 || incoming.length > 0;
+
+  return (
+    <div>
+      {/* Relationship rows */}
+      {!hasAny && !adding && (
+        <div style={{ padding:"16px 14px", fontSize:12, color:C.text3, fontStyle:"italic" }}>
+          No reporting relationships yet.
+        </div>
+      )}
+      <div style={{ background:"#f8f9fc", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}` }}>
+        {outgoing.map(r => <RelRow key={r.id} rel={r} dir="out"/>)}
+        {incoming.map(r => <RelRow key={r.id} rel={r} dir="in"/>)}
+
+        {/* Add form */}
+        {adding ? (
+          <div style={{ padding:"12px 14px", borderTop: hasAny ? `1px solid ${C.border}` : "none",
+            display:"flex", flexDirection:"column", gap:8 }}>
+            <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}
+              style={{ padding:"6px 9px", borderRadius:7, border:`1px solid ${C.border}`,
+                fontSize:12, fontFamily:F, color:C.text1 }}>
+              {REL_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <input value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="Search people…"
+              style={{ padding:"6px 9px", borderRadius:7, border:`1px solid ${C.border}`,
+                fontSize:12, fontFamily:F, color:C.text1 }}/>
+            {search && (
+              <div style={{ maxHeight:160, overflowY:"auto", border:`1px solid ${C.border}`,
+                borderRadius:8, background:"white" }}>
+                {filtered.length === 0
+                  ? <div style={{ padding:10, fontSize:12, color:C.text3, textAlign:"center" }}>No matches</div>
+                  : filtered.slice(0,10).map(p => (
+                    <div key={p.id} onClick={()=>{ setForm(f=>({...f,to_record_id:p.id})); setSearch(personName(p.id)); }}
+                      style={{ padding:"7px 10px", cursor:"pointer", fontSize:12, color:C.text1,
+                        borderBottom:`1px solid ${C.border}`, background: form.to_record_id===p.id ? C.accentLight : "transparent" }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+                      onMouseLeave={e=>e.currentTarget.style.background=form.to_record_id===p.id?C.accentLight:"transparent"}>
+                      <span style={{ fontWeight:600 }}>{personName(p.id)}</span>
+                      {personTitle(p.id) && <span style={{ color:C.text3 }}> · {personTitle(p.id)}</span>}
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={handleAdd} disabled={!form.to_record_id || saving}
+                style={{ flex:1, padding:"6px", borderRadius:7, border:"none",
+                  background:C.accent, color:"#fff", fontSize:12, fontWeight:700,
+                  cursor:"pointer", fontFamily:F, opacity:(!form.to_record_id||saving)?0.5:1 }}>
+                {saving ? "Saving…" : "Add relationship"}
+              </button>
+              <button onClick={()=>{ setAdding(false); setSearch(""); setForm({type:"reports_to",to_record_id:""}); }}
+                style={{ padding:"6px 12px", borderRadius:7, border:`1px solid ${C.border}`,
+                  background:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding:"8px 14px", borderTop: hasAny ? `1px solid ${C.border}` : "none",
+            display:"flex", justifyContent:"flex-end" }}>
+            <button onClick={()=>setAdding(true)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
+                borderRadius:7, border:`1px solid ${C.border}`, background:"transparent",
+                fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>
+              + Add relationship
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Panel registry — future: load custom panels from object config (Settings > Objects > Panels)
 export const PANEL_META = {
   comms:       { icon:"mail",          label:"Communications", defaultOpen:true  },
@@ -755,12 +1298,13 @@ export const PANEL_META = {
   workflows:   { icon:"layers",        label:"Pipeline",  defaultOpen:false },
   linked:      { icon:"link",          label:"Linked Records", defaultOpen:true },
   match:       { icon:"sparkles",      label:"AI Match",  defaultOpen:false },
+  reporting:   { icon:"gitBranch",     label:"Reporting", defaultOpen:true  },
   user:        { icon:"user",          label:"Platform User",  defaultOpen:true },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
   const base = ["comms","notes","attachments","activity","workflows"];
-  if (objectName === "Person") base.splice(1, 0, "linked"); // after comms
+  if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   return base;
 };
@@ -773,7 +1317,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [activity, setActivity] = useState([]);
   const [newNote, setNewNote]   = useState("");
   const [saving, setSaving]     = useState(false);
-  const [openPanels, setOpenPanels] = useState({comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,user:true});
+  const [openPanels, setOpenPanels] = useState({comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,reporting:true,user:true});
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
   const [showCommMenu, setShowCommMenu] = useState(false);
   const [draggingPanel, setDraggingPanel] = useState(null);
@@ -781,7 +1325,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   const storageKey = `talentos_panels_${objectName}`;
   const [panelOrder, setPanelOrder] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey)) || getDefaultPanelOrder(objectName); }
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (!saved) return getDefaultPanelOrder(objectName);
+      // Merge any new panels not yet in saved order
+      const defaults = getDefaultPanelOrder(objectName);
+      const merged = [...saved, ...defaults.filter(id => !saved.includes(id))];
+      return merged;
+    }
     catch { return getDefaultPanelOrder(objectName); }
   });
 
@@ -863,9 +1414,18 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const statusField = fields.find(f=>f.api_key==="status");
   const status = record.data?.status;
 
+  // Filter fields by condition — check editing state first so conditional fields
+  // appear/disappear immediately as person_type is changed before saving
+  const liveData = { ...record.data, ...editing };
+  const visibleFields = fields.filter(f => {
+    if (!f.condition_field || !f.condition_value) return true;
+    const recordVal = liveData[f.condition_field];
+    return String(recordVal || '').toLowerCase() === String(f.condition_value).toLowerCase();
+  });
+
   const fieldSections = [
-    { label:"Core",       fs: fields.filter((_,i)=>i<7) },
-    { label:"Additional", fs: fields.filter((_,i)=>i>=7) },
+    { label:"Core",       fs: visibleFields.filter((_,i)=>i<7) },
+    { label:"Additional", fs: visibleFields.filter((_,i)=>i>=7) },
   ].filter(s=>s.fs.length);
 
 
@@ -1043,6 +1603,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     if (id==="workflows") return <RecordWorkflows record={record} objectId={record.object_id} environment={environment} objectName={objectName} onNavigate={onNavigate}/>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate}/>;
+    if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
+    if (id==="user") return <UserPanel record={record}/>;
 
     if (id==="match") return (
       <div style={{ margin:"-16px" }}>
@@ -1450,13 +2012,30 @@ const CSVImportModal = ({ object, environment, onClose, onDone }) => {
   );
 };
 
-export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session }) {
+export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed }) {
   const [records, setRecords]   = useState([]);
   const [fields,  setFields]    = useState([]);
   const [loading, setLoading]   = useState(true);
   const [view,    setView]      = useState("table");
   const [search,  setSearch]    = useState("");
   const [filterChip, setFilterChip] = useState(initialFilter || null); // { fieldKey, fieldLabel, fieldValue }
+  // Column picker state — null means "use defaults"
+  const [visibleFieldIds, setVisibleFieldIds] = useState(null);
+  const [showColPicker, setShowColPicker]     = useState(false);
+  // Advanced filters
+  const [activeFilters, setActiveFilters]     = useState([]);
+  // Saved views
+  const [showViewsMenu, setShowViewsMenu]     = useState(false);
+  const [showExport,    setShowExport]        = useState(false);
+  const exportRef = useRef(null);
+  const userId = session?.user?.id || session?.id || "unknown";
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const h = e => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   // Permission helper — Super Admin always passes; no session → deny
   const can = (action) => {
@@ -1469,11 +2048,18 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
   const [selected, setSelected] = useState(null);   // slide-out panel only
   const [showForm, setShowForm] = useState(false);
+
+  // Auto-open create modal when triggered from top bar Create button
+  useEffect(() => {
+    if (autoCreate) { setShowForm(true); onAutoCreateConsumed?.(); }
+  }, [autoCreate]);
   const [editRecord, setEditRecord] = useState(null);
   const [page, setPage]         = useState(1);
   const [showImport, setShowImport] = useState(false);
   const [activeTab, setActiveTab]   = useState("records");
   const [total, setTotal]       = useState(0);
+
+  const colStorageKey = `talentos_cols_${object.id}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1481,7 +2067,19 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       api.get(`/fields?object_id=${object.id}`),
       api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=200${search?`&search=${encodeURIComponent(search)}`:""}`),
     ]);
-    setFields(Array.isArray(f)?f:[]);
+    const loadedFields = Array.isArray(f) ? f : [];
+    setFields(loadedFields);
+    // Restore saved column order/selection, or use defaults
+    try {
+      const saved = JSON.parse(localStorage.getItem(colStorageKey));
+      if (saved && saved.length) {
+        setVisibleFieldIds(saved.filter(id => loadedFields.some(ff => ff.id === id)));
+      } else {
+        setVisibleFieldIds(loadedFields.filter(ff => ff.show_in_list).slice(0, 6).map(ff => ff.id));
+      }
+    } catch {
+      setVisibleFieldIds(loadedFields.filter(ff => ff.show_in_list).slice(0, 6).map(ff => ff.id));
+    }
     const loaded = r.records||[];
     // Apply active filter chip client-side
     const filtered = filterChip
@@ -1495,6 +2093,11 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
     setLoading(false);
   }, [object.id, environment.id, page, search, filterChip]);
+
+  const handleColChange = (ids) => {
+    setVisibleFieldIds(ids);
+    try { localStorage.setItem(colStorageKey, JSON.stringify(ids)); } catch {}
+  };
 
   // Sync filterChip when initialFilter changes (e.g. navigating from a pill in another record)
   useEffect(() => { setFilterChip(initialFilter || null); setPage(1); }, [initialFilter]);
@@ -1530,12 +2133,52 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setRecords(rs => rs.map(r => r.id===id ? updated : r));
   };
 
+  // Apply advanced filters on top of the loaded records
+  const displayedRecords = applyFilters(records, activeFilters, fields);
+
+  const handleLoadView = (view) => {    if (view.filters)           setActiveFilters(view.filters);
+    if (view.visible_field_ids?.length) { setVisibleFieldIds(view.visible_field_ids); try { localStorage.setItem(colStorageKey, JSON.stringify(view.visible_field_ids)); } catch {} }
+    if (view.view_mode)         setView(view.view_mode);
+    setFilterChip(null);
+    setPage(1);
+  };
+
+  const handleExport = (format) => {
+    setShowExport(false);
+    const exportFields = visibleFieldIds
+      ? fields.filter(f => visibleFieldIds.includes(f.id))
+      : fields.filter(f => f.show_in_list).slice(0, 10);
+    const slug = object?.slug || 'export';
+    const ts = new Date().toISOString().slice(0, 10);
+    if (format === 'json') {
+      const json = displayedRecords.map(r => {
+        const obj = {}; exportFields.forEach(f => { obj[f.api_key] = r.data?.[f.api_key] ?? null; }); return obj;
+      });
+      triggerDownload(`${slug}-${ts}.json`, JSON.stringify(json, null, 2), 'application/json');
+      return;
+    }
+    const sep = format === 'tsv' ? '\t' : ',';
+    const esc = (v) => { const s = String(v??''); if (format==='tsv') return s.replace(/\t/g,' '); if (s.includes(',')||s.includes('"')||s.includes('\n')) return '"'+s.replace(/"/g,'""')+'"'; return s; };
+    const header = exportFields.map(f => esc(f.name)).join(sep);
+    const rows = displayedRecords.map(r => exportFields.map(f => { const v=r.data?.[f.api_key]; return esc(Array.isArray(v)?v.join(';'):(v??'')); }).join(sep));
+    const ext = format === 'tsv' ? 'tsv' : 'csv';
+    triggerDownload(`${slug}-${ts}.${ext}`, [header,...rows].join('\n'), 'text/plain');
+  };
+
+  const triggerDownload = (filename, content, type) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0 }}>
       {/* Toolbar */}
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
         <h1 style={{ margin:0, fontSize:22, fontWeight:800, color:C.text1, flex:"none" }}>{object.plural_name}</h1>
-        <span style={{ fontSize:13, color:C.text3, fontWeight:500 }}>{total} record{total!==1?"s":""}</span>
+        <span style={{ fontSize:13, color:C.text3, fontWeight:500 }}>
+          {activeFilters.length ? `${displayedRecords.length} of ${total}` : total} record{total!==1?"s":""}
+        </span>
 
         {/* Tab switcher */}
         <div style={{ display:"flex", border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden", marginLeft:4 }}>
@@ -1576,12 +2219,89 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
         {/* View toggle */}
         <div style={{ display:"flex", border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
-          {[{v:"table",i:"list"},{v:"kanban",i:"kanban"}].map(({v,i})=>(
+          {[{v:"table",i:"list"}].map(({v,i})=>(
             <button key={v} onClick={()=>setView(v)}
               style={{ padding:"7px 12px", border:"none", cursor:"pointer", background:view===v?C.accentLight:"transparent", color:view===v?C.accent:C.text3, display:"flex", alignItems:"center", transition:"all .12s" }}>
               <Ic n={i} s={15}/>
             </button>
           ))}
+        </div>
+
+        {/* Saved Lists button */}
+        <div style={{ position:"relative" }}>
+          <button onClick={() => setShowViewsMenu(p => !p)}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+              border:`1px solid ${showViewsMenu ? C.accent : C.border}`, background: showViewsMenu ? C.accentLight : C.surface,
+              color: showViewsMenu ? C.accent : C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            Lists
+          </button>
+          {showViewsMenu && (
+            <SavedViewsDropdown
+              objectId={object.id}
+              environmentId={environment.id}
+              userId={userId}
+              currentFilters={activeFilters}
+              currentVisibleFieldIds={visibleFieldIds}
+              currentViewMode={view}
+              fields={fields}
+              onLoad={handleLoadView}
+              onClose={() => setShowViewsMenu(false)}
+            />
+          )}
+        </div>
+
+        {/* Column picker button */}
+        {view === "table" && (
+          <div style={{ position:"relative" }}>
+            <button onClick={() => setShowColPicker(p => !p)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+                border:`1px solid ${showColPicker ? C.accent : C.border}`, background: showColPicker ? C.accentLight : C.surface,
+                color: showColPicker ? C.accent : C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+              </svg>
+              Columns {visibleFieldIds && <span style={{ background:C.accent, color:"#fff", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 6px", marginLeft:2 }}>{visibleFieldIds.length}</span>}
+            </button>
+            {showColPicker && (
+              <ColumnPickerDropdown
+                fields={fields}
+                visibleIds={visibleFieldIds || []}
+                onChange={handleColChange}
+                onClose={() => setShowColPicker(false)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Export dropdown */}
+        <div ref={exportRef} style={{ position:"relative" }}>
+          <button onClick={() => setShowExport(s => !s)}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+              border:`1px solid ${showExport ? C.accent : C.border}`, background: showExport ? C.accentLight : C.surface,
+              color: showExport ? C.accent : C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Export
+          </button>
+          {showExport && (
+            <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:400, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, boxShadow:"0 6px 20px rgba(0,0,0,.1)", minWidth:160, overflow:"hidden" }}>
+              {[
+                { fmt:"csv",  label:"CSV",  sub:"Comma separated" },
+                { fmt:"tsv",  label:"TSV",  sub:"Tab separated" },
+                { fmt:"json", label:"JSON", sub:"Structured data" },
+              ].map(({fmt,label,sub}) => (
+                <div key={fmt} onClick={() => handleExport(fmt)}
+                  style={{ padding:"9px 14px", cursor:"pointer", borderBottom:`1px solid ${C.border}`, transition:"background .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.accentLight}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{label}</div>
+                  <div style={{ fontSize:10, color:C.text3 }}>{sub} · {displayedRecords.length} rows</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <Btn icon="plus" onClick={()=>setShowForm(true)} style={{display:can("create")?"":"none"}}>New {object.name}</Btn>
@@ -1595,25 +2315,24 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
       {/* Records tab */}
       {activeTab === "records" && <>
+
+      {/* Filter bar — always visible in records tab */}
+      {fields.length > 0 && (
+        <div style={{ marginBottom:10 }}>
+          <FilterBar fields={fields} filters={activeFilters} onChange={setActiveFilters}/>
+        </div>
+      )}
+
       {/* Content */}
       <div style={{ flex:1, background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:C.text3 }}>Loading…</div>
-        ) : view==="table" ? (
-          <TableView records={records} fields={fields} objectColor={object.color||C.accent}
+        ) : (
+          <TableView records={displayedRecords} fields={fields} visibleFieldIds={visibleFieldIds} objectColor={object.color||C.accent}
             onProfile={r=>onOpenRecord?.(r.id, object.id)}
             onSelect={r=>{setSelected(r);}}
             onEdit={can("edit") ? r=>setEditRecord(r) : null}
             onDelete={can("delete") ? handleDelete : null}/>
-        ) : (
-          <div style={{ padding:"20px" }}>
-            <KanbanView records={records} fields={fields} objectColor={object.color||C.accent}
-              onProfile={r=>onOpenRecord?.(r.id, object.id)}
-              onSelect={r=>{setSelected(r);}}
-              onEdit={can("edit") ? r=>setEditRecord(r) : null}
-              onDelete={can("delete") ? handleDelete : null}
-              onStatusChange={handleStatusChange}/>
-          </div>
         )}
       </div>
 

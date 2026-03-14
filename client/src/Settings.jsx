@@ -777,6 +777,72 @@ const FIELD_TYPES_DM = [
 ];
 const COLORS_DM = ["#6366f1","#f59e0b","#10b981","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#64748b"];
 
+// ── PersonTypeConfig — manage person_type options for People objects ───────────
+const PersonTypeConfig = ({ object, onUpdate }) => {
+  const [options, setOptions] = useState(object.person_type_options || ['Employee','Contractor','Consultant','Candidate','Contact']);
+  const [newOpt, setNewOpt]   = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const save = async (opts) => {
+    setSaving(true);
+    const updated = await fetch(`/api/objects/${object.id}`, {
+      method:"PATCH", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ person_type_options: opts }),
+    }).then(r=>r.json());
+    setSaving(false);
+    if (onUpdate) onUpdate(updated);
+  };
+
+  const addOption = () => {
+    const trimmed = newOpt.trim();
+    if (!trimmed || options.includes(trimmed)) return;
+    const next = [...options, trimmed];
+    setOptions(next); setNewOpt(""); save(next);
+  };
+
+  const removeOption = (opt) => {
+    const next = options.filter(o => o !== opt);
+    setOptions(next); save(next);
+  };
+
+  return (
+    <div style={{ background:"#fff8f0", border:"1px solid #fed7aa", borderRadius:12,
+      padding:"14px 16px", marginBottom:16 }}>
+      <div style={{ fontSize:12, fontWeight:700, color:"#92400e", marginBottom:10 }}>
+        👤 Person Type Options
+      </div>
+      <div style={{ fontSize:11, color:"#a16207", marginBottom:12 }}>
+        These are the options for the <strong>Person Type</strong> field. Setting a record to <strong>Employee</strong> reveals employment fields (Job Title, Department, Entity, etc.).
+      </div>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
+        {options.map(opt => (
+          <div key={opt} style={{ display:"flex", alignItems:"center", gap:5,
+            background:"white", border:"1px solid #fed7aa", borderRadius:20,
+            padding:"3px 10px", fontSize:12, fontWeight:600, color:"#92400e" }}>
+            {opt}
+            <button onClick={() => removeOption(opt)}
+              style={{ background:"none", border:"none", cursor:"pointer",
+                color:"#d97706", fontSize:14, lineHeight:1, padding:"0 0 0 2px" }}>×</button>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:8 }}>
+        <input value={newOpt} onChange={e=>setNewOpt(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter") addOption(); }}
+          placeholder="Add option…"
+          style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid #fed7aa",
+            fontSize:12, fontFamily:"'DM Sans', sans-serif", outline:"none" }}/>
+        <button onClick={addOption} disabled={!newOpt.trim()||saving}
+          style={{ padding:"6px 14px", borderRadius:8, border:"none",
+            background:"#f59e0b", color:"white", fontSize:12, fontWeight:700,
+            cursor:"pointer", opacity:(!newOpt.trim()||saving)?0.5:1 }}>
+          {saving ? "…" : "Add"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const DataModelSection = () => {
   const [envs,       setEnvs]       = useState([]);
   const [selEnv,     setSelEnv]     = useState(null);
@@ -984,8 +1050,13 @@ const DataModelSection = () => {
             </div>
           </div>
           {loading ? <div style={{padding:40,textAlign:"center",color:C.text3}}>Loading fields…</div> : (
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {fields.map(f=>(
+            <>
+              {/* Person Type config — only for People objects */}
+              {selObj.slug === "people" && (
+                <PersonTypeConfig object={selObj} onUpdate={updated => { setSelObj(updated); reloadObjects(); }}/>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {fields.map(f=>(
                 <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#fff",borderRadius:10,border:`1px solid ${C.border}`}}>
                   <div style={{flex:1}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1002,12 +1073,143 @@ const DataModelSection = () => {
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
       )}
 
       {showCreate && <CreateObjectModal onClose={()=>setShowCreate(false)}/>}
       {(showField||editField) && <FieldModal field={editField} onClose={()=>{setShowField(false);setEditField(null);}}/>}
+    </div>
+  );
+};
+
+// ─── Config Import / Export Section ──────────────────────────────────────────
+const ConfigSection = ({ environment }) => {
+  const [status,    setStatus]    = useState(null);
+  const [diff,      setDiff]      = useState(null);
+  const [diffMeta,  setDiffMeta]  = useState(null);
+  const [pending,   setPending]   = useState(null);
+  const [applying,  setApplying]  = useState(false);
+  const [mode,      setMode]      = useState('merge');
+  const fileRef = useRef(null);
+  const envId = environment?.id;
+
+  const handleExport = () => {
+    const a = document.createElement('a');
+    a.href = `/api/config/export?environment_id=${envId}`;
+    a.download = `talentos-config-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setStatus({ type:'success', msg:'Config exported successfully.' });
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setStatus({ type:'info', msg:'Validating config file…' }); setDiff(null); setPending(null);
+    try {
+      const json = JSON.parse(await file.text());
+      const res  = await fetch(`/api/config/preview?environment_id=${envId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(json) });
+      const data = await res.json();
+      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Invalid config file.' }); return; }
+      setDiff(data.diff); setDiffMeta(data.meta); setPending(json);
+      setStatus({ type:'info', msg:'Review the changes below, then click Apply Import.' });
+    } catch(err) { setStatus({ type:'error', msg:`Parse error: ${err.message}` }); }
+    e.target.value = '';
+  };
+
+  const handleApply = async () => {
+    if (!pending) return; setApplying(true);
+    try {
+      const res  = await fetch(`/api/config/import?environment_id=${envId}&mode=${mode}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pending) });
+      const data = await res.json();
+      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Import failed.' }); return; }
+      const summary = Object.entries(data.results).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ');
+      setStatus({ type:'success', msg:`Import complete: ${summary||'no changes'}. Reload to see changes.` });
+      setDiff(null); setPending(null);
+    } catch(err) { setStatus({ type:'error', msg: err.message }); }
+    setApplying(false);
+  };
+
+  const DiffPills = ({ items, color, bg }) => items?.length > 0 ? (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:4 }}>
+      {items.map((n,i) => <span key={i} style={{ fontSize:11, padding:'2px 8px', borderRadius:99, background:bg, color, fontWeight:600 }}>{n}</span>)}
+    </div>
+  ) : null;
+
+  const card = { background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, padding:'22px 24px', marginBottom:16 };
+  const btn  = (col) => ({ display:'flex', alignItems:'center', gap:7, padding:'9px 18px', borderRadius:9, border:'none', background:col, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F });
+
+  return (
+    <div style={{ maxWidth:720 }}>
+      <h2 style={{ margin:'0 0 4px', fontSize:18, fontWeight:800, color:C.text1 }}>Import / Export</h2>
+      <p style={{ margin:'0 0 20px', fontSize:13, color:C.text3 }}>Export your platform configuration or import from another environment.</p>
+
+      {status && (
+        <div style={{ padding:'10px 14px', borderRadius:10, marginBottom:14, fontSize:13, fontWeight:500,
+          background:status.type==='error'?'#fef2f2':status.type==='success'?'#f0fdf4':'#eff6ff',
+          color:status.type==='error'?'#b91c1c':status.type==='success'?'#15803d':'#1d4ed8',
+          border:`1px solid ${status.type==='error'?'#fecaca':status.type==='success'?'#bbf7d0':'#bfdbfe'}`,
+          display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <span>{status.msg}</span>
+          <button onClick={()=>setStatus(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:16, color:'inherit', opacity:0.6 }}>×</button>
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginBottom:4 }}>Export Configuration</div>
+        <div style={{ fontSize:13, color:C.text3, marginBottom:14 }}>Downloads a JSON bundle of all objects, fields, workflows, email templates, portals, saved lists, and org structure.</div>
+        <button onClick={handleExport} style={btn(C.accent)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export config
+        </button>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginBottom:4 }}>Import Configuration</div>
+        <div style={{ fontSize:13, color:C.text3, marginBottom:12 }}>Upload a config JSON — you'll preview what changes before anything is applied.</div>
+        <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+          {[['merge','Merge','Add/update, keep existing'],['replace','Replace','Imported data overwrites']].map(([val,label,desc])=>(
+            <div key={val} onClick={()=>setMode(val)} style={{ flex:1, padding:'10px 12px', borderRadius:10, border:`2px solid ${mode===val?C.accent:C.border}`, cursor:'pointer', background:mode===val?'#eff6ff':C.surface }}>
+              <div style={{ fontSize:13, fontWeight:700, color:mode===val?C.accent:C.text1 }}>{label}</div>
+              <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={()=>fileRef.current?.click()} style={btn('#64748b')}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          Choose config file…
+        </button>
+        <input ref={fileRef} type="file" accept=".json" style={{ display:'none' }} onChange={handleFileChange}/>
+
+        {diff && diffMeta && (
+          <div style={{ borderTop:`1px solid ${C.border}`, marginTop:16, paddingTop:16 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:C.text1, marginBottom:12 }}>
+              Preview — from "{diffMeta.environment_name}" · exported {new Date(diffMeta.exported_at).toLocaleDateString()}
+            </div>
+            {Object.entries(diff).map(([col, ch]) => {
+              const total = (ch.add?.length||0)+(ch.update?.length||0)+(ch.remove?.length||0);
+              if (!total) return null;
+              return (
+                <div key={col} style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.text2, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:5 }}>{col.replace(/_/g,' ')}</div>
+                  <DiffPills items={ch.add}    color="#15803d" bg="#dcfce7"/>
+                  <DiffPills items={ch.update} color="#92400e" bg="#fef3c7"/>
+                  <DiffPills items={ch.remove} color="#b91c1c" bg="#fee2e2"/>
+                </div>
+              );
+            })}
+            <div style={{ display:'flex', gap:8, marginTop:12 }}>
+              <button onClick={handleApply} disabled={applying} style={{...btn('#16a34a'), opacity:applying?0.6:1}}>
+                {applying?'Applying…':'✓ Apply Import'}
+              </button>
+              <button onClick={()=>{setDiff(null);setPending(null);setStatus(null);}}
+                style={{ padding:'9px 16px', borderRadius:9, border:`1px solid ${C.border}`, background:'transparent', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:F, color:C.text2 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1025,6 +1227,7 @@ const SECTIONS = [
 
 const SUPER_ADMIN_SECTIONS = [
   { id:"superadmin",  icon:"zap",      label:"Super Admin" },
+  { id:"config",      icon:"refresh",  label:"Import / Export" },
 ];
 
 export default function SettingsPage({ currentUser, environment }) {
@@ -1072,7 +1275,9 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="sessions"  && <SessionsSection/>}
         {activeSection==="audit"     && <AuditLogSection/>}
         {activeSection==="superadmin" && <SuperAdminSection/>}
+        {activeSection==="config"     && <ConfigSection environment={environment}/>}
       </div>
     </div>
   );
 }
+

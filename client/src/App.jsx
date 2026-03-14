@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import SettingsPage from "./Settings.jsx";
+import OrgChart from "./OrgChart.jsx";
 import RecordsView, { RecordDetail } from "./Records.jsx";
 import SearchPage from "./Search.jsx";
 import { AICopilot, MatchingEngine } from "./AI.jsx";
@@ -83,6 +84,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
     user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
     "bar-chart-2": "M18 20V10M12 20V4M6 20v-6",
+    "git-branch": "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
     "log-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   };
 
@@ -645,13 +647,21 @@ const EnvironmentBadge = ({ env, selected, onClick }) => (
 );
 
 // ─── Global Search Bar ────────────────────────────────────────────────────────
-const GlobalSearch = ({ selectedEnv, onNavigateToSearch, onNavigateToRecord }) => {
-  const [query,   setQuery]   = useState("");
-  const [results, setResults] = useState([]);
-  const [open,    setOpen]    = useState(false);
-  const [loading, setLoading] = useState(false);
-  const ref   = useRef(null);
-  const timer = useRef(null);
+const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateToRecord, onCreateRecord }) => {
+  const [query,       setQuery]       = useState("");
+  const [results,     setResults]     = useState([]);
+  const [open,        setOpen]        = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [showCreate,  setShowCreate]  = useState(false);
+  const ref       = useRef(null);
+  const createRef = useRef(null);
+  const timer     = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => { if (createRef.current && !createRef.current.contains(e.target)) setShowCreate(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -750,7 +760,44 @@ const GlobalSearch = ({ selectedEnv, onNavigateToSearch, onNavigateToRecord }) =
           </div>
         )}
       </div>
-      <span style={{ fontSize: 12, color: "var(--t-text3)" }}>{selectedEnv?.name}</span>
+      {/* Create dropdown */}
+      <div ref={createRef} style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={() => setShowCreate(s => !s)}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10,
+            border: "none", background: showCreate ? "var(--t-accent-dark, #3451d1)" : "var(--t-accent)", color: "#fff",
+            fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "var(--t-font, 'DM Sans', sans-serif)",
+            boxShadow: "0 2px 8px rgba(67,97,238,.3)", transition: "background .12s" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Create
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.7 }}><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        {showCreate && (
+          <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 500,
+            background: "var(--t-surface)", border: "1px solid var(--t-border)", borderRadius: 12,
+            boxShadow: "0 8px 28px rgba(0,0,0,.14)", minWidth: 200, overflow: "hidden" }}>
+            <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 700, color: "var(--t-text3)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+              New record
+            </div>
+            {(navObjects || []).map(obj => (
+              <div key={obj.id}
+                onClick={() => { setShowCreate(false); onCreateRecord?.(obj); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
+                  cursor: "pointer", transition: "background .1s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: `${obj.color || "var(--t-accent)"}18`,
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name={obj.icon || "layers"} size={13} color={obj.color || "var(--t-accent)"} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t-text1)" }}>{obj.singular_name || obj.name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -918,7 +965,8 @@ function App() {
   const [apiOnline, setApiOnline] = useState(null);
   const [showTheme, setShowTheme] = useState(false);
   const [filterPreset, setFilterPreset] = useState(null);
-  const [reportPreset, setReportPreset] = useState(null); // { objectSlug, name, filters, groupBy, view, ... }
+  const [reportPreset, setReportPreset] = useState(null);
+  const [createTarget, setCreateTarget] = useState(null); // obj to auto-open new record modal
 
   useEffect(() => {
     fetch("/api/health")
@@ -959,11 +1007,12 @@ function App() {
     {
       label: "Tools",
       items: [
-        { id: "matching",  icon: "zap",      label: "AI Matching" },
-        { id: "workflows", icon: "workflow",  label: "Workflows" },
-        { id: "portals",   icon: "globe",     label: "Portals" },
-        { id: "reports",   icon: "bar-chart-2", label: "Reports" },
-        { id: "search",    icon: "search",    label: "Search" },
+        { id: "orgchart",  icon: "git-branch",  label: "Org Chart" },
+        { id: "matching",  icon: "zap",          label: "AI Matching" },
+        { id: "workflows", icon: "workflow",      label: "Workflows" },
+        { id: "portals",   icon: "globe",         label: "Portals" },
+        { id: "reports",   icon: "bar-chart-2",   label: "Reports" },
+        { id: "search",    icon: "search",        label: "Search" },
       ]
     },
     {
@@ -1161,13 +1210,18 @@ function App() {
       {/* Main content */}
       <div style={{ marginLeft: 220, flex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)" }}>
         {/* Top bar */}
-        <GlobalSearch selectedEnv={selectedEnv} onNavigateToSearch={(q) => {
+        <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects} onNavigateToSearch={(q) => {
           setActiveNav("search");
           if (q) {
             sessionStorage.setItem("talentos_search_query", q);
             sessionStorage.setItem("talentos_autosearch", "1");
           }
-        }} onNavigateToRecord={(recordId, objectId) => openRecord(recordId, objectId)} />
+        }} onNavigateToRecord={(recordId, objectId) => openRecord(recordId, objectId)}
+           onCreateRecord={(obj) => {
+             // Navigate to the object list and trigger new record modal
+             setActiveNav(`obj_${obj.id}`);
+             setCreateTarget(obj);
+           }} />
         {/* Page content */}
         <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: "auto" }}>
         {loading ? (
@@ -1175,7 +1229,7 @@ function App() {
         ) : !selectedEnv ? (
           <div style={{ textAlign: "center", padding: 60, color: "#9ca3af" }}>No environments found.</div>
         ) : activeNav === "dashboard" ? (
-          <Dashboard environment={selectedEnv} onNavigate={(slug) => {
+          <Dashboard environment={selectedEnv} session={session} onOpenRecord={openRecord} onNavigate={(slug) => {
             if (slug === "matching") { setActiveNav("matching"); return; }
             if (slug === "search")   { setActiveNav("search");   return; }
             const obj = navObjects.find(o => o.slug === slug || o.plural_name.toLowerCase() === slug);
@@ -1189,6 +1243,8 @@ function App() {
             environment={selectedEnv}
             onOpenRecord={openRecord}
             initialFilter={filterPreset}
+            autoCreate={createTarget?.id === navObjects.find(o => `obj_${o.id}` === activeNav)?.id ? createTarget : null}
+            onAutoCreateConsumed={() => setCreateTarget(null)}
             session={session}
           />
         ) : activeNav.startsWith("record_") ? (() => {
@@ -1207,6 +1263,10 @@ function App() {
           <ReportsPage envId={selectedEnv?.id} initialReport={reportPreset} />
         ) : activeNav === "settings" ? (
           <SettingsPage environment={selectedEnv} />
+        ) : activeNav === "orgchart" ? (
+          <div style={{ padding:"28px 32px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column" }}>
+            <OrgChart environment={selectedEnv} />
+          </div>
         ) : activeNav === "schema" ? (
           selectedObject
             ? <ObjectSchemaView object={selectedObject} allObjects={allObjects} environmentId={selectedEnv.id} onBack={() => setSelectedObject(null)} />

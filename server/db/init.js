@@ -8,9 +8,9 @@ const DB_PATH  = path.join(DATA_DIR, 'talentos.json');
 
 let store = {
   environments: [], objects: [], fields: [], records: [],
-    relationships: [], activity: [],
-    users: [], roles: [], permissions: [], sessions: [], audit_log: [],
-    org_units: []
+  relationships: [], activity: [],
+  users: [], roles: [], permissions: [], sessions: [], audit_log: [],
+  org_units: []
 };
 
 function loadStore() {
@@ -55,7 +55,25 @@ async function initDB() {
     if (!store.sessions) store.sessions = [];
     if (!store.audit_log) store.audit_log = [];
     if (!store.org_units) store.org_units = [];
+    if (!store.relationships) store.relationships = [];
+
+    // Migrate: add condition columns to existing fields if missing
+    (store.fields || []).forEach(f => {
+      if (f.condition_field === undefined) f.condition_field = null;
+      if (f.condition_value === undefined) f.condition_value = null;
+    });
+
+    // Migrate: add person_type_options to existing objects if missing
+    (store.objects || []).forEach(o => {
+      if (o.person_type_options === undefined) o.person_type_options = null;
+      if (o.relationships_enabled === undefined) o.relationships_enabled = 0;
+    });
+
+    // Migrate: seed person_type + employment fields on People object if missing
+    await seedPersonTypeFields();
+
     await seedUsersAndRoles();
+    saveStore();
     console.log('✅ Store loaded');
     return;
   }
@@ -77,15 +95,23 @@ async function initDB() {
       { name:'Email', ak:'email', type:'email', req:1, list:1, uniq:1, o:3 },
       { name:'Phone', ak:'phone', type:'phone', list:0, o:4 },
       { name:'Location', ak:'location', type:'text', list:1, o:5 },
-      { name:'Current Title', ak:'current_title', type:'text', list:1, o:6 },
-      { name:'Current Company', ak:'current_company', type:'text', list:1, o:7 },
-      { name:'Status', ak:'status', type:'select', list:1, o:8, opts:['Active','Passive','Not Looking','Placed','Archived'] },
-      { name:'Source', ak:'source', type:'select', list:1, o:9, opts:['LinkedIn','Referral','Job Board','Direct Apply','Agency','Event','Other'] },
-      { name:'LinkedIn URL', ak:'linkedin_url', type:'url', list:0, o:10 },
-      { name:'Summary', ak:'summary', type:'textarea', list:0, o:11 },
-      { name:'Skills', ak:'skills', type:'multi_select', list:0, o:12, opts:[] },
-      { name:'Years Experience', ak:'years_experience', type:'number', list:1, o:13 },
-      { name:'Rating', ak:'rating', type:'rating', list:1, o:14 },
+      { name:'Person Type', ak:'person_type', type:'select', list:1, o:6, opts:['Employee','Contractor','Consultant','Candidate','Contact'] },
+      { name:'Current Title', ak:'current_title', type:'text', list:1, o:7 },
+      { name:'Current Company', ak:'current_company', type:'text', list:1, o:8 },
+      { name:'Status', ak:'status', type:'select', list:1, o:9, opts:['Active','Passive','Not Looking','Placed','Archived'] },
+      { name:'Source', ak:'source', type:'select', list:1, o:10, opts:['LinkedIn','Referral','Job Board','Direct Apply','Agency','Event','Other'] },
+      { name:'LinkedIn URL', ak:'linkedin_url', type:'url', list:0, o:11 },
+      { name:'Summary', ak:'summary', type:'textarea', list:0, o:12 },
+      { name:'Skills', ak:'skills', type:'multi_select', list:0, o:13, opts:[] },
+      { name:'Years Experience', ak:'years_experience', type:'number', list:1, o:14 },
+      { name:'Rating', ak:'rating', type:'rating', list:1, o:15 },
+      // Employment fields — only shown when person_type = Employee
+      { name:'Job Title', ak:'job_title', type:'text', list:1, o:16, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Department', ak:'department', type:'select', list:1, o:17, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'], cond_field:'person_type', cond_val:'Employee' },
+      { name:'Entity', ak:'entity', type:'text', list:1, o:18, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Employment Type', ak:'employment_type', type:'select', list:0, o:19, opts:['Full-time','Part-time','Fixed-term','Zero Hours'], cond_field:'person_type', cond_val:'Employee' },
+      { name:'Start Date', ak:'start_date', type:'date', list:0, o:20, cond_field:'person_type', cond_val:'Employee' },
+      { name:'End Date', ak:'end_date', type:'date', list:0, o:21, cond_field:'person_type', cond_val:'Employee' },
     ],
     jobs: [
       { name:'Job Title', ak:'job_title', type:'text', req:1, list:1, o:1 },
@@ -115,14 +141,52 @@ async function initDB() {
 
   for (const obj of systemObjects) {
     const objId = uuidv4();
-    insert('objects', { id:objId, environment_id:envId, name:obj.name, plural_name:obj.plural, slug:obj.slug, icon:obj.icon, color:obj.color, description:null, is_system:1, sort_order:obj.order, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
+    insert('objects', { id:objId, environment_id:envId, name:obj.name, plural_name:obj.plural, slug:obj.slug, icon:obj.icon, color:obj.color, description:null, is_system:1, sort_order:obj.order, relationships_enabled:0, person_type_options: obj.slug==='people' ? ['Employee','Contractor','Consultant','Candidate','Contact'] : null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
     for (const f of (fieldSets[obj.slug]||[])) {
-      insert('fields', { id:uuidv4(), object_id:objId, environment_id:envId, name:f.name, api_key:f.ak, field_type:f.type, is_required:f.req||0, is_unique:f.uniq||0, is_system:1, show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o, options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null, help_text:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
+      insert('fields', { id:uuidv4(), object_id:objId, environment_id:envId, name:f.name, api_key:f.ak, field_type:f.type, is_required:f.req||0, is_unique:f.uniq||0, is_system:1, show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o, options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null, help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
     }
   }
 
   await seedUsersAndRoles();
   console.log('✅ Seeded default environment + system objects + users');
+}
+
+async function seedPersonTypeFields() {
+  // Find all People objects across all environments
+  const peopleObjects = (store.objects || []).filter(o => o.slug === 'people');
+  for (const obj of peopleObjects) {
+    const existing = store.fields.filter(f => f.object_id === obj.id);
+    // Ensure person_type_options on object
+    if (!obj.person_type_options) {
+      obj.person_type_options = ['Employee','Contractor','Consultant','Candidate','Contact'];
+    }
+    if (obj.relationships_enabled === undefined) obj.relationships_enabled = 0;
+
+    const newFields = [
+      { name:'Person Type', ak:'person_type', type:'select', list:1, o:6, opts:['Employee','Contractor','Consultant','Candidate','Contact'], cond_field:null, cond_val:null },
+      { name:'Job Title', ak:'job_title', type:'text', list:1, o:16, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Department', ak:'department', type:'select', list:1, o:17, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'], cond_field:'person_type', cond_val:'Employee' },
+      { name:'Entity', ak:'entity', type:'text', list:1, o:18, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Employment Type', ak:'employment_type', type:'select', list:0, o:19, opts:['Full-time','Part-time','Fixed-term','Zero Hours'], cond_field:'person_type', cond_val:'Employee' },
+      { name:'Start Date', ak:'start_date', type:'date', list:0, o:20, cond_field:'person_type', cond_val:'Employee' },
+      { name:'End Date', ak:'end_date', type:'date', list:0, o:21, cond_field:'person_type', cond_val:'Employee' },
+    ];
+    for (const f of newFields) {
+      if (!existing.find(e => e.api_key === f.ak)) {
+        insert('fields', { id:uuidv4(), object_id:obj.id, environment_id:obj.environment_id,
+          name:f.name, api_key:f.ak, field_type:f.type, is_required:0, is_unique:0, is_system:1,
+          show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o,
+          options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null,
+          help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null,
+          created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
+      } else {
+        // Ensure condition columns exist on existing field
+        const ef = existing.find(e => e.api_key === f.ak);
+        if (ef.condition_field === undefined) ef.condition_field = f.cond_field || null;
+        if (ef.condition_value === undefined) ef.condition_value = f.cond_val || null;
+      }
+    }
+  }
 }
 
 async function seedUsersAndRoles() {
