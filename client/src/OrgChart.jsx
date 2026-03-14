@@ -65,7 +65,7 @@ function useZoomPan() {
   const ZOOM_MIN = 0.3, ZOOM_MAX = 2;
 
   const adjustZoom = (delta) =>
-    setZoom(z => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + delta) * 10) / 10)));
+    setZoom(z => parseFloat(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z + delta)).toFixed(2)));
 
   const handlePanStart = (e) => {
     if (e.button !== 0) return;
@@ -87,14 +87,35 @@ function useZoomPan() {
     window.addEventListener("mouseup", onUp);
   };
 
-  const handleWheel = (e) => {
+  const wheelTimer = useRef(null);
+  const handleWheel = useCallback((e) => {
     e.preventDefault();
-    adjustZoom(e.deltaY < 0 ? 0.1 : -0.1);
-  };
+    if (wheelTimer.current) return; // throttle to one event per 80ms
+    wheelTimer.current = setTimeout(() => { wheelTimer.current = null; }, 80);
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    setZoom(z => parseFloat(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z + delta)).toFixed(2)));
+  }, []);  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
-  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  // Center a specific canvas x position (e.g. root node centre) in the viewport
+  const centerOnX = useCallback((canvasX) => {
+    const container = canvasRef.current;
+    if (!container) return;
+    const cw = container.clientWidth;
+    setPan({ x: Math.round(cw / 2 - canvasX), y: 40 });
+  }, []);
 
-  return { zoom, pan, setZoom, canvasRef, panRef, adjustZoom, handlePanStart, handleWheel, reset, ZOOM_MIN, ZOOM_MAX };
+  // Fallback: center the whole content block
+  const centerContent = useCallback(() => {
+    const container = canvasRef.current;
+    if (!container) return;
+    const content = container.firstElementChild;
+    if (!content) return;
+    const cw = container.clientWidth;
+    const contentW = content.scrollWidth;
+    setPan({ x: Math.max(0, Math.round((cw - contentW) / 2)), y: 40 });
+  }, []);
+
+  return { zoom, pan, setZoom, canvasRef, panRef, adjustZoom, handlePanStart, handleWheel, reset, centerContent, centerOnX, ZOOM_MIN, ZOOM_MAX };
 }
 
 // ── Shared zoom controls UI ───────────────────────────────────────────────────
@@ -127,8 +148,15 @@ function ZoomControls({ zoom, setZoom, adjustZoom, reset, ZOOM_MIN, ZOOM_MAX }) 
 
 // ── Shared canvas wrapper ─────────────────────────────────────────────────────
 function CanvasWrapper({ zoom, pan, panRef, canvasRef, handlePanStart, handleWheel, selectedPanel, children }) {
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || !handleWheel) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
   return (
-    <div ref={canvasRef} onWheel={handleWheel}
+    <div ref={canvasRef}
       style={{ position:"absolute", inset:0, overflow:"hidden",
         paddingRight: selectedPanel ? 300 : 0, transition:"padding-right 0.2s" }}>
       <div style={{
@@ -687,9 +715,12 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
   const [plusMenu, setPlusMenu]   = useState(null); // { anchorEl, personId, dir }
   const [roleModal, setRoleModal] = useState(null); // { anchorEl, personId, dir, defaultDept }
 
-  // Show ALL people + open job roles
+  // Show only people who have at least one relationship + all open job roles
+  const linkedPersonIds = new Set();
+  relationships.forEach(r => { linkedPersonIds.add(r.from_record_id); linkedPersonIds.add(r.to_record_id); });
+
   const allNodes = [
-    ...people.map(p => ({ ...p, _nodeType: "person" })),
+    ...people.filter(p => linkedPersonIds.has(p.id)).map(p => ({ ...p, _nodeType: "person" })),
     ...(openJobs||[]).map(j => ({ ...j, _nodeType: "job" })),
   ];
   const visiblePeople = allNodes;
@@ -983,6 +1014,62 @@ export default function OrgChart({ environment }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Center on root node after data loads or view changes
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      if (viewMode === "structure" && units.length > 0) {
+        const positions = computeLayout(units, u => u.parent_id);
+        const allX = Object.values(positions).map(p => p.x);
+        const minX = Math.min(...allX, 0);
+        const PAD = 60;
+        const roots = units.filter(u => !u.parent_id);
+        if (roots.length > 0) {
+          const rootPos = positions[roots[0].id];
+          if (rootPos) {
+            zp.centerOnX(rootPos.x - minX + PAD + NODE_W / 2);
+            return;
+          }
+        }
+      } else if (viewMode === "people" && people.length > 0) {
+        // Derive visible nodes the same way scopedPeople + PeopleCanvas does
+        const linkedIds = new Set(relationships.flatMap(r => [r.from_record_id, r.to_record_id]));
+        const drillUnitId = drillPath[drillPath.length - 1];
+        let base = people;
+        if (drillUnitId) {
+          const descIds = new Set();
+          const collect = (id) => { descIds.add(id); units.filter(u => u.parent_id === id).forEach(c => collect(c.id)); };
+          collect(drillUnitId);
+          const descNames = new Set(units.filter(u => descIds.has(u.id)).map(u => u.name.toLowerCase()));
+          const allNames  = new Set(units.map(u => u.name.toLowerCase()));
+          const drillUnit = units.find(u => u.id === drillUnitId);
+          const isRoot = !drillUnit?.parent_id;
+          base = people.filter(p => {
+            const dept = (p.data?.department || "").toLowerCase();
+            return descNames.has(dept) || (isRoot && !allNames.has(dept));
+          });
+        }
+        const visibleNodes = base.filter(p => linkedIds.has(p.id));
+        if (visibleNodes.length > 0) {
+          const positions = computeLayout(visibleNodes, p => {
+            if (!activeFilters.includes("reports_to")) return null;
+            const rel = relationships.find(r => r.type === "reports_to" && r.from_record_id === p.id);
+            return rel && visibleNodes.some(vp => vp.id === rel.to_record_id) ? rel.to_record_id : null;
+          });
+          const allX = Object.values(positions).map(p => p.x);
+          if (allX.length > 0) {
+            const minX = Math.min(...allX);
+            const maxX = Math.max(...allX) + NODE_W;
+            zp.centerOnX((minX + maxX) / 2 - minX + 60);
+            return;
+          }
+        }
+      }
+      zp.centerContent();
+    }, 100);
+    return () => clearTimeout(t);
+  }, [loading, viewMode, drillPath.length, units.length, people.length]);
+
   // ── Drill helpers ──────────────────────────────────────────────────────────
   const isDrilled = viewMode === "people";
   const currentUnit = isDrilled ? units.find(u => u.id === drillPath[drillPath.length - 1]) : null;
@@ -1180,7 +1267,12 @@ export default function OrgChart({ environment }) {
           </div>
           <p style={{ margin:0, fontSize:12, color:C.text3 }}>
             {isDrilled
-              ? `${scopedPeople.length} people${peopleSearch ? ` matching "${peopleSearch}"` : ""} · click nodes to inspect`
+              ? (() => {
+                  const linkedIds = new Set(relationships.flatMap(r => [r.from_record_id, r.to_record_id]));
+                  const linked = scopedPeople.filter(p => linkedIds.has(p.id)).length;
+                  const hidden = scopedPeople.length - linked;
+                  return `${linked} on canvas${hidden > 0 ? ` · ${hidden} unlinked hidden` : ""}${peopleSearch ? ` · matching "${peopleSearch}"` : ""}`;
+                })()
               : `${units.length} units · ${people.length} people`}
           </p>
         </div>
