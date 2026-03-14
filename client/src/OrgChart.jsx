@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import React from "react";
 import ReactDOM from "react-dom";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const API = "/api";
 const F = "'DM Sans', -apple-system, sans-serif";
@@ -115,11 +117,38 @@ function useZoomPan() {
     setPan({ x: Math.max(0, Math.round((cw - contentW) / 2)), y: 40 });
   }, []);
 
-  return { zoom, pan, setZoom, canvasRef, panRef, adjustZoom, handlePanStart, handleWheel, reset, centerContent, centerOnX, ZOOM_MIN, ZOOM_MAX };
+  // Zoom to fit given content dimensions into the container
+  const zoomToFit = useCallback((contentW, contentH) => {
+    const container = canvasRef.current;
+    if (!container) return;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    // Node positions are relative to layout. Full render size includes:
+    // layout PAD (60px each side) + canvas wrapper padding (40px each side) = 200px extra each axis
+    const EXTRA = 200;
+    const totalW = contentW + EXTRA;
+    const totalH = contentH + EXTRA;
+    const MARGIN = 48;
+    const newZoom = parseFloat(Math.min(
+      (cw - MARGIN) / Math.max(totalW, 1),
+      (ch - MARGIN) / Math.max(totalH, 1),
+      1.5
+    ).toFixed(2));
+    setZoom(newZoom);
+    setPan({
+      x: Math.round((cw - totalW * newZoom) / 2),
+      y: Math.round((ch - totalH * newZoom) / 2),
+    });
+  }, []);
+
+  return { zoom, pan, setZoom, canvasRef, panRef, adjustZoom, handlePanStart, handleWheel, reset, centerContent, centerOnX, zoomToFit, ZOOM_MIN, ZOOM_MAX };
 }
 
 // ── Shared zoom controls UI ───────────────────────────────────────────────────
-function ZoomControls({ zoom, setZoom, adjustZoom, reset, ZOOM_MIN, ZOOM_MAX }) {
+function ZoomControls({ zoom, setZoom, adjustZoom, reset, onFit, onExportPdf, ZOOM_MIN, ZOOM_MAX }) {
+  const [exporting, setExporting] = useState(false);
+  const btnSt = { height:26, borderRadius:6, border:`1px solid ${C.border}`, background:"white",
+    cursor:"pointer", fontSize:11, fontWeight:600, color:C.text2, fontFamily:F, padding:"0 8px" };
   return (
     <div style={{ position:"absolute", bottom:16, left:16, zIndex:20,
       display:"flex", alignItems:"center", gap:6,
@@ -129,7 +158,7 @@ function ZoomControls({ zoom, setZoom, adjustZoom, reset, ZOOM_MIN, ZOOM_MAX }) 
         style={{ width:26,height:26,borderRadius:6,border:`1px solid ${C.border}`,
           background:"white",cursor:"pointer",fontSize:16,fontWeight:700,
           display:"flex",alignItems:"center",justifyContent:"center",color:C.text2,fontFamily:F }}>−</button>
-      <input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={zoom}
+      <input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step={0.05} value={zoom}
         onChange={e => setZoom(parseFloat(e.target.value))}
         style={{ width:80, accentColor:C.accent, cursor:"pointer" }}/>
       <button onClick={() => adjustZoom(0.1)}
@@ -139,9 +168,25 @@ function ZoomControls({ zoom, setZoom, adjustZoom, reset, ZOOM_MIN, ZOOM_MAX }) 
       <span style={{ fontSize:11,color:C.text3,fontWeight:600,minWidth:32,textAlign:"center",fontFamily:F }}>
         {Math.round(zoom * 100)}%
       </span>
-      <button onClick={reset}
-        style={{ marginLeft:2,padding:"3px 8px",borderRadius:6,border:`1px solid ${C.border}`,
-          background:"white",cursor:"pointer",fontSize:11,fontWeight:600,color:C.text2,fontFamily:F }}>Reset</button>
+      <div style={{ width:1, height:16, background:C.border, margin:"0 2px" }}/>
+      <button onClick={onFit} title="Fit to screen" style={{...btnSt, display:"flex", alignItems:"center", gap:4 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        Fit
+      </button>
+      <button onClick={reset} style={btnSt}>Reset</button>
+      <div style={{ width:1, height:16, background:C.border, margin:"0 2px" }}/>
+      <button onClick={async () => { setExporting(true); await onExportPdf(); setExporting(false); }}
+        disabled={exporting}
+        title="Export to PDF"
+        style={{...btnSt, display:"flex", alignItems:"center", gap:4, opacity: exporting ? 0.6 : 1, color: C.accent, borderColor: C.accent+"40" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+        {exporting ? "Exporting…" : "PDF"}
+      </button>
     </div>
   );
 }
@@ -710,18 +755,29 @@ function PersonPickerPortal({ anchorEl, allPeople, excludeIds=[], onPick, onClos
   );
 }
 
-function PeopleCanvas({ people, openJobs, relationships, activeFilters, selectedId, onSelect, onPanStart, onAddRelationship, onOpenRecord, onCreateOpenRole }) {
+function PeopleCanvas({ people, openJobs, relationships, activeFilters, selectedId, onSelect, onPanStart, onAddRelationship, onOpenRecord, onCreateOpenRole, deptFilter }) {
   const [picker, setPicker]       = useState(null); // { anchorEl, personId, dir }
   const [plusMenu, setPlusMenu]   = useState(null); // { anchorEl, personId, dir }
   const [roleModal, setRoleModal] = useState(null); // { anchorEl, personId, dir, defaultDept }
 
-  // Show only people who have at least one relationship + all open job roles
+  // Show only people who have at least one relationship + jobs linked to visible people
   const linkedPersonIds = new Set();
   relationships.forEach(r => { linkedPersonIds.add(r.from_record_id); linkedPersonIds.add(r.to_record_id); });
 
+  const linkedPeople = people.filter(p => linkedPersonIds.has(p.id));
+  const visibleDepts = new Set(linkedPeople.map(p => (p.data?.department || "").toLowerCase()).filter(Boolean));
+  const visiblePersonIds = new Set(linkedPeople.map(p => p.id));
+
   const allNodes = [
-    ...people.filter(p => linkedPersonIds.has(p.id)).map(p => ({ ...p, _nodeType: "person" })),
-    ...(openJobs||[]).map(j => ({ ...j, _nodeType: "job" })),
+    ...linkedPeople.map(p => ({ ...p, _nodeType: "person" })),
+    ...(openJobs||[]).filter(j =>
+      relationships.some(r =>
+        !r.deleted_at && (
+          (r.from_record_id === j.id && visiblePersonIds.has(r.to_record_id)) ||
+          (r.to_record_id === j.id && visiblePersonIds.has(r.from_record_id))
+        )
+      )
+    ).map(j => ({ ...j, _nodeType: "job" })),
   ];
   const visiblePeople = allNodes;
 
@@ -794,8 +850,8 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
           const dept  = d.department || "";
           return (
             <div key={node.id}
-              onClick={e=>{ e.stopPropagation(); onSelect(isSelected ? null : node.id); }}
-              onDoubleClick={e=>{ e.stopPropagation(); onOpenRecord && onOpenRecord(node.id, "job"); }}
+              onClick={e=>{ e.stopPropagation(); onOpenRecord && onOpenRecord(node.id, "job"); }}
+              onDoubleClick={e=>e.stopPropagation()}
               title="Open role · Click to select · Double-click to open"
               style={{ position:"absolute", left:nodeLeft, top:nodeTop, width:NODE_W, height:NODE_H,
                 background:"#FFFBF2",
@@ -938,7 +994,10 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
       {roleModal && (
         <OpenRoleModal
           defaultDept={roleModal.defaultDept}
-          onSave={async (fields) => { await onCreateOpenRole(fields); }}
+          onSave={async (fields) => {
+            await onCreateOpenRole(fields, roleModal.personId, roleModal.dir);
+            setRoleModal(null);
+          }}
           onClose={() => setRoleModal(null)}
         />
       )}
@@ -949,8 +1008,9 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
 // ── Main export ────────────────────────────────────────────────────────────────
 export default function OrgChart({ environment }) {
   const [activeFilters, setActiveFilters] = useState(["reports_to","dotted_line_to","interim_manager_of"]);
-  const [viewMode, setViewMode]           = useState("structure"); // "structure" | "people"
+  const [viewMode, setViewMode]           = useState("structure");
   const [peopleSearch, setPeopleSearch]   = useState("");
+  const [deptFilter, setDeptFilter]       = useState("all");
 
   // All data loaded together
   const [units, setUnits]             = useState([]);
@@ -1014,25 +1074,21 @@ export default function OrgChart({ environment }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Center on root node after data loads or view changes
+  // Center/fit canvas after data loads or view/filter changes
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
       if (viewMode === "structure" && units.length > 0) {
         const positions = computeLayout(units, u => u.parent_id);
         const allX = Object.values(positions).map(p => p.x);
-        const minX = Math.min(...allX, 0);
-        const PAD = 60;
-        const roots = units.filter(u => !u.parent_id);
-        if (roots.length > 0) {
-          const rootPos = positions[roots[0].id];
-          if (rootPos) {
-            zp.centerOnX(rootPos.x - minX + PAD + NODE_W / 2);
-            return;
-          }
+        const allY = Object.values(positions).map(p => p.y);
+        if (allX.length > 0) {
+          const contentW = Math.max(...allX) - Math.min(...allX) + NODE_W;
+          const contentH = Math.max(...allY) - Math.min(...allY) + NODE_H;
+          zp.zoomToFit(contentW, contentH);
+          return;
         }
       } else if (viewMode === "people" && people.length > 0) {
-        // Derive visible nodes the same way scopedPeople + PeopleCanvas does
         const linkedIds = new Set(relationships.flatMap(r => [r.from_record_id, r.to_record_id]));
         const drillUnitId = drillPath[drillPath.length - 1];
         let base = people;
@@ -1049,6 +1105,7 @@ export default function OrgChart({ environment }) {
             return descNames.has(dept) || (isRoot && !allNames.has(dept));
           });
         }
+        if (deptFilter !== "all") base = base.filter(p => (p.data?.department || "") === deptFilter);
         const visibleNodes = base.filter(p => linkedIds.has(p.id));
         if (visibleNodes.length > 0) {
           const positions = computeLayout(visibleNodes, p => {
@@ -1057,7 +1114,12 @@ export default function OrgChart({ environment }) {
             return rel && visibleNodes.some(vp => vp.id === rel.to_record_id) ? rel.to_record_id : null;
           });
           const allX = Object.values(positions).map(p => p.x);
+          const allY = Object.values(positions).map(p => p.y);
           if (allX.length > 0) {
+            const contentW = Math.max(...allX) - Math.min(...allX) + NODE_W;
+            const contentH = Math.max(...allY) - Math.min(...allY) + NODE_H;
+            // Zoom to fit if a dept is selected, otherwise just center
+            if (deptFilter !== "all") { zp.zoomToFit(contentW, contentH); return; }
             const minX = Math.min(...allX);
             const maxX = Math.max(...allX) + NODE_W;
             zp.centerOnX((minX + maxX) / 2 - minX + 60);
@@ -1068,7 +1130,7 @@ export default function OrgChart({ environment }) {
       zp.centerContent();
     }, 100);
     return () => clearTimeout(t);
-  }, [loading, viewMode, drillPath.length, units.length, people.length]);
+  }, [loading, viewMode, drillPath.length, units.length, people.length, deptFilter]);
 
   // ── Drill helpers ──────────────────────────────────────────────────────────
   const isDrilled = viewMode === "people";
@@ -1102,50 +1164,49 @@ export default function OrgChart({ environment }) {
     return unitNameToIds[dept]?.[0] || null;
   }, [unitNameToIds]);
 
-  // People scoped to current drilled unit (including descendants, matched by department)
   const scopedPeople = (() => {
     const drillUnitId = drillPath[drillPath.length - 1];
-    if (!drillUnitId) {
-      // People view, no dept selected — show all
-      const base = people;
-      if (!peopleSearch.trim()) return base;
-      const q = peopleSearch.toLowerCase();
-      return base.filter(p => `${p.data?.first_name||""} ${p.data?.last_name||""}`.toLowerCase().includes(q));
+    let base = people;
+
+    // Scope to drilled unit if applicable
+    if (drillUnitId) {
+      const descIds = getDescendantIds(drillUnitId);
+      const descUnitNames = new Set(units.filter(u => descIds.has(u.id)).map(u => u.name.toLowerCase()));
+      const drillUnit = units.find(u => u.id === drillUnitId);
+      const isRoot = !drillUnit?.parent_id;
+      const allUnitNames = new Set(units.map(u => u.name.toLowerCase()));
+      base = people.filter(p => {
+        const dept = (p.data?.department || "").toLowerCase();
+        return descUnitNames.has(dept) || (isRoot && !allUnitNames.has(dept));
+      });
     }
-    const descIds = getDescendantIds(drillUnitId);
-    const descUnitNames = new Set(units.filter(u => descIds.has(u.id)).map(u => u.name.toLowerCase()));
-    const drillUnit = units.find(u => u.id === drillUnitId);
-    const isRoot = !drillUnit?.parent_id;
-    const allUnitNames = new Set(units.map(u => u.name.toLowerCase()));
-    const base = people.filter(p => {
-      const dept = (p.data?.department || "").toLowerCase();
-      if (descUnitNames.has(dept)) return true;
-      if (isRoot && !allUnitNames.has(dept)) return true;
-      return false;
-    });
-    if (!peopleSearch.trim()) return base;
-    const q = peopleSearch.toLowerCase();
-    return base.filter(p => `${p.data?.first_name||""} ${p.data?.last_name||""}`.toLowerCase().includes(q));
+
+    // Apply department filter
+    if (deptFilter !== "all") {
+      base = base.filter(p => (p.data?.department || "") === deptFilter);
+    }
+
+    // Apply search
+    if (peopleSearch.trim()) {
+      const q = peopleSearch.toLowerCase();
+      base = base.filter(p => `${p.data?.first_name||""} ${p.data?.last_name||""}`.toLowerCase().includes(q));
+    }
+
+    return base;
   })();
 
-  const scopedJobs = isDrilled
-    ? (() => {
-        const drillUnitId = drillPath[drillPath.length - 1];
-        const descIds = getDescendantIds(drillUnitId);
-        const descUnitNames = new Set(
-          units.filter(u => descIds.has(u.id)).map(u => u.name.toLowerCase())
-        );
-        const drillUnit = units.find(u => u.id === drillUnitId);
-        const isRoot = !drillUnit?.parent_id;
-        const allUnitNames = new Set(units.map(u => u.name.toLowerCase()));
-        return openJobs.filter(j => {
-          const dept = (j.data?.department || "").toLowerCase();
-          if (descUnitNames.has(dept)) return true;
-          if (isRoot && !allUnitNames.has(dept)) return true;
-          return false;
-        });
-      })()
-    : openJobs;
+  const scopedJobs = (() => {
+    const drillUnitId = drillPath[drillPath.length - 1];
+    const scopedPersonIds = new Set(scopedPeople.map(p => p.id));
+    return openJobs.filter(j =>
+      relationships.some(r =>
+        !r.deleted_at && (
+          (r.from_record_id === j.id && scopedPersonIds.has(r.to_record_id)) ||
+          (r.to_record_id === j.id && scopedPersonIds.has(r.from_record_id))
+        )
+      )
+    );
+  })();
 
   const drillInto = (unitId) => {
     setDrillPath(prev => [...prev, unitId]);
@@ -1160,6 +1221,7 @@ export default function OrgChart({ environment }) {
     setSelectedId(null);
     setViewMode("structure");
     setPeopleSearch("");
+    setDeptFilter("all");
     zp.reset();
   };
 
@@ -1211,19 +1273,114 @@ export default function OrgChart({ environment }) {
     await load();
   };
 
-  const handleCreateOpenRole = async (fields) => {
+  const handleCreateOpenRole = async (fields, anchorPersonId, dir) => {
     const objId = jobsObjIdRef.current || jobsObjId;
     if (!objId) { console.error("Jobs object ID not loaded"); return; }
-    await api.post("/records", { object_id: objId, environment_id: environment.id, data: { ...fields, status: "Open" } });
+
+    // Find the anchor person to set as hiring manager
+    const anchorPerson = people.find(p => p.id === anchorPersonId);
+    const hiringManagerName = anchorPerson
+      ? `${anchorPerson.data?.first_name || ""} ${anchorPerson.data?.last_name || ""}`.trim()
+      : undefined;
+
+    const result = await api.post("/records", {
+      object_id: objId, environment_id: environment.id,
+      data: {
+        ...fields,
+        status: "Open",
+        ...(hiringManagerName && { hiring_manager: hiringManagerName }),
+      }
+    });
+
+    // Link the new job to the anchor person in the chart
+    if (result?.id && anchorPersonId) {
+      if (dir === "below") {
+        // Job reports to the person (vacancy under this manager)
+        await api.post("/relationships", {
+          from_record_id: result.id, to_record_id: anchorPersonId,
+          type: "reports_to", environment_id: environment.id
+        });
+      } else {
+        // Person reports to the job (vacancy above this person)
+        await api.post("/relationships", {
+          from_record_id: anchorPersonId, to_record_id: result.id,
+          type: "reports_to", environment_id: environment.id
+        });
+      }
+    }
     load();
   };
 
-  const openPersonRecord = (personId) => {
-    if (!peopleObjId) return;
+  const openPersonRecord = (recordId, type) => {    const objId = type === "job"
+      ? (jobsObjIdRef.current || jobsObjId)
+      : peopleObjId;
+    if (!objId) return;
     window.dispatchEvent(new CustomEvent("talentos:openRecord", {
-      detail: { recordId: personId, objectId: peopleObjId }
+      detail: { recordId, objectId: objId }
     }));
   };
+
+  // Fit button — re-triggers the same auto-fit logic used on load/filter change
+  const handleFit = useCallback(() => {
+    if (viewMode === "structure" && units.length > 0) {
+      const positions = computeLayout(units, u => u.parent_id);
+      const allX = Object.values(positions).map(p => p.x);
+      const allY = Object.values(positions).map(p => p.y);
+      if (allX.length > 0) {
+        zp.zoomToFit(Math.max(...allX) - Math.min(...allX) + NODE_W, Math.max(...allY) - Math.min(...allY) + NODE_H);
+        return;
+      }
+    } else if (viewMode === "people") {
+      const linkedIds = new Set(relationships.flatMap(r => [r.from_record_id, r.to_record_id]));
+      const visibleNodes = scopedPeople.filter(p => linkedIds.has(p.id));
+      if (visibleNodes.length > 0) {
+        const positions = computeLayout(visibleNodes, p => {
+          if (!activeFilters.includes("reports_to")) return null;
+          const rel = relationships.find(r => r.type === "reports_to" && r.from_record_id === p.id);
+          return rel && visibleNodes.some(vp => vp.id === rel.to_record_id) ? rel.to_record_id : null;
+        });
+        const allX = Object.values(positions).map(p => p.x);
+        const allY = Object.values(positions).map(p => p.y);
+        if (allX.length > 0) {
+          zp.zoomToFit(Math.max(...allX) - Math.min(...allX) + NODE_W, Math.max(...allY) - Math.min(...allY) + NODE_H);
+          return;
+        }
+      }
+    }
+    zp.centerContent();
+  }, [viewMode, units, scopedPeople, relationships, activeFilters]);
+
+  const handleExportPdf = useCallback(async () => {
+    const container = zp.canvasRef.current;
+    if (!container) return;
+
+    // Fit the full chart before capturing
+    handleFit();
+    await new Promise(r => setTimeout(r, 200)); // allow render
+
+    try {
+      const canvas = await html2canvas(container, {
+        backgroundColor: C.bg,
+        scale: 2, // retina quality
+        useCORS: true,
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+
+      // Landscape PDF sized to the content
+      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [imgW / 2, imgH / 2] });
+      pdf.addImage(imgData, "PNG", 0, 0, imgW / 2, imgH / 2);
+
+      const deptLabel = deptFilter !== "all" ? `-${deptFilter}` : "";
+      const viewLabel = viewMode === "people" ? "people" : "structure";
+      pdf.save(`orgchart-${viewLabel}${deptLabel}-${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch(e) {
+      console.error("PDF export failed:", e);
+    }
+  }, [handleFit, viewMode, deptFilter]);
 
   const selectedUnit   = !isDrilled ? units.find(u => u.id === selectedId) : null;
   const selectedPerson = isDrilled  ? scopedPeople.find(p => p.id === selectedId) : null;
@@ -1271,7 +1428,7 @@ export default function OrgChart({ environment }) {
                   const linkedIds = new Set(relationships.flatMap(r => [r.from_record_id, r.to_record_id]));
                   const linked = scopedPeople.filter(p => linkedIds.has(p.id)).length;
                   const hidden = scopedPeople.length - linked;
-                  return `${linked} on canvas${hidden > 0 ? ` · ${hidden} unlinked hidden` : ""}${peopleSearch ? ` · matching "${peopleSearch}"` : ""}`;
+                  return `${linked} on canvas${hidden > 0 ? ` · ${hidden} unlinked hidden` : ""}${deptFilter !== "all" ? ` · ${deptFilter}` : ""}${peopleSearch ? ` · matching "${peopleSearch}"` : ""}`;
                 })()
               : `${units.length} units · ${people.length} people`}
           </p>
@@ -1287,6 +1444,7 @@ export default function OrgChart({ environment }) {
                 setViewMode(mode);
                 setSelectedId(null);
                 setPeopleSearch("");
+                setDeptFilter("all");
                 if (mode === "structure") setDrillPath([]);
                 zp.reset();
               }}
@@ -1297,6 +1455,21 @@ export default function OrgChart({ environment }) {
               </button>
             ))}
           </div>
+
+          {/* Department filter (people view only) */}
+          {isDrilled && (() => {
+            const depts = ["all", ...([...new Set(people.map(p => p.data?.department).filter(Boolean))].sort())];
+            return (
+              <select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setSelectedId(null); }}
+                style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${deptFilter !== "all" ? C.accent : C.border}`,
+                  fontSize:12, fontFamily:F, color: deptFilter !== "all" ? C.accent : C.text2,
+                  background: deptFilter !== "all" ? C.accentLight : C.surface,
+                  fontWeight: deptFilter !== "all" ? 700 : 500, cursor:"pointer", outline:"none" }}>
+                <option value="all">All departments</option>
+                {depts.filter(d => d !== "all").map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            );
+          })()}
 
           {/* People search (people view only) */}
           {isDrilled && (
@@ -1392,14 +1565,15 @@ export default function OrgChart({ environment }) {
             {isDrilled
               ? <PeopleCanvas people={scopedPeople} openJobs={scopedJobs} relationships={relationships} activeFilters={activeFilters}
                   selectedId={selectedId} onSelect={setSelectedId} onPanStart={zp.handlePanStart}
-                  onAddRelationship={handleAddRelationship} onOpenRecord={openPersonRecord}/>
+                  onAddRelationship={handleAddRelationship} onOpenRecord={openPersonRecord}
+                  onCreateOpenRole={handleCreateOpenRole} deptFilter={deptFilter}/>
               : <CompanyCanvas units={units} users={users} people={people} selectedId={selectedId}
                   onSelect={setSelectedId} onDrillInto={drillInto} onPanStart={zp.handlePanStart}
                   getPeopleCount={getPeopleCount}/>
             }
           </CanvasWrapper>
 
-          <ZoomControls zoom={zp.zoom} setZoom={zp.setZoom} adjustZoom={zp.adjustZoom} reset={zp.reset} ZOOM_MIN={zp.ZOOM_MIN} ZOOM_MAX={zp.ZOOM_MAX}/>
+          <ZoomControls zoom={zp.zoom} setZoom={zp.setZoom} adjustZoom={zp.adjustZoom} reset={zp.reset} onFit={handleFit} onExportPdf={handleExportPdf} ZOOM_MIN={zp.ZOOM_MIN} ZOOM_MAX={zp.ZOOM_MAX}/>
 
           {/* Detail panel */}
           {hasPanel && (
