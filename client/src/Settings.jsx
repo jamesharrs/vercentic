@@ -1321,22 +1321,21 @@ function AppearanceSection() {
   );
 }
 
-const SECTIONS = [
+const SECTIONS = [];
+
+const SUPER_ADMIN_SECTIONS = [
   { id:"appearance",  icon:"sun",      label:"Appearance" },
   { id:"audit",       icon:"key",      label:"Audit Log" },
   { id:"datamodel",   icon:"database", label:"Data Model" },
+  { id:"superadmin",  icon:"zap",      label:"Integrations" },
+  { id:"config",      icon:"refresh",  label:"Import / Export" },
   { id:"org",         icon:"layers",   label:"Org Structure" },
+  { id:"portals",     icon:"globe",    label:"Portals" },
   { id:"roles",       icon:"shield",   label:"Roles & Permissions" },
   { id:"security",    icon:"lock",     label:"Security" },
   { id:"sessions",    icon:"activity", label:"Active Sessions" },
   { id:"users",       icon:"users",    label:"Users" },
-];
-
-const SUPER_ADMIN_SECTIONS = [
   { id:"workflows",   icon:"workflow", label:"Workflows" },
-  { id:"portals",     icon:"globe",    label:"Portals" },
-  { id:"superadmin",  icon:"zap",      label:"Super Admin" },
-  { id:"config",      icon:"refresh",  label:"Import / Export" },
 ];
 
 export default function SettingsPage({ currentUser, environment }) {
@@ -1352,20 +1351,13 @@ export default function SettingsPage({ currentUser, environment }) {
       <div style={{width:200,flexShrink:0,paddingRight:24}}>
         <h1 style={{margin:"0 0 20px",fontSize:20,fontWeight:800,color:C.text1}}>Settings</h1>
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
-          {SECTIONS.map(s=>(
-            <button key={s.id} onClick={()=>setActiveSection(s.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",background:activeSection===s.id?"#f0f4ff":"transparent",color:activeSection===s.id?C.accent:C.text2,fontSize:13,fontWeight:activeSection===s.id?700:500,fontFamily:F,textAlign:"left",transition:"all .12s"}}>
-              <Ic n={s.icon} s={15}/>{s.label}
-            </button>
-          ))}
-
-          {/* Super Admin section — divider + gated nav item */}
-          <div style={{ margin:"12px 0 6px", borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", padding:"0 10px 4px" }}>System Admin</div>
+          <div style={{ marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", padding:"0 10px 6px" }}>System Admin</div>
             {SUPER_ADMIN_SECTIONS.map(s=>(
               <button key={s.id} onClick={()=>setActiveSection(s.id)}
-                style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",
-                  background:activeSection===s.id?"#fef3c7":"transparent",
-                  color:activeSection===s.id?"#92400e":C.text2,
+                style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",width:"100%",
+                  background:activeSection===s.id?C.accentLight:"transparent",
+                  color:activeSection===s.id?C.accent:C.text2,
                   fontSize:13,fontWeight:activeSection===s.id?700:500,fontFamily:F,textAlign:"left",transition:"all .12s"}}>
                 <Ic n={s.icon} s={15}/>{s.label}
               </button>
