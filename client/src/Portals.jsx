@@ -16,10 +16,10 @@ const api = {
 };
 
 const PORTAL_TYPES = [
-  { id:"career_site",    label:"Career Site",          icon:"🌐", color:C.accent,  desc:"Public job listings & branded application experience" },
-  { id:"hm_portal",      label:"Hiring Manager Portal",icon:"👔", color:C.purple, desc:"Req review, interview feedback & candidate scorecards" },
-  { id:"agency_portal",  label:"Agency Portal",        icon:"🤝", color:C.amber,  desc:"Vendor submission portal with pipeline visibility" },
-  { id:"onboarding",     label:"Onboarding Portal",    icon:"🚀", color:C.green,  desc:"Post-offer candidate journey & document collection" },
+  { id:"career_site",    label:"Career Site",          icon:"globe",     color:C.accent,  desc:"Public job listings & branded application experience" },
+  { id:"hm_portal",      label:"Hiring Manager Portal",icon:"briefcase", color:C.purple,  desc:"Req review, interview feedback & candidate scorecards" },
+  { id:"agency_portal",  label:"Agency Portal",        icon:"users",     color:C.amber,   desc:"Vendor submission portal with pipeline visibility" },
+  { id:"onboarding",     label:"Onboarding Portal",    icon:"rocket",    color:C.green,   desc:"Post-offer candidate journey & document collection" },
 ];
 
 const Ic = ({ n, s=16, c="currentColor" }) => {

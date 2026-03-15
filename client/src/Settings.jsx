@@ -3,6 +3,9 @@ import ReactDOM from "react-dom";
 
 import SuperAdminSection from "./SuperAdmin.jsx";
 import OrgChart from "./OrgChart.jsx";
+import WorkflowsPage from "./Workflows.jsx";
+import PortalsPage from "./Portals.jsx";
+import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 
 const api = {
   get:   p     => fetch(`/api${p}`).then(r=>r.json()),
@@ -1238,17 +1241,100 @@ const ConfigSection = ({ environment }) => {
 };
 
 // ── Main Settings Page ────────────────────────────────────────────────────────
+// ─── Appearance Section ───────────────────────────────────────────────────────
+function AppearanceSection() {
+  const { prefs, update } = useTheme();
+  const labelSt = { fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 };
+  return (
+    <div style={{ maxWidth:520 }}>
+      <h2 style={{ margin:"0 0 4px", fontSize:18, fontWeight:800, color:C.text1 }}>Appearance</h2>
+      <p style={{ margin:"0 0 28px", fontSize:13, color:C.text3 }}>Personalise your workspace theme and layout.</p>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:28 }}>
+        {/* Mode */}
+        <div>
+          <div style={labelSt}>Mode</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {[{id:false,label:"Light"},{id:true,label:"Dark"}].map(({id,label}) => (
+              <button key={String(id)} onClick={() => update("dark", id)} style={{
+                flex:1, padding:"10px 0", borderRadius:9, border:`1.5px solid ${prefs.dark===id?C.accent:C.border}`,
+                background:prefs.dark===id?C.accentLight:C.surface, color:prefs.dark===id?C.accent:C.text2,
+                fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all 0.15s"
+              }}>{label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Colour */}
+        <div>
+          <div style={labelSt}>Colour</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+            {Object.entries(SCHEMES).map(([id, s]) => (
+              <button key={id} onClick={() => update("scheme", id)} title={s.label} style={{
+                display:"flex", flexDirection:"column", alignItems:"center", gap:5, padding:"10px 4px",
+                borderRadius:10, border:`1.5px solid ${prefs.scheme===id?C.accent:C.border}`,
+                background:prefs.scheme===id?C.accentLight:C.surface, cursor:"pointer", fontFamily:F, transition:"all 0.15s"
+              }}>
+                <div style={{ display:"flex", gap:3 }}>
+                  <span style={{ width:12, height:12, borderRadius:"50%", background:s.accentDark, display:"inline-block" }}/>
+                  <span style={{ width:12, height:12, borderRadius:"50%", background:s.accent, display:"inline-block" }}/>
+                </div>
+                <span style={{ fontSize:10, fontWeight:600, color:prefs.scheme===id?C.accent:C.text3 }}>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Font */}
+        <div>
+          <div style={labelSt}>Font</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {Object.entries(FONTS).map(([id, f]) => (
+              <button key={id} onClick={() => update("font", id)} style={{
+                padding:"10px 14px", borderRadius:9, border:`1.5px solid ${prefs.font===id?C.accent:C.border}`,
+                background:prefs.font===id?C.accentLight:C.surface, color:prefs.font===id?C.accent:C.text2,
+                fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:f.value, textAlign:"left",
+                display:"flex", alignItems:"center", justifyContent:"space-between", transition:"all 0.15s"
+              }}>
+                <span>{f.label}</span>
+                <span style={{ fontSize:11, opacity:0.5 }}>Aa</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Density */}
+        <div>
+          <div style={labelSt}>Density</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {Object.entries(DENSITIES).map(([id, d]) => (
+              <button key={id} onClick={() => update("density", id)} style={{
+                flex:1, padding:"10px 0", borderRadius:9, border:`1.5px solid ${prefs.density===id?C.accent:C.border}`,
+                background:prefs.density===id?C.accentLight:C.surface, color:prefs.density===id?C.accent:C.text2,
+                fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all 0.15s"
+              }}>{d.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const SECTIONS = [
+  { id:"appearance",  icon:"sun",      label:"Appearance" },
+  { id:"audit",       icon:"key",      label:"Audit Log" },
   { id:"datamodel",   icon:"database", label:"Data Model" },
-  { id:"users",       icon:"users",    label:"Users" },
-  { id:"roles",       icon:"shield",   label:"Roles & Permissions" },
   { id:"org",         icon:"layers",   label:"Org Structure" },
+  { id:"roles",       icon:"shield",   label:"Roles & Permissions" },
   { id:"security",    icon:"lock",     label:"Security" },
   { id:"sessions",    icon:"activity", label:"Active Sessions" },
-  { id:"audit",       icon:"key",      label:"Audit Log" },
+  { id:"users",       icon:"users",    label:"Users" },
 ];
 
 const SUPER_ADMIN_SECTIONS = [
+  { id:"workflows",   icon:"workflow", label:"Workflows" },
+  { id:"portals",     icon:"globe",    label:"Portals" },
   { id:"superadmin",  icon:"zap",      label:"Super Admin" },
   { id:"config",      icon:"refresh",  label:"Import / Export" },
 ];
@@ -1274,7 +1360,7 @@ export default function SettingsPage({ currentUser, environment }) {
 
           {/* Super Admin section — divider + gated nav item */}
           <div style={{ margin:"12px 0 6px", borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", padding:"0 10px 4px" }}>System</div>
+            <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", padding:"0 10px 4px" }}>System Admin</div>
             {SUPER_ADMIN_SECTIONS.map(s=>(
               <button key={s.id} onClick={()=>setActiveSection(s.id)}
                 style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",
@@ -1290,13 +1376,16 @@ export default function SettingsPage({ currentUser, environment }) {
 
       {/* Content */}
       <div style={{flex:1,minWidth:0}}>
-        {activeSection==="datamodel" && <DataModelSection/>}
-        {activeSection==="users"     && <UsersSection/>}
-        {activeSection==="roles"     && <RolesSection/>}
-        {activeSection==="org"       && <OrgChart environment={environment}/>}
-        {activeSection==="security"  && <SecuritySection/>}
-        {activeSection==="sessions"  && <SessionsSection/>}
-        {activeSection==="audit"     && <AuditLogSection/>}
+        {activeSection==="datamodel"  && <DataModelSection/>}
+        {activeSection==="users"      && <UsersSection/>}
+        {activeSection==="roles"      && <RolesSection/>}
+        {activeSection==="org"        && <OrgChart environment={environment}/>}
+        {activeSection==="security"   && <SecuritySection/>}
+        {activeSection==="sessions"   && <SessionsSection/>}
+        {activeSection==="audit"      && <AuditLogSection/>}
+        {activeSection==="appearance" && <AppearanceSection/>}
+        {activeSection==="workflows"  && <WorkflowsPage environment={environment}/>}
+        {activeSection==="portals"    && <PortalsPage environment={environment}/>}
         {activeSection==="superadmin" && <SuperAdminSection/>}
         {activeSection==="config"     && <ConfigSection environment={environment}/>}
       </div>

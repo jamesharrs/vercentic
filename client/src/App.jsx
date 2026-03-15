@@ -1011,10 +1011,8 @@ function App() {
         { id: "orgchart",   icon: "git-branch",  label: "Org Chart" },
         { id: "interviews", icon: "calendar",     label: "Interviews" },
         { id: "matching",   icon: "zap",          label: "AI Matching" },
-        { id: "workflows", icon: "workflow",      label: "Workflows" },
-        { id: "portals",   icon: "globe",         label: "Portals" },
-        { id: "reports",   icon: "bar-chart-2",   label: "Reports" },
-        { id: "search",    icon: "search",        label: "Search" },
+        { id: "reports",    icon: "bar-chart-2",  label: "Reports" },
+        { id: "search",     icon: "search",       label: "Search" },
       ]
     },
     {
@@ -1159,21 +1157,6 @@ function App() {
 
         {/* Footer */}
         <div style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-          {/* Theme button */}
-          <button onClick={() => setShowTheme(true)} style={{
-            width: "100%", display: "flex", alignItems: "center", gap: 8,
-            padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-            background: "transparent", color: "var(--t-text2)", fontSize: 12, fontWeight: 500,
-            fontFamily: "inherit", textAlign: "left", transition: "all 0.15s"
-          }}>
-            <Icon name="settings" size={14} color="var(--t-text3)" />
-            Appearance
-            <span style={{ marginLeft: "auto", display: "flex", gap: 3 }}>
-              {["accent", "accentDark"].map((k,i) => (
-                <span key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: SCHEMES[prefs.scheme]?.[k] || "#3b5bdb", display: "inline-block" }} />
-              ))}
-            </span>
-          </button>
           <div style={{ padding: "10px 12px", background: "var(--t-surface2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", flexShrink: 0 }} />
             <span style={{ fontSize: 11, color: "var(--t-text2)" }}>API Connected</span>
@@ -1257,10 +1240,6 @@ function App() {
           <SearchPage environment={selectedEnv} onNavigateToRecord={(record) => {
             openRecord(record.id, record.object_id);
           }}/>
-        ) : activeNav === "workflows" ? (
-          <WorkflowsPage environment={selectedEnv} />
-        ) : activeNav === "portals" ? (
-          <PortalsPage environment={selectedEnv} />
         ) : activeNav === "reports" ? (
           <ReportsPage envId={selectedEnv?.id} initialReport={reportPreset} />
         ) : activeNav === "settings" ? (
