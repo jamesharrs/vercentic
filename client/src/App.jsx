@@ -9,6 +9,7 @@ import ObjectApp from "./ObjectApp.jsx";
 import WorkflowsPage from "./Workflows.jsx";
 import PortalsPage from "./Portals.jsx";
 import ReportsPage from "./Reports.jsx";
+import Interviews from "./Interviews.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import LoginPage from "./LoginPage.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
@@ -1007,8 +1008,9 @@ function App() {
     {
       label: "Tools",
       items: [
-        { id: "orgchart",  icon: "git-branch",  label: "Org Chart" },
-        { id: "matching",  icon: "zap",          label: "AI Matching" },
+        { id: "orgchart",   icon: "git-branch",  label: "Org Chart" },
+        { id: "interviews", icon: "calendar",     label: "Interviews" },
+        { id: "matching",   icon: "zap",          label: "AI Matching" },
         { id: "workflows", icon: "workflow",      label: "Workflows" },
         { id: "portals",   icon: "globe",         label: "Portals" },
         { id: "reports",   icon: "bar-chart-2",   label: "Reports" },
@@ -1266,6 +1268,10 @@ function App() {
         ) : activeNav === "orgchart" ? (
           <div style={{ padding:"28px 32px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column" }}>
             <OrgChart environment={selectedEnv} />
+          </div>
+        ) : activeNav === "interviews" ? (
+          <div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}>
+            <Interviews environment={selectedEnv} />
           </div>
         ) : activeNav === "schema" ? (
           selectedObject
