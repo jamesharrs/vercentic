@@ -11,6 +11,7 @@ import PortalsPage from "./Portals.jsx";
 import ReportsPage from "./Reports.jsx";
 import Interviews from "./Interviews.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import { useI18n } from "./i18n/I18nContext.jsx";
 import LoginPage from "./LoginPage.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 
@@ -955,6 +956,7 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
   const { prefs, update } = useTheme();
+  const { t, isRTL } = useI18n();
   const [session, setSession]   = useState(() => getSession()); // { user, role, permissions }
   const [environments, setEnvironments] = useState([]);
   const [selectedEnv, setSelectedEnv] = useState(null);
@@ -996,29 +998,29 @@ function App() {
 
   const navSections = [
     {
-      label: "Overview",
+      label: t("nav.overview"),
       items: [
-        { id: "dashboard", icon: "home", label: "Dashboard" },
+        { id: "dashboard", icon: "home", label: t("nav.dashboard") },
       ]
     },
     {
-      label: "Recruit",
+      label: t("nav.recruit"),
       items: navObjects.map(o => ({ id: `obj_${o.id}`, icon: OBJECT_ICONS[o.slug] || "database", label: o.plural_name, object: o }))
     },
     {
-      label: "Tools",
+      label: t("nav.tools"),
       items: [
-        { id: "orgchart",   icon: "git-branch",  label: "Org Chart" },
-        { id: "interviews", icon: "calendar",     label: "Interviews" },
-        { id: "matching",   icon: "zap",          label: "AI Matching" },
-        { id: "reports",    icon: "bar-chart-2",  label: "Reports" },
-        { id: "search",     icon: "search",       label: "Search" },
+        { id: "orgchart",   icon: "git-branch",  label: t("nav.orgChart") },
+        { id: "interviews", icon: "calendar",     label: t("nav.interviews") },
+        { id: "matching",   icon: "zap",          label: t("nav.aiMatching") },
+        { id: "reports",    icon: "bar-chart-2",  label: t("nav.reports") },
+        { id: "search",     icon: "search",       label: t("nav.search") },
       ]
     },
     {
-      label: "Configure",
+      label: t("nav.configure"),
       items: [
-        { id: "settings", icon: "settings", label: "Settings" },
+        { id: "settings", icon: "settings", label: t("nav.settings") },
       ]
     }
   ];

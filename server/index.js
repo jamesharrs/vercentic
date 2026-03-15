@@ -47,6 +47,7 @@ app.use('/api/saved-views',      require('./routes/saved_views'));
 app.use('/api/config',           require('./routes/config'));
 app.use('/api/interview-types',  require('./routes/interview_types'));
 app.use('/api/interviews',       require('./routes/interviews'));
+app.use('/api/translate',        require('./routes/translate'));
 app.use('/api/comms',            require('./routes/communications'));
 app.use('/api/email-templates',  require('./routes/email-templates'));
 app.use('/api/integrations',     require('./routes/integrations'));

@@ -6,6 +6,7 @@ import OrgChart from "./OrgChart.jsx";
 import WorkflowsPage from "./Workflows.jsx";
 import PortalsPage from "./Portals.jsx";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import { useI18n, LANGUAGES } from "./i18n/I18nContext.jsx";
 
 const api = {
   get:   p     => fetch(`/api${p}`).then(r=>r.json()),
@@ -1245,12 +1246,20 @@ const ConfigSection = ({ environment }) => {
 function AppearanceSection() {
   const { prefs, update } = useTheme();
   const labelSt = { fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 };
+
+  const handleLangSelect = async (code) => {
+    if (code === locale) return;
+    setGenStatus(s => ({ ...s, [code]: "loading" }));
+    const ok = await generateTranslations(code);
+    setGenStatus(s => ({ ...s, [code]: ok ? "done" : "error" }));
+  };
+
   return (
-    <div style={{ maxWidth:520 }}>
+    <div style={{ maxWidth:540 }}>
       <h2 style={{ margin:"0 0 4px", fontSize:18, fontWeight:800, color:C.text1 }}>Appearance</h2>
       <p style={{ margin:"0 0 28px", fontSize:13, color:C.text3 }}>Personalise your workspace theme and layout.</p>
-
       <div style={{ display:"flex", flexDirection:"column", gap:28 }}>
+
         {/* Mode */}
         <div>
           <div style={labelSt}>Mode</div>
@@ -1316,15 +1325,69 @@ function AppearanceSection() {
             ))}
           </div>
         </div>
+
       </div>
     </div>
   );
 }
 
+// ─── Language Section ─────────────────────────────────────────────────────────
+function LanguageSection() {
+  const { locale, generateTranslations, generating, LANGUAGES } = useI18n();
+  const [genStatus, setGenStatus] = useState({});
+
+  const handleLangSelect = async (code) => {
+    if (code === locale) return;
+    setGenStatus(s => ({ ...s, [code]: "loading" }));
+    const ok = await generateTranslations(code);
+    setGenStatus(s => ({ ...s, [code]: ok ? "done" : "error" }));
+  };
+
+  return (
+    <div style={{ maxWidth:540 }}>
+      <h2 style={{ margin:"0 0 4px", fontSize:18, fontWeight:800, color:C.text1 }}>Language</h2>
+      <p style={{ margin:"0 0 24px", fontSize:13, color:C.text3 }}>Choose your preferred display language.</p>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
+        {LANGUAGES.map(lang => {
+          const isActive  = locale === lang.code;
+          const isLoading = genStatus[lang.code] === "loading" || (generating && lang.code !== locale);
+          return (
+            <button key={lang.code} onClick={() => handleLangSelect(lang.code)}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px", borderRadius:10,
+                border:`1.5px solid ${isActive ? C.accent : C.border}`,
+                background: isActive ? C.accentLight : C.surface,
+                cursor: isLoading ? "wait" : "pointer", fontFamily:F, transition:"all .15s",
+                opacity: isLoading ? 0.7 : 1 }}>
+              <span style={{ fontSize:20 }}>{lang.flag}</span>
+              <div style={{ textAlign:"left", flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color: isActive ? C.accent : C.text1 }}>{lang.label}</div>
+                <div style={{ fontSize:10, color:C.text3, marginTop:1 }}>
+                  {lang.code.toUpperCase()}{lang.dir === "rtl" ? " · RTL" : ""}
+                </div>
+              </div>
+              {isActive  && <div style={{ width:8, height:8, borderRadius:"50%", background:C.accent, flexShrink:0 }}/>}
+              {isLoading && <div style={{ fontSize:10, color:C.text3, flexShrink:0 }}>…</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ padding:"12px 14px", borderRadius:10, background:"#f8f9fc", border:`1px solid ${C.border}`, fontSize:12, color:C.text3, lineHeight:1.6 }}>
+        Non-English languages are AI-generated on first use and cached for the session. Switching back to English is instant.
+      </div>
+    </div>
+  );
+}
+
+const USER_ADMIN_SECTIONS = [
+  { id:"appearance",  icon:"sun",      label:"Appearance" },
+  { id:"language",    icon:"globe",    label:"Language" },
+];
+
 const SECTIONS = [];
 
 const SUPER_ADMIN_SECTIONS = [
-  { id:"appearance",  icon:"sun",      label:"Appearance" },
   { id:"audit",       icon:"key",      label:"Audit Log" },
   { id:"datamodel",   icon:"database", label:"Data Model" },
   { id:"superadmin",  icon:"zap",      label:"Integrations" },
@@ -1339,7 +1402,7 @@ const SUPER_ADMIN_SECTIONS = [
 ];
 
 export default function SettingsPage({ currentUser, environment }) {
-  const [activeSection, setActiveSection] = useState("datamodel");
+  const [activeSection, setActiveSection] = useState("appearance");
 
   // Super admin check — currentUser prop from App, fallback to localStorage
   const user = currentUser || (() => { try { return JSON.parse(localStorage.getItem("talentos_user")||"{}"); } catch { return {}; } })();
@@ -1351,8 +1414,24 @@ export default function SettingsPage({ currentUser, environment }) {
       <div style={{width:200,flexShrink:0,paddingRight:24}}>
         <h1 style={{margin:"0 0 20px",fontSize:20,fontWeight:800,color:C.text1}}>Settings</h1>
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
-          <div style={{ marginBottom:6 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", padding:"0 10px 6px" }}>System Admin</div>
+
+          {/* User Admin */}
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.08em",padding:"0 10px 6px"}}>User Admin</div>
+            {USER_ADMIN_SECTIONS.map(s=>(
+              <button key={s.id} onClick={()=>setActiveSection(s.id)}
+                style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",width:"100%",
+                  background:activeSection===s.id?C.accentLight:"transparent",
+                  color:activeSection===s.id?C.accent:C.text2,
+                  fontSize:13,fontWeight:activeSection===s.id?700:500,fontFamily:F,textAlign:"left",transition:"all .12s"}}>
+                <Ic n={s.icon} s={15}/>{s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* System Admin */}
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.08em",padding:"0 10px 6px"}}>System Admin</div>
             {SUPER_ADMIN_SECTIONS.map(s=>(
               <button key={s.id} onClick={()=>setActiveSection(s.id)}
                 style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",width:"100%",
@@ -1363,6 +1442,7 @@ export default function SettingsPage({ currentUser, environment }) {
               </button>
             ))}
           </div>
+
         </div>
       </div>
 
@@ -1376,6 +1456,7 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="sessions"   && <SessionsSection/>}
         {activeSection==="audit"      && <AuditLogSection/>}
         {activeSection==="appearance" && <AppearanceSection/>}
+        {activeSection==="language"   && <LanguageSection/>}
         {activeSection==="workflows"  && <WorkflowsPage environment={environment}/>}
         {activeSection==="portals"    && <PortalsPage environment={environment}/>}
         {activeSection==="superadmin" && <SuperAdminSection/>}
