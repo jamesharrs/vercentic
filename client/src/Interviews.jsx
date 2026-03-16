@@ -432,21 +432,46 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
   });
   const [candidates, setCandidates] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [jobInterviewers, setJobInterviewers] = useState([]); // from job record
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   useEffect(() => {
     if (!envId) return;
-    Promise.all([
-      api.get(`/records?environment_id=${envId}&object_slug=people&limit=200`),
-      api.get(`/records?environment_id=${envId}&object_slug=jobs&limit=200`),
-    ]).then(([p,j]) => {
-      const pr = Array.isArray(p)?p:(p.records||[]);
-      const jr = Array.isArray(j)?j:(j.records||[]);
-      setCandidates(pr.map(r=>({id:r.id,name:`${r.data?.first_name||""} ${r.data?.last_name||""}`.trim()||r.id})));
-      setJobs(jr.map(r=>({id:r.id,name:r.data?.job_title||r.data?.name||r.id})));
+    api.get(`/objects?environment_id=${envId}`).then(objs => {
+      const arr = Array.isArray(objs) ? objs : [];
+      const peopleObj = arr.find(o=>o.slug==="people");
+      const jobsObj   = arr.find(o=>o.slug==="jobs");
+      const reqs = [];
+      if (peopleObj) reqs.push(api.get(`/records?object_id=${peopleObj.id}&environment_id=${envId}&limit=200`));
+      else reqs.push(Promise.resolve([]));
+      if (jobsObj) reqs.push(api.get(`/records?object_id=${jobsObj.id}&environment_id=${envId}&limit=200`));
+      else reqs.push(Promise.resolve([]));
+      Promise.all(reqs).then(([p,j]) => {
+        const pr = Array.isArray(p)?p:(p.records||[]);
+        const jr = Array.isArray(j)?j:(j.records||[]);
+        setCandidates(pr.map(r=>({id:r.id,name:`${r.data?.first_name||""} ${r.data?.last_name||""}`.trim()||r.id})));
+        setJobs(jr.map(r=>({id:r.id,name:r.data?.job_title||r.data?.name||r.id, interviewers:r.data?.interviewers||[]})));
+      });
     });
   }, [envId]);
+
+  // When job changes, load its interviewers and pre-check them
+  useEffect(() => {
+    if (!form.job_id) { setJobInterviewers([]); return; }
+    const job = jobs.find(j=>j.id===form.job_id);
+    if (!job) return;
+    const jivs = (job.interviewers||[]).map(iv =>
+      typeof iv === "object" ? iv : { id: iv, name: iv }
+    );
+    setJobInterviewers(jivs);
+    // merge into form interviewers (add any not already there)
+    setForm(f => {
+      const existing = new Set((f.interviewers||[]).map(x=>typeof x==="object"?x.id:x));
+      const toAdd = jivs.filter(iv=>!existing.has(iv.id));
+      return toAdd.length ? {...f, interviewers:[...f.interviewers,...toAdd]} : f;
+    });
+  }, [form.job_id, jobs]);
 
   const handle = async () => {
     setSaving(true);
@@ -501,7 +526,31 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
             </div>
             <div>
               <label style={labelSt}>Interviewers</label>
-              <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add interviewers…"/>
+              {jobInterviewers.length > 0 && (
+                <div style={{marginBottom:10,padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"#f8f9fc"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>From Job</div>
+                  {jobInterviewers.map(iv => {
+                    const isChecked = (form.interviewers||[]).some(x=>(typeof x==="object"?x.id:x)===iv.id);
+                    const toggle = () => setForm(f => ({
+                      ...f,
+                      interviewers: isChecked
+                        ? (f.interviewers||[]).filter(x=>(typeof x==="object"?x.id:x)!==iv.id)
+                        : [...(f.interviewers||[]), iv]
+                    }));
+                    const init = (iv.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+                    return (
+                      <div key={iv.id} onClick={toggle} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",cursor:"pointer",borderBottom:`1px solid ${C.border}`,lastChild:{borderBottom:"none"}}}>
+                        <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isChecked?C.accent:C.border}`,background:isChecked?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
+                          {isChecked && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                        </div>
+                        <div style={{width:26,height:26,borderRadius:"50%",background:`${C.accent}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:C.accent,flexShrink:0}}>{init}</div>
+                        <span style={{fontSize:13,color:C.text1,fontWeight:500}}>{iv.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add more interviewers…"/>
             </div>
             <div>
               <label style={labelSt}>Notes</label>
