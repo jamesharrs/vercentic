@@ -267,6 +267,9 @@ const FieldEditor = ({ field, value, onChange, autoFocus }) => {
 // Module-level environment ref — set by RecordsView on mount
 let _currentEnvId = null;
 
+// Module-level cache so PeoplePicker doesn't re-fetch on every open
+const _pickerCache = {};
+
 const PeoplePicker = ({ field, value, onChange }) => {
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState([]);
@@ -290,17 +293,23 @@ const PeoplePicker = ({ field, value, onChange }) => {
     setDropUp(window.innerHeight - rect.bottom < 220);
   };
 
-  // Load options once on first open
+  // Load options once — use module-level cache keyed by objectId+envId
   useEffect(() => {
-    if (!open || loaded || !_currentEnvId) return;
+    if (!open || !_currentEnvId) return;
+    const cacheKey = `${field.lookup_object_id||field.related_object_slug||'people'}_${_currentEnvId}`;
+    if (_pickerCache[cacheKey]) { setOptions(_pickerCache[cacheKey]); setLoaded(true); return; }
+    if (loaded) return;
+
     const fetchRecords = (objectId) =>
       api.get(`/records?object_id=${objectId}&environment_id=${_currentEnvId}&limit=200`)
         .then(res => {
           const recs = Array.isArray(res) ? res : (res.records || []);
-          setOptions(recs.map(r => ({
+          const opts = recs.map(r => ({
             id: r.id,
             name: `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.name || r.data?.job_title || r.id
-          })));
+          }));
+          _pickerCache[cacheKey] = opts;
+          setOptions(opts);
           setLoaded(true);
         }).catch(() => {});
 
@@ -3008,7 +3017,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setLoading(true);
     const [f, r] = await Promise.all([
       api.get(`/fields?object_id=${object.id}`),
-      api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=200${search?`&search=${encodeURIComponent(search)}`:""}`),
+      api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
     ]);
     const loadedFields = Array.isArray(f) ? f : [];
     setFields(loadedFields);

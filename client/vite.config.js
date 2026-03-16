@@ -12,7 +12,25 @@ export default defineConfig({
       }
     }
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom'],
+  },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'module-records':   ['./src/Records.jsx'],
+          'module-workflows': ['./src/Workflows.jsx'],
+          'module-orgchart':  ['./src/OrgChart.jsx'],
+          'module-settings':  ['./src/Settings.jsx'],
+          'module-ai':        ['./src/AI.jsx'],
+          'module-interviews':['./src/Interviews.jsx'],
+          'module-offers':    ['./src/Offers.jsx'],
+        }
+      }
+    }
   }
 })
+

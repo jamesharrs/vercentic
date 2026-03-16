@@ -36,6 +36,22 @@ function saveStore() {
 function getStore() { return store; }
 function query(table, predicate) { return (store[table] || []).filter(predicate || (() => true)); }
 function findOne(table, predicate) { return (store[table] || []).find(predicate); }
+
+// Debounced saveStore — batches rapid writes (e.g. field edits) into one disk write
+let _saveTimer = null;
+function saveStore() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+  }, 150);
+}
+function saveStoreNow() {
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+}
 function insert(table, record) { if (!store[table]) store[table] = []; store[table].push(record); saveStore(); return record; }
 function update(table, predicate, updates) {
   const idx = store[table].findIndex(predicate);
@@ -284,4 +300,4 @@ async function seedUsersAndRoles() {
   }
 }
 
-module.exports = { getStore, saveStore, query, findOne, insert, update, remove, initDB };
+module.exports = { getStore, saveStore, saveStoreNow, query, findOne, insert, update, remove, initDB };
