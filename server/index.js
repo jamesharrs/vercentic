@@ -54,6 +54,7 @@ app.use('/api/file-types',         require('./routes/file_types'));
 app.use('/api/cv-parse',           require('./routes/cv_parse'));
 app.use('/api/doc-extract',        require('./routes/doc_extract'));
 app.use('/api/forms',              require('./routes/forms'));
+app.use('/api/offers',             require('./routes/offers'));
 app.use('/api/comms',            require('./routes/communications'));
 app.use('/api/email-templates',  require('./routes/email-templates'));
 app.use('/api/integrations',     require('./routes/integrations'));
