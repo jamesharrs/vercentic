@@ -1086,6 +1086,78 @@ const STEP_COLORS = { stage_change:"#3b5bdb", ai_prompt:"#7c3aed", update_field:
 const STEP_LABELS = { stage_change:"Change Stage", ai_prompt:"AI Prompt", update_field:"Update Field", send_email:"Send Email", webhook:"Webhook" };
 const STEP_ICONS  = { stage_change:"tag", ai_prompt:"sparkles", update_field:"edit", send_email:"mail", webhook:"activity" };
 
+// ─── Create Offer Modal (triggered by workflow) ───────────────────────────────
+const CreateOfferModal = ({ workflow, record, environment, onConfirm, onClose }) => {
+  const step = (workflow?.steps || []).find(s => s.automation_type === "create_offer");
+  const cfg  = step?.config || {};
+  const [salary,   setSalary]   = useState(cfg.default_salary || "");
+  const [currency, setCurrency] = useState(cfg.currency || "USD");
+  const [expiry,   setExpiry]   = useState("");
+  const [bonus,    setBonus]    = useState("");
+  const [notes,    setNotes]    = useState("");
+
+  const inp = { width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:8,
+    border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:C.surface };
+  const lbl = txt => <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>{txt}</div>;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.45)", zIndex:2000,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:C.surface, borderRadius:16, width:"100%", maxWidth:460,
+        boxShadow:"0 24px 64px rgba(0,0,0,.18)", overflow:"hidden" }}>
+        <div style={{ height:4, background:"#0ca678" }}/>
+        <div style={{ padding:"20px 24px" }}>
+          <div style={{ fontSize:16, fontWeight:800, color:C.text1, marginBottom:2 }}>Create Offer</div>
+          <div style={{ fontSize:12, color:C.text3, marginBottom:18 }}>
+            For: <strong>{record?.data?.first_name} {record?.data?.last_name}</strong>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 }}>
+              <div>
+                {lbl("Base Salary *")}
+                <input type="number" value={salary} onChange={e=>setSalary(e.target.value)} placeholder="e.g. 80000" style={inp}/>
+              </div>
+              <div>
+                {lbl("Currency")}
+                <select value={currency} onChange={e=>setCurrency(e.target.value)} style={{...inp, background:C.surface}}>
+                  {["USD","GBP","EUR","AED","SAR","QAR","SGD","AUD","CAD"].map(c=><option key={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              {lbl("Bonus (optional)")}
+              <input type="number" value={bonus} onChange={e=>setBonus(e.target.value)} placeholder="e.g. 10000" style={inp}/>
+            </div>
+            <div>
+              {lbl("Offer Expiry Date")}
+              <input type="date" value={expiry} onChange={e=>setExpiry(e.target.value)} style={inp}
+                min={new Date().toISOString().slice(0,10)}/>
+            </div>
+            <div>
+              {lbl("Notes (optional)")}
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2}
+                placeholder="Internal notes…" style={{...inp, resize:"vertical"}}/>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
+            <button onClick={onClose} style={{ padding:"9px 18px", borderRadius:8, border:`1px solid ${C.border}`,
+              background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+              Cancel
+            </button>
+            <button onClick={()=>onConfirm({ salary, currency, bonus, expiry, notes })} disabled={!salary}
+              style={{ padding:"9px 20px", borderRadius:8, border:"none",
+                background:!salary?"#e5e7eb":"#0ca678", color:"white",
+                fontSize:13, fontWeight:700, cursor:!salary?"not-allowed":"pointer", fontFamily:F }}>
+              ⚡ Create Offer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Schedule Interview Modal (triggered by workflow) ─────────────────────────
 const ScheduleInterviewModal = ({ workflow, record, environment, onConfirm, onClose }) => {
   const [date, setDate] = useState("");
@@ -1146,7 +1218,8 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
   const [loading, setLoading]     = useState(true);
   const [running, setRunning]     = useState(null);
   const [results, setResults]     = useState({});
-  const [scheduleModal, setScheduleModal] = useState(null); // { wf }
+  const [scheduleModal, setScheduleModal] = useState(null);
+  const [offerModal,    setOfferModal]    = useState(null);
 
   useEffect(() => {
     if (!objectId || !environment?.id) return;
@@ -1155,12 +1228,10 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
   }, [objectId, environment?.id]);
 
   const runWorkflow = async (wf, extraParams = {}) => {
-    // Check if any step is schedule_interview — if so, show date modal first
     const hasSchedule = (wf.steps||[]).some(s => s.automation_type === "schedule_interview");
-    if (hasSchedule && !extraParams.scheduled_date) {
-      setScheduleModal({ wf });
-      return;
-    }
+    const hasOffer    = (wf.steps||[]).some(s => s.automation_type === "create_offer");
+    if (hasSchedule && !extraParams.scheduled_date) { setScheduleModal({ wf }); return; }
+    if (hasOffer    && !extraParams.offer_salary)   { setOfferModal({ wf });    return; }
     setRunning(wf.id);
     setResults(r => ({ ...r, [wf.id]: null }));
     try {
@@ -1181,15 +1252,16 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
       {scheduleModal && (
         <ScheduleInterviewModal
-          workflow={scheduleModal.wf}
-          record={record}
-          environment={environment}
+          workflow={scheduleModal.wf} record={record} environment={environment}
           onClose={()=>setScheduleModal(null)}
-          onConfirm={({date,time})=>{
-            const wf = scheduleModal.wf;
-            setScheduleModal(null);
-            runWorkflow(wf, { scheduled_date: date, scheduled_time: time });
-          }}
+          onConfirm={({date,time})=>{ const wf=scheduleModal.wf; setScheduleModal(null); runWorkflow(wf,{scheduled_date:date,scheduled_time:time}); }}
+        />
+      )}
+      {offerModal && (
+        <CreateOfferModal
+          workflow={offerModal.wf} record={record} environment={environment}
+          onClose={()=>setOfferModal(null)}
+          onConfirm={({salary,currency,bonus,expiry,notes})=>{ const wf=offerModal.wf; setOfferModal(null); runWorkflow(wf,{offer_salary:salary,offer_currency:currency,offer_bonus:bonus,offer_expiry:expiry,offer_notes:notes}); }}
         />
       )}
       {/* Pipeline + People Link section */}

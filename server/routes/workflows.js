@@ -198,6 +198,55 @@ router.post('/:id/run', async (req, res) => {
         stepResult.output = `Interview scheduled for ${scheduled_date} at ${scheduled_time} with ${interviewers.length} interviewer(s)`;
         stepResult.status = 'done';
 
+      } else if (step.automation_type === 'create_offer') {
+        const cfg = step.config || {};
+        const { offer_salary, offer_currency, offer_bonus, offer_expiry, offer_notes } = req.body;
+
+        // Resolve linked job from record data or relationships
+        let jobId = record.data?.job_id || null;
+        let jobName = record.data?.job_name || '';
+        let jobDepartment = record.data?.job_department || '';
+        if (!jobId) {
+          const rels = query('relationships', r => r.source_id === record.id || r.target_id === record.id);
+          for (const rel of rels) {
+            const otherId = rel.source_id === record.id ? rel.target_id : rel.source_id;
+            const other = findOne('records', r => r.id === otherId);
+            if (other?.data?.job_title) { jobId = other.id; jobName = other.data.job_title; jobDepartment = other.data.department || ''; break; }
+          }
+        }
+
+        if (!store.offers) store.offers = [];
+        const offer = insert('offers', {
+          id: uuidv4(),
+          environment_id: record.environment_id,
+          candidate_id:   record.id,
+          candidate_name: `${record.data?.first_name||''} ${record.data?.last_name||''}`.trim() || record.id,
+          job_id:         jobId,
+          job_name:       jobName,
+          job_department: jobDepartment,
+          base_salary:    parseFloat(offer_salary) || null,
+          currency:       offer_currency || cfg.currency || 'USD',
+          bonus:          offer_bonus ? parseFloat(offer_bonus) : null,
+          bonus_type:     'fixed',
+          start_date:     null,
+          expiry_date:    offer_expiry || null,
+          status:         'draft',
+          approval_chain: [],
+          current_approver_index: null,
+          notes:          offer_notes || '',
+          terms:          '',
+          custom_fields:  {},
+          created_by:     'Workflow',
+          sent_at: null, accepted_at: null, declined_at: null, withdrawn_at: null, decline_reason: '',
+          activity_log: [{ id: uuidv4(), type: 'created', message: `Offer created by workflow: ${wf.name}`, user: 'Workflow', timestamp: new Date().toISOString() }],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          deleted_at: null,
+        });
+
+        stepResult.output = `Offer created (Draft) — ${offer_currency || cfg.currency || 'USD'} ${Number(offer_salary).toLocaleString()} for ${offer.candidate_name}`;
+        stepResult.status = 'done';
+
       } else {
         stepResult.status = 'skipped';
         stepResult.output = 'Unknown step type';

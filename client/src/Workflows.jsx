@@ -58,6 +58,7 @@ const AUTOMATION_TYPES = [
   { type:"send_email",         label:"Send Email",         icon:"mail",      color:"#f59f00", desc:"Send an email to the candidate" },
   { type:"webhook",            label:"Webhook",            icon:"webhook",   color:"#e03131", desc:"POST record data to an external URL" },
   { type:"schedule_interview", label:"Schedule Interview", icon:"briefcase", color:"#0891b2", desc:"Schedule an interview with the person" },
+  { type:"create_offer",       label:"Create Offer",       icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
 ];
 
 // Keep STEP_TYPES as alias for display in run results etc.
@@ -253,14 +254,28 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
                 </div>
               </div>
             )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ─── Workflow Editor ──────────────────────────────────────────────────────────
+            {step.automation_type === "create_offer" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ fontSize:11, color:C.text3, lineHeight:1.5 }}>
+                  When triggered on a person record, a modal will ask for salary, currency and expiry date before creating the offer.
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8 }}>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#0ca678", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Default Base Salary (optional)</div>
+                    <input type="number" value={cfg.default_salary||""} onChange={e=>setConfig("default_salary", e.target.value)}
+                      placeholder="e.g. 80000"
+                      style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#0ca678", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Currency</div>
+                    <select value={cfg.currency||"USD"} onChange={e=>setConfig("currency", e.target.value)}
+                      style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+                      {["USD","GBP","EUR","AED","SAR","QAR","SGD","AUD","CAD"].map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave, onClose }) => {
   const [name, setName]       = useState(workflow?.name || "");
   const [objectId, setObjectId] = useState(workflow?.object_id || "");
