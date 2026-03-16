@@ -1086,11 +1086,67 @@ const STEP_COLORS = { stage_change:"#3b5bdb", ai_prompt:"#7c3aed", update_field:
 const STEP_LABELS = { stage_change:"Change Stage", ai_prompt:"AI Prompt", update_field:"Update Field", send_email:"Send Email", webhook:"Webhook" };
 const STEP_ICONS  = { stage_change:"tag", ai_prompt:"sparkles", update_field:"edit", send_email:"mail", webhook:"activity" };
 
+// ─── Schedule Interview Modal (triggered by workflow) ─────────────────────────
+const ScheduleInterviewModal = ({ workflow, record, environment, onConfirm, onClose }) => {
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const step = (workflow?.steps || []).find(s => s.automation_type === "schedule_interview");
+  const cfg  = step?.config || {};
+
+  const inp = { width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:8,
+    border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:C.surface };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.45)", zIndex:2000,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:C.surface, borderRadius:16, width:"100%", maxWidth:420,
+        boxShadow:"0 24px 64px rgba(0,0,0,.18)", overflow:"hidden" }}>
+        <div style={{ height:4, background:"#0891b2" }}/>
+        <div style={{ padding:"20px 24px" }}>
+          <div style={{ fontSize:16, fontWeight:800, color:C.text1, marginBottom:2 }}>Schedule Interview</div>
+          <div style={{ fontSize:12, color:C.text3, marginBottom:20 }}>
+            {cfg.interview_type_name || "Interview"} · {cfg.interview_duration || 30} min
+            {cfg.interview_format ? ` · ${cfg.interview_format}` : ""}
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>Date *</div>
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inp}
+                min={new Date().toISOString().slice(0,10)}/>
+            </div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>Time *</div>
+              <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={inp}/>
+            </div>
+            <div style={{ padding:"10px 12px", borderRadius:8, background:"#f0fdff", border:"1px solid #0891b220", fontSize:12, color:"#0e7490" }}>
+              <strong>Candidate:</strong> {record?.data?.first_name} {record?.data?.last_name}<br/>
+              <strong>Interviewers:</strong> {cfg.interviewer_source === "interview_type" ? "From interview type" : cfg.interviewer_source === "both" ? "Job record + interview type" : "From job record"}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
+            <button onClick={onClose} style={{ padding:"9px 18px", borderRadius:8, border:`1px solid ${C.border}`,
+              background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+              Cancel
+            </button>
+            <button onClick={()=>onConfirm({ date, time })} disabled={!date||!time}
+              style={{ padding:"9px 20px", borderRadius:8, border:"none", background:!date||!time?"#e5e7eb":"#0891b2",
+                color:"white", fontSize:13, fontWeight:700, cursor:!date||!time?"not-allowed":"pointer", fontFamily:F }}>
+              Schedule Interview
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate }) => {
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [running, setRunning]     = useState(null);
   const [results, setResults]     = useState({});
+  const [scheduleModal, setScheduleModal] = useState(null); // { wf }
 
   useEffect(() => {
     if (!objectId || !environment?.id) return;
@@ -1098,11 +1154,17 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
       .then(d => { setWorkflows(Array.isArray(d) ? d.filter(w => w.active !== false) : []); setLoading(false); });
   }, [objectId, environment?.id]);
 
-  const runWorkflow = async (wf) => {
+  const runWorkflow = async (wf, extraParams = {}) => {
+    // Check if any step is schedule_interview — if so, show date modal first
+    const hasSchedule = (wf.steps||[]).some(s => s.automation_type === "schedule_interview");
+    if (hasSchedule && !extraParams.scheduled_date) {
+      setScheduleModal({ wf });
+      return;
+    }
     setRunning(wf.id);
     setResults(r => ({ ...r, [wf.id]: null }));
     try {
-      const res = await api.post(`/workflows/${wf.id}/run`, { record_id: record.id });
+      const res = await api.post(`/workflows/${wf.id}/run`, { record_id: record.id, ...extraParams });
       setResults(r => ({ ...r, [wf.id]: res }));
     } catch(e) {
       setResults(r => ({ ...r, [wf.id]: { error: e.message } }));
@@ -1117,6 +1179,19 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {scheduleModal && (
+        <ScheduleInterviewModal
+          workflow={scheduleModal.wf}
+          record={record}
+          environment={environment}
+          onClose={()=>setScheduleModal(null)}
+          onConfirm={({date,time})=>{
+            const wf = scheduleModal.wf;
+            setScheduleModal(null);
+            runWorkflow(wf, { scheduled_date: date, scheduled_time: time });
+          }}
+        />
+      )}
       {/* Pipeline + People Link section */}
       <RecordPipelinePanel record={record} objectId={objectId} environment={environment} objectName={objectName} onNavigate={onNavigate}/>
 

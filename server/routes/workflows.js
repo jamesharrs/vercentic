@@ -132,6 +132,72 @@ router.post('/:id/run', async (req, res) => {
         stepResult.output = `[Demo] POST to ${step.config.url}`;
         stepResult.status = 'done';
 
+      } else if (step.automation_type === 'schedule_interview') {
+        const cfg = step.config || {};
+        const { scheduled_date, scheduled_time } = req.body;
+
+        // Resolve interviewers based on config
+        let interviewers = [];
+        const source = cfg.interviewer_source || 'job_record';
+
+        // Get interviewers from interview type
+        if (['interview_type','both'].includes(source) && cfg.interview_type_id) {
+          const itype = findOne('interview_types', t => t.id === cfg.interview_type_id);
+          if (itype?.interviewers?.length) interviewers.push(...itype.interviewers);
+        }
+
+        // Get interviewers from the linked job record
+        if (['job_record','both'].includes(source)) {
+          // Find job linked to this record — check data.job_id or relationships
+          const jobId = record.data?.job_id;
+          if (jobId) {
+            const jobRecord = findOne('records', r => r.id === jobId);
+            const jobIvs = jobRecord?.data?.interviewers;
+            if (Array.isArray(jobIvs)) interviewers.push(...jobIvs);
+          }
+          // Also check relationships
+          const rels = query('relationships', r =>
+            (r.source_id === record.id || r.target_id === record.id)
+          );
+          for (const rel of rels) {
+            const otherId = rel.source_id === record.id ? rel.target_id : rel.source_id;
+            const other = findOne('records', r => r.id === otherId);
+            if (other?.data?.interviewers?.length) {
+              interviewers.push(...other.data.interviewers);
+            }
+          }
+        }
+
+        // Dedupe by id
+        const seen = new Set();
+        interviewers = interviewers.filter(iv => {
+          const id = typeof iv === 'object' ? iv.id : iv;
+          if (seen.has(id)) return false;
+          seen.add(id); return true;
+        });
+
+        // Create the interview record
+        const interview = insert('interviews', {
+          id: uuidv4(),
+          environment_id: record.environment_id,
+          interview_type_id: cfg.interview_type_id || null,
+          interview_type_name: cfg.interview_type_name || 'Interview',
+          candidate_id: record.id,
+          candidate_name: `${record.data?.first_name||''} ${record.data?.last_name||''}`.trim() || record.id,
+          date: scheduled_date || null,
+          time: scheduled_time || null,
+          duration: cfg.interview_duration || 30,
+          format: cfg.interview_format || 'Video Call',
+          interviewers,
+          status: 'scheduled',
+          notes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        stepResult.output = `Interview scheduled for ${scheduled_date} at ${scheduled_time} with ${interviewers.length} interviewer(s)`;
+        stepResult.status = 'done';
+
       } else {
         stepResult.status = 'skipped';
         stepResult.output = 'Unknown step type';

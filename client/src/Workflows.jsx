@@ -52,11 +52,12 @@ const Ic = ({ n, s=16, c="currentColor" }) => (
 
 // ─── Step type definitions ────────────────────────────────────────────────────
 const AUTOMATION_TYPES = [
-  { type:"ai_prompt",    label:"AI Prompt",       icon:"cpu",     color:"#7c3aed", desc:"Run an AI prompt against this record" },
-  { type:"stage_change", label:"Change Stage",    icon:"tag",     color:"#3b5bdb", desc:"Update the record's status/stage field" },
-  { type:"update_field", label:"Update Field",    icon:"edit",    color:"#0ca678", desc:"Set a field to a specific value" },
-  { type:"send_email",   label:"Send Email",      icon:"mail",    color:"#f59f00", desc:"Send an email to the candidate" },
-  { type:"webhook",      label:"Webhook",         icon:"webhook", color:"#e03131", desc:"POST record data to an external URL" },
+  { type:"ai_prompt",          label:"AI Prompt",          icon:"cpu",       color:"#7c3aed", desc:"Run an AI prompt against this record" },
+  { type:"stage_change",       label:"Change Stage",       icon:"tag",       color:"#3b5bdb", desc:"Update the record's status/stage field" },
+  { type:"update_field",       label:"Update Field",       icon:"edit",      color:"#0ca678", desc:"Set a field to a specific value" },
+  { type:"send_email",         label:"Send Email",         icon:"mail",      color:"#f59f00", desc:"Send an email to the candidate" },
+  { type:"webhook",            label:"Webhook",            icon:"webhook",   color:"#e03131", desc:"POST record data to an external URL" },
+  { type:"schedule_interview", label:"Schedule Interview", icon:"briefcase", color:"#0891b2", desc:"Schedule an interview with the person" },
 ];
 
 // Keep STEP_TYPES as alias for display in run results etc.
@@ -66,10 +67,18 @@ const automationDef = (type) => AUTOMATION_TYPES.find(s => s.type === type);
 const stepDef = (type) => automationDef(type) || { type:"placeholder", label:"Stage", icon:"chevRight", color:"#9ca3af", desc:"Process stage" };
 
 // ─── Step Card ────────────────────────────────────────────────────────────────
-const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields }) => {
+const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, envId }) => {
   const [showAutomationPicker, setShowAutomationPicker] = useState(false);
+  const [interviewTypes, setInterviewTypes] = useState([]);
   const cfg = step.config || {};
-  const auto = automationDef(step.automation_type); // may be undefined = placeholder
+  const auto = automationDef(step.automation_type);
+
+  useEffect(() => {
+    if (step.automation_type === "schedule_interview" && envId) {
+      api.get(`/interview-types?environment_id=${envId}`)
+        .then(d => setInterviewTypes(Array.isArray(d) ? d : [])).catch(()=>{});
+    }
+  }, [step.automation_type, envId]);
 
   const setConfig   = (key, val) => onChange({ ...step, config: { ...cfg, [key]: val } });
   const setName     = (name)     => onChange({ ...step, name });
@@ -198,6 +207,51 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
             {step.automation_type === "webhook" && (
               <input value={cfg.url||""} onChange={e=>setConfig("url", e.target.value)} placeholder="https://hooks.example.com/talentos"
                 style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
+            )}
+
+            {step.automation_type === "schedule_interview" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#0891b2", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Interview Type</div>
+                  <select value={cfg.interview_type_id||""} onChange={e=>{
+                    const t = interviewTypes.find(t=>t.id===e.target.value);
+                    setConfig("interview_type_id", e.target.value);
+                    setConfig("interview_type_name", t?.name||"");
+                    setConfig("interview_duration", t?.duration||30);
+                    setConfig("interview_format", t?.format||"");
+                  }}
+                    style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+                    <option value="">Select interview type…</option>
+                    {interviewTypes.map(t => <option key={t.id} value={t.id}>{t.name} ({t.duration} min)</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#0891b2", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Interviewers</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {[
+                      { value:"job_record",    label:"From job record",        desc:"Use interviewers set on the linked job" },
+                      { value:"interview_type",label:"From interview type",    desc:"Use the interview type's default panel" },
+                      { value:"both",          label:"Job record + type",      desc:"Merge both lists (deduped)" },
+                    ].map(opt => (
+                      <label key={opt.value} onClick={()=>setConfig("interviewer_source", opt.value)}
+                        style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"8px 10px", borderRadius:8,
+                          border:`1.5px solid ${(cfg.interviewer_source||"job_record")===opt.value?"#0891b2":C.border}`,
+                          background:(cfg.interviewer_source||"job_record")===opt.value?"#ecfeff":"transparent",
+                          cursor:"pointer" }}>
+                        <div style={{ width:16, height:16, borderRadius:"50%", border:`2px solid ${(cfg.interviewer_source||"job_record")===opt.value?"#0891b2":C.border}`,
+                          background:(cfg.interviewer_source||"job_record")===opt.value?"#0891b2":"transparent",
+                          flexShrink:0, marginTop:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          {(cfg.interviewer_source||"job_record")===opt.value && <div style={{ width:6, height:6, borderRadius:"50%", background:"white" }}/>}
+                        </div>
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{opt.label}</div>
+                          <div style={{ fontSize:11, color:C.text3 }}>{opt.desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -351,7 +405,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
                     {i < steps.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 20, background: `${stepDef(step.type).color}30`, marginTop: 4 }}/>}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <StepCard step={step} index={i} total={steps.length} fields={fields}
+                    <StepCard step={step} index={i} total={steps.length} fields={fields} envId={environment?.id}
                       onChange={updated => updateStep(i, updated)}
                       onDelete={() => deleteStep(i)}
                       onMoveUp={() => moveStep(i, -1)}
