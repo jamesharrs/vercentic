@@ -2159,13 +2159,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
       {fieldSections.map(section => (        <div key={section.label} style={{ marginBottom:20 }}>
           <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>{section.label}</div>
-          <div style={{ background:"#f8f9fc", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}` }}>
+          <div style={{ background:"#f8f9fc", borderRadius:12, border:`1px solid ${C.border}` }}>
             {section.fs.map((field,i) => {
               const isEditing = editing.hasOwnProperty(field.api_key);
               const originalVal = record.data?.[field.api_key];
               const val = isEditing ? editing[field.api_key] : originalVal;
               const READONLY_KEYS = ["id","created_at","updated_at"];
               const isReadonly = READONLY_KEYS.includes(field.api_key);
+              const isPickerField = ["multi_lookup","lookup","people"].includes(field.field_type);
               const isClickSave = CLICK_SAVE_TYPES.includes(field.field_type);
               return (
                 <div key={field.id}
@@ -2176,14 +2177,16 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   <div style={{ flex:1, minWidth:0 }}
                     onBlur={e=>{ if(isEditing && !isClickSave && !e.currentTarget.contains(e.relatedTarget)) handleSaveField(field.api_key, originalVal); }}
                     onKeyDown={e=>{ if(isEditing && !isClickSave){ if(e.key==="Enter"&&field.field_type!=="textarea"&&field.field_type!=="rich_text") handleSaveField(field.api_key, originalVal); if(e.key==="Escape") setEditing(prev=>{const n={...prev};delete n[field.api_key];return n;}); }}}>
-                    {isEditing
+                    {isPickerField
+                      ? <PeoplePicker field={field} value={originalVal} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)}/>
+                      : isEditing
                       ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)} autoFocus={!isClickSave}/>
                       : <div onClick={()=>!isReadonly&&setEditing(e=>({...e,[field.api_key]:originalVal}))} style={{ cursor:isReadonly?"default":"text", minHeight:22 }}>
                           <FieldValue field={field} value={val}/>
                         </div>
                     }
                   </div>
-                  {isEditing ? (
+                  {!isPickerField && (isEditing ? (
                     <button onClick={()=>{ setEditing(e=>{const n={...e};delete n[field.api_key];return n;}); }}
                       style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:"3px 4px", display:"flex", alignItems:"center", borderRadius:5, flexShrink:0, fontFamily:F }}
                       title="Cancel (Esc)">
@@ -2194,7 +2197,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                       style={{ background:"none", border:"none", cursor:"pointer", color:C.accent, opacity:0, padding:"3px 6px", display:"flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600, borderRadius:6, transition:"opacity .1s", flexShrink:0, fontFamily:F }}>
                       <Ic n="edit" s={12} c={C.accent}/> Edit
                     </button>
-                  )}
+                  ))}
                 </div>
               );
             })}
