@@ -1,571 +1,1046 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const C = {
-  bg:"#EEF2FF", surface:"#FFFFFF", border:"#E8ECF8",
-  text1:"#0F1729", text2:"#4B5675", text3:"#9DA8C7",
-  accent:"#4361EE", accentLight:"#EEF2FF",
-  green:"#0CAF77", amber:"#F79009", red:"#EF4444", purple:"#7C3AED",
+  bg:"#F3F4F8", surface:"#FFFFFF", surface2:"#F8F9FC",
+  border:"#E8ECF8", border2:"#D1D5DB",
+  text1:"#0F1729", text2:"#374151", text3:"#9CA3AF",
+  accent:"#4361EE", accentLight:"#EEF2FF", accentDark:"#3A56E8",
+  green:"#0CAF77", greenLight:"#ECFDF5",
+  red:"#EF4444", redLight:"#FEF2F2",
+  amber:"#F79009", amberLight:"#FFFBEB",
 };
 
-const api = {
-  get: p => fetch(`/api${p}`).then(r => r.json()),
-  post: (p, b) => fetch(`/api${p}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b) }).then(r => r.json()),
-  put: (p, b) => fetch(`/api${p}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b) }).then(r => r.json()),
-  del: p => fetch(`/api${p}`, { method:"DELETE" }).then(r => r.json()),
-};
-
-const PORTAL_TYPES = [
-  { id:"career_site",    label:"Career Site",          icon:"globe",     color:C.accent,  desc:"Public job listings & branded application experience" },
-  { id:"hm_portal",      label:"Hiring Manager Portal",icon:"briefcase", color:C.purple,  desc:"Req review, interview feedback & candidate scorecards" },
-  { id:"agency_portal",  label:"Agency Portal",        icon:"users",     color:C.amber,   desc:"Vendor submission portal with pipeline visibility" },
-  { id:"onboarding",     label:"Onboarding Portal",    icon:"rocket",    color:C.green,   desc:"Post-offer candidate journey & document collection" },
+const PADDING_OPTS = [
+  { value:"none", label:"None",    py:"0px" },
+  { value:"sm",   label:"Small",   py:"24px" },
+  { value:"md",   label:"Medium",  py:"56px" },
+  { value:"lg",   label:"Large",   py:"96px" },
+  { value:"xl",   label:"X-Large", py:"140px" },
 ];
 
+const COLUMN_PRESETS = [
+  { id:"1",   label:"Full width",  icon:"▬",   cols:1 },
+  { id:"2",   label:"Two halves",  icon:"▬▬",  cols:2 },
+  { id:"3",   label:"Three cols",  icon:"▬▬▬", cols:3 },
+  { id:"1-2", label:"⅓ + ⅔",      icon:"▭▬",  cols:2 },
+  { id:"2-1", label:"⅔ + ⅓",      icon:"▬▭",  cols:2 },
+];
+
+const WIDGET_TYPES = [
+  { type:"hero",     label:"Hero",       icon:"🏔", desc:"Headline, subheading & CTA" },
+  { type:"text",     label:"Rich Text",  icon:"¶",  desc:"Copy & content blocks" },
+  { type:"image",    label:"Image",      icon:"🖼", desc:"Photo or illustration" },
+  { type:"jobs",     label:"Job Board",  icon:"💼", desc:"Live jobs from TalentOS" },
+  { type:"form",     label:"Form",       icon:"📋", desc:"Linked to any object" },
+  { type:"stats",    label:"Stats",      icon:"📊", desc:"Numbers & social proof" },
+  { type:"team",     label:"Team",       icon:"👥", desc:"People from records" },
+  { type:"video",    label:"Video",      icon:"▶",  desc:"YouTube or Vimeo embed" },
+  { type:"divider",  label:"Divider",    icon:"─",  desc:"Horizontal separator" },
+  { type:"spacer",   label:"Spacer",     icon:"⬜", desc:"Blank vertical space" },
+];
+
+const FONT_OPTS = [
+  { value:"'DM Sans', sans-serif",           label:"DM Sans" },
+  { value:"'Inter', sans-serif",             label:"Inter" },
+  { value:"'Plus Jakarta Sans', sans-serif", label:"Jakarta Sans" },
+  { value:"'Outfit', sans-serif",            label:"Outfit" },
+  { value:"'Raleway', sans-serif",           label:"Raleway" },
+  { value:"'Sora', sans-serif",              label:"Sora" },
+  { value:"'Playfair Display', serif",       label:"Playfair Display" },
+  { value:"'Lora', serif",                   label:"Lora" },
+  { value:"'Space Grotesk', sans-serif",     label:"Space Grotesk" },
+];
+
+const RADIUS_OPTS = [
+  { value:"0px",   label:"Sharp" },
+  { value:"4px",   label:"Subtle" },
+  { value:"8px",   label:"Rounded" },
+  { value:"14px",  label:"Soft" },
+  { value:"999px", label:"Pill" },
+];
+
+const BUTTON_STYLES = [
+  { value:"filled",    label:"Filled" },
+  { value:"outline",   label:"Outline" },
+  { value:"ghost",     label:"Ghost" },
+  { value:"underline", label:"Underline" },
+];
+
+const PALETTES = [
+  { name:"Indigo",   primary:"#4361EE", secondary:"#7C3AED", bg:"#FFFFFF", text:"#0F1729" },
+  { name:"Slate",    primary:"#334155", secondary:"#64748B", bg:"#F8FAFC", text:"#0F172A" },
+  { name:"Rose",     primary:"#E11D48", secondary:"#F43F5E", bg:"#FFFFFF", text:"#1C1917" },
+  { name:"Teal",     primary:"#0D9488", secondary:"#0891B2", bg:"#F0FDFA", text:"#134E4A" },
+  { name:"Amber",    primary:"#D97706", secondary:"#B45309", bg:"#FFFBEB", text:"#1C1917" },
+  { name:"Violet",   primary:"#7C3AED", secondary:"#4361EE", bg:"#FAF5FF", text:"#1E1B4B" },
+  { name:"Midnight", primary:"#6366F1", secondary:"#818CF8", bg:"#0F172A", text:"#F1F5F9" },
+  { name:"Forest",   primary:"#16A34A", secondary:"#15803D", bg:"#F0FDF4", text:"#14532D" },
+];
+
+const api = {
+  get:    p     => fetch(`/api${p}`).then(r=>r.json()),
+  post:   (p,b) => fetch(`/api${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  patch:  (p,b) => fetch(`/api${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  delete: p     => fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()),
+};
+
+const uid = () => Math.random().toString(36).slice(2,10);
+
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+const defaultTheme = () => ({
+  primaryColor:"#4361EE", secondaryColor:"#7C3AED",
+  bgColor:"#FFFFFF", textColor:"#0F1729", accentColor:"#F79009",
+  fontFamily:"'DM Sans', sans-serif", headingFont:"'DM Sans', sans-serif",
+  fontSize:"16px", headingWeight:"700",
+  borderRadius:"8px", buttonStyle:"filled", buttonRadius:"8px",
+  maxWidth:"1200px",
+});
+const defaultCell = () => ({ id:uid(), widgetType:null, widgetConfig:{} });
+const defaultRow  = (preset="1") => ({
+  id:uid(), preset,
+  bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
+  cells: preset==="1" ? [defaultCell()] : [defaultCell(), defaultCell()],
+});
+const defaultPage = () => ({ id:uid(), name:"Home", slug:"/", rows:[defaultRow("1")] });
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
 const Ic = ({ n, s=16, c="currentColor" }) => {
-  const paths = {
+  const p = {
     plus:"M12 5v14M5 12h14", x:"M18 6L6 18M6 6l12 12",
-    edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
-    trash:"M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
-    eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
-    link:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
-    copy:"M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.91 4.895 3 6 3h8c1.105 0 2 .911 2 2.036v1.866m-6 .17h8c1.105 0 2 .91 2 2.035v10.857C20 21.09 19.105 22 18 22h-8c-1.105 0-2-.911-2-2.036V9.107c0-1.124.895-2.036 2-2.036z",
-    check:"M20 6L9 17l-5-5", globe:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
-    settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+    edit:"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
+    trash:"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
+    eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+    copy:"M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2M8 4a2 2 0 012-2h4a2 2 0 012 2",
+    grip:"M9 5h2M9 12h2M9 19h2M15 5h2M15 12h2M15 19h2",
+    chevD:"M6 9l6 6 6-6", chevR:"M9 18l6-6-6-6",
     arrowL:"M19 12H5M12 19l-7-7 7-7",
+    palette:"M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2c1.1 0 2 .9 2 2 0 .55-.225 1.05-.585 1.415A2 2 0 0015 7h1a5 5 0 015 5c0 4.418-4.03 8-9 8z",
+    settings:"M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
+    check:"M20 6L9 17l-5-5", zap:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+    globe:"M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z",
   };
-  return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={paths[n]||""}/></svg>;
-};
-
-const Btn = ({ children, onClick, v="primary", icon, disabled, style={} }) => {
-  const base = { display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"none", cursor:disabled?"not-allowed":"pointer", fontSize:13, fontWeight:700, fontFamily:F, transition:"all .15s", opacity:disabled?0.5:1, ...style };
-  const variants = {
-    primary:   { background:C.accent, color:"white" },
-    secondary: { background:"transparent", color:C.text2, border:`1.5px solid ${C.border}` },
-    danger:    { background:"#FEF2F2", color:C.red, border:`1.5px solid #FECACA` },
-    ghost:     { background:"transparent", color:C.text2 },
-    success:   { background:"#ECFDF5", color:C.green, border:`1.5px solid #A7F3D0` },
-  };
-  return <button onClick={onClick} disabled={disabled} style={{...base,...variants[v]}}>{icon&&<Ic n={icon} s={13} c={variants[v].color}/>}{children}</button>;
-};
-
-const Input = ({ label, value, onChange, placeholder, type="text", help }) => (
-  <div style={{display:"flex",flexDirection:"column",gap:5}}>
-    {label&&<label style={{fontSize:12,fontWeight:600,color:C.text2}}>{label}</label>}
-    <input type={type} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-      style={{padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,color:C.text1,outline:"none",background:C.surface,width:"100%",boxSizing:"border-box"}}
-      onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
-    {help&&<span style={{fontSize:11,color:C.text3}}>{help}</span>}
-  </div>
-);
-
-const Modal = ({ title, onClose, children, width=560 }) => (
-  <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(3px)"}}>
-    <div style={{background:C.surface,borderRadius:18,width,maxWidth:"95vw",maxHeight:"90vh",overflow:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.18)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:`1px solid ${C.border}`}}>
-        <h2 style={{margin:0,fontSize:16,fontWeight:800,color:C.text1}}>{title}</h2>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,display:"flex",padding:4}}><Ic n="x" s={16}/></button>
-      </div>
-      <div style={{padding:"24px"}}>{children}</div>
-    </div>
-  </div>
-);
-
-const Badge = ({ children, color=C.accent }) => (
-  <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${color}18`,color}}>{children}</span>
-);
-
-const StatusDot = ({ status }) => (
-  <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,
-    color:status==="published"?C.green:C.amber}}>
-    <span style={{width:6,height:6,borderRadius:"50%",background:status==="published"?C.green:C.amber,display:"inline-block"}}/>
-    {status==="published"?"Live":"Draft"}
-  </span>
-);
-
-// ── Create Portal wizard ──────────────────────────────────────────────────────
-const CreatePortalModal = ({ environment, onCreated, onClose }) => {
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({
-    type:"career_site", name:"", branding:{ primary_color:"#4361EE", bg_color:"#F8FAFF", company_name:"", tagline:"", font:"DM Sans" },
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(f => ({...f, [k]:v}));
-  const setBranding = (k, v) => setForm(f => ({...f, branding:{...f.branding, [k]:v}}));
-
-  const handleCreate = async () => {
-    setSaving(true);
-    const portal = await api.post("/portals", { ...form, environment_id: environment.id });
-    setSaving(false);
-    onCreated(portal);
-  };
-
-  const chosen = PORTAL_TYPES.find(t => t.id === form.type);
-
   return (
-    <Modal title="Create New Portal" onClose={onClose} width={600}>
-      {/* Steps */}
-      <div style={{display:"flex",gap:0,marginBottom:24,background:"#F5F7FF",borderRadius:12,padding:4}}>
-        {["Portal Type","Name & Branding"].map((s,i)=>(
-          <div key={i} onClick={()=>i<step-1&&setStep(i+1)} style={{flex:1,textAlign:"center",padding:"8px 0",borderRadius:9,cursor:i<step-1?"pointer":"default",
-            background:step===i+1?C.surface:"transparent",boxShadow:step===i+1?"0 1px 4px rgba(0,0,0,0.08)":"none",
-            fontSize:12,fontWeight:step===i+1?700:500,color:step===i+1?C.text1:C.text3,transition:"all .15s"}}>
-            <span style={{marginRight:6,color:step>i+1?C.green:step===i+1?C.accent:C.text3}}>{step>i+1?"✓":i+1}</span>{s}
-          </div>
-        ))}
-      </div>
-
-      {step===1 && (
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          {PORTAL_TYPES.map(pt => (
-            <div key={pt.id} onClick={()=>set("type",pt.id)} style={{padding:"18px 16px",borderRadius:14,border:`2px solid ${form.type===pt.id?pt.color:C.border}`,cursor:"pointer",background:form.type===pt.id?`${pt.color}08`:C.surface,transition:"all .15s"}}>
-              <div style={{fontSize:28,marginBottom:10}}>{pt.icon}</div>
-              <div style={{fontSize:14,fontWeight:700,color:C.text1,marginBottom:4}}>{pt.label}</div>
-              <div style={{fontSize:12,color:C.text3,lineHeight:1.5}}>{pt.desc}</div>
-            </div>
-          ))}
-          <div style={{gridColumn:"1/-1",display:"flex",justifyContent:"flex-end",marginTop:8}}>
-            <Btn onClick={()=>setStep(2)}>Continue →</Btn>
-          </div>
-        </div>
-      )}
-
-      {step===2 && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{padding:"12px 16px",borderRadius:12,background:`${chosen.color}0D`,border:`1px solid ${chosen.color}30`,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:22}}>{chosen.icon}</span>
-            <div><div style={{fontSize:13,fontWeight:700,color:C.text1}}>{chosen.label}</div><div style={{fontSize:11,color:C.text3}}>{chosen.desc}</div></div>
-          </div>
-          <Input label="Portal Name *" value={form.name} onChange={v=>set("name",v)} placeholder="e.g. Global Careers Site"/>
-          <Input label="Company Name" value={form.branding.company_name} onChange={v=>setBranding("company_name",v)} placeholder="e.g. Acme Corp"/>
-          <Input label="Tagline" value={form.branding.tagline} onChange={v=>setBranding("tagline",v)} placeholder="e.g. Find your next opportunity"/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:5}}>Primary Colour</label>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="color" value={form.branding.primary_color} onChange={e=>setBranding("primary_color",e.target.value)} style={{width:36,height:36,border:"none",borderRadius:8,cursor:"pointer",padding:0}}/>
-                <span style={{fontSize:12,color:C.text2,fontFamily:"monospace"}}>{form.branding.primary_color}</span>
-              </div>
-            </div>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:5}}>Background Colour</label>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="color" value={form.branding.bg_color} onChange={e=>setBranding("bg_color",e.target.value)} style={{width:36,height:36,border:"none",borderRadius:8,cursor:"pointer",padding:0}}/>
-                <span style={{fontSize:12,color:C.text2,fontFamily:"monospace"}}>{form.branding.bg_color}</span>
-              </div>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:8,justifyContent:"space-between",marginTop:8}}>
-            <Btn v="secondary" onClick={()=>setStep(1)}>← Back</Btn>
-            <Btn onClick={handleCreate} disabled={!form.name||saving}>{saving?"Creating…":"Create Portal"}</Btn>
-          </div>
-        </div>
-      )}
-    </Modal>
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      {(p[n]||"").split("M").filter(Boolean).map((d,i)=><path key={i} d={"M"+d}/>)}
+    </svg>
   );
 };
 
-// ── Portal Editor (branding + config + preview) ───────────────────────────────
-const PortalEditor = ({ portal, objects, onSave, onClose }) => {
-  const [tab, setTab] = useState("branding");
-  const [form, setForm] = useState({ ...portal });
-  const [copied, setCopied] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const set = (k, v) => setForm(f => ({...f, [k]:v}));
-  const setBr = (k, v) => setForm(f => ({...f, branding:{...f.branding,[k]:v}}));
-  const setCfg = (k, v) => setForm(f => ({...f, config:{...f.config,[k]:v}}));
-
-  const pt = PORTAL_TYPES.find(t => t.id === portal.type);
-
-  const embedSnippet = `<script src="http://localhost:3001/portal.js" data-portal="${portal.access_token}"></script>`;
-  const portalUrl = `http://localhost:5173/?portal=${portal.access_token}`;
-
-  const handleSave = async () => {
-    setSaving(true);
-    const updated = await api.put(`/portals/${portal.id}`, form);
-    setSaving(false);
-    onSave(updated);
+const Btn = ({ children, onClick, v="primary", s="md", icon, disabled, style={} }) => {
+  const sz = s==="sm"?{padding:"5px 11px",fontSize:11}:s==="lg"?{padding:"10px 20px",fontSize:14}:{padding:"8px 14px",fontSize:13};
+  const vs = {
+    primary:   {background:C.accent,   color:"white",  border:"none"},
+    secondary: {background:C.surface2, color:C.text1,  border:`1px solid ${C.border}`},
+    ghost:     {background:"transparent",color:C.text2, border:"none"},
+    danger:    {background:C.redLight, color:C.red,    border:`1px solid ${C.red}40`},
+    success:   {background:C.greenLight,color:C.green,  border:`1px solid ${C.green}40`},
   };
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{display:"inline-flex",alignItems:"center",gap:6,borderRadius:8,fontFamily:F,fontWeight:600,
+        cursor:disabled?"not-allowed":"pointer",opacity:disabled?.5:1,transition:"all .12s",...sz,...vs[v],...style}}>
+      {icon&&<Ic n={icon} s={parseInt(sz.fontSize)+1} c="currentColor"/>}{children}
+    </button>
+  );
+};
 
-  const handlePublish = async () => {
-    const updated = await api.post(`/portals/${portal.id}/publish`, {});
-    onSave(updated);
-    setForm(updated);
-  };
+// ─── Color Picker ─────────────────────────────────────────────────────────────
+const ColorPicker = ({ label, value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(()=>{
+    const h = e=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+  const swatches = ["#4361EE","#7C3AED","#E11D48","#0D9488","#D97706","#0F172A","#FFFFFF","#F8FAFC",
+    "#EEF2FF","#FAF5FF","#FEF2F2","#F0FDFA","#FFFBEB","#F0FDF4","#6366F1","#EC4899"];
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      {label&&<div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>{label}</div>}
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer"}}>
+        <div style={{width:18,height:18,borderRadius:4,background:value||"#ccc",border:`1px solid ${C.border2}`,flexShrink:0}}/>
+        <span style={{fontSize:12,color:C.text1,fontFamily:"monospace",flex:1}}>{value||"—"}</span>
+        <Ic n="chevD" s={11} c={C.text3}/>
+      </div>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:700,background:C.surface,
+          border:`1px solid ${C.border}`,borderRadius:10,padding:12,boxShadow:"0 8px 24px rgba(0,0,0,.12)",width:210}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,marginBottom:8}}>
+            {swatches.map(s=>(
+              <div key={s} onClick={()=>{onChange(s);setOpen(false);}}
+                style={{width:20,height:20,borderRadius:4,background:s,cursor:"pointer",
+                  border:`2px solid ${value===s?C.accent:C.border}`,boxSizing:"border-box"}}/>
+            ))}
+          </div>
+          <input type="color" value={value||"#000000"} onChange={e=>onChange(e.target.value)}
+            style={{width:"100%",height:30,borderRadius:6,border:`1px solid ${C.border}`,cursor:"pointer",padding:2}}/>
+          <input value={value||""} onChange={e=>onChange(e.target.value)} placeholder="#hex or rgba…"
+            style={{width:"100%",marginTop:6,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,
+              fontSize:11,fontFamily:"monospace",boxSizing:"border-box",outline:"none"}}/>
+        </div>
+      )}
+    </div>
+  );
+};
 
-  const copyText = text => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false), 2000); };
-
-  const TABS = ["branding","config","access","preview"];
+// ─── Theme Drawer ─────────────────────────────────────────────────────────────
+const ThemeDrawer = ({ theme, onChange, onClose }) => {
+  const [tab, setTab] = useState("colours");
+  const set = (k,v) => onChange({...theme,[k]:v});
+  const inp = {padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,width:"100%",boxSizing:"border-box"};
 
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:200,display:"flex",flexDirection:"column",fontFamily:F}}>
-      {/* Header */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"0 24px",display:"flex",alignItems:"center",gap:16,height:60,flexShrink:0}}>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:C.text3,fontSize:13,fontWeight:600,padding:0}}>
-          <Ic n="arrowL" s={15}/> Portals
-        </button>
-        <div style={{width:1,height:24,background:C.border}}/>
-        <span style={{fontSize:22}}>{pt?.icon}</span>
-        <div>
-          <div style={{fontSize:15,fontWeight:800,color:C.text1}}>{form.name}</div>
-          <div style={{fontSize:11,color:C.text3}}>{pt?.label}</div>
+    <div style={{position:"fixed",top:0,right:0,width:320,height:"100vh",background:C.surface,
+      borderLeft:`1px solid ${C.border}`,zIndex:500,display:"flex",flexDirection:"column",
+      boxShadow:"-8px 0 40px rgba(0,0,0,.1)"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <Ic n="palette" s={16} c={C.accent}/>
+          <span style={{fontSize:15,fontWeight:800,color:C.text1}}>Design Tokens</span>
         </div>
-        <StatusDot status={form.status}/>
-        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <Btn v="secondary" onClick={handleSave} disabled={saving}>{saving?"Saving…":"Save Changes"}</Btn>
-          <Btn v={form.status==="published"?"danger":"success"} onClick={handlePublish}>
-            {form.status==="published"?"Unpublish":"Publish Portal"}
-          </Btn>
-        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}><Ic n="x" s={16}/></button>
       </div>
-
-      {/* Tab bar */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"0 24px",display:"flex",gap:0}}>
-        {TABS.map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={{padding:"12px 18px",border:"none",borderBottom:`2px solid ${tab===t?C.accent:"transparent"}`,background:"transparent",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,color:tab===t?C.accent:C.text3,fontFamily:F,textTransform:"capitalize",transition:"all .15s"}}>
-            {t}
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
+        {[["colours","Colours"],["type","Typography"],["shape","Shape"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"9px 0",border:"none",background:"transparent",
+            fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,
+            color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>
+            {lbl}
           </button>
         ))}
       </div>
-
-      {/* Body */}
-      <div style={{flex:1,overflow:"auto",padding:"28px 32px",maxWidth:760,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
-
-        {tab==="branding" && (
-          <div style={{display:"flex",flexDirection:"column",gap:20}}>
-            <h3 style={{margin:"0 0 4px",fontSize:15,fontWeight:800,color:C.text1}}>Branding & Identity</h3>
-            <Input label="Portal Name" value={form.name} onChange={v=>set("name",v)}/>
-            <Input label="Company Name" value={form.branding?.company_name} onChange={v=>setBr("company_name",v)} placeholder="Shown in portal header"/>
-            <Input label="Tagline" value={form.branding?.tagline} onChange={v=>setBr("tagline",v)} placeholder="e.g. Build your career with us"/>
-            <Input label="Logo URL" value={form.branding?.logo_url} onChange={v=>setBr("logo_url",v)} placeholder="https://..."/>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-              {[["primary_color","Primary Colour"],["bg_color","Background Colour"],["text_color","Text Colour"],["button_color","Button Colour"]].map(([k,lbl])=>(
-                <div key={k}>
-                  <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>{lbl}</label>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",border:`1.5px solid ${C.border}`,borderRadius:9,background:C.surface}}>
-                    <input type="color" value={form.branding?.[k]||"#4361EE"} onChange={e=>setBr(k,e.target.value)} style={{width:28,height:28,border:"none",borderRadius:6,cursor:"pointer",padding:0,flexShrink:0}}/>
-                    <span style={{fontSize:12,fontFamily:"monospace",color:C.text2}}>{form.branding?.[k]||"#4361EE"}</span>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
+        {tab==="colours"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Quick Palettes</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                {PALETTES.map(p=>(
+                  <div key={p.name} onClick={()=>onChange({...theme,primaryColor:p.primary,secondaryColor:p.secondary,bgColor:p.bg,textColor:p.text})}
+                    style={{padding:"8px 10px",borderRadius:8,border:`1.5px solid ${theme.primaryColor===p.primary?C.accent:C.border}`,
+                      cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:theme.primaryColor===p.primary?C.accentLight:"transparent"}}>
+                    <div style={{display:"flex",gap:2}}>
+                      {[p.primary,p.secondary,p.bg].map((col,i)=>(
+                        <div key={i} style={{width:11,height:11,borderRadius:"50%",background:col,border:`1px solid ${C.border}`}}/>
+                      ))}
+                    </div>
+                    <span style={{fontSize:11,fontWeight:600,color:theme.primaryColor===p.primary?C.accent:C.text1}}>{p.name}</span>
                   </div>
+                ))}
+              </div>
+            </div>
+            <ColorPicker label="Primary" value={theme.primaryColor} onChange={v=>set("primaryColor",v)}/>
+            <ColorPicker label="Secondary" value={theme.secondaryColor} onChange={v=>set("secondaryColor",v)}/>
+            <ColorPicker label="Accent" value={theme.accentColor} onChange={v=>set("accentColor",v)}/>
+            <ColorPicker label="Background" value={theme.bgColor} onChange={v=>set("bgColor",v)}/>
+            <ColorPicker label="Text" value={theme.textColor} onChange={v=>set("textColor",v)}/>
+          </div>
+        )}
+        {tab==="type"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Heading Font</div>
+              {FONT_OPTS.map(f=>(
+                <div key={f.value} onClick={()=>set("headingFont",f.value)}
+                  style={{padding:"7px 12px",borderRadius:8,marginBottom:4,cursor:"pointer",
+                    border:`1.5px solid ${theme.headingFont===f.value?C.accent:C.border}`,
+                    background:theme.headingFont===f.value?C.accentLight:"transparent",
+                    display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontFamily:f.value,fontWeight:600,color:theme.headingFont===f.value?C.accent:C.text1}}>{f.label}</span>
+                  <span style={{fontSize:16,fontFamily:f.value,color:C.text3}}>Aa</span>
                 </div>
               ))}
             </div>
             <div>
-              <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Font</label>
-              <select value={form.branding?.font||"DM Sans"} onChange={e=>setBr("font",e.target.value)}
-                style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,color:C.text1,background:C.surface}}>
-                {["DM Sans","Inter","Plus Jakarta Sans","Roboto","Open Sans"].map(f=><option key={f}>{f}</option>)}
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Body Font</div>
+              {FONT_OPTS.map(f=>(
+                <div key={f.value} onClick={()=>set("fontFamily",f.value)}
+                  style={{padding:"7px 12px",borderRadius:8,marginBottom:4,cursor:"pointer",
+                    border:`1.5px solid ${theme.fontFamily===f.value?C.accent:C.border}`,
+                    background:theme.fontFamily===f.value?C.accentLight:"transparent",
+                    display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontFamily:f.value,color:theme.fontFamily===f.value?C.accent:C.text1}}>{f.label}</span>
+                  <span style={{fontSize:16,fontFamily:f.value,color:C.text3}}>Aa</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Base Size</div>
+              <select value={theme.fontSize} onChange={e=>set("fontSize",e.target.value)} style={inp}>
+                {["14px","15px","16px","17px","18px"].map(v=><option key={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Heading Weight</div>
+              <select value={theme.headingWeight} onChange={e=>set("headingWeight",e.target.value)} style={inp}>
+                {[["400","Regular"],["500","Medium"],["600","Semi-bold"],["700","Bold"],["800","Extra-bold"],["900","Black"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
               </select>
             </div>
           </div>
         )}
-
-        {tab==="config" && (
+        {tab==="shape"&&(
           <div style={{display:"flex",flexDirection:"column",gap:20}}>
-            <h3 style={{margin:"0 0 4px",fontSize:15,fontWeight:800,color:C.text1}}>Portal Configuration</h3>
-            <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-              {[
-                {k:"show_apply_button",  label:"Show Apply Button",    desc:"Display apply CTA on job listings"},
-                {k:"require_auth",       label:"Require Login",        desc:"Candidates must create an account to apply"},
-                {k:"show_salary",        label:"Show Salary Range",    desc:"Display compensation fields on job cards"},
-                {k:"allow_cv_upload",    label:"Allow CV Upload",      desc:"Let candidates attach their resume"},
-                {k:"show_team_info",     label:"Show Team Section",    desc:"Display team or department information"},
-              ].map((item,i,arr)=>(
-                <div key={item.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{item.label}</div>
-                    <div style={{fontSize:11,color:C.text3}}>{item.desc}</div>
-                  </div>
-                  <button onClick={()=>setCfg(item.k,!form.config?.[item.k])} style={{width:44,height:24,borderRadius:99,border:"none",cursor:"pointer",background:form.config?.[item.k]?C.accent:C.border,position:"relative",transition:"background .2s",flexShrink:0}}>
-                    <span style={{position:"absolute",top:2,left:form.config?.[item.k]?22:2,width:20,height:20,borderRadius:"50%",background:"white",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
-                  </button>
-                </div>
-              ))}
-            </div>
-
             <div>
-              <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:8}}>Exposed Objects</label>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {objects.map(o=>{
-                  const allowed = form.config?.allowed_objects||[];
-                  const on = allowed.includes(o.slug);
-                  return (
-                    <div key={o.id} onClick={()=>setCfg("allowed_objects",on?allowed.filter(s=>s!==o.slug):[...allowed,o.slug])}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accentLight:C.surface,cursor:"pointer",transition:"all .15s"}}>
-                      <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${on?C.accent:C.border}`,background:on?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {on&&<Ic n="check" s={11} c="white"/>}
-                      </div>
-                      <div style={{width:10,height:10,borderRadius:"50%",background:o.color||C.accent,flexShrink:0}}/>
-                      <span style={{fontSize:13,fontWeight:600,color:C.text1}}>{o.plural_name||o.name}</span>
-                      <span style={{fontSize:11,color:C.text3,marginLeft:"auto"}}>{o.slug}</span>
-                    </div>
-                  );
-                })}
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Border Radius</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {RADIUS_OPTS.map(r=>(
+                  <div key={r.value} onClick={()=>set("borderRadius",r.value)}
+                    style={{padding:"6px 12px",borderRadius:r.value==="999px"?"999px":"8px",cursor:"pointer",fontSize:12,fontWeight:600,
+                      border:`1.5px solid ${theme.borderRadius===r.value?C.accent:C.border}`,
+                      background:theme.borderRadius===r.value?C.accentLight:"transparent",
+                      color:theme.borderRadius===r.value?C.accent:C.text2}}>
+                    {r.label}
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-        )}
-
-        {tab==="access" && (
-          <div style={{display:"flex",flexDirection:"column",gap:20}}>
-            <h3 style={{margin:"0 0 4px",fontSize:15,fontWeight:800,color:C.text1}}>Access & Embed</h3>
-
-            <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,padding:"20px"}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:4}}>Portal URL</div>
-              <div style={{fontSize:11,color:C.text3,marginBottom:12}}>Share this URL to give access to the portal</div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <div style={{flex:1,padding:"9px 12px",borderRadius:9,background:"#F5F7FF",border:`1px solid ${C.border}`,fontSize:12,fontFamily:"monospace",color:C.text2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {portalUrl}
-                </div>
-                <Btn v="secondary" icon="copy" onClick={()=>copyText(portalUrl)}>{copied?"Copied!":"Copy"}</Btn>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Button Style</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {BUTTON_STYLES.map(b=>(
+                  <div key={b.value} onClick={()=>set("buttonStyle",b.value)}
+                    style={{padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,
+                      border:`1.5px solid ${theme.buttonStyle===b.value?C.accent:C.border}`,
+                      background:theme.buttonStyle===b.value?C.accentLight:"transparent",
+                      color:theme.buttonStyle===b.value?C.accent:C.text2}}>
+                    {b.label}
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,padding:"20px"}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:4}}>Embed Snippet</div>
-              <div style={{fontSize:11,color:C.text3,marginBottom:12}}>Drop this into any webpage to embed the portal inline</div>
-              <div style={{padding:"12px",borderRadius:9,background:"#0F1729",marginBottom:12}}>
-                <code style={{fontSize:11,color:"#a5f3fc",fontFamily:"monospace",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{embedSnippet}</code>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Button Radius</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {RADIUS_OPTS.map(r=>(
+                  <div key={r.value} onClick={()=>set("buttonRadius",r.value)}
+                    style={{padding:"6px 12px",borderRadius:r.value==="999px"?"999px":"8px",cursor:"pointer",fontSize:12,fontWeight:600,
+                      border:`1.5px solid ${theme.buttonRadius===r.value?C.accent:C.border}`,
+                      background:theme.buttonRadius===r.value?C.accentLight:"transparent",
+                      color:theme.buttonRadius===r.value?C.accent:C.text2}}>
+                    {r.label}
+                  </div>
+                ))}
               </div>
-              <Btn v="secondary" icon="copy" onClick={()=>copyText(embedSnippet)}>Copy Snippet</Btn>
             </div>
-
-            <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,padding:"20px"}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:4}}>Access Token</div>
-              <div style={{fontSize:11,color:C.text3,marginBottom:12}}>Used to authenticate API requests from the portal renderer</div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <div style={{flex:1,padding:"9px 12px",borderRadius:9,background:"#F5F7FF",border:`1px solid ${C.border}`,fontSize:11,fontFamily:"monospace",color:C.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {portal.access_token}
-                </div>
-                <Btn v="secondary" icon="copy" onClick={()=>copyText(portal.access_token)}>Copy</Btn>
-              </div>
-              <button onClick={async()=>{const u=await api.post(`/portals/${portal.id}/regenerate-token`,{});onSave(u);}}
-                style={{marginTop:12,background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.red,fontFamily:F,fontWeight:600,padding:0}}>
-                ↻ Regenerate Token
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab==="preview" && (
-          <div style={{display:"flex",flexDirection:"column",gap:16}}>
-            <h3 style={{margin:"0 0 4px",fontSize:15,fontWeight:800,color:C.text1}}>Portal Preview</h3>
-            <div style={{borderRadius:16,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 4px 20px rgba(67,97,238,0.1)"}}>
-              <div style={{background:"#1E1E2E",padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}>
-                <div style={{display:"flex",gap:5}}>{["#FF5F57","#FEBC2E","#28C840"].map(c=><div key={c} style={{width:11,height:11,borderRadius:"50%",background:c}}/>)}</div>
-                <div style={{flex:1,background:"#2D2D3F",borderRadius:6,padding:"4px 10px",fontSize:11,color:"#888",fontFamily:"monospace",textAlign:"center"}}>{portalUrl}</div>
-              </div>
-              <PortalPreview portal={form}/>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Content Max Width</div>
+              <select value={theme.maxWidth} onChange={e=>set("maxWidth",e.target.value)} style={inp}>
+                {[["720px","Narrow (720)"],["960px","Medium (960)"],["1200px","Wide (1200)"],["1440px","Full (1440)"],["100%","Edge-to-edge"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-};
-
-// ── In-app portal preview renderer ───────────────────────────────────────────
-const PortalPreview = ({ portal }) => {
-  const br = portal.branding || {};
-  const pc = br.primary_color || "#4361EE";
-  const bg = br.bg_color || "#F8FAFF";
-  const font = br.font || "DM Sans";
-  const [jobs, setJobs] = useState([]);
-
-  useEffect(() => {
-    api.get(`/records?environment_id=${portal.environment_id}&limit=6`).then(d => {
-      setJobs((d.records||[]).slice(0,4));
-    }).catch(()=>{});
-  }, [portal.environment_id]);
-
-  if (portal.type === "career_site") return (
-    <div style={{background:bg,fontFamily:`'${font}', sans-serif`,minHeight:480}}>
-      <div style={{background:pc,padding:"28px 32px",color:"white"}}>
-        {br.logo_url&&<img src={br.logo_url} alt="logo" style={{height:36,marginBottom:12,objectFit:"contain"}}/>}
-        <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800}}>{br.company_name||"Company Name"}</h1>
-        <p style={{margin:0,opacity:0.85,fontSize:14}}>{br.tagline||"Find your next opportunity"}</p>
-      </div>
-      <div style={{padding:"24px 32px"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#4B5675",marginBottom:16}}>Open Positions</div>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {jobs.length===0&&[1,2,3].map(i=>(
-            <div key={i} style={{background:"white",borderRadius:12,padding:"16px",border:"1px solid #E8ECF8",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{width:140+i*30,height:12,background:"#E8ECF8",borderRadius:4,marginBottom:6}}/><div style={{width:80,height:10,background:"#F0F2FA",borderRadius:4}}/></div>
-              <div style={{width:60,height:28,borderRadius:8,background:pc,opacity:0.15}}/>
-            </div>
-          ))}
-          {jobs.map(j=>(
-            <div key={j.id} style={{background:"white",borderRadius:12,padding:"16px",border:"1px solid #E8ECF8",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:"#0F1729",marginBottom:3}}>{j.data?.job_title||j.data?.name||"Open Role"}</div>
-                <div style={{fontSize:11,color:"#9DA8C7"}}>{j.data?.department||"Department"} · {j.data?.work_type||"Full-time"}</div>
-              </div>
-              <div style={{padding:"6px 14px",borderRadius:8,background:pc,color:"white",fontSize:12,fontWeight:700}}>Apply</div>
-            </div>
-          ))}
+      {/* Live preview strip */}
+      <div style={{padding:"12px 20px",borderTop:`1px solid ${C.border}`}}>
+        <div style={{padding:"12px 16px",borderRadius:10,background:theme.bgColor||"#fff",border:`1px solid ${C.border}`,fontFamily:theme.fontFamily}}>
+          <div style={{fontSize:15,fontWeight:parseInt(theme.headingWeight)||700,color:theme.textColor,fontFamily:theme.headingFont,marginBottom:3}}>Preview heading</div>
+          <div style={{fontSize:12,color:theme.textColor,opacity:0.6,marginBottom:10}}>Body text in your chosen font.</div>
+          <span style={{padding:"7px 16px",borderRadius:theme.buttonRadius||"8px",fontSize:12,fontWeight:600,fontFamily:theme.fontFamily,
+            background:theme.buttonStyle==="filled"?theme.primaryColor:"transparent",
+            color:theme.buttonStyle==="filled"?"white":theme.primaryColor,
+            border:theme.buttonStyle==="outline"?`2px solid ${theme.primaryColor}`:"none",
+            borderBottom:theme.buttonStyle==="underline"?`2px solid ${theme.primaryColor}`:"none",
+            display:"inline-block"}}>
+            Call to action
+          </span>
         </div>
       </div>
     </div>
   );
+};
 
-  if (portal.type === "hm_portal") return (
-    <div style={{background:bg,fontFamily:`'${font}', sans-serif`,minHeight:480}}>
-      <div style={{background:"#1E2235",padding:"20px 28px",display:"flex",alignItems:"center",gap:12}}>
-        <div style={{width:36,height:36,borderRadius:10,background:pc,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:900,fontSize:16}}>H</div>
-        <div style={{color:"white",fontSize:14,fontWeight:700}}>Hiring Manager Portal{br.company_name?` · ${br.company_name}`:""}</div>
+// ─── Widget Picker Modal ───────────────────────────────────────────────────────
+const WidgetPicker = ({ onSelect, onClose }) => (
+  <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.35)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center"}}
+    onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:C.surface,borderRadius:16,width:420,boxShadow:"0 20px 64px rgba(0,0,0,.18)",overflow:"hidden"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:15,fontWeight:800,color:C.text1}}>Add Widget</span>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}><Ic n="x" s={16}/></button>
       </div>
-      <div style={{padding:"24px 28px"}}>
-        {[{label:"Pending Reviews",v:3,c:"#F79009"},{label:"Interviews Today",v:2,c:pc},{label:"Offers Out",v:1,c:"#0CAF77"}].map(s=>(
-          <div key={s.label} style={{display:"inline-flex",flexDirection:"column",padding:"14px 20px",borderRadius:12,background:"white",border:"1px solid #E8ECF8",marginRight:10,marginBottom:10}}>
-            <span style={{fontSize:24,fontWeight:800,color:s.c}}>{s.v}</span>
-            <span style={{fontSize:11,color:"#9DA8C7"}}>{s.label}</span>
+      <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:380,overflowY:"auto"}}>
+        {WIDGET_TYPES.map(w=>(
+          <div key={w.type} onClick={()=>onSelect(w.type)}
+            style={{padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,cursor:"pointer",
+              display:"flex",alignItems:"center",gap:10,transition:"all .1s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background=C.accentLight;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background="transparent";}}>
+            <span style={{fontSize:22}}>{w.icon}</span>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{w.label}</div>
+              <div style={{fontSize:10,color:C.text3}}>{w.desc}</div>
+            </div>
           </div>
         ))}
-        <div style={{marginTop:8,fontSize:13,fontWeight:700,color:"#4B5675",marginBottom:10}}>My Open Requisitions</div>
-        {[1,2].map(i=>(
-          <div key={i} style={{background:"white",borderRadius:10,padding:"12px 16px",border:"1px solid #E8ECF8",marginBottom:8,display:"flex",justifyContent:"space-between"}}>
-            <div style={{width:160,height:11,background:"#E8ECF8",borderRadius:4}}/>
-            <div style={{width:50,height:11,background:`${pc}30`,borderRadius:4}}/>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Widget Preview ────────────────────────────────────────────────────────────
+const WidgetPreview = ({ cell, theme }) => {
+  const t = theme;
+  const cfg = cell.widgetConfig||{};
+  const btnStyle = {
+    padding:`7px 18px`, borderRadius:t.buttonRadius||"8px", fontSize:12, fontWeight:600, fontFamily:t.fontFamily||F,
+    background:t.buttonStyle==="filled"?t.primaryColor:"transparent",
+    color:t.buttonStyle==="filled"?"white":t.primaryColor,
+    border:t.buttonStyle==="outline"?`2px solid ${t.primaryColor}`:"none",
+    borderBottom:t.buttonStyle==="underline"?`2px solid ${t.primaryColor}`:"none",
+    display:"inline-block",cursor:"default",
+  };
+
+  if (cell.widgetType==="hero") return (
+    <div style={{padding:"32px 24px",textAlign:"center",background:`linear-gradient(135deg,${t.primaryColor}18,${t.secondaryColor}0a)`}}>
+      <div style={{fontSize:22,fontWeight:parseInt(t.headingWeight)||700,color:t.textColor,fontFamily:t.headingFont,marginBottom:6}}>
+        {cfg.headline||"Your Compelling Headline"}
+      </div>
+      <div style={{fontSize:13,color:t.textColor,opacity:0.65,marginBottom:16,fontFamily:t.fontFamily}}>
+        {cfg.subheading||"A short description that tells visitors what to expect here."}
+      </div>
+      <span style={btnStyle}>{cfg.ctaText||"Get Started"}</span>
+    </div>
+  );
+
+  if (cell.widgetType==="text") return (
+    <div style={{padding:"16px 20px",fontFamily:t.fontFamily}}>
+      <div style={{fontSize:16,fontWeight:parseInt(t.headingWeight)||700,color:t.textColor,fontFamily:t.headingFont,marginBottom:6}}>
+        {cfg.heading||"Content Heading"}
+      </div>
+      <div style={{fontSize:13,color:t.textColor,opacity:0.65,lineHeight:1.7}}>
+        {cfg.content||"Your content will appear here. Add copy, instructions, or descriptions to engage your visitors."}
+      </div>
+    </div>
+  );
+
+  if (cell.widgetType==="image") return (
+    <div style={{background:C.surface2,minHeight:100,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,overflow:"hidden"}}>
+      {cfg.url?<img src={cfg.url} alt="" style={{width:"100%",display:"block"}}/>:(
+        <div style={{textAlign:"center",color:C.text3,padding:24}}>
+          <div style={{fontSize:28}}>🖼</div><div style={{fontSize:11,marginTop:4}}>Add image URL in settings</div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (cell.widgetType==="jobs") return (
+    <div style={{padding:"14px 20px",fontFamily:t.fontFamily}}>
+      <div style={{fontSize:15,fontWeight:parseInt(t.headingWeight)||700,color:t.textColor,fontFamily:t.headingFont,marginBottom:10}}>Open Positions</div>
+      {["Senior Engineer","Product Designer","Head of Sales"].map((j,i)=>(
+        <div key={i} style={{padding:"8px 0",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:600,color:t.textColor}}>{j}</div>
+            <div style={{fontSize:10,color:C.text3}}>Engineering · Remote</div>
+          </div>
+          <span style={{fontSize:11,color:t.primaryColor,fontWeight:600}}>Apply →</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (cell.widgetType==="form") return (
+    <div style={{padding:"14px 20px",fontFamily:t.fontFamily}}>
+      <div style={{fontSize:15,fontWeight:parseInt(t.headingWeight)||700,color:t.textColor,fontFamily:t.headingFont,marginBottom:10}}>
+        {cfg.title||"Apply Now"}
+      </div>
+      {["Name","Email","Role"].map(f=>(
+        <div key={f} style={{marginBottom:8}}>
+          <div style={{fontSize:10,fontWeight:600,color:C.text3,marginBottom:2}}>{f}</div>
+          <div style={{height:28,borderRadius:t.borderRadius||"8px",border:`1px solid ${C.border}`,background:C.surface2}}/>
+        </div>
+      ))}
+      <div style={{...btnStyle,marginTop:10,textAlign:"center",display:"block"}}>Submit Application</div>
+    </div>
+  );
+
+  if (cell.widgetType==="stats") return (
+    <div style={{padding:"20px",display:"flex",gap:20,justifyContent:"center",fontFamily:t.fontFamily}}>
+      {(cfg.stats||[{value:"500+",label:"Employees"},{value:"12",label:"Offices"},{value:"20+",label:"Countries"}]).map((s,i)=>(
+        <div key={i} style={{textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:800,color:t.primaryColor,fontFamily:t.headingFont}}>{s.value}</div>
+          <div style={{fontSize:11,color:C.text3}}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (cell.widgetType==="team") return (
+    <div style={{padding:"14px 20px",fontFamily:t.fontFamily}}>
+      <div style={{fontSize:15,fontWeight:parseInt(t.headingWeight)||700,color:t.textColor,fontFamily:t.headingFont,marginBottom:10}}>Meet the Team</div>
+      <div style={{display:"flex",gap:14}}>
+        {[["SJ","#4361EE"],["ML","#7C3AED"],["AR","#0D9488"],["PK","#E11D48"]].map(([init,col])=>(
+          <div key={init} style={{textAlign:"center"}}>
+            <div style={{width:44,height:44,borderRadius:"50%",background:`${col}18`,border:`2px solid ${col}40`,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:col}}>{init}</div>
+            <div style={{fontSize:9,color:C.text3,marginTop:4}}>Team Member</div>
           </div>
         ))}
       </div>
     </div>
   );
 
+  if (cell.widgetType==="video") return (
+    <div style={{background:"#000",minHeight:90,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8}}>
+      <div style={{textAlign:"center",color:"rgba(255,255,255,.5)"}}>
+        <div style={{fontSize:32}}>▶</div>
+        <div style={{fontSize:11,marginTop:4}}>{cfg.url?cfg.url.slice(0,40)+"…":"Add video URL"}</div>
+      </div>
+    </div>
+  );
+
+  if (cell.widgetType==="divider") return (
+    <div style={{padding:"20px",display:"flex",alignItems:"center"}}>
+      <div style={{flex:1,height:1,background:C.border}}/>
+    </div>
+  );
+
+  if (cell.widgetType==="spacer") return (
+    <div style={{height:cfg.height||"48px",background:"repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,.025) 8px,rgba(0,0,0,.025) 16px)",
+      display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6}}>
+      <span style={{fontSize:10,color:C.text3}}>Spacer · {cfg.height||"48px"}</span>
+    </div>
+  );
+
+  const wt = WIDGET_TYPES.find(w=>w.type===cell.widgetType);
   return (
-    <div style={{background:bg,fontFamily:`'${font}', sans-serif`,minHeight:480,padding:"32px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:12}}>{PORTAL_TYPES.find(t=>t.id===portal.type)?.icon}</div>
-        <div style={{fontSize:16,fontWeight:700,color:"#0F1729",marginBottom:4}}>{PORTAL_TYPES.find(t=>t.id===portal.type)?.label}</div>
-        <div style={{fontSize:13,color:"#9DA8C7"}}>{br.company_name||"Your Company"}</div>
+    <div style={{padding:"16px 20px",display:"flex",gap:10,alignItems:"center"}}>
+      <span style={{fontSize:22}}>{wt?.icon}</span>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{wt?.label}</div>
+        <div style={{fontSize:11,color:C.text3}}>Click to configure</div>
       </div>
     </div>
   );
 };
 
-// ── Main Portals list view ────────────────────────────────────────────────────
-export default function Portals({ environment }) {
+// ─── Widget Cell ──────────────────────────────────────────────────────────────
+const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing }) => {
+  const [showPicker, setShowPicker] = useState(false);
+
+  return (
+    <div style={{flex, minWidth:0, position:"relative"}}>
+      {!cell.widgetType ? (
+        <div onClick={()=>isEditing&&setShowPicker(true)}
+          style={{minHeight:120,borderRadius:10,border:`2px dashed ${C.border}`,background:C.surface2,
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,
+            cursor:isEditing?"pointer":"default",transition:"all .15s",padding:16}}
+          onMouseEnter={e=>{if(isEditing){e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background=C.accentLight;}}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface2;}}>
+          {isEditing&&<>
+            <div style={{width:28,height:28,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Ic n="plus" s={14} c={C.accent}/>
+            </div>
+            <span style={{fontSize:11,color:C.accent,fontWeight:600}}>Add widget</span>
+          </>}
+          {!isEditing&&<span style={{fontSize:11,color:C.text3}}>Empty</span>}
+        </div>
+      ) : (
+        <div style={{position:"relative",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.surface,overflow:"hidden",minHeight:80}}
+          onMouseEnter={e=>{if(isEditing){const a=e.currentTarget.querySelector(".wa");if(a)a.style.opacity="1";}}}
+          onMouseLeave={e=>{if(isEditing){const a=e.currentTarget.querySelector(".wa");if(a)a.style.opacity="0";}}}>
+          <WidgetPreview cell={cell} theme={theme}/>
+          {isEditing&&(
+            <div className="wa" style={{position:"absolute",top:6,right:6,display:"flex",gap:4,opacity:0,transition:"opacity .15s"}}>
+              <button onClick={()=>setShowPicker(true)}
+                style={{padding:"4px 9px",borderRadius:6,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.95)",
+                  color:C.text2,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:4}}>
+                <Ic n="edit" s={10}/> Change
+              </button>
+              <button onClick={onRemove}
+                style={{padding:"4px 7px",borderRadius:6,border:`1px solid ${C.red}30`,background:"rgba(255,255,255,.95)",color:C.red,fontSize:10,cursor:"pointer"}}>
+                <Ic n="trash" s={10}/>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {showPicker&&<WidgetPicker onSelect={type=>{onUpdate({...cell,widgetType:type,widgetConfig:{}});setShowPicker(false);}} onClose={()=>setShowPicker(false)}/>}
+    </div>
+  );
+};
+
+// ─── Row Settings Popover ─────────────────────────────────────────────────────
+const RowSettings = ({ row, onChange, onClose }) => {
+  const set = (k,v) => onChange({...row,[k]:v});
+  const inp = {padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,width:"100%",boxSizing:"border-box"};
+
+  const changePreset = (preset) => {
+    const numCols = preset==="1"?1:2;
+    const cells = Array.from({length:numCols},(_,i)=>row.cells[i]||defaultCell());
+    onChange({...row,preset,cells});
+  };
+
+  return (
+    <div style={{position:"absolute",top:0,right:-268,width:248,background:C.surface,border:`1px solid ${C.border}`,
+      borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,.12)",zIndex:200,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:13,fontWeight:700,color:C.text1}}>Row settings</span>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}><Ic n="x" s={13}/></button>
+      </div>
+      <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Layout</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {COLUMN_PRESETS.map(p=>(
+              <div key={p.id} onClick={()=>changePreset(p.id)}
+                style={{padding:"5px 9px",borderRadius:6,cursor:"pointer",fontSize:10,fontWeight:700,
+                  border:`1.5px solid ${row.preset===p.id?C.accent:C.border}`,
+                  background:row.preset===p.id?C.accentLight:"transparent",
+                  color:row.preset===p.id?C.accent:C.text2}}
+                title={p.label}>
+                {p.icon}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Vertical Padding</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {PADDING_OPTS.map(p=>(
+              <div key={p.value} onClick={()=>set("padding",p.value)}
+                style={{padding:"4px 9px",borderRadius:6,cursor:"pointer",fontSize:10,fontWeight:600,
+                  border:`1.5px solid ${row.padding===p.value?C.accent:C.border}`,
+                  background:row.padding===p.value?C.accentLight:"transparent",
+                  color:row.padding===p.value?C.accent:C.text2}}>
+                {p.label}
+              </div>
+            ))}
+          </div>
+        </div>
+        <ColorPicker label="Background Colour" value={row.bgColor} onChange={v=>set("bgColor",v)}/>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Background Image</div>
+          <input value={row.bgImage||""} onChange={e=>set("bgImage",e.target.value)} placeholder="https://…" style={inp}/>
+        </div>
+        {row.bgImage&&(
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>
+              Image Overlay · {row.overlayOpacity||0}%
+            </div>
+            <input type="range" min="0" max="85" value={row.overlayOpacity||0}
+              onChange={e=>set("overlayOpacity",parseInt(e.target.value))} style={{width:"100%"}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Canvas Row ───────────────────────────────────────────────────────────────
+const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop }) => {
+  const [showSettings, setShowSettings] = useState(false);
+  const padMap = {none:"0px",sm:"24px",md:"56px",lg:"96px",xl:"140px"};
+  const padding = padMap[row.padding]||"56px";
+
+  const updateCell = (ci, updated) => onUpdate({...row, cells:row.cells.map((c,i)=>i===ci?updated:c)});
+  const removeWidget = (ci) => onUpdate({...row, cells:row.cells.map((c,i)=>i===ci?defaultCell():c)});
+
+  // Column flex values per preset
+  const cellFlex = (ci) => {
+    if (row.preset==="1")   return "1 1 100%";
+    if (row.preset==="1-2") return ci===0?"0 0 33%":"0 0 67%";
+    if (row.preset==="2-1") return ci===0?"0 0 67%":"0 0 33%";
+    return "1 1 0"; // 2 or 3 cols equal
+  };
+
+  return (
+    <div draggable={isEditing} onDragStart={()=>onDragStart(index)} onDragOver={e=>{e.preventDefault();onDragOver(index);}} onDrop={()=>onDrop(index)}
+      style={{position:"relative",border:isEditing?`1.5px solid ${dragTarget?C.accent:C.border}`:"none",
+        borderRadius:isEditing?10:0,marginBottom:isEditing?6:0,
+        background:row.bgImage?`url(${row.bgImage}) center/cover no-repeat`:(row.bgColor||"transparent"),
+        cursor:isEditing?"grab":"default"}}>
+      {/* Overlay */}
+      {row.bgImage&&(row.overlayOpacity||0)>0&&(
+        <div style={{position:"absolute",inset:0,background:`rgba(0,0,0,${(row.overlayOpacity||0)/100})`,borderRadius:isEditing?10:0,pointerEvents:"none"}}/>
+      )}
+      {/* Content */}
+      <div style={{position:"relative",padding:`${padding} ${isEditing?"16px":"0"}`,maxWidth:theme.maxWidth||"1200px",margin:"0 auto",boxSizing:"border-box"}}>
+        <div style={{display:"flex",gap:16,alignItems:"stretch",flexWrap:"wrap"}}>
+          {row.cells.map((cell,ci)=>(
+            <WidgetCell key={cell.id} cell={cell} flex={cellFlex(ci)}
+              onUpdate={u=>updateCell(ci,u)} onRemove={()=>removeWidget(ci)}
+              theme={theme} isEditing={isEditing}/>
+          ))}
+        </div>
+      </div>
+      {/* Row toolbar — appears on hover */}
+      {isEditing&&(
+        <div className="row-tb" style={{position:"absolute",top:4,left:4,display:"flex",gap:2,
+          background:"rgba(255,255,255,.95)",border:`1px solid ${C.border}`,borderRadius:7,padding:"2px 4px",
+          opacity:0,transition:"opacity .15s",zIndex:50}}
+          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+          onMouseLeave={e=>e.currentTarget.style.opacity="0"}>
+          <button onClick={e=>{e.stopPropagation();onMoveUp();}} disabled={index===0}
+            style={{background:"none",border:"none",cursor:index===0?"default":"pointer",padding:3,opacity:index===0?.3:1}}>
+            <Ic n="chevD" s={11} c={C.text3} style={{transform:"rotate(180deg)"}}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onMoveDown();}} disabled={index===total-1}
+            style={{background:"none",border:"none",cursor:index===total-1?"default":"pointer",padding:3,opacity:index===total-1?.3:1}}>
+            <Ic n="chevD" s={11} c={C.text3}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();setShowSettings(s=>!s);}}
+            style={{background:"none",border:"none",cursor:"pointer",padding:3,color:showSettings?C.accent:C.text3}}>
+            <Ic n="settings" s={11} c={showSettings?C.accent:C.text3}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onDuplicate();}}
+            style={{background:"none",border:"none",cursor:"pointer",padding:3}}>
+            <Ic n="copy" s={11} c={C.text3}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onDelete();}}
+            style={{background:"none",border:"none",cursor:"pointer",padding:3}}>
+            <Ic n="trash" s={11} c={C.red}/>
+          </button>
+        </div>
+      )}
+      {/* Hover target for row toolbar */}
+      {isEditing&&(
+        <div style={{position:"absolute",inset:0,borderRadius:10,pointerEvents:"none"}}
+          onMouseEnter={e=>{const tb=e.currentTarget.previousSibling;if(tb&&tb.classList.contains("row-tb"))tb.style.opacity="1";}}
+          onMouseLeave={e=>{const tb=e.currentTarget.previousSibling;if(tb&&tb.classList.contains("row-tb"))tb.style.opacity="0";}}/>
+      )}
+      {/* Settings popover */}
+      {isEditing&&showSettings&&<RowSettings row={row} onChange={onUpdate} onClose={()=>setShowSettings(false)}/>}
+    </div>
+  );
+};
+
+// ─── Add Row Bar ──────────────────────────────────────────────────────────────
+const AddRowBar = ({ onAdd }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{margin:"4px 0",display:"flex",justifyContent:"center"}}>
+      {!open?(
+        <button onClick={()=>setOpen(true)}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"3px 14px",borderRadius:99,
+            border:`1.5px dashed ${C.border}`,background:"transparent",color:C.text3,
+            fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text3;}}>
+          <Ic n="plus" s={10}/> Add row
+        </button>
+      ):(
+        <div style={{display:"flex",gap:5,padding:"6px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.08)"}}>
+          {COLUMN_PRESETS.map(p=>(
+            <button key={p.id} onClick={()=>{onAdd(p.id);setOpen(false);}}
+              style={{padding:"5px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:C.surface2,
+                cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,color:C.text2,transition:"all .1s"}}
+              title={p.label}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;e.currentTarget.style.background=C.accentLight;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text2;e.currentTarget.style.background=C.surface2;}}>
+              {p.icon} {p.label}
+            </button>
+          ))}
+          <button onClick={()=>setOpen(false)} style={{padding:"5px 7px",borderRadius:7,border:"none",background:"transparent",cursor:"pointer",color:C.text3}}>
+            <Ic n="x" s={11}/>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+const PortalCanvas = ({ page, onUpdate, theme, isEditing }) => {
+  const [dragFrom, setDragFrom] = useState(null);
+  const [dragTarget, setDragTarget] = useState(null);
+
+  const updateRow = (i, updated) => onUpdate({...page, rows:page.rows.map((r,j)=>j===i?updated:r)});
+  const deleteRow = (i) => onUpdate({...page, rows:page.rows.filter((_,j)=>j!==i)});
+  const addRow = (preset, afterIdx) => {
+    const rows = [...page.rows];
+    rows.splice(afterIdx+1, 0, defaultRow(preset));
+    onUpdate({...page, rows});
+  };
+  const moveRow = (i, dir) => {
+    const rows = [...page.rows]; const j = i+dir;
+    if(j<0||j>=rows.length) return;
+    [rows[i],rows[j]]=[rows[j],rows[i]];
+    onUpdate({...page, rows});
+  };
+  const duplicateRow = (i) => {
+    const rows = [...page.rows];
+    const copy = JSON.parse(JSON.stringify(rows[i]));
+    copy.id = uid(); copy.cells = copy.cells.map(c=>({...c,id:uid()}));
+    rows.splice(i+1,0,copy);
+    onUpdate({...page, rows});
+  };
+  const handleDrop = (toIdx) => {
+    if(dragFrom===null||dragFrom===toIdx) return;
+    const rows=[...page.rows];
+    const [moved]=rows.splice(dragFrom,1);
+    rows.splice(toIdx,0,moved);
+    onUpdate({...page,rows});
+    setDragFrom(null); setDragTarget(null);
+  };
+
+  return (
+    <div style={{background:isEditing?C.bg:(theme.bgColor||"#fff"),minHeight:400,padding:isEditing?"12px":"0"}}>
+      {page.rows.map((row,i)=>(
+        <div key={row.id}>
+          {isEditing&&<AddRowBar onAdd={preset=>addRow(preset,i-1)}/>}
+          <CanvasRow row={row} index={i} total={page.rows.length}
+            onUpdate={u=>updateRow(i,u)} onDelete={()=>deleteRow(i)}
+            onMoveUp={()=>moveRow(i,-1)} onMoveDown={()=>moveRow(i,1)}
+            onDuplicate={()=>duplicateRow(i)}
+            theme={theme} isEditing={isEditing}
+            dragTarget={dragTarget===i}
+            onDragStart={setDragFrom} onDragOver={setDragTarget} onDrop={handleDrop}/>
+        </div>
+      ))}
+      {isEditing&&<AddRowBar onAdd={preset=>addRow(preset,page.rows.length-1)}/>}
+    </div>
+  );
+};
+
+// ─── Portal Builder (full-screen editor) ──────────────────────────────────────
+const PortalBuilder = ({ portal:init, onSave, onClose }) => {
+  const [portal, setPortal] = useState({
+    ...init,
+    theme: init.theme||defaultTheme(),
+    pages: init.pages?.length?init.pages:[defaultPage()],
+  });
+  const [activePageIdx, setActivePageIdx] = useState(0);
+  const [showTheme, setShowTheme] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const page = portal.pages[activePageIdx]||portal.pages[0];
+
+  const updatePage = (updated) => setPortal(p=>({...p,pages:p.pages.map((pg,i)=>i===activePageIdx?updated:pg)}));
+  const addPage = () => {
+    const np = {...defaultPage(),id:uid(),name:`Page ${portal.pages.length+1}`,slug:`/page-${portal.pages.length+1}`};
+    setPortal(p=>({...p,pages:[...p.pages,np]}));
+    setActivePageIdx(portal.pages.length);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(portal);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",fontFamily:F,background:C.bg}}>
+      {/* Top bar */}
+      <div style={{height:52,background:C.surface,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:0,flexShrink:0,padding:"0 16px"}}>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:6,fontFamily:F,fontSize:13}}
+          onMouseEnter={e=>e.currentTarget.style.color=C.text1} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+          <Ic n="arrowL" s={14}/> Portals
+        </button>
+        <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
+        <input value={portal.name} onChange={e=>setPortal(p=>({...p,name:e.target.value}))}
+          style={{border:"none",outline:"none",fontSize:14,fontWeight:700,color:C.text1,background:"transparent",fontFamily:F,minWidth:160}}/>
+        <div style={{flex:1}}/>
+        {/* Page tabs */}
+        <div style={{display:"flex",gap:2,background:C.surface2,borderRadius:8,padding:3,border:`1px solid ${C.border}`}}>
+          {portal.pages.map((pg,i)=>(
+            <button key={pg.id} onClick={()=>setActivePageIdx(i)}
+              style={{padding:"4px 12px",borderRadius:6,border:"none",fontFamily:F,fontSize:12,fontWeight:600,cursor:"pointer",
+                background:activePageIdx===i?C.surface:"transparent",color:activePageIdx===i?C.text1:C.text3,
+                boxShadow:activePageIdx===i?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
+              {pg.name}
+            </button>
+          ))}
+          <button onClick={addPage} style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer"}}><Ic n="plus" s={11}/></button>
+        </div>
+        <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
+        {/* Actions */}
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button onClick={()=>setIsEditing(e=>!e)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
+              border:`1px solid ${C.border}`,background:isEditing?C.accentLight:"transparent",color:isEditing?C.accent:C.text2}}>
+            <Ic n="eye" s={12} c={isEditing?C.accent:C.text2}/>{isEditing?"Editing":"Preview"}
+          </button>
+          <button onClick={()=>setShowTheme(s=>!s)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
+              border:`1px solid ${C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2}}>
+            <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
+          </button>
+          <Btn v="primary" s="sm" onClick={handleSave} disabled={saving}>{saving?"Saving…":"Save"}</Btn>
+          <Btn v={portal.status==="published"?"success":"secondary"} s="sm"
+            onClick={()=>setPortal(p=>({...p,status:p.status==="published"?"draft":"published"}))}>
+            {portal.status==="published"?"✓ Published":"Publish"}
+          </Btn>
+        </div>
+      </div>
+
+      {/* Edit hint bar */}
+      {isEditing&&(
+        <div style={{padding:"5px 16px",background:C.accentLight,borderBottom:`1px solid ${C.accent}30`,display:"flex",alignItems:"center",gap:6}}>
+          <Ic n="edit" s={11} c={C.accent}/>
+          <span style={{fontSize:11,color:C.accent,fontWeight:600}}>Editing — click cells to add widgets · drag rows to reorder · hover rows for settings</span>
+        </div>
+      )}
+
+      {/* Canvas */}
+      <div style={{flex:1,overflow:"auto",marginRight:showTheme?320:0,transition:"margin-right .2s"}}>
+        <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
+      </div>
+
+      {showTheme&&<ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>}
+    </div>
+  );
+};
+
+// ─── Portal Card ──────────────────────────────────────────────────────────────
+const PortalCard = ({ portal, onEdit, onDelete, onDuplicate }) => {
+  const t = portal.theme||defaultTheme();
+  const pageCount = (portal.pages||[]).length||1;
+  const widgetCount = (portal.pages||[]).reduce((a,pg)=>(pg.rows||[]).reduce((b,r)=>b+(r.cells||[]).filter(c=>c.widgetType).length,a),0);
+
+  return (
+    <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",transition:"all .15s"}}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 20px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=C.border2;}}
+      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
+      {/* Preview strip */}
+      <div onClick={onEdit} style={{height:96,background:`linear-gradient(135deg,${t.primaryColor}22,${t.secondaryColor}12)`,
+        position:"relative",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:700,color:t.primaryColor,fontFamily:t.headingFont||F}}>{portal.name}</div>
+          <div style={{fontSize:10,color:C.text3,marginTop:2}}>{pageCount} page{pageCount!==1?"s":""} · {widgetCount} widget{widgetCount!==1?"s":""}</div>
+        </div>
+        <div style={{position:"absolute",bottom:8,left:10,display:"flex",gap:3}}>
+          {[t.primaryColor,t.secondaryColor,t.accentColor].map((col,i)=>(
+            <div key={i} style={{width:8,height:8,borderRadius:"50%",background:col||C.text3}}/>
+          ))}
+        </div>
+        <div style={{position:"absolute",top:8,right:8}}>
+          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,
+            background:portal.status==="published"?C.greenLight:C.amberLight,
+            color:portal.status==="published"?C.green:C.amber}}>
+            {portal.status==="published"?"LIVE":"DRAFT"}
+          </span>
+        </div>
+      </div>
+      {/* Footer */}
+      <div style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{portal.name}</div>
+          <div style={{fontSize:11,color:C.text3}}>{portal.slug||"/"}</div>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={onDuplicate} title="Duplicate"
+            style={{background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",padding:"4px 7px",color:C.text3}}>
+            <Ic n="copy" s={12}/>
+          </button>
+          <button onClick={onEdit}
+            style={{background:C.accent,border:"none",borderRadius:6,cursor:"pointer",padding:"5px 12px",color:"white",fontSize:11,fontWeight:600,fontFamily:F}}>
+            Edit
+          </button>
+          <button onClick={onDelete}
+            style={{background:C.redLight,border:`1px solid ${C.red}20`,borderRadius:6,cursor:"pointer",padding:"4px 7px",color:C.red}}>
+            <Ic n="trash" s={12}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+export default function PortalsPage({ environment }) {
   const [portals, setPortals] = useState([]);
-  const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
 
-  useEffect(() => { if (environment?.id) load(); }, [environment?.id]);
-
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (!environment?.id) return;
     setLoading(true);
-    const [p, o] = await Promise.all([
-      api.get(`/portals?environment_id=${environment.id}`),
-      api.get(`/objects?environment_id=${environment.id}`),
-    ]);
-    setPortals(Array.isArray(p) ? p : []);
-    setObjects(Array.isArray(o) ? o : []);
+    const data = await api.get(`/portals?environment_id=${environment.id}`);
+    setPortals(Array.isArray(data)?data:[]);
     setLoading(false);
+  }, [environment?.id]);
+
+  useEffect(()=>{ load(); },[load]);
+
+  if (editing) {
+    return (
+      <PortalBuilder
+        portal={editing}
+        onClose={()=>{ setEditing(null); load(); }}
+        onSave={async (updated) => {
+          if (updated.id&&!String(updated.id).startsWith("new_")) {
+            await api.patch(`/portals/${updated.id}`, updated);
+          } else {
+            const created = await api.post("/portals",{...updated,environment_id:environment.id});
+            setEditing(created);
+          }
+          load();
+        }}
+      />
+    );
+  }
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    const p = { name:newName.trim(), slug:`/${newName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-")}`,
+      environment_id:environment.id, status:"draft", theme:defaultTheme(), pages:[defaultPage()] };
+    const created = await api.post("/portals", p);
+    setNewName(""); setCreating(false);
+    setEditing(created);
   };
 
   const handleDelete = async (id) => {
     if (!confirm("Delete this portal?")) return;
-    await api.del(`/portals/${id}`);
-    setPortals(ps => ps.filter(p => p.id !== id));
+    await api.delete(`/portals/${id}`);
+    load();
   };
 
-  const handlePublish = async (portal) => {
-    const updated = await api.post(`/portals/${portal.id}/publish`, {});
-    setPortals(ps => ps.map(p => p.id === updated.id ? updated : p));
+  const handleDuplicate = async (portal) => {
+    const copy = {...portal,id:undefined,name:`${portal.name} (copy)`,slug:`${portal.slug}-copy`,status:"draft"};
+    await api.post("/portals",{...copy,environment_id:environment.id});
+    load();
   };
-
-  if (editing) return (
-    <PortalEditor
-      portal={editing}
-      objects={objects}
-      onSave={updated => { setPortals(ps => ps.map(p => p.id === updated.id ? updated : p)); setEditing(updated); }}
-      onClose={() => setEditing(null)}
-    />
-  );
 
   return (
-    <div style={{fontFamily:F,color:C.text1}}>
-      {/* Header */}
+    <div style={{padding:"28px 32px",fontFamily:F}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:28}}>
         <div>
-          <h1 style={{margin:"0 0 4px",fontSize:24,fontWeight:800,letterSpacing:"-0.5px"}}>Portal Builder</h1>
-          <p style={{margin:0,fontSize:13,color:C.text3}}>Create branded external experiences for candidates, managers & agencies</p>
+          <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.text1}}>Portals</h1>
+          <p style={{margin:"4px 0 0",fontSize:13,color:C.text3}}>Build candidate-facing portals with a drag-and-drop canvas and design token system</p>
         </div>
-        <Btn icon="plus" onClick={()=>setShowCreate(true)}>New Portal</Btn>
+        <Btn icon="plus" onClick={()=>setCreating(true)}>New Portal</Btn>
       </div>
 
-      {/* Portal type explainer strip */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:28}}>
-        {PORTAL_TYPES.map(pt=>(
-          <div key={pt.id} style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,padding:"16px",boxShadow:"0 1px 4px rgba(67,97,238,0.05)"}}>
-            <div style={{fontSize:22,marginBottom:8}}>{pt.icon}</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:3}}>{pt.label}</div>
-            <div style={{fontSize:11,color:C.text3,lineHeight:1.5}}>{pt.desc}</div>
+      {creating&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={e=>e.target===e.currentTarget&&setCreating(false)}>
+          <div style={{background:C.surface,borderRadius:14,padding:24,width:380,boxShadow:"0 24px 64px rgba(0,0,0,.18)"}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:16}}>New Portal</div>
+            <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCreate()}
+              placeholder="e.g. Engineering Careers" autoFocus
+              style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:8,border:`1.5px solid ${C.accent}`,
+                fontSize:13,fontFamily:F,outline:"none",color:C.text1,marginBottom:16}}/>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <Btn v="secondary" onClick={()=>setCreating(false)}>Cancel</Btn>
+              <Btn onClick={handleCreate} disabled={!newName.trim()}>Create &amp; Edit</Btn>
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* Portal cards */}
-      {loading ? (
-        <div style={{textAlign:"center",padding:60,color:C.text3}}>Loading portals…</div>
-      ) : portals.length === 0 ? (
-        <div style={{textAlign:"center",padding:"60px 40px",background:C.surface,borderRadius:18,border:`2px dashed ${C.border}`}}>
-          <div style={{fontSize:48,marginBottom:16}}>🌐</div>
-          <div style={{fontSize:16,fontWeight:700,color:C.text1,marginBottom:6}}>No portals yet</div>
-          <div style={{fontSize:13,color:C.text3,marginBottom:20}}>Create your first portal to start building external experiences</div>
-          <Btn icon="plus" onClick={()=>setShowCreate(true)}>Create First Portal</Btn>
-        </div>
-      ) : (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
-          {portals.map(portal => {
-            const pt = PORTAL_TYPES.find(t => t.id === portal.type);
-            return (
-              <div key={portal.id} style={{background:C.surface,borderRadius:18,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 1px 4px rgba(67,97,238,0.06)",transition:"box-shadow .2s"}}
-                onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(67,97,238,0.12)"}
-                onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 4px rgba(67,97,238,0.06)"}>
-                {/* Colour band */}
-                <div style={{height:6,background:portal.branding?.primary_color||pt?.color||C.accent}}/>
-                <div style={{padding:"20px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <div style={{width:40,height:40,borderRadius:12,background:`${pt?.color||C.accent}14`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{pt?.icon}</div>
-                      <div>
-                        <div style={{fontSize:14,fontWeight:800,color:C.text1}}>{portal.name}</div>
-                        <div style={{fontSize:11,color:C.text3}}>{pt?.label}</div>
-                      </div>
-                    </div>
-                    <StatusDot status={portal.status}/>
-                  </div>
-                  {portal.branding?.company_name&&<div style={{fontSize:12,color:C.text2,marginBottom:4}}>🏢 {portal.branding.company_name}</div>}
-                  {portal.branding?.tagline&&<div style={{fontSize:11,color:C.text3,marginBottom:12,fontStyle:"italic"}}>"{portal.branding.tagline}"</div>}
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-                    {(portal.config?.allowed_objects||[]).map(slug=>(
-                      <Badge key={slug} color={C.accent}>{slug}</Badge>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
-                    <Btn v="primary" onClick={()=>setEditing(portal)}>Edit Portal</Btn>
-                    <div style={{display:"flex",gap:6}}>
-                      <Btn v={portal.status==="published"?"danger":"success"} onClick={()=>handlePublish(portal)}>
-                        {portal.status==="published"?"Unpublish":"Publish"}
-                      </Btn>
-                      <Btn v="ghost" icon="trash" onClick={()=>handleDelete(portal.id)}/>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 
-      {showCreate && (
-        <CreatePortalModal
-          environment={environment}
-          onCreated={portal => { setPortals(ps=>[...ps,portal]); setShowCreate(false); setEditing(portal); }}
-          onClose={() => setShowCreate(false)}
-        />
+      {loading?(
+        <div style={{textAlign:"center",padding:"60px 0",color:C.text3}}>Loading portals…</div>
+      ):portals.length===0?(
+        <div style={{textAlign:"center",padding:"80px 0"}}>
+          <div style={{fontSize:40,marginBottom:16}}>🌐</div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text1,marginBottom:6}}>No portals yet</div>
+          <div style={{fontSize:13,color:C.text3,marginBottom:24}}>Build your first candidate-facing portal with the drag-and-drop canvas</div>
+          <Btn icon="plus" onClick={()=>setCreating(true)}>Create your first portal</Btn>
+        </div>
+      ):(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
+          {portals.map(p=>(
+            <PortalCard key={p.id} portal={p}
+              onEdit={()=>setEditing(p)}
+              onDelete={()=>handleDelete(p.id)}
+              onDuplicate={()=>handleDuplicate(p)}/>
+          ))}
+        </div>
       )}
     </div>
   );

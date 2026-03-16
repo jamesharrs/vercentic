@@ -1,105 +1,89 @@
 const express = require('express');
 const router = express.Router();
-const { getStore, saveStore } = require('../db/init');
 const crypto = require('crypto');
+const { getStore, saveStore } = require('../db/init');
 
 const uid = () => crypto.randomUUID();
-const token = () => crypto.randomBytes(24).toString('hex');
 
-// GET /api/portals — list all portals (optionally filter by environment)
+function ensure() {
+  const s = getStore();
+  if (!s.portals) { s.portals = []; saveStore(); }
+}
+
+// GET / — list portals for an environment
 router.get('/', (req, res) => {
+  ensure();
+  const { environment_id } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   const store = getStore();
-  let portals = store.portals || [];
-  if (req.query.environment_id) portals = portals.filter(p => p.environment_id === req.query.environment_id);
-  res.json(portals);
+  const rows = (store.portals || []).filter(p => p.environment_id === environment_id && !p.deleted_at);
+  rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(rows);
 });
 
-// GET /api/portals/:id
+// GET /:id
 router.get('/:id', (req, res) => {
+  ensure();
   const store = getStore();
-  const portal = (store.portals || []).find(p => p.id === req.params.id);
-  if (!portal) return res.status(404).json({ error: 'Not found' });
+  const portal = (store.portals || []).find(p => p.id === req.params.id && !p.deleted_at);
+  if (!portal) return res.status(404).json({ error: 'Portal not found' });
   res.json(portal);
 });
 
-// GET /api/portals/token/:token — public lookup by access token
-router.get('/token/:token', (req, res) => {
+// GET /slug/:slug — public lookup
+router.get('/slug/:slug', (req, res) => {
+  ensure();
   const store = getStore();
-  const portal = (store.portals || []).find(p => p.access_token === req.params.token && p.status === 'published');
-  if (!portal) return res.status(404).json({ error: 'Portal not found or unpublished' });
+  const portal = (store.portals || []).find(p => p.slug === req.params.slug && p.status === 'published' && !p.deleted_at);
+  if (!portal) return res.status(404).json({ error: 'Not found or unpublished' });
   res.json(portal);
 });
 
-// POST /api/portals — create portal
+// POST / — create
 router.post('/', (req, res) => {
+  ensure();
+  const { environment_id, name, slug, status, theme, pages, description } = req.body;
+  if (!environment_id || !name) return res.status(400).json({ error: 'environment_id and name required' });
   const store = getStore();
-  if (!store.portals) store.portals = [];
-  const { name, type, environment_id, branding, config, pages } = req.body;
-  if (!name || !type || !environment_id) return res.status(400).json({ error: 'name, type, environment_id required' });
-  const portal = {
-    id: uid(),
-    name,
-    type,              // 'career_site' | 'hm_portal' | 'agency_portal' | 'onboarding'
-    environment_id,
-    status: 'draft',   // 'draft' | 'published'
-    access_token: token(),
-    branding: branding || {
-      logo_url: '', primary_color: '#4361EE', bg_color: '#F8FAFF',
-      font: 'DM Sans', company_name: '', tagline: ''
-    },
-    config: config || {
-      allowed_objects: [],   // which object slugs to expose
-      require_auth: false,   // candidates must log in
-      show_apply_button: true,
-      jobs_filter: {},       // e.g. { department: 'Engineering' }
-    },
-    pages: pages || [],      // array of page configs
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+  const now = new Date().toISOString();
+  const rec = {
+    id: uid(), environment_id, name,
+    slug: slug || `/${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    description: description || '',
+    status: status || 'draft',
+    theme: theme || {},
+    pages: pages || [],
+    deleted_at: null, created_at: now, updated_at: now,
   };
-  store.portals.push(portal);
-  saveStore(store);
-  res.status(201).json(portal);
+  if (!store.portals) store.portals = [];
+  store.portals.push(rec);
+  saveStore();
+  res.status(201).json(rec);
 });
 
-// PUT /api/portals/:id — update portal
-router.put('/:id', (req, res) => {
+// PATCH /:id — update
+router.patch('/:id', (req, res) => {
+  ensure();
   const store = getStore();
-  const idx = (store.portals || []).findIndex(p => p.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  store.portals[idx] = { ...store.portals[idx], ...req.body, id: req.params.id, updated_at: new Date().toISOString() };
-  saveStore(store);
+  const idx = (store.portals || []).findIndex(p => p.id === req.params.id && !p.deleted_at);
+  if (idx === -1) return res.status(404).json({ error: 'Portal not found' });
+  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages'];
+  const updates = { updated_at: new Date().toISOString() };
+  allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  store.portals[idx] = { ...store.portals[idx], ...updates };
+  saveStore();
   res.json(store.portals[idx]);
 });
 
-// POST /api/portals/:id/publish — toggle publish status
-router.post('/:id/publish', (req, res) => {
-  const store = getStore();
-  const idx = (store.portals || []).findIndex(p => p.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  store.portals[idx].status = store.portals[idx].status === 'published' ? 'draft' : 'published';
-  store.portals[idx].updated_at = new Date().toISOString();
-  saveStore(store);
-  res.json(store.portals[idx]);
-});
-
-// POST /api/portals/:id/regenerate-token
-router.post('/:id/regenerate-token', (req, res) => {
-  const store = getStore();
-  const idx = (store.portals || []).findIndex(p => p.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  store.portals[idx].access_token = token();
-  store.portals[idx].updated_at = new Date().toISOString();
-  saveStore(store);
-  res.json(store.portals[idx]);
-});
-
-// DELETE /api/portals/:id
+// DELETE /:id — soft delete
 router.delete('/:id', (req, res) => {
+  ensure();
   const store = getStore();
-  store.portals = (store.portals || []).filter(p => p.id !== req.params.id);
-  saveStore(store);
-  res.json({ ok: true });
+  const idx = (store.portals || []).findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  store.portals[idx].deleted_at = new Date().toISOString();
+  saveStore();
+  res.json({ deleted: true });
 });
 
 module.exports = router;
