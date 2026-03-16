@@ -272,6 +272,7 @@ const PeoplePicker = ({ field, value, onChange }) => {
   const [options, setOptions] = useState([]);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
   const ref = useRef(null);
   const inputRef = useRef(null);
   const isMulti = field.field_type === "multi_lookup" || field.field_type === "people" || field.people_multi !== false;
@@ -282,6 +283,12 @@ const PeoplePicker = ({ field, value, onChange }) => {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+
+  const checkDropDirection = () => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setDropUp(window.innerHeight - rect.bottom < 220);
+  };
 
   // Load options once on first open
   useEffect(() => {
@@ -326,7 +333,7 @@ const PeoplePicker = ({ field, value, onChange }) => {
   return (
     <div ref={ref} style={{position:"relative"}}>
       {/* Combined pill + search input box */}
-      <div onClick={()=>{ setOpen(true); setTimeout(()=>inputRef.current?.focus(),10); }}
+      <div onClick={()=>{ checkDropDirection(); setOpen(true); setTimeout(()=>inputRef.current?.focus(),10); }}
         style={{display:"flex",flexWrap:"wrap",gap:4,padding:"5px 8px",borderRadius:8,
           border:`1.5px solid ${open?C.accent:C.border}`,background:C.surface,cursor:"text",
           minHeight:36,alignItems:"center",transition:"border-color .15s"}}>
@@ -346,7 +353,7 @@ const PeoplePicker = ({ field, value, onChange }) => {
             </span>
           );
         })}
-        <input ref={inputRef} value={search} onChange={e=>{ setSearch(e.target.value); setOpen(true); }}
+        <input ref={inputRef} value={search} onChange={e=>{ setSearch(e.target.value); checkDropDirection(); setOpen(true); }}
           onFocus={()=>setOpen(true)}
           placeholder={selected.length===0?(field.placeholder||`Search ${field.name||"people"}…`):""}
           style={{border:"none",outline:"none",fontSize:13,fontFamily:F,color:C.text1,background:"transparent",
@@ -354,7 +361,9 @@ const PeoplePicker = ({ field, value, onChange }) => {
       </div>
       {/* Dropdown */}
       {open && (
-        <div style={{position:"absolute",top:"calc(100% + 3px)",left:0,right:0,zIndex:400,background:C.surface,
+        <div style={{position:"absolute",
+          ...(dropUp ? {bottom:"calc(100% + 3px)"} : {top:"calc(100% + 3px)"}),
+          left:0,right:0,zIndex:400,background:C.surface,
           border:`1px solid ${C.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.1)",
           maxHeight:200,overflowY:"auto"}}>
           {!loaded && <div style={{padding:"12px",fontSize:12,color:C.text3,textAlign:"center"}}>Loading…</div>}
