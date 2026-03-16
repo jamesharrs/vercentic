@@ -104,6 +104,150 @@ const defaultRow  = (preset="1") => ({
 });
 const defaultPage = () => ({ id:uid(), name:"Home", slug:"/", rows:[defaultRow("1")] });
 
+// ─── Portal Templates ─────────────────────────────────────────────────────────
+const TEMPLATES = [
+  {
+    id: "career_site",
+    name: "Career Site",
+    desc: "Branded job listings, company story and application experience",
+    icon: "🌐",
+    accent: "#4361EE",
+    tags: ["Public", "Jobs", "Apply"],
+    theme: {
+      primaryColor:"#4361EE", secondaryColor:"#7C3AED",
+      bgColor:"#FFFFFF", textColor:"#0F1729", accentColor:"#F79009",
+      fontFamily:"'Plus Jakarta Sans', sans-serif", headingFont:"'Plus Jakarta Sans', sans-serif",
+      fontSize:"16px", headingWeight:"700",
+      borderRadius:"10px", buttonStyle:"filled", buttonRadius:"10px", maxWidth:"1200px",
+    },
+    pages: [
+      { id:"p1", name:"Home", slug:"/", rows:[
+        { id:"r1", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"xl",
+          cells:[{ id:"c1", widgetType:"hero", widgetConfig:{ headline:"Find Your Next Opportunity", subheading:"Join a team building something meaningful. Explore open roles across engineering, product, design and more.", ctaText:"See Open Roles" }}]},
+        { id:"r2", preset:"1", bgColor:"#F8F9FF", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[{ id:"c2", widgetType:"stats", widgetConfig:{ stats:[{value:"500+",label:"Team Members"},{value:"12",label:"Global Offices"},{value:"40+",label:"Nationalities"},{value:"4.8★",label:"Glassdoor"}]}}]},
+        { id:"r3", preset:"2", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[
+            { id:"c3", widgetType:"text", widgetConfig:{ heading:"Why work with us?", content:"We believe great work happens when talented people have the freedom to do their best work. We offer flexible hours, competitive pay, and a culture built on trust and transparency." }},
+            { id:"c4", widgetType:"image", widgetConfig:{ url:"" }},
+          ]},
+        { id:"r4", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c5", widgetType:"jobs", widgetConfig:{}}]},
+        { id:"r5", preset:"1", bgColor:"#0F1729", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c6", widgetType:"text", widgetConfig:{ heading:"Ready to apply?", content:"We review every application carefully. If there's a match, our team will be in touch within 5 business days." }}]},
+      ]},
+      { id:"p2", name:"Apply", slug:"/apply", rows:[
+        { id:"r6", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c7", widgetType:"form", widgetConfig:{ title:"Submit Your Application" }}]},
+      ]},
+    ],
+  },
+
+  {
+    id: "hm_portal",
+    name: "Hiring Manager Portal",
+    desc: "Review candidates, leave feedback and manage your open requisitions",
+    icon: "💼",
+    accent: "#334155",
+    tags: ["Internal", "Review", "Feedback"],
+    theme: {
+      primaryColor:"#334155", secondaryColor:"#475569",
+      bgColor:"#F8FAFC", textColor:"#0F172A", accentColor:"#6366F1",
+      fontFamily:"'Inter', sans-serif", headingFont:"'Inter', sans-serif",
+      fontSize:"15px", headingWeight:"600",
+      borderRadius:"8px", buttonStyle:"filled", buttonRadius:"6px", maxWidth:"1100px",
+    },
+    pages: [
+      { id:"p1", name:"Dashboard", slug:"/", rows:[
+        { id:"r1", preset:"1", bgColor:"#1E293B", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[{ id:"c1", widgetType:"hero", widgetConfig:{ headline:"Hiring Manager Portal", subheading:"Your candidates, interviews and open roles — all in one place.", ctaText:"View Open Roles" }}]},
+        { id:"r2", preset:"3", bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[
+            { id:"c2", widgetType:"stats", widgetConfig:{ stats:[{value:"8",label:"Open Reqs"}]}},
+            { id:"c3", widgetType:"stats", widgetConfig:{ stats:[{value:"24",label:"In Pipeline"}]}},
+            { id:"c4", widgetType:"stats", widgetConfig:{ stats:[{value:"6",label:"This Week"}]}},
+          ]},
+        { id:"r3", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[{ id:"c5", widgetType:"jobs", widgetConfig:{}}]},
+      ]},
+      { id:"p2", name:"Feedback", slug:"/feedback", rows:[
+        { id:"r4", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c6", widgetType:"form", widgetConfig:{ title:"Interview Scorecard" }}]},
+      ]},
+    ],
+  },
+
+  {
+    id: "onboarding",
+    name: "Onboarding Portal",
+    desc: "Welcome new hires with a guided post-offer journey and document collection",
+    icon: "🚀",
+    accent: "#0D9488",
+    tags: ["New Hire", "Documents", "Welcome"],
+    theme: {
+      primaryColor:"#0D9488", secondaryColor:"#0891B2",
+      bgColor:"#F0FDFA", textColor:"#134E4A", accentColor:"#F59E0B",
+      fontFamily:"'Outfit', sans-serif", headingFont:"'Outfit', sans-serif",
+      fontSize:"16px", headingWeight:"700",
+      borderRadius:"12px", buttonStyle:"filled", buttonRadius:"999px", maxWidth:"960px",
+    },
+    pages: [
+      { id:"p1", name:"Welcome", slug:"/", rows:[
+        { id:"r1", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"xl",
+          cells:[{ id:"c1", widgetType:"hero", widgetConfig:{ headline:"Welcome to the team! 👋", subheading:"We're so excited to have you on board. This portal will guide you through everything you need to do before Day 1.", ctaText:"Get Started" }}]},
+        { id:"r2", preset:"3", bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[
+            { id:"c2", widgetType:"stats", widgetConfig:{ stats:[{value:"Step 1",label:"Upload Documents"}]}},
+            { id:"c3", widgetType:"stats", widgetConfig:{ stats:[{value:"Step 2",label:"Complete Profile"}]}},
+            { id:"c4", widgetType:"stats", widgetConfig:{ stats:[{value:"Step 3",label:"Meet the Team"}]}},
+          ]},
+        { id:"r3", preset:"2", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[
+            { id:"c5", widgetType:"text", widgetConfig:{ heading:"Before Day 1", content:"Complete your onboarding checklist at your own pace. Our People team is available if you have any questions — just reply to your welcome email." }},
+            { id:"c6", widgetType:"team", widgetConfig:{}},
+          ]},
+      ]},
+      { id:"p2", name:"Documents", slug:"/documents", rows:[
+        { id:"r4", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c7", widgetType:"form", widgetConfig:{ title:"Upload Your Documents" }}]},
+      ]},
+    ],
+  },
+
+  {
+    id: "agency",
+    name: "Agency Portal",
+    desc: "Let agencies submit candidates against open roles with full pipeline visibility",
+    icon: "🤝",
+    accent: "#D97706",
+    tags: ["Agency", "Submit", "External"],
+    theme: {
+      primaryColor:"#D97706", secondaryColor:"#B45309",
+      bgColor:"#FFFBEB", textColor:"#1C1917", accentColor:"#0D9488",
+      fontFamily:"'Raleway', sans-serif", headingFont:"'Raleway', sans-serif",
+      fontSize:"16px", headingWeight:"700",
+      borderRadius:"8px", buttonStyle:"outline", buttonRadius:"8px", maxWidth:"1100px",
+    },
+    pages: [
+      { id:"p1", name:"Home", slug:"/", rows:[
+        { id:"r1", preset:"1", bgColor:"#78350F", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c1", widgetType:"hero", widgetConfig:{ headline:"Agency Submission Portal", subheading:"Submit candidates for active roles and track your submissions through our hiring pipeline.", ctaText:"View Open Roles" }}]},
+        { id:"r2", preset:"2", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[
+            { id:"c2", widgetType:"stats", widgetConfig:{ stats:[{value:"12",label:"Active Roles"},{value:"48h",label:"Avg Response"}]}},
+            { id:"c3", widgetType:"text", widgetConfig:{ heading:"How it works", content:"Browse open roles below, then use the submission form to share your candidate's details. We'll review and respond within 48 hours with next steps." }},
+          ]},
+        { id:"r3", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
+          cells:[{ id:"c4", widgetType:"jobs", widgetConfig:{}}]},
+      ]},
+      { id:"p2", name:"Submit Candidate", slug:"/submit", rows:[
+        { id:"r4", preset:"1", bgColor:"", bgImage:"", overlayOpacity:0, padding:"lg",
+          cells:[{ id:"c5", widgetType:"form", widgetConfig:{ title:"Submit a Candidate" }}]},
+      ]},
+    ],
+  },
+];
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const p = {
@@ -946,6 +1090,7 @@ export default function PortalsPage({ environment }) {
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState(null); // null = blank
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
@@ -977,10 +1122,24 @@ export default function PortalsPage({ environment }) {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const p = { name:newName.trim(), slug:`/${newName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-")}`,
-      environment_id:environment.id, status:"draft", theme:defaultTheme(), pages:[defaultPage()] };
+    const tmpl = TEMPLATES.find(t=>t.id===selectedTemplate);
+    // Deep-clone template pages and give fresh IDs
+    const pages = tmpl
+      ? JSON.parse(JSON.stringify(tmpl.pages)).map(pg=>({
+          ...pg, id:uid(),
+          rows:pg.rows.map(r=>({...r,id:uid(),cells:r.cells.map(c=>({...c,id:uid()}))}))
+        }))
+      : [defaultPage()];
+    const p = {
+      name: newName.trim(),
+      slug: `/${newName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-")}`,
+      environment_id: environment.id,
+      status: "draft",
+      theme: tmpl ? {...tmpl.theme} : defaultTheme(),
+      pages,
+    };
     const created = await api.post("/portals", p);
-    setNewName(""); setCreating(false);
+    setNewName(""); setCreating(false); setSelectedTemplate(null);
     setEditing(created);
   };
 
@@ -1007,17 +1166,108 @@ export default function PortalsPage({ environment }) {
       </div>
 
       {creating&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
-          onClick={e=>e.target===e.currentTarget&&setCreating(false)}>
-          <div style={{background:C.surface,borderRadius:14,padding:24,width:380,boxShadow:"0 24px 64px rgba(0,0,0,.18)"}}>
-            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:16}}>New Portal</div>
-            <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCreate()}
-              placeholder="e.g. Engineering Careers" autoFocus
-              style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:8,border:`1.5px solid ${C.accent}`,
-                fontSize:13,fontFamily:F,outline:"none",color:C.text1,marginBottom:16}}/>
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <Btn v="secondary" onClick={()=>setCreating(false)}>Cancel</Btn>
-              <Btn onClick={handleCreate} disabled={!newName.trim()}>Create &amp; Edit</Btn>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}
+          onClick={e=>e.target===e.currentTarget&&(setCreating(false),setSelectedTemplate(null),setNewName(""))}>
+          <div style={{background:C.surface,borderRadius:16,width:680,maxWidth:"100%",boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"90vh"}}>
+            {/* Modal header */}
+            <div style={{padding:"18px 24px 14px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:17,fontWeight:800,color:C.text1,marginBottom:2}}>New Portal</div>
+              <div style={{fontSize:12,color:C.text3}}>Choose a template or start from a blank canvas</div>
+            </div>
+            {/* Template grid */}
+            <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                {/* Blank option */}
+                <div onClick={()=>setSelectedTemplate(null)}
+                  style={{padding:"14px 16px",borderRadius:10,border:`2px solid ${selectedTemplate===null?C.accent:C.border}`,
+                    cursor:"pointer",background:selectedTemplate===null?C.accentLight:"transparent",transition:"all .12s",
+                    display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:36,height:36,borderRadius:8,background:C.surface2,border:`2px dashed ${C.border2}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>+</div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:selectedTemplate===null?C.accent:C.text1}}>Blank canvas</div>
+                    <div style={{fontSize:11,color:C.text3}}>Start from scratch</div>
+                  </div>
+                  {selectedTemplate===null&&<div style={{marginLeft:"auto",color:C.accent}}><Ic n="check" s={14} c={C.accent}/></div>}
+                </div>
+                {/* Template options */}
+                {TEMPLATES.map(t=>(
+                  <div key={t.id} onClick={()=>setSelectedTemplate(t.id)}
+                    style={{padding:"14px 16px",borderRadius:10,border:`2px solid ${selectedTemplate===t.id?t.accent:C.border}`,
+                      cursor:"pointer",background:selectedTemplate===t.id?`${t.accent}10`:"transparent",transition:"all .12s",
+                      display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:36,height:36,borderRadius:8,background:`${t.accent}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:20}}>
+                      {t.icon}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:selectedTemplate===t.id?t.accent:C.text1}}>{t.name}</div>
+                      <div style={{fontSize:10,color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.desc}</div>
+                      <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
+                        {t.tags.map(tag=>(
+                          <span key={tag} style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,
+                            background:selectedTemplate===t.id?`${t.accent}18`:C.surface2,
+                            color:selectedTemplate===t.id?t.accent:C.text3,border:`1px solid ${selectedTemplate===t.id?t.accent+"30":C.border}`}}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {selectedTemplate===t.id&&<Ic n="check" s={14} c={t.accent}/>}
+                  </div>
+                ))}
+              </div>
+              {/* Template preview strip */}
+              {selectedTemplate&&(()=>{
+                const tmpl = TEMPLATES.find(t=>t.id===selectedTemplate);
+                return (
+                  <div style={{borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:4}}>
+                    <div style={{padding:"8px 14px",background:C.surface2,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em"}}>Template preview</div>
+                      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+                        {[tmpl.theme.primaryColor,tmpl.theme.secondaryColor,tmpl.theme.bgColor].map((col,i)=>(
+                          <div key={i} style={{width:10,height:10,borderRadius:"50%",background:col,border:`1px solid ${C.border}`}}/>
+                        ))}
+                        <span style={{fontSize:10,color:C.text3,marginLeft:6}}>{tmpl.theme.fontFamily?.split("'")[1]||"Default"}</span>
+                      </div>
+                    </div>
+                    <div style={{padding:12,display:"flex",gap:6}}>
+                      {tmpl.pages.map(pg=>(
+                        <div key={pg.id} style={{flex:1,background:tmpl.theme.bgColor||"#fff",borderRadius:6,border:`1px solid ${C.border}`,overflow:"hidden",minWidth:0}}>
+                          <div style={{padding:"4px 8px",background:`${tmpl.accent}18`,fontSize:9,fontWeight:700,color:tmpl.accent}}>{pg.name}</div>
+                          <div style={{padding:"6px 8px",display:"flex",flexDirection:"column",gap:4}}>
+                            {pg.rows.map(row=>(
+                              <div key={row.id} style={{display:"flex",gap:3}}>
+                                {row.cells.map(cell=>(
+                                  <div key={cell.id} style={{flex:1,height:12,borderRadius:3,
+                                    background:cell.widgetType==="hero"?`${tmpl.accent}40`:cell.widgetType==="jobs"?`${tmpl.accent}20`:cell.widgetType==="form"?`${tmpl.accent}30`:`${C.border}`,
+                                    fontSize:7,color:C.text3,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                                    {cell.widgetType?WIDGET_TYPES.find(w=>w.type===cell.widgetType)?.label?.slice(0,3):""}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            {/* Name + actions */}
+            <div style={{padding:"14px 24px 20px",borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Portal Name</div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={newName} onChange={e=>setNewName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&handleCreate()}
+                  placeholder={selectedTemplate?TEMPLATES.find(t=>t.id===selectedTemplate)?.name||"My Portal":"My Portal"}
+                  autoFocus
+                  style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.accent}`,
+                    fontSize:13,fontFamily:F,outline:"none",color:C.text1,boxSizing:"border-box"}}/>
+                <Btn v="secondary" onClick={()=>{setCreating(false);setSelectedTemplate(null);setNewName("");}}>Cancel</Btn>
+                <Btn onClick={handleCreate} disabled={!newName.trim()}>
+                  {selectedTemplate?"Use Template":"Create blank"}
+                </Btn>
+              </div>
             </div>
           </div>
         </div>
