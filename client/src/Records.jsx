@@ -175,7 +175,9 @@ const FieldValue = ({ field, value }) => {
         {[1,2,3,4,5].map(i=><Ic key={i} n="star" s={14} c={i<=value?"#f59f00":"#e5e7eb"}/>)}
       </div>
     );
-    case "people": {
+    case "people":
+    case "lookup":
+    case "multi_lookup": {
       const people = Array.isArray(value) ? value : (value ? [value] : []);
       if (!people.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
       return (
@@ -250,6 +252,10 @@ const FieldEditor = ({ field, value, onChange, autoFocus }) => {
     case "people": {
       return <PeoplePicker field={field} value={value} onChange={onChange}/>;
     }
+    case "lookup":
+    case "multi_lookup": {
+      return <PeoplePicker field={field} value={value} onChange={onChange}/>;
+    }
     case "url":
       return <Inp type="url" value={value} onChange={onChange} placeholder="https://…" autoFocus={autoFocus}/>;
     default:
@@ -277,16 +283,35 @@ const PeoplePicker = ({ field, value, onChange }) => {
 
   useEffect(() => {
     if (!open || !_currentEnvId) return;
+    // For multi_lookup/lookup, use lookup_object_id directly if available
+    if (field.lookup_object_id) {
+      api.get(`/records?object_id=${field.lookup_object_id}&environment_id=${_currentEnvId}&limit=200`)
+        .then(res => {
+          const recs = Array.isArray(res) ? res : (res.records || []);
+          setOptions(recs.map(r => ({
+            id: r.id,
+            name: `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.name || r.data?.job_title || r.id
+          })));
+        }).catch(() => {});
+      return;
+    }
+    // Fallback: resolve by slug
     const slug = field.related_object_slug || "people";
-    api.get(`/records?environment_id=${_currentEnvId}&object_slug=${slug}&limit=200`)
+    api.get(`/objects?environment_id=${_currentEnvId}`)
+      .then(objs => {
+        const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+        if (!obj) return;
+        return api.get(`/records?object_id=${obj.id}&environment_id=${_currentEnvId}&limit=200`);
+      })
       .then(res => {
+        if (!res) return;
         const recs = Array.isArray(res) ? res : (res.records || []);
         setOptions(recs.map(r => ({
           id: r.id,
           name: `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.name || r.data?.job_title || r.id
         })));
       }).catch(() => {});
-  }, [open, field.related_object_slug]);
+  }, [open, field.lookup_object_id, field.related_object_slug]);
 
   const filtered = options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
   const isSelected = id => selected.some(s => (typeof s === "object" ? s.id : s) === id);
