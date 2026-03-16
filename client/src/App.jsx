@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 const SettingsPage    = lazy(() => import("./Settings.jsx"));
 const OrgChart        = lazy(() => import("./OrgChart.jsx"));
 const SearchPage      = lazy(() => import("./Search.jsx"));
-const Dashboard       = lazy(() => import("./Dashboard.jsx"));
+const Dashboard          = lazy(() => import("./Dashboard.jsx"));
+const InterviewDashboard = lazy(() => import("./InterviewDashboard.jsx"));
+const OfferDashboard     = lazy(() => import("./OfferDashboard.jsx"));
 const ObjectApp       = lazy(() => import("./ObjectApp.jsx"));
 const WorkflowsPage   = lazy(() => import("./Workflows.jsx"));
 const PortalsPage     = lazy(() => import("./Portals.jsx"));
@@ -976,6 +978,7 @@ function App() {
   const [selectedObject, setSelectedObject] = useState(null);
   const [allObjects, setAllObjects] = useState([]);
   const [activeNav, setActiveNav] = useState("dashboard");
+  const [dashFlyout, setDashFlyout] = useState(false);
   const [navObjects, setNavObjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(null);
@@ -1045,6 +1048,10 @@ function App() {
   const switchNav = (id) => {
     if (!id.startsWith("obj_") || id !== activeNav) setFilterPreset(null);
     if (id !== "reports") setReportPreset(null);
+    // Close dashboard flyout when navigating away from dashboard section
+    if (!id.startsWith("dashboard")) setDashFlyout(false);
+    // Open flyout when navigating to any dashboard sub-page
+    if (id.startsWith("dashboard")) setDashFlyout(true);
     // If clicking an obj_ nav item while already on that object's record page,
     // force a re-mount by briefly resetting first
     if (id.startsWith("obj_") && (activeNav === id || activeNav.startsWith("record_"))) {
@@ -1154,19 +1161,53 @@ function App() {
           {navSections.map(section => (
             <div key={section.label} style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 4 }}>{section.label}</div>
-              {section.items.map(item => (
-                <button key={item.id} onClick={() => switchNav(item.id)} style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 9,
-                  padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                  background: (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`)) ? "var(--t-nav-active)" : "transparent",
-                  color: (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`)) ? "var(--t-nav-active-c)" : "var(--t-nav-text)",
-                  fontSize: 13, fontWeight: (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`)) ? 700 : 500,
-                  fontFamily: "inherit", textAlign: "left", transition: "all 0.15s", marginBottom: 2
-                }}>
-                  <Icon name={item.icon} size={15} color={(activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`)) ? "var(--t-nav-active-c)" : "var(--t-text3)"} />
-                  {item.label}
-                </button>
-              ))}
+              {section.items.map(item => {
+                const isDashboard = item.id === "dashboard";
+                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers";
+                const isActive = isDashboard ? dashActive : (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`));
+                return (
+                  <div key={item.id} style={{ position: "relative" }}>
+                    <button
+                      onClick={() => isDashboard ? (setDashFlyout(o => !o), switchNav("dashboard")) : switchNav(item.id)}
+                      style={{
+                        width: "100%", display: "flex", alignItems: "center", gap: 9,
+                        padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                        background: isActive ? "var(--t-nav-active)" : "transparent",
+                        color: isActive ? "var(--t-nav-active-c)" : "var(--t-nav-text)",
+                        fontSize: 13, fontWeight: isActive ? 700 : 500,
+                        fontFamily: "inherit", textAlign: "left", transition: "all 0.15s", marginBottom: 2
+                      }}>
+                      <Icon name={item.icon} size={15} color={isActive ? "var(--t-nav-active-c)" : "var(--t-text3)"} />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {isDashboard && (
+                        <span style={{ fontSize: 9, color: isActive ? "var(--t-nav-active-c)" : "var(--t-text3)", opacity: 0.6, transform: dashFlyout ? "rotate(180deg)" : "none", transition: "transform .2s", display: "inline-block" }}>▼</span>
+                      )}
+                    </button>
+                    {/* Dashboard flyout sub-items */}
+                    {isDashboard && dashFlyout && (
+                      <div style={{ marginLeft: 14, marginBottom: 4, borderLeft: "2px solid var(--t-border)", paddingLeft: 10 }}>
+                        {[
+                          { id: "dashboard",             icon: "home",     label: "Overview" },
+                          { id: "dashboard_interviews",  icon: "calendar", label: "Interviews" },
+                          { id: "dashboard_offers",      icon: "dollar",   label: "Offers" },
+                        ].map(sub => (
+                          <button key={sub.id} onClick={() => switchNav(sub.id)} style={{
+                            width: "100%", display: "flex", alignItems: "center", gap: 8,
+                            padding: "6px 8px", borderRadius: 7, border: "none", cursor: "pointer",
+                            background: activeNav === sub.id ? "var(--t-nav-active)" : "transparent",
+                            color: activeNav === sub.id ? "var(--t-nav-active-c)" : "var(--t-nav-text)",
+                            fontSize: 12, fontWeight: activeNav === sub.id ? 700 : 500,
+                            fontFamily: "inherit", textAlign: "left", transition: "all 0.12s", marginBottom: 1
+                          }}>
+                            <Icon name={sub.icon} size={13} color={activeNav === sub.id ? "var(--t-nav-active-c)" : "var(--t-text3)"} />
+                            {sub.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -1238,6 +1279,10 @@ function App() {
             const obj = navObjects.find(o => o.slug === slug || o.plural_name.toLowerCase() === slug);
             if (obj) setActiveNav(`obj_${obj.id}`);
           }}/>
+        ) : activeNav === "dashboard_interviews" ? (
+          <InterviewDashboard environment={selectedEnv} session={session} onNavigate={(id) => setActiveNav(id)}/>
+        ) : activeNav === "dashboard_offers" ? (
+          <OfferDashboard environment={selectedEnv} session={session} onNavigate={(id) => setActiveNav(id)}/>
         ) : activeNav === "matching" ? (
           <MatchingEngine environment={selectedEnv} />
         ) : activeNav.startsWith("obj_") ? (
