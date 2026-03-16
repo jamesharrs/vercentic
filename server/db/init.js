@@ -69,6 +69,19 @@ async function initDB() {
       if (o.relationships_enabled === undefined) o.relationships_enabled = 0;
     });
 
+    // Migrate: add Interviewers multi_lookup field to Jobs if missing
+    const jobsObjs = (store.objects || []).filter(o => o.slug === 'jobs');
+    const peopleObjs = (store.objects || []).filter(o => o.slug === 'people');
+    for (const jobsObj of jobsObjs) {
+      const already = (store.fields || []).find(f => f.object_id === jobsObj.id && f.api_key === 'interviewers');
+      if (!already) {
+        const peopleObj = peopleObjs.find(p => p.environment_id === jobsObj.environment_id);
+        const maxOrder = Math.max(0, ...(store.fields || []).filter(f => f.object_id === jobsObj.id).map(f => f.sort_order || 0));
+        if (!store.fields) store.fields = [];
+        store.fields.push({ id: uuidv4(), object_id: jobsObj.id, environment_id: jobsObj.environment_id, name: 'Interviewers', api_key: 'interviewers', field_type: 'multi_lookup', is_required: 0, is_unique: 0, is_system: 1, show_in_list: 0, show_in_form: 1, sort_order: maxOrder + 1, options: null, lookup_object_id: peopleObj ? peopleObj.id : null, default_value: null, placeholder: 'Search people…', help_text: null, condition_field: null, condition_value: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      }
+    }
+
     // Migrate: seed person_type + employment fields on People object if missing
     await seedPersonTypeFields();
 
@@ -128,6 +141,7 @@ async function initDB() {
       { name:'Required Skills', ak:'required_skills', type:'multi_select', list:0, o:12, opts:[] },
       { name:'Open Date', ak:'open_date', type:'date', list:1, o:13 },
       { name:'Target Close Date', ak:'target_close_date', type:'date', list:1, o:14 },
+      { name:'Interviewers', ak:'interviewers', type:'multi_lookup', list:0, o:15 },
     ],
     'talent-pools': [
       { name:'Pool Name', ak:'pool_name', type:'text', req:1, list:1, o:1 },
@@ -145,6 +159,12 @@ async function initDB() {
     for (const f of (fieldSets[obj.slug]||[])) {
       insert('fields', { id:uuidv4(), object_id:objId, environment_id:envId, name:f.name, api_key:f.ak, field_type:f.type, is_required:f.req||0, is_unique:f.uniq||0, is_system:1, show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o, options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null, help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
     }
+  }
+  // Wire up lookup_object_id for multi_lookup fields
+  const peopleObjId = (store.objects||[]).find(o=>o.environment_id===envId&&o.slug==='people')?.id;
+  if (peopleObjId) {
+    (store.fields||[]).filter(f=>f.environment_id===envId&&f.field_type==='multi_lookup').forEach(f=>{ f.lookup_object_id = peopleObjId; });
+    saveStore();
   }
 
   await seedUsersAndRoles();

@@ -1958,7 +1958,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   useEffect(() => { load(); setEditing({}); setTab("fields"); }, [record.id, load]);
 
   // Click-based types save immediately when value changes; text types wait for explicit save
-  const CLICK_SAVE_TYPES = ["select","multi_select","boolean","rating"];
+  const CLICK_SAVE_TYPES = ["select","multi_select","boolean","rating","people","lookup","multi_lookup"];
 
   const handleFieldEdit = (key, value, fieldType) => {
     setEditing(e=>({...e,[key]:value}));
