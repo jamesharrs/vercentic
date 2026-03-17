@@ -152,7 +152,7 @@ async function executeAgent(agent, run, record_id) {
     let record = null, fields = [];
     if (record_id) {
       record = query('records', r => r.id === record_id)[0] || null;
-      if (record) { fields = query('field_definitions', f => f.object_id === record.object_id && !f.deleted_at); addStep(`Loaded record: ${record_id}`); }
+      if (record) { fields = query('fields', f => f.object_id === record.object_id); addStep(`Loaded record: ${record_id}`); }
     }
     if (agent.conditions && agent.conditions.length > 0) {
       if (!evaluateConditions(agent.conditions, record)) {
@@ -163,8 +163,23 @@ async function executeAgent(agent, run, record_id) {
       addStep('All conditions passed');
     }
     let recordContext = '';
-    if (record && fields.length > 0) {
-      recordContext = fields.map(f => { const v = record.data?.[f.api_key]; return v != null ? `${f.name}: ${v}` : null; }).filter(Boolean).join('\n');
+    if (record) {
+      if (fields.length > 0) {
+        const lines = fields.map(f => {
+          const v = record.data?.[f.api_key];
+          if (v == null || v === '') return null;
+          return `${f.name}: ${Array.isArray(v) ? v.join(', ') : v}`;
+        }).filter(Boolean);
+        recordContext = lines.join('\n');
+      }
+      // Fallback: raw data keys if field lookup returned nothing
+      if (!recordContext && record.data) {
+        recordContext = Object.entries(record.data)
+          .filter(([,v]) => v != null && v !== '')
+          .map(([k,v]) => `${k.replace(/_/g,' ')}: ${Array.isArray(v)?v.join(', '):v}`)
+          .join('\n');
+      }
+      if (!recordContext) recordContext = `Record ID: ${record.id} (no field data available)`;
     }
     let aiOutput = null;
     const pendingActions = [];

@@ -98,7 +98,7 @@ async function executeAgentForRecord(agent, record_id, trigger) {
     let record = null, fields = [];
     if (record_id) {
       record = query('records', r => r.id === record_id)[0] || null;
-      if (record) fields = query('field_definitions', f => f.object_id === record.object_id && !f.deleted_at);
+      if (record) fields = query('fields', f => f.object_id === record.object_id);
     }
     if (agent.conditions?.length > 0) {
       if (!evaluateConditions(agent.conditions, record)) {
@@ -108,7 +108,25 @@ async function executeAgentForRecord(agent, record_id, trigger) {
       addStep('Conditions passed');
     }
     let recordContext = '';
-    if (record && fields.length > 0) recordContext = fields.map(f=>{ const v=record.data?.[f.api_key]; return v!=null?`${f.name}: ${v}`:null; }).filter(Boolean).join('\n');
+    if (record) {
+      // Build context from field definitions + raw data fallback
+      if (fields.length > 0) {
+        const lines = fields.map(f => {
+          const v = record.data?.[f.api_key];
+          if (v == null || v === '') return null;
+          return `${f.name}: ${Array.isArray(v) ? v.join(', ') : v}`;
+        }).filter(Boolean);
+        recordContext = lines.join('\n');
+      }
+      // Fallback: use raw data keys if no field definitions resolved
+      if (!recordContext && record.data) {
+        recordContext = Object.entries(record.data)
+          .filter(([,v]) => v != null && v !== '')
+          .map(([k,v]) => `${k.replace(/_/g,' ')}: ${Array.isArray(v)?v.join(', '):v}`)
+          .join('\n');
+      }
+      if (!recordContext) recordContext = `Record ID: ${record.id} (no field data available)`;
+    }
 
     let aiOutput = null;
     const pendingActions = [];
