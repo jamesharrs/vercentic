@@ -1849,15 +1849,16 @@ const JobQuestionsPanel = ({ record, environment }) => {
       {view==="assigned" && (
         <div>
           {assigned.length === 0
-            ? <div style={{padding:"32px 16px",textAlign:"center",color:C.text3}}>
-                <div style={{fontSize:24,marginBottom:8}}>📋</div>
-                <div style={{fontSize:13,fontWeight:600,color:C.text2,marginBottom:4}}>No questions assigned</div>
-                <div style={{fontSize:12,marginBottom:16}}>Pick from the Question Bank, apply a template, or let AI generate questions for this role.</div>
+            ? <div style={{padding:"32px 16px",textAlign:"center"}}>
+                <div style={{width:44,height:44,borderRadius:12,background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",fontSize:22}}>📋</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:6}}>No questions assigned</div>
+                <div style={{fontSize:12,color:C.text3,marginBottom:20,lineHeight:1.5}}>Pick from the Question Bank, apply a template, or let AI generate questions for this role.</div>
                 <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-                  <button onClick={()=>setView("bank")} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"white",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",color:C.text2}}>Browse Bank</button>
-                  <button onClick={()=>setView("templates")} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"white",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",color:C.text2}}>Use Template</button>
-                  <button onClick={generate} disabled={generating} style={{padding:"7px 14px",borderRadius:8,border:"none",background:C.purple,color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:generating?0.6:1}}>
-                    {generating?"Generating…":"✨ AI Generate"}
+                  <button onClick={()=>setView("bank")} style={{padding:"8px 16px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"white",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",color:C.text1}}>Browse Bank</button>
+                  <button onClick={()=>setView("templates")} style={{padding:"8px 16px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"white",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",color:C.text1}}>Use Template</button>
+                  <button onClick={generate} disabled={generating} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#1e1b4b",color:"#e0e7ff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:generating?0.6:1,display:"flex",alignItems:"center",gap:5}}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="2"><path d="M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0L9.937 15.5z"/></svg>
+                    {generating?"Generating…":"AI Generate"}
                   </button>
                 </div>
               </div>
