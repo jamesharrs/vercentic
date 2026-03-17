@@ -1140,6 +1140,9 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
   // Super Admin route — completely separate from main app
+  const portalSlug = window.location.pathname.match(/^\/portal\/(.+)$/)?.[1];
+  if (portalSlug) return <PortalApp slug={portalSlug}/>
+
   if (window.location.pathname === '/superadmin') {
     return <SuperAdminConsole />;
   }
