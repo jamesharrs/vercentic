@@ -204,9 +204,27 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
         return prev === 0 ? 0 : Math.round(((cur-prev)/prev)*100);
       };
 
-      const statsData = { counts, statusBreakdowns, monthlyBuckets, deptBreakdowns, objects: objs, trends: {
-        people: trend("people"), jobs: trend("jobs"), pools: trend("talent-pools"),
-      }};
+      const statsData = { counts, statusBreakdowns, monthlyBuckets, deptBreakdowns, objects: objs,
+        todayInterviews: 0, pendingOffers: 0, // populated below
+        trends: {
+          people: trend("people"), jobs: trend("jobs"), pools: trend("talent-pools"),
+        }
+      };
+
+      // Today's interviews count
+      try {
+        const interviews = await fetch(`/api/interviews?environment_id=${environment.id}&limit=100`).then(r=>r.json());
+        const todayStr = new Date().toISOString().slice(0,10);
+        statsData.todayInterviews = (Array.isArray(interviews) ? interviews : interviews.interviews||[])
+          .filter(i => i.date === todayStr || (i.date||"").startsWith(todayStr)).length;
+      } catch {}
+
+      // Pending offers count
+      try {
+        const offers = await fetch(`/api/offers?environment_id=${environment.id}&limit=100`).then(r=>r.json());
+        statsData.pendingOffers = (Array.isArray(offers) ? offers : offers.offers||[])
+          .filter(o => ["pending_approval","approved","sent"].includes(o.status)).length;
+      } catch {}
 
       _cache[environment.id] = { stats: statsData, activity: Array.isArray(feed) ? feed : [] };
       setStats(statsData);
@@ -271,15 +289,44 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
   return (
     <div style={{fontFamily:F,color:C.text1}}>
 
-      {/* Header */}
-      <div style={{marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-        <div>
-          <h1 style={{margin:"0 0 2px",fontSize:24,fontWeight:800,color:C.text1,letterSpacing:"-0.5px"}}>{greeting} 👋</h1>
-          <p style={{margin:0,fontSize:12,color:C.text3}}>{today}</p>
+      {/* Header — compact, no wasted space */}
+      <div style={{marginBottom:20,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        {/* Greeting */}
+        <div style={{flexShrink:0}}>
+          <h1 style={{margin:"0 0 1px",fontSize:20,fontWeight:800,color:C.text1,letterSpacing:"-0.3px"}}>{greeting} 👋</h1>
+          <p style={{margin:0,fontSize:11,color:C.text3}}>{today}</p>
         </div>
-        <button onClick={()=>{delete _cache[environment.id];loadData();}}
-          style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>
-          <Ic n="refresh" s={12}/> Refresh
+
+        {/* Inline quick-stat pills */}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",flex:1}}>
+          <div onClick={()=>goToFiltered("jobs","status","Status","Open")} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:99,background:`${C.green}12`,border:`1px solid ${C.green}28`,cursor:"pointer"}}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-4 0v2"/></svg>
+            <span style={{fontSize:12,fontWeight:700,color:C.green}}>{openJobs}</span>
+            <span style={{fontSize:11,color:C.text3}}>open roles</span>
+          </div>
+          <div onClick={()=>onNavigate?.("people")} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:99,background:`${C.accent}12`,border:`1px solid ${C.accent}28`,cursor:"pointer"}}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{activePeople}</span>
+            <span style={{fontSize:11,color:C.text3}}>active candidates</span>
+          </div>
+          <div onClick={()=>onNavigate?.("interviews")} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:99,background:"#0ca67812",border:"1px solid #0ca67828",cursor:"pointer"}}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0ca678" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+            <span style={{fontSize:12,fontWeight:700,color:"#0ca678"}}>{stats.todayInterviews||0}</span>
+            <span style={{fontSize:11,color:C.text3}}>interviews today</span>
+          </div>
+          {(stats.pendingOffers||0) > 0 && (
+            <div onClick={()=>onNavigate?.("offers")} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:99,background:"#f59e0b12",border:"1px solid #f59e0b28",cursor:"pointer"}}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              <span style={{fontSize:12,fontWeight:700,color:"#f59e0b"}}>{stats.pendingOffers}</span>
+              <span style={{fontSize:11,color:C.text3}}>offers pending</span>
+            </div>
+          )}
+        </div>
+
+        {/* Refresh icon-only */}
+        <button onClick={()=>{delete _cache[environment.id];loadData();}} title="Refresh"
+          style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text3,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+          <Ic n="refresh" s={13}/>
         </button>
       </div>
 
