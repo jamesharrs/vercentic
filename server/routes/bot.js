@@ -132,6 +132,14 @@ router.post('/sessions', (req, res) => {
   res.json({ ...session, bot_url: `/bot/${session.token}` });
 });
 
+router.get('/sessions/by-interview/:interview_id', (req, res) => {
+  const store = getStore();
+  const session = store.bot_sessions?.find(s => s.interview_id === req.params.interview_id);
+  if (!session) return res.status(404).json({ error: 'No bot session for this interview' });
+  const { token, ...safe } = session;
+  res.json(safe);
+});
+
 router.get('/sessions/:token', (req, res) => {
   const store = getStore();
   const session = store.bot_sessions?.find(s => s.token === req.params.token);
