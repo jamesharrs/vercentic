@@ -1,5 +1,6 @@
 // client/src/Agents.jsx
 import { useState, useEffect, useCallback } from "react";
+import AiBadge from "./AiBadge.jsx";
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const C = {
@@ -393,7 +394,9 @@ function ApprovalInbox({ environmentId, onRefresh }) {
           </div>
           {run.ai_output&&(
             <div style={{padding:"10px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:12,color:C.text2,marginBottom:12,lineHeight:1.6,whiteSpace:"pre-wrap",maxHeight:120,overflowY:"auto"}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.purple,marginBottom:4}}>AI OUTPUT</div>{run.ai_output}
+              <div style={{fontSize:10,fontWeight:700,color:C.purple,marginBottom:4,display:"flex",alignItems:"center",gap:5}}>
+                <AiBadge variant="dot"/>AI OUTPUT
+              </div>{run.ai_output}
             </div>
           )}
           {(run.pending_actions||[]).filter(a=>a.approved===undefined).map((pa,idx)=>{
@@ -477,7 +480,7 @@ function AgentDetail({ agent, onEdit, onClose }) {
                   <div style={{borderTop:`1px solid ${C.border}`,padding:"8px 10px",background:"#FAFAFA"}}>
                     {r.skip_reason&&<div style={{fontSize:11,color:C.amber,marginBottom:4}}>⚠ {r.skip_reason}</div>}
                     {r.error&&<div style={{fontSize:11,color:C.red,marginBottom:4}}>✗ {r.error}</div>}
-                    {r.ai_output&&<div style={{fontSize:11,color:C.text2,marginBottom:6,padding:"6px 8px",background:`${C.purple}08`,borderRadius:6,lineHeight:1.5,maxHeight:80,overflowY:"auto",whiteSpace:"pre-wrap"}}><strong style={{color:C.purple}}>AI: </strong>{r.ai_output}</div>}
+                    {r.ai_output&&<div style={{fontSize:11,color:C.text2,marginBottom:6,padding:"6px 8px",background:`${C.purple}08`,borderRadius:6,lineHeight:1.5,maxHeight:80,overflowY:"auto",whiteSpace:"pre-wrap"}}><strong style={{color:C.purple,display:"inline-flex",alignItems:"center",gap:4}}><AiBadge variant="dot"/> AI: </strong>{r.ai_output}</div>}
                     {(r.steps||[]).map((s,si)=><div key={si} style={{fontSize:11,color:C.text3,display:"flex",gap:6,marginBottom:2}}><span>→</span><span>{s.step}</span></div>)}
                   </div>
                 )}

@@ -34,7 +34,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       const content = action.note_template
         ? action.note_template.replace('{{ai_output}}', aiOutput||'')
         : (aiOutput||'Agent note');
-      insert('notes', { id:uuidv4(), record_id, content: modifierNote ? `${content}\n\n_Reviewer: ${modifierNote}_` : content, created_by:'Agent', created_at:new Date().toISOString() });
+      insert('notes', { id:uuidv4(), record_id, content: modifierNote ? `${content}\n\n_Reviewer: ${modifierNote}_` : content, author:'Agent', created_by:'Agent', ai_generated:true, created_at:new Date().toISOString() });
       break;
     }
     case 'update_field': {

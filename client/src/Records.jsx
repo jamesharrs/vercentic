@@ -3,6 +3,7 @@ import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import { RecordFormPanel } from "./Forms.jsx";
+import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
 const api = {
   get:    p     => fetch(`/api${p}`).then(r=>r.json()),
@@ -2382,11 +2383,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {notes.length===0
           ? <div style={{ textAlign:"center", padding:"20px 0", color:C.text3, fontSize:13 }}>No notes yet</div>
           : notes.map(note=>(
-            <div key={note.id} style={{ background:"#f8f9fc", borderRadius:10, padding:"12px 14px", marginBottom:8, border:`1px solid ${C.border}` }}>
+            <div key={note.id} style={{ background: isAiGenerated(note) ? "#F5F3FF" : "#f8f9fc", borderRadius:10, padding:"12px 14px", marginBottom:8, border:`1px solid ${isAiGenerated(note) ? "#7048E830" : C.border}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <Avatar name={note.author} size={22} color={C.accent}/>
+                  <Avatar name={note.author} size={22} color={isAiGenerated(note) ? "#7048E8" : C.accent}/>
                   <span style={{ fontSize:12, fontWeight:600, color:C.text2 }}>{note.author}</span>
+                  {isAiGenerated(note) && <AiBadge label="AI generated" tooltip="This note was written by an AI agent"/>}
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:11, color:C.text3 }}>{new Date(note.created_at).toLocaleString()}</span>
