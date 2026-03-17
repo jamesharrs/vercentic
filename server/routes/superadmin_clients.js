@@ -455,22 +455,29 @@ router.patch('/:clientId/environments/:envId/status', (req, res) => {
 
 // ─── Load test data into an environment ──────────────────────────────────────
 router.post('/load-test-data', async (req, res) => {
-  const { environment_id } = req.body;
+  const { environment_id, tenant_slug } = req.body;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  const s = getStore();
-  const env = (s.environments||[]).find(e => e.id === environment_id);
-  if (!env) return res.status(404).json({ error: 'Environment not found' });
-  try {
-    const loadTestData = require('../data/test_data_seed');
-    const results = await loadTestData(environment_id);
-    s.provision_log = s.provision_log || [];
-    s.provision_log.push({ id: uuidv4(), environment_id, action: 'load_test_data', details: `Loaded: ${results.people} people, ${results.jobs} jobs, ${results.pools} pools`, performed_by: 'superadmin', created_at: new Date().toISOString() });
-    saveStore();
-    res.json({ success: true, ...results });
-  } catch (err) {
-    console.error('Load test data error:', err);
-    res.status(500).json({ error: err.message });
-  }
+
+  // Run within the correct tenant context so getStore() returns the right store
+  const slug = tenant_slug || 'master';
+  if (slug !== 'master') loadTenantStore(slug);
+
+  await tenantStorage.run(slug, async () => {
+    const s = getStore();
+    const env = (s.environments||[]).find(e => e.id === environment_id);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+    try {
+      const loadTestData = require('../data/test_data_seed');
+      const results = await loadTestData(environment_id);
+      s.provision_log = s.provision_log || [];
+      s.provision_log.push({ id: uuidv4(), environment_id, action: 'load_test_data', details: `Loaded: ${results.people} people, ${results.jobs} jobs, ${results.pools} pools`, performed_by: 'superadmin', created_at: new Date().toISOString() });
+      saveStore();
+      res.json({ success: true, ...results });
+    } catch (err) {
+      console.error('Load test data error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
 });
 
 module.exports = router;

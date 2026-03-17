@@ -147,7 +147,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
     if (!confirm('Load standard test data? This adds 15 people, 8 jobs and 3 talent pools.')) return;
     setLoadingTD(true);
     try {
-      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId }) });
+      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId, tenant_slug: client?.tenant_slug }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed');
       setTdResults(prev => ({ ...prev, [envId]: d }));
@@ -376,7 +376,7 @@ export function ProvisionWizard({ onDone, onCancel }) {
     if (!confirm('Load standard test data? This adds 15 people, 8 jobs and 3 talent pools.')) return;
     setLoadingTD(true); setTdResult(null);
     try {
-      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId }) });
+      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId, tenant_slug: selClient?.tenant_slug || client?.tenant_slug }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed');
       setTdResult(d);
