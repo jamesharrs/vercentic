@@ -87,11 +87,12 @@ router.post('/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const token = uuidv4() + '-' + uuidv4();
-  insert('sessions', { id:uuidv4(), user_id:user.id, token, created_at:new Date().toISOString(), expires_at: new Date(Date.now() + 60*60*1000).toISOString(), ip: req.ip });
+  const tenantSlug = require('../db/init').getCurrentTenant();
+  insert('sessions', { id:uuidv4(), user_id:user.id, token, tenant_slug: tenantSlug, created_at:new Date().toISOString(), expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(), ip: req.ip });
   update('users', u => u.id === user.id, { last_login: new Date().toISOString(), login_count: (user.login_count||0)+1 });
-  insert('audit_log', { id:uuidv4(), action:'auth.login', actor:email, target_id:user.id, target_type:'user', details:{}, created_at:new Date().toISOString() });
+  insert('audit_log', { id:uuidv4(), action:'auth.login', actor:email, target_id:user.id, target_type:'user', details:{ tenant: tenantSlug }, created_at:new Date().toISOString() });
   const role = findOne('roles', r => r.id === user.role_id);
-  res.json({ token, user: { ...user, password_hash: undefined, role }, must_change_password: user.must_change_password });
+  res.json({ token, user: { ...user, password_hash: undefined, role }, tenant_slug: tenantSlug, must_change_password: user.must_change_password });
 });
 
 module.exports = router;

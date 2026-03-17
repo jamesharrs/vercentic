@@ -2,18 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { initDB, getStore } = require('./db/init');
+const tenantMiddleware = require('./middleware/tenant');
 
 const app = express();
 
-// CORS — allow localhost dev + Vercel deployments
+// CORS — allow localhost dev + Vercel deployments + tenant subdomains
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   /\.vercel\.app$/,
+  /\.talentos\.io$/,   // wildcard tenant subdomains
 ];
 if (process.env.CLIENT_URL)  allowedOrigins.push(process.env.CLIENT_URL);
 if (process.env.PORTAL_URL)  allowedOrigins.push(process.env.PORTAL_URL);
-// Self-allow (Railway health checks)
 allowedOrigins.push('https://talentos-production-4045.up.railway.app');
 
 app.use(cors({
@@ -26,6 +27,12 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
+
+// ── Tenant isolation middleware ────────────────────────────────────────────────
+// Must come before all routes. Sets AsyncLocalStorage context so getStore()
+// returns the correct tenant's isolated data store for each request.
+// Tenant is resolved from: X-Tenant-Slug header → subdomain → master (default)
+app.use(tenantMiddleware);
 
 app.use('/api/environments', require('./routes/environments'));
 app.use('/api/objects',      require('./routes/objects'));

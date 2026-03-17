@@ -21,10 +21,10 @@ export default function LoginPage({ onLogin }) {
     setLoading(true); setError("");
     try {
       const data = await api.post("/api/users/login", { email, password });
-      // data = { ...user, role, permissions }
-      const { role, permissions, ...user } = data;
-      setSession({ user, role, permissions });
-      onLogin({ user, role, permissions });
+      const { role, permissions, tenant_slug, ...user } = data;
+      // Store tenant_slug in session so every API call can send the right header
+      setSession({ user, role, permissions, tenant_slug });
+      onLogin({ user, role, permissions, tenant_slug });
     } catch (e) {
       setError(e.message || "Invalid credentials");
     } finally {

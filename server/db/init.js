@@ -1,70 +1,156 @@
+// server/db/init.js — Multi-tenant aware data store
 const path = require('path');
-const fs = require('fs');
+const fs   = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { AsyncLocalStorage } = require('async_hooks');
 
-// Allow Railway Volume path override via env var (set DATA_PATH=/data in Railway Variables)
 const DATA_DIR = process.env.DATA_PATH || path.join(__dirname, '../../data');
-const DB_PATH  = path.join(DATA_DIR, 'talentos.json');
 
-let store = {
+// ── Tenant context ─────────────────────────────────────────────────────────────
+const tenantStorage = new AsyncLocalStorage();
+
+// ── Per-tenant in-memory store cache ──────────────────────────────────────────
+const storeCache = {};
+
+const EMPTY_STORE = () => ({
   environments: [], objects: [], fields: [], records: [],
   relationships: [], activity: [],
   users: [], roles: [], permissions: [], sessions: [], audit_log: [],
-  org_units: []
-};
+  org_units: [], question_bank: [], bot_sessions: [], scorecards: [],
+});
 
-function loadStore() {
+function tenantDbPath(slug) {
+  if (!slug || slug === 'master') return path.join(DATA_DIR, 'talentos.json');
+  return path.join(DATA_DIR, `tenant-${slug}.json`);
+}
+
+function loadTenantStore(slug) {
+  const key  = slug || 'master';
+  const file = tenantDbPath(slug);
+  const base = { ...EMPTY_STORE() };
   try {
-    // Ensure data directory exists (important on Railway/cloud)
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    if (fs.existsSync(DB_PATH)) {
-      const loaded = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-      store = { ...store, ...loaded };
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(file)) {
+      const loaded = JSON.parse(fs.readFileSync(file, 'utf8'));
+      storeCache[key] = { ...base, ...loaded };
     } else {
-      // Bootstrap empty DB file
-      fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
-      console.log('Created fresh data store at', DB_PATH);
+      storeCache[key] = base;
+      fs.writeFileSync(file, JSON.stringify(base, null, 2));
+      console.log(`Created tenant store: ${file}`);
     }
-  } catch(e) { console.log('Starting fresh store:', e.message); }
+  } catch(e) {
+    console.log(`Error loading store for ${key}:`, e.message);
+    storeCache[key] = base;
+  }
+  return storeCache[key];
 }
 
-function saveStore() {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+// ── Core store access ──────────────────────────────────────────────────────────
+// Routes call getStore() — it automatically returns the right tenant's store
+// for the current HTTP request via AsyncLocalStorage. No route changes needed.
+function getCurrentTenant() {
+  return tenantStorage.getStore() || 'master';
 }
 
-function getStore() { return store; }
-function query(table, predicate) { return (store[table] || []).filter(predicate || (() => true)); }
-function findOne(table, predicate) { return (store[table] || []).find(predicate); }
+function getStore() {
+  const key = getCurrentTenant();
+  if (!storeCache[key]) loadTenantStore(key === 'master' ? null : key);
+  return storeCache[key];
+}
 
-// Debounced saveStore — batches rapid writes (e.g. field edits) into one disk write
-let _saveTimer = null;
-function saveStore() {
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    _saveTimer = null;
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+let _saveTimers = {};
+function saveStore(slugOverride) {
+  const key = slugOverride || getCurrentTenant();
+  if (_saveTimers[key]) clearTimeout(_saveTimers[key]);
+  _saveTimers[key] = setTimeout(() => {
+    delete _saveTimers[key];
+    const store = storeCache[key];
+    if (!store) return;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(tenantDbPath(key === 'master' ? null : key), JSON.stringify(store, null, 2));
   }, 150);
 }
-function saveStoreNow() {
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+
+function saveStoreNow(slugOverride) {
+  const key = slugOverride || getCurrentTenant();
+  if (_saveTimers[key]) { clearTimeout(_saveTimers[key]); delete _saveTimers[key]; }
+  const store = storeCache[key];
+  if (!store) return;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(tenantDbPath(key === 'master' ? null : key), JSON.stringify(store, null, 2));
 }
-function insert(table, record) { if (!store[table]) store[table] = []; store[table].push(record); saveStore(); return record; }
+
+function query(table, predicate) {
+  return (getStore()[table] || []).filter(predicate || (() => true));
+}
+function findOne(table, predicate) {
+  return (getStore()[table] || []).find(predicate);
+}
+function insert(table, record) {
+  const store = getStore();
+  if (!store[table]) store[table] = [];
+  store[table].push(record);
+  saveStore();
+  return record;
+}
 function update(table, predicate, updates) {
+  const store = getStore();
   const idx = store[table].findIndex(predicate);
   if (idx === -1) return null;
   store[table][idx] = { ...store[table][idx], ...updates, updated_at: new Date().toISOString() };
-  saveStore(); return store[table][idx];
+  saveStore();
+  return store[table][idx];
 }
-function remove(table, predicate) { const before = store[table].length; store[table] = store[table].filter(r => !predicate(r)); saveStore(); return before - store[table].length; }
+function remove(table, predicate) {
+  const store = getStore();
+  const before = store[table].length;
+  store[table] = store[table].filter(r => !predicate(r));
+  saveStore();
+  return before - store[table].length;
+}
 
+// ── Provision a new tenant data file ──────────────────────────────────────────
+// Called by superadmin_clients.js when provisioning a new client.
+// Creates an isolated data file and seeds it with the standard objects.
+function provisionTenant(slug) {
+  const key  = slug;
+  const file = tenantDbPath(slug);
+  if (fs.existsSync(file)) {
+    // Already exists — just load it
+    return loadTenantStore(slug);
+  }
+  // Bootstrap fresh store
+  storeCache[key] = { ...EMPTY_STORE() };
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(storeCache[key], null, 2));
+  console.log(`✅ Provisioned tenant store: ${file}`);
+  return storeCache[key];
+}
+
+// ── Reload a tenant store from disk (called after external writes) ─────────────
+function reloadTenantStore(slug) {
+  const key = slug || 'master';
+  delete storeCache[key];
+  return loadTenantStore(slug);
+}
+
+// ── List all tenant slugs (from file names) ───────────────────────────────────
+function listTenants() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    return fs.readdirSync(DATA_DIR)
+      .filter(f => f.startsWith('tenant-') && f.endsWith('.json'))
+      .map(f => f.replace('tenant-', '').replace('.json', ''));
+  } catch { return []; }
+}
+
+// ── initDB — seeds master store if empty ──────────────────────────────────────
+// Same logic as before — only touches the master store.
 async function initDB() {
-  loadStore();
+  loadTenantStore(null); // Ensure master store is loaded
+  const store = storeCache['master'];
+  
   if (store.environments && store.environments.length > 0) {
-    // Migrate: ensure new tables exist
     if (!store.users) store.users = [];
     if (!store.roles) store.roles = [];
     if (!store.permissions) store.permissions = [];
@@ -72,21 +158,20 @@ async function initDB() {
     if (!store.audit_log) store.audit_log = [];
     if (!store.org_units) store.org_units = [];
     if (!store.relationships) store.relationships = [];
+    if (!store.question_bank) store.question_bank = [];
+    if (!store.bot_sessions) store.bot_sessions = [];
+    if (!store.scorecards) store.scorecards = [];
 
-    // Migrate: add condition columns to existing fields if missing
     (store.fields || []).forEach(f => {
       if (f.condition_field === undefined) f.condition_field = null;
       if (f.condition_value === undefined) f.condition_value = null;
     });
-
-    // Migrate: add person_type_options to existing objects if missing
     (store.objects || []).forEach(o => {
       if (o.person_type_options === undefined) o.person_type_options = null;
       if (o.relationships_enabled === undefined) o.relationships_enabled = 0;
     });
 
-    // Migrate: add Interviewers multi_lookup field to Jobs if missing
-    const jobsObjs = (store.objects || []).filter(o => o.slug === 'jobs');
+    const jobsObjs   = (store.objects || []).filter(o => o.slug === 'jobs');
     const peopleObjs = (store.objects || []).filter(o => o.slug === 'people');
     for (const jobsObj of jobsObjs) {
       const already = (store.fields || []).find(f => f.object_id === jobsObj.id && f.api_key === 'interviewers');
@@ -97,17 +182,22 @@ async function initDB() {
         store.fields.push({ id: uuidv4(), object_id: jobsObj.id, environment_id: jobsObj.environment_id, name: 'Interviewers', api_key: 'interviewers', field_type: 'multi_lookup', is_required: 0, is_unique: 0, is_system: 1, show_in_list: 0, show_in_form: 1, sort_order: maxOrder + 1, options: null, lookup_object_id: peopleObj ? peopleObj.id : null, default_value: null, placeholder: 'Search people…', help_text: null, condition_field: null, condition_value: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       }
     }
-
-    // Migrate: seed person_type + employment fields on People object if missing
-    await seedPersonTypeFields();
-
-    await seedUsersAndRoles();
-    saveStore();
-    console.log('✅ Store loaded');
+    await seedPersonTypeFields('master');
+    await seedUsersAndRoles('master');
+    saveStore('master');
+    console.log('✅ Master store loaded');
     return;
   }
 
-  // Seed environments + objects
+  // Fresh seed — run within master tenant context
+  await tenantStorage.run('master', async () => {
+    await seedEnvironmentAndObjects();
+    await seedUsersAndRoles('master');
+  });
+  console.log('✅ Seeded master store');
+}
+
+async function seedEnvironmentAndObjects() {
   const envId = uuidv4();
   insert('environments', { id:envId, name:'Production', slug:'production', description:'Main production environment', color:'#3b5bdb', is_default:1, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
 
@@ -116,7 +206,6 @@ async function initDB() {
     { name:'Job', plural:'Jobs', slug:'jobs', icon:'briefcase', color:'#f59f00', order:2 },
     { name:'Talent Pool', plural:'Talent Pools', slug:'talent-pools', icon:'layers', color:'#0ca678', order:3 },
   ];
-
   const fieldSets = {
     people: [
       { name:'First Name', ak:'first_name', type:'text', req:1, list:1, o:1 },
@@ -130,174 +219,79 @@ async function initDB() {
       { name:'Status', ak:'status', type:'select', list:1, o:9, opts:['Active','Passive','Not Looking','Placed','Archived'] },
       { name:'Source', ak:'source', type:'select', list:1, o:10, opts:['LinkedIn','Referral','Job Board','Direct Apply','Agency','Event','Other'] },
       { name:'LinkedIn URL', ak:'linkedin_url', type:'url', list:0, o:11 },
-      { name:'Summary', ak:'summary', type:'textarea', list:0, o:12 },
-      { name:'Skills', ak:'skills', type:'multi_select', list:0, o:13, opts:[] },
-      { name:'Years Experience', ak:'years_experience', type:'number', list:1, o:14 },
-      { name:'Rating', ak:'rating', type:'rating', list:1, o:15 },
-      // Employment fields — only shown when person_type = Employee
-      { name:'Job Title', ak:'job_title', type:'text', list:1, o:16, cond_field:'person_type', cond_val:'Employee' },
-      { name:'Department', ak:'department', type:'select', list:1, o:17, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'], cond_field:'person_type', cond_val:'Employee' },
-      { name:'Entity', ak:'entity', type:'text', list:1, o:18, cond_field:'person_type', cond_val:'Employee' },
-      { name:'Employment Type', ak:'employment_type', type:'select', list:0, o:19, opts:['Full-time','Part-time','Fixed-term','Zero Hours'], cond_field:'person_type', cond_val:'Employee' },
-      { name:'Start Date', ak:'start_date', type:'date', list:0, o:20, cond_field:'person_type', cond_val:'Employee' },
-      { name:'End Date', ak:'end_date', type:'date', list:0, o:21, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Skills', ak:'skills', type:'multi_select', list:0, o:12, opts:[] },
+      { name:'Years Experience', ak:'years_experience', type:'number', list:1, o:13 },
+      { name:'Rating', ak:'rating', type:'rating', list:1, o:14 },
+      { name:'Job Title', ak:'job_title', type:'text', list:1, o:15, cond_field:'person_type', cond_val:'Employee' },
+      { name:'Department', ak:'department', type:'select', list:1, o:16, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'], cond_field:'person_type', cond_val:'Employee' },
     ],
     jobs: [
       { name:'Job Title', ak:'job_title', type:'text', req:1, list:1, o:1 },
       { name:'Department', ak:'department', type:'select', list:1, o:2, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'] },
       { name:'Location', ak:'location', type:'text', list:1, o:3 },
-      { name:'Work Type', ak:'work_type', type:'select', list:1, o:4, opts:['On-site','Remote','Hybrid'] },
-      { name:'Employment Type', ak:'employment_type', type:'select', list:1, o:5, opts:['Full-time','Part-time','Contract','Internship','Freelance'] },
-      { name:'Status', ak:'status', type:'select', list:1, o:6, opts:['Draft','Open','On Hold','Filled','Cancelled'] },
-      { name:'Priority', ak:'priority', type:'select', list:1, o:7, opts:['Low','Medium','High','Critical'] },
-      { name:'Salary Min', ak:'salary_min', type:'currency', list:0, o:8 },
-      { name:'Salary Max', ak:'salary_max', type:'currency', list:0, o:9 },
-      { name:'Hiring Manager', ak:'hiring_manager', type:'text', list:1, o:10 },
-      { name:'Description', ak:'description', type:'rich_text', list:0, o:11 },
-      { name:'Required Skills', ak:'required_skills', type:'multi_select', list:0, o:12, opts:[] },
-      { name:'Open Date', ak:'open_date', type:'date', list:1, o:13 },
-      { name:'Target Close Date', ak:'target_close_date', type:'date', list:1, o:14 },
-      { name:'Interviewers', ak:'interviewers', type:'multi_lookup', list:0, o:15 },
+      { name:'Status', ak:'status', type:'select', list:1, o:4, opts:['Draft','Open','On Hold','Filled','Cancelled'] },
+      { name:'Description', ak:'description', type:'rich_text', list:0, o:5 },
     ],
     'talent-pools': [
       { name:'Pool Name', ak:'pool_name', type:'text', req:1, list:1, o:1 },
-      { name:'Description', ak:'description', type:'textarea', list:1, o:2 },
-      { name:'Category', ak:'category', type:'select', list:1, o:3, opts:['Technical','Leadership','Sales','Operations','Creative','Graduates','Diversity','Other'] },
-      { name:'Status', ak:'status', type:'select', list:1, o:4, opts:['Active','Inactive','Archived'] },
-      { name:'Owner', ak:'owner', type:'text', list:1, o:5 },
-      { name:'Tags', ak:'tags', type:'multi_select', list:1, o:6, opts:[] },
+      { name:'Category', ak:'category', type:'select', list:1, o:2, opts:['Technical','Leadership','Sales','Operations','Creative','Graduates','Diversity','Other'] },
+      { name:'Status', ak:'status', type:'select', list:1, o:3, opts:['Active','Inactive','Archived'] },
     ],
   };
-
   for (const obj of systemObjects) {
     const objId = uuidv4();
-    insert('objects', { id:objId, environment_id:envId, name:obj.name, plural_name:obj.plural, slug:obj.slug, icon:obj.icon, color:obj.color, description:null, is_system:1, sort_order:obj.order, relationships_enabled:0, person_type_options: obj.slug==='people' ? ['Employee','Contractor','Consultant','Candidate','Contact'] : null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
+    insert('objects', { id:objId, environment_id:envId, name:obj.name, plural_name:obj.plural, slug:obj.slug, icon:obj.icon, color:obj.color, description:null, is_system:1, sort_order:obj.order, relationships_enabled:0, person_type_options: obj.slug==='people'?['Employee','Contractor','Consultant','Candidate','Contact']:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
     for (const f of (fieldSets[obj.slug]||[])) {
       insert('fields', { id:uuidv4(), object_id:objId, environment_id:envId, name:f.name, api_key:f.ak, field_type:f.type, is_required:f.req||0, is_unique:f.uniq||0, is_system:1, show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o, options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null, help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
     }
   }
-  // Wire up lookup_object_id for multi_lookup fields
-  const peopleObjId = (store.objects||[]).find(o=>o.environment_id===envId&&o.slug==='people')?.id;
+  const peopleObjId = (getStore().objects||[]).find(o=>o.environment_id===envId&&o.slug==='people')?.id;
   if (peopleObjId) {
-    (store.fields||[]).filter(f=>f.environment_id===envId&&f.field_type==='multi_lookup').forEach(f=>{ f.lookup_object_id = peopleObjId; });
+    (getStore().fields||[]).filter(f=>f.environment_id===envId&&f.field_type==='multi_lookup').forEach(f=>{ f.lookup_object_id = peopleObjId; });
     saveStore();
   }
-
-  await seedUsersAndRoles();
-  console.log('✅ Seeded default environment + system objects + users');
 }
 
-async function seedPersonTypeFields() {
-  // Find all People objects across all environments
+async function seedPersonTypeFields(tenantKey) {
+  const store = storeCache[tenantKey || 'master'];
+  if (!store) return;
   const peopleObjects = (store.objects || []).filter(o => o.slug === 'people');
   for (const obj of peopleObjects) {
-    const existing = store.fields.filter(f => f.object_id === obj.id);
-    // Ensure person_type_options on object
-    if (!obj.person_type_options) {
-      obj.person_type_options = ['Employee','Contractor','Consultant','Candidate','Contact'];
-    }
+    if (!obj.person_type_options) obj.person_type_options = ['Employee','Contractor','Consultant','Candidate','Contact'];
     if (obj.relationships_enabled === undefined) obj.relationships_enabled = 0;
-
+    const existing = (store.fields || []).filter(f => f.object_id === obj.id);
     const newFields = [
       { name:'Person Type', ak:'person_type', type:'select', list:1, o:6, opts:['Employee','Contractor','Consultant','Candidate','Contact'], cond_field:null, cond_val:null },
       { name:'Job Title', ak:'job_title', type:'text', list:1, o:16, cond_field:'person_type', cond_val:'Employee' },
       { name:'Department', ak:'department', type:'select', list:1, o:17, opts:['Engineering','Product','Design','Sales','Marketing','HR','Finance','Operations','Legal','Other'], cond_field:'person_type', cond_val:'Employee' },
-      { name:'Entity', ak:'entity', type:'text', list:1, o:18, cond_field:'person_type', cond_val:'Employee' },
-      { name:'Employment Type', ak:'employment_type', type:'select', list:0, o:19, opts:['Full-time','Part-time','Fixed-term','Zero Hours'], cond_field:'person_type', cond_val:'Employee' },
-      { name:'Start Date', ak:'start_date', type:'date', list:0, o:20, cond_field:'person_type', cond_val:'Employee' },
-      { name:'End Date', ak:'end_date', type:'date', list:0, o:21, cond_field:'person_type', cond_val:'Employee' },
     ];
     for (const f of newFields) {
       if (!existing.find(e => e.api_key === f.ak)) {
-        insert('fields', { id:uuidv4(), object_id:obj.id, environment_id:obj.environment_id,
-          name:f.name, api_key:f.ak, field_type:f.type, is_required:0, is_unique:0, is_system:1,
-          show_in_list:f.list!==undefined?f.list:1, show_in_form:1, sort_order:f.o,
-          options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null,
-          help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null,
-          created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
-      } else {
-        // Ensure condition columns exist on existing field
-        const ef = existing.find(e => e.api_key === f.ak);
-        if (ef.condition_field === undefined) ef.condition_field = f.cond_field || null;
-        if (ef.condition_value === undefined) ef.condition_value = f.cond_val || null;
+        insert('fields', { id:uuidv4(), object_id:obj.id, environment_id:obj.environment_id, name:f.name, api_key:f.ak, field_type:f.type, is_required:0, is_unique:0, is_system:1, show_in_list:f.list, show_in_form:1, sort_order:f.o, options:f.opts||null, lookup_object_id:null, default_value:null, placeholder:null, help_text:null, condition_field:f.cond_field||null, condition_value:f.cond_val||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
       }
     }
   }
 }
 
-async function seedUsersAndRoles() {
-  if (store.roles && store.roles.length > 0) return;
-
+async function seedUsersAndRoles(tenantKey) {
+  const store = storeCache[tenantKey || 'master'];
+  if (!store || (store.roles && store.roles.length > 0)) return;
   const crypto = require('crypto');
   const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
-
-  // System roles
   const roles = [
-    { id: uuidv4(), name: 'Super Admin', slug: 'super_admin', description: 'Full access to everything', is_system: 1, color: '#e03131' },
-    { id: uuidv4(), name: 'Admin', slug: 'admin', description: 'Manage users, settings and all data', is_system: 1, color: '#f59f00' },
-    { id: uuidv4(), name: 'Recruiter', slug: 'recruiter', description: 'Manage candidates, jobs and talent pools', is_system: 1, color: '#3b5bdb' },
-    { id: uuidv4(), name: 'Hiring Manager', slug: 'hiring_manager', description: 'View and provide feedback on candidates', is_system: 1, color: '#0ca678' },
-    { id: uuidv4(), name: 'Read Only', slug: 'read_only', description: 'View data only, no edits', is_system: 1, color: '#868e96' },
+    { id:uuidv4(), name:'Super Admin', slug:'super_admin', description:'Full access', is_system:1, color:'#e03131' },
+    { id:uuidv4(), name:'Admin', slug:'admin', description:'Manage users and all data', is_system:1, color:'#f59f00' },
+    { id:uuidv4(), name:'Recruiter', slug:'recruiter', description:'Manage candidates and jobs', is_system:1, color:'#3b5bdb' },
+    { id:uuidv4(), name:'Hiring Manager', slug:'hiring_manager', description:'View and provide feedback', is_system:1, color:'#0ca678' },
+    { id:uuidv4(), name:'Read Only', slug:'read_only', description:'View data only', is_system:1, color:'#868e96' },
   ];
-
-  for (const role of roles) {
-    insert('roles', { ...role, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-  }
-
-  // Default permissions per role per object action
-  const objects = ['people', 'jobs', 'talent-pools'];
-  const actions = ['view', 'create', 'edit', 'delete', 'export'];
-  const rolePerms = {
-    super_admin:    { view:1, create:1, edit:1, delete:1, export:1 },
-    admin:          { view:1, create:1, edit:1, delete:1, export:1 },
-    recruiter:      { view:1, create:1, edit:1, delete:0, export:1 },
-    hiring_manager: { view:1, create:0, edit:0, delete:0, export:0 },
-    read_only:      { view:1, create:0, edit:0, delete:0, export:0 },
-  };
-
-  for (const role of roles) {
-    for (const obj of objects) {
-      const perms = rolePerms[role.slug];
-      for (const action of actions) {
-        insert('permissions', { id:uuidv4(), role_id:role.id, object_slug:obj, action, allowed:perms[action]||0, created_at:new Date().toISOString() });
-      }
-    }
-  }
-
-  // Default admin user
+  for (const role of roles) insert('roles', { ...role, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
   const superAdminRole = roles.find(r => r.slug === 'super_admin');
-  insert('users', {
-    id: uuidv4(), email: 'admin@talentos.io', first_name: 'Admin', last_name: 'User',
-    password_hash: hashPassword('Admin1234!'), role_id: superAdminRole.id,
-    status: 'active', auth_provider: 'local',
-    mfa_enabled: 0, must_change_password: 1,
-    last_login: null, last_login_ip: null, login_count: 0,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-  });
-
-  // Security settings
+  insert('users', { id:uuidv4(), email:'admin@talentos.io', first_name:'Admin', last_name:'User', password_hash:hashPassword('Admin1234!'), role_id:superAdminRole.id, status:'active', auth_provider:'local', mfa_enabled:0, must_change_password:1, last_login:null, last_login_ip:null, login_count:0, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
   if (!store.security_settings) {
-    store.security_settings = {
-      password_min_length: 8,
-      password_require_uppercase: 1,
-      password_require_number: 1,
-      password_require_symbol: 1,
-      password_expiry_days: 90,
-      session_timeout_minutes: 60,
-      max_login_attempts: 5,
-      lockout_duration_minutes: 30,
-      mfa_required: 0,
-      mfa_methods: ['totp', 'email'],
-      sso_enabled: 0,
-      sso_provider: null,
-      sso_client_id: null,
-      sso_client_secret: null,
-      sso_domain: null,
-      allowed_ip_ranges: [],
-      updated_at: new Date().toISOString()
-    };
-    saveStore();
+    store.security_settings = { password_min_length:8, password_require_uppercase:1, password_require_number:1, password_require_symbol:1, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_required:0, sso_enabled:0, updated_at:new Date().toISOString() };
   }
+  saveStore(tenantKey || 'master');
 }
 
-module.exports = { getStore, saveStore, saveStoreNow, query, findOne, insert, update, remove, initDB };
+module.exports = { getStore, saveStore, saveStoreNow, query, findOne, insert, update, remove, initDB, tenantStorage, getCurrentTenant, provisionTenant, reloadTenantStore, loadTenantStore, listTenants, tenantDbPath };

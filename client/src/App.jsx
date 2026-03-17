@@ -26,11 +26,39 @@ import BotInterview from "./BotInterview.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 
 // ─── API Client ───────────────────────────────────────────────────────────────
+// Derive tenant slug — session takes priority, then URL param, then subdomain
+function getTenantSlug() {
+  // 1. Session (set at login, most reliable)
+  try {
+    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    if (sess?.tenant_slug && sess.tenant_slug !== 'master') return sess.tenant_slug;
+  } catch {}
+  // 2. URL query param ?tenant=slug
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('tenant')) return params.get('tenant');
+  // 3. Subdomain (e.g. acme.talentos.io)
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  const reserved = ['www','app','api','admin','localhost','client','portal'];
+  if (parts.length >= 2 && !reserved.includes(parts[0]) && !['vercel','railway','localhost'].some(r => host.includes(r))) {
+    return parts[0];
+  }
+  return null;
+}
+
+// TENANT_SLUG is re-evaluated per request so it picks up the session after login
+function apiHeaders(extra = {}) {
+  const slug = getTenantSlug();
+  const h = { 'Content-Type': 'application/json', ...extra };
+  if (slug) h['X-Tenant-Slug'] = slug;
+  return h;
+}
+
 const api = {
-  get: (path) => fetch(`/api${path}`).then(r => r.json()),
-  post: (path, body) => fetch(`/api${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json()),
-  patch: (path, body) => fetch(`/api${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json()),
-  delete: (path) => fetch(`/api${path}`, { method: "DELETE" }).then(r => r.json()),
+  get: (path) => { const slug = getTenantSlug(); return fetch(`/api${path}`, { headers: slug ? { 'X-Tenant-Slug': slug } : {} }).then(r => r.json()); },
+  post: (path, body) => fetch(`/api${path}`, { method: "POST", headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
+  patch: (path, body) => fetch(`/api${path}`, { method: "PATCH", headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
+  delete: (path) => { const slug = getTenantSlug(); return fetch(`/api${path}`, { method: "DELETE", headers: slug ? { 'X-Tenant-Slug': slug } : {} }).then(r => r.json()); },
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────

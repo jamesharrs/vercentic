@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
-const { getStore, saveStore } = require('../db/init');
+const { getStore, saveStore, provisionTenant, tenantStorage, loadTenantStore } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
 
@@ -164,10 +164,18 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   const s = getStore(); ensureCollections();
   const now = new Date().toISOString();
 
+  // Generate a URL-safe tenant slug from the company name
+  const tenantSlug = clientData.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 30);
+
   const client = {
     id: uuidv4(), name: clientData.name, industry: clientData.industry||'',
     region: clientData.region||'', plan: clientData.plan||'starter', size: clientData.size||'',
-    status: 'active', primary_contact_name: clientData.contact_name||'',
+    status: 'active', tenant_slug: tenantSlug,
+    primary_contact_name: clientData.contact_name||'',
     primary_contact_email: clientData.contact_email||'', primary_contact_phone: clientData.contact_phone||'',
     website: clientData.website||'', notes: clientData.notes||'',
     trial_ends_at: clientData.plan==='trial' ? new Date(Date.now()+30*24*60*60*1000).toISOString() : null,
@@ -249,12 +257,49 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   });
 
   saveStore();
+
+  // === Provision isolated tenant store ===
+  // All client data lives in /data/tenant-{slug}.json, NOT in master store.
+  // We run the seeding inside the tenant's AsyncLocalStorage context so
+  // getStore() inside seedUsersAndRoles etc. writes to the tenant file.
+  await tenantStorage.run(tenantSlug, async () => {
+    const ts = provisionTenant(tenantSlug); // creates /data/tenant-{slug}.json
+
+    // Seed environment
+    if (!ts.environments) ts.environments = [];
+    ts.environments.push({ ...environment });
+
+    // Seed objects + fields
+    if (!ts.objects) ts.objects = [];
+    if (!ts.fields)  ts.fields  = [];
+    for (const obj of createdObjects) ts.objects.push(obj);
+    for (const field of (s.fields||[]).filter(f => f.environment_id === environment.id)) ts.fields.push(field);
+
+    // Seed roles
+    if (!ts.roles) ts.roles = [];
+    for (const role of createdRoles) ts.roles.push(role);
+
+    // Seed admin user into tenant store
+    if (!ts.users) ts.users = [];
+    ts.users.push(user);
+
+    // Seed security defaults
+    ts.security_settings = { password_min_length:8, password_require_uppercase:1, password_require_number:1, password_require_symbol:1, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, sso_enabled:0, updated_at: now };
+
+    saveStore(tenantSlug);
+  });
+
   return {
-    client, environment,
+    client, environment, tenant_slug: tenantSlug,
     admin_user: { ...user, password: '[hidden]' },
     objects: createdObjects.map(o=>({id:o.id,slug:o.slug,name:o.name})),
     roles: createdRoles.map(r=>({id:r.id,name:r.name})),
-    credentials: { url:'/', email: adminUser.email, password: plainPassword }
+    credentials: {
+      url: `/?tenant=${tenantSlug}`,
+      email: adminUser.email,
+      password: plainPassword,
+      tenant_slug: tenantSlug,
+    }
   };
 }
 
