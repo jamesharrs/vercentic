@@ -116,6 +116,85 @@ export const matchCandidateToJob = (candidate, job) => {
   return { score:Math.min(100,Math.max(0,score)), reasons, gaps };
 };
 
+// ── Compact match results list with 5-item limit + expand ────────────────────
+const MatchResultsList = ({ matches }) => {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? matches : matches.slice(0, 5);
+
+  return (
+    <div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {visible.map((m, i) => {
+          const title = getTitle(m.item, m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools");
+          const color = itemColor(m.type);
+          const d = m.item.data || {};
+          const sub = m.type==="person"
+            ? [d.current_title, d.location].filter(Boolean).join(" · ")
+            : m.type==="job"
+            ? [d.department, d.location, d.work_type].filter(Boolean).join(" · ")
+            : d.category || "";
+          const scoreCol = m.score>=75?"#0ca678":m.score>=50?"#f59f00":"#ef4444";
+          const allTags = [...(m.reasons||[]).map(r=>({text:r,ok:true})), ...(m.gaps||[]).map(g=>({text:g,ok:false}))];
+
+          return (
+            <div key={m.item.id} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,display:"flex",alignItems:"stretch",overflow:"hidden",transition:"box-shadow .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.08)"}
+              onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+
+              {/* Score bar — left edge */}
+              <div style={{width:4,background:scoreCol,flexShrink:0}}/>
+
+              {/* Rank number */}
+              <div style={{width:28,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:"0 4px"}}>
+                <span style={{fontSize:10,fontWeight:800,color:C.text3}}>#{i+1}</span>
+              </div>
+
+              {/* Icon */}
+              <div style={{width:30,height:30,borderRadius:8,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,alignSelf:"center",margin:"10px 8px 10px 0"}}>
+                <Ic n={itemIcon(m.type)} s={13} c="white"/>
+              </div>
+
+              {/* Main content */}
+              <div style={{flex:1,minWidth:0,padding:"10px 8px 10px 0"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</span>
+                  {d.status && <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:d.status==="Active"||d.status==="Open"?"#f0fdf4":"#f1f5f9",color:d.status==="Active"||d.status==="Open"?"#0ca678":"#868e96",flexShrink:0}}>{d.status}</span>}
+                </div>
+                {sub && <div style={{fontSize:11,color:C.text3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub}</div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                  {allTags.slice(0,3).map((tag,ti)=>(
+                    <span key={ti} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:tag.ok?"#f0fdf4":"#fffbeb",color:tag.ok?"#0ca678":"#d97706",display:"inline-flex",alignItems:"center",gap:3}}>
+                      {tag.ok ? <Ic n="check" s={9} c="#0ca678"/> : "·"}{tag.text}
+                    </span>
+                  ))}
+                  {allTags.length>3 && <span style={{fontSize:10,color:C.text3,padding:"1px 5px"}}>+{allTags.length-3}</span>}
+                </div>
+              </div>
+
+              {/* Score badge — right */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"0 14px",flexShrink:0}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                  <span style={{fontSize:18,fontWeight:900,color:scoreCol,lineHeight:1}}>{m.score}</span>
+                  <span style={{fontSize:9,color:C.text3,fontWeight:600,letterSpacing:"0.04em"}}>SCORE</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Show more / less */}
+      {matches.length > 5 && (
+        <button onClick={()=>setExpanded(e=>!e)} style={{width:"100%",marginTop:8,padding:"8px",borderRadius:8,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,fontWeight:600,color:C.text3,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
+          onMouseEnter={e=>{e.currentTarget.style.background="#f8f9fc";e.currentTarget.style.color=C.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.text3;}}>
+          {expanded ? `Show less ↑` : `Show ${matches.length-5} more ↓`}
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const MatchingEngine = ({ environment, initialObject, initialRecord }) => {
   const mode = initialObject?.slug === "jobs" ? "job" : "person"; // "job" = rank candidates, "person" = rank jobs
   const [objects,setObjects]   = useState([]);
@@ -298,50 +377,16 @@ export const MatchingEngine = ({ environment, initialObject, initialRecord }) =>
           </div>
 
           {loading
-            ? <div style={{textAlign:"center",padding:"60px 0",color:C.text3}}>
+            ? <div style={{textAlign:"center",padding:"40px 0",color:C.text3}}>
                 <div style={{animation:"spin 1s linear infinite",display:"inline-flex",marginBottom:8}}><Ic n="loader" s={24} c={C.ai}/></div>
                 <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                 <div style={{fontSize:13}}>Scoring…</div>
               </div>
             : filtered.length===0
-              ? <div style={{textAlign:"center",padding:"60px 0",color:C.text3}}>
-                  <div style={{fontSize:32,marginBottom:8}}>🎯</div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text2}}>No matches above {minScore}</div>
+              ? <div style={{textAlign:"center",padding:"40px 0",color:C.text3}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text2}}>No matches above {minScore}</div>
                 </div>
-              : <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {filtered.map((m,i)=>{
-                    const title = getTitle(m.item, m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools");
-                    const color = itemColor(m.type);
-                    const d = m.item.data||{};
-                    const sub = m.type==="person"
-                      ? [d.current_title,d.current_company].filter(Boolean).join(" · ")
-                      : m.type==="job"
-                      ? [d.department,d.location,d.work_type].filter(Boolean).join(" · ")
-                      : d.category||d.description?.slice(0,50)||"";
-                    return (
-                      <div key={m.item.id} style={{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,padding:"16px 18px",display:"flex",gap:14,alignItems:"flex-start"}}>
-                        <div style={{fontSize:11,fontWeight:800,color:C.text3,width:20,textAlign:"center",paddingTop:16,flexShrink:0}}>#{i+1}</div>
-                        <div style={{width:40,height:40,borderRadius:"50%",background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          <Ic n={itemIcon(m.type)} s={16} c="white"/>
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                            <span style={{fontSize:14,fontWeight:700,color:C.text1}}>{title}</span>
-                            {d.status&&<Badge color={d.status==="Active"||d.status==="Open"?"#0ca678":"#868e96"} light>{d.status}</Badge>}
-                          </div>
-                          {sub&&<div style={{fontSize:12,color:C.text3,marginBottom:8}}>{sub}</div>}
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:4}}>
-                            {m.reasons.map((r,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:"#0ca678",background:"#f0fdf4",padding:"2px 8px",borderRadius:99}}><Ic n="check" s={10} c="#0ca678"/>{r}</span>)}
-                          </div>
-                          {m.gaps.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                            {m.gaps.map((g,i)=><span key={i} style={{fontSize:11,color:"#f59f00",background:"#fffbeb",padding:"2px 8px",borderRadius:99}}>{g}</span>)}
-                          </div>}
-                        </div>
-                        <ScoreRing score={m.score}/>
-                      </div>
-                    );
-                  })}
-                </div>
+              : <MatchResultsList matches={filtered} />
           }
         </div>
       </div>
