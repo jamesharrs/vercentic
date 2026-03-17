@@ -3,7 +3,6 @@ import CareerSite from './portals/CareerSite.jsx'
 import HMPortal from './portals/HMPortal.jsx'
 import AgencyPortal from './portals/AgencyPortal.jsx'
 import OnboardingPortal from './portals/OnboardingPortal.jsx'
-import BotInterview from './BotInterview.jsx'
 
 const api = {
   get: p => fetch(`/api${p}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
@@ -27,26 +26,17 @@ const ErrorScreen = ({ message }) => (
   </div>
 )
 
-export default function App() {
+export default function PortalApp({ slug }) {
   const [portal, setPortal] = useState(null)
   const [objects, setObjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Bot interview route — /bot/:token (no portal token needed)
-  const botToken = window.location.pathname.match(/^\/bot\/(.+)$/)?.[1];
-  if (botToken) return <BotInterview token={botToken}/>;
-
-  // Read slug from URL: ?portal=SLUG or /portal/SLUG
-  const token = new URLSearchParams(window.location.search).get('portal')
-    || window.location.pathname.split('/portal/')[1]
-
   useEffect(() => {
-    if (!token) { setError('No portal provided. Add ?portal=YOUR_SLUG to the URL.'); setLoading(false); return; }
-    api.get(`/portals/slug/${token}`)
+    if (!slug) { setError('No portal provided.'); setLoading(false); return; }
+    api.get(`/portals/slug/${slug}`)
       .then(async p => {
         setPortal(p)
-        // Inject branding into document
         document.title = p.branding?.company_name || p.name || 'Portal'
         if (p.branding?.font) {
           const link = document.createElement('link')
@@ -54,19 +44,17 @@ export default function App() {
           link.rel = 'stylesheet'
           document.head.appendChild(link)
         }
-        // Load objects for this environment
         const objs = await api.get(`/objects?environment_id=${p.environment_id}`)
         setObjects(Array.isArray(objs) ? objs : [])
         setLoading(false)
       })
-      .catch(() => { setError('This portal is not available. It may have been unpublished or the link is invalid.'); setLoading(false); })
-  }, [token])
+      .catch(() => { setError('This portal is not available.'); setLoading(false); })
+  }, [slug])
 
   if (loading) return <Spinner color={portal?.branding?.primary_color}/>
   if (error || !portal) return <ErrorScreen message={error}/>
 
   const props = { portal, objects, api }
-
   switch (portal.type) {
     case 'career_site':   return <CareerSite   {...props}/>
     case 'hm_portal':     return <HMPortal     {...props}/>

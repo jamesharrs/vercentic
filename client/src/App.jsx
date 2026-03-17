@@ -8,6 +8,7 @@ const Dashboard          = lazy(() => import("./Dashboard.jsx"));
 const InterviewDashboard = lazy(() => import("./InterviewDashboard.jsx"));
 const OfferDashboard     = lazy(() => import("./OfferDashboard.jsx"));
 const ObjectApp       = lazy(() => import("./ObjectApp.jsx"));
+import PortalApp from "./PortalApp.jsx";
 const WorkflowsPage   = lazy(() => import("./Workflows.jsx"));
 const PortalsPage     = lazy(() => import("./Portals.jsx"));
 const ReportsPage     = lazy(() => import("./Reports.jsx"));
@@ -706,7 +707,6 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
   const [unread,      setUnread]      = useState(0);
   const [bellOpen,    setBellOpen]    = useState(false);
   const bellRef  = useRef(null);
-  const bellTimer = useRef(null);
   const [loading,     setLoading]     = useState(false);
   const [showCreate,  setShowCreate]  = useState(false);
   const ref       = useRef(null);
@@ -726,16 +726,21 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Load notifications
-  const loadNotifs = async () => {
-    try {
-      const envParam = selectedEnv ? `&environment_id=${selectedEnv.id}` : "";
-      const d = await fetch(`/api/notifications?limit=30${envParam}`).then(r => r.json());
-      setNotifs(Array.isArray(d.notifications) ? d.notifications : []);
-      setUnread(d.unread || 0);
-    } catch {}
-  };
-  useEffect(() => { loadNotifs(); bellTimer.current = setInterval(loadNotifs, 30000); return () => clearInterval(bellTimer.current); }, [selectedEnv?.id]);
+  // Load notifications — runs on mount and whenever env changes
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const envParam = selectedEnv ? `&environment_id=${selectedEnv.id}` : "";
+        const d = await fetch(`/api/notifications?limit=30${envParam}`).then(r => r.json());
+        setNotifs(Array.isArray(d.notifications) ? d.notifications : []);
+        setUnread(d.unread || 0);
+      } catch {}
+    };
+    load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
+  }, [selectedEnv?.id]);
+
   useEffect(() => { const h = e => { if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
 
   const markRead = async (id) => {
@@ -875,7 +880,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         )}
       </div>
       {/* Create dropdown */}
-      <div ref={createRef} style={{ position: "relative", flexShrink: 0 }}>
+      <div ref={createRef} style={{ position: "relative", flexShrink: 0, marginLeft:"auto" }}>
         <button
           onClick={() => setShowCreate(s => !s)}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10,
