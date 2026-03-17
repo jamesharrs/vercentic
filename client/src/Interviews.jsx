@@ -644,7 +644,16 @@ export default function Interviews({ environment }) {
   };
 
   const handleSchedule = async (form) => {
-    await api.post(`/interviews`, { ...form, environment_id: envId, status: "pending" });
+    const newInterview = await api.post(`/interviews`, { ...form, environment_id: envId, status: "pending" });
+    // Auto-create a bot pre-screen session for this interview
+    if (newInterview?.id) {
+      api.post(`/bot/sessions`, {
+        interview_id: newInterview.id,
+        candidate_id: form.candidate_id,
+        job_id: form.job_id,
+        environment_id: envId,
+      }).catch(() => {}); // non-blocking
+    }
     setScheduleFor(null); load();
   };
 

@@ -3,6 +3,7 @@ import CareerSite from './portals/CareerSite.jsx'
 import HMPortal from './portals/HMPortal.jsx'
 import AgencyPortal from './portals/AgencyPortal.jsx'
 import OnboardingPortal from './portals/OnboardingPortal.jsx'
+import BotInterview from './BotInterview.jsx'
 
 const api = {
   get: p => fetch(`/api${p}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
@@ -31,6 +32,10 @@ export default function App() {
   const [objects, setObjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Bot interview route — /bot/:token (no portal token needed)
+  const botToken = window.location.pathname.match(/^\/bot\/(.+)$/)?.[1];
+  if (botToken) return <BotInterview token={botToken}/>;
 
   // Read token from URL: ?portal=TOKEN or /portal/TOKEN
   const token = new URLSearchParams(window.location.search).get('portal')

@@ -3,6 +3,7 @@ import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import { RecordFormPanel } from "./Forms.jsx";
+import { ScorecardPanel } from "./Scorecards.jsx";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
 const api = {
@@ -1741,12 +1742,14 @@ export const PANEL_META = {
   match:       { icon:"sparkles",      label:"AI Match",  defaultOpen:false },
   reporting:   { icon:"gitBranch",     label:"Reporting", defaultOpen:true  },
   user:        { icon:"user",          label:"Platform User",  defaultOpen:true },
+  scorecard:   { icon:"clipboard",     label:"Scorecards",     defaultOpen:false },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
   const base = ["comms","notes","attachments","forms","activity","workflows"];
   if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
+  if (objectName === "Person") base.push("scorecard");
   return base;
 };
 
@@ -2705,6 +2708,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
+    if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
 
     if (id==="match") return (
       <div style={{ margin:"-16px" }}>

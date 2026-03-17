@@ -45,6 +45,7 @@ app.use('/api/portals',      require('./routes/portals'));
 app.use('/api/reports',      require('./routes/reports'));
 app.use('/api/saved-views',      require('./routes/saved_views'));
 app.use('/api/config',           require('./routes/config'));
+app.use('/api/bot',              require('./routes/bot'));
 app.use('/api/interview-types',  require('./routes/interview_types'));
 app.use('/api/interviews',       require('./routes/interviews'));
 app.use('/api/translate',          require('./routes/translate'));
