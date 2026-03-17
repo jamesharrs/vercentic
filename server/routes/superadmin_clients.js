@@ -179,7 +179,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     id: uuidv4(), client_id: client.id,
     name: envData.name || `${clientData.name} Production`,
     type: envData.type||'production', locale: envData.locale||'en',
-    timezone: envData.timezone||'UTC', is_default: true, status: 'active',
+    timezone: envData.timezone||'UTC', is_default: 0, status: 'active',
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.client_environments.push(environment);
