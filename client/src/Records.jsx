@@ -2094,9 +2094,22 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [activity, setActivity] = useState([]);
   const [newNote, setNewNote]   = useState("");
   const [saving, setSaving]     = useState(false);
-  const [openPanels, setOpenPanels] = useState({comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,reporting:true,user:true});
+  const openPanelsKey = `talentos_openpanels_${objectName}`;
+  const [openPanels, setOpenPanels] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`talentos_openpanels_${objectName}`));
+      if (saved && typeof saved === "object") return saved;
+    } catch {}
+    return {comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,reporting:true,user:true,forms:false};
+  });
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
   const [showCommMenu, setShowCommMenu] = useState(false);
+  // ── Record search ──────────────────────────────────────────────────────────
+  const [recordSearch, setRecordSearch] = useState("");
+  const [recordSearchOpen, setRecordSearchOpen] = useState(false);
+  const [recordSearchResults, setRecordSearchResults] = useState([]);
+  const recordSearchRef = useRef(null);
+  const recordSearchInputRef = useRef(null);
   const [draggingPanel, setDraggingPanel] = useState(null);
   const [dragOverPanel, setDragOverPanel] = useState(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
@@ -2117,6 +2130,60 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const savePanelOrder = (order) => {
     setPanelOrder(order);
     try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch {}
+  };
+
+  // ── Record search logic ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!recordSearch.trim()) { setRecordSearchResults([]); return; }
+    const q = recordSearch.toLowerCase();
+    const results = [];
+
+    // Search notes
+    notes.forEach(n => {
+      if (n.content?.toLowerCase().includes(q)) {
+        results.push({ type:"note", icon:"messageSquare", label:n.content.slice(0,80), sub:"Note", panelId:"notes", created_at:n.created_at });
+      }
+    });
+
+    // Search activity
+    activity.forEach(a => {
+      const text = [a.action, a.field_name, a.new_value, a.old_value].filter(Boolean).join(" ");
+      if (text.toLowerCase().includes(q)) {
+        results.push({ type:"activity", icon:"activity", label:`${a.action} — ${a.field_name||""}`, sub:"Activity", panelId:"activity", created_at:a.created_at });
+      }
+    });
+
+    // Search attachments
+    attachments.forEach(att => {
+      if (att.filename?.toLowerCase().includes(q) || att.file_type?.toLowerCase().includes(q)) {
+        results.push({ type:"file", icon:"paperclip", label:att.filename||att.name, sub:`File · ${att.file_type||""}`, panelId:"attachments", created_at:att.created_at });
+      }
+    });
+
+    // Search field values on the record itself
+    fields.forEach(f => {
+      const val = record.data?.[f.api_key];
+      if (val && String(val).toLowerCase().includes(q)) {
+        results.push({ type:"field", icon:"edit", label:`${f.name}: ${String(val).slice(0,60)}`, sub:"Field value", panelId:null });
+      }
+    });
+
+    setRecordSearchResults(results.slice(0, 12));
+  }, [recordSearch, notes, activity, attachments, fields, record]);
+
+  // Close search on outside click
+  useEffect(() => {
+    const h = e => { if (recordSearchRef.current && !recordSearchRef.current.contains(e.target)) setRecordSearchOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const openPanelAndScroll = (panelId) => {
+    if (panelId) {
+      setOpenPanels(p => { const next={...p,[panelId]:true}; try{localStorage.setItem(openPanelsKey,JSON.stringify(next));}catch{} return next; });
+    }
+    setRecordSearch("");
+    setRecordSearchOpen(false);
   };
 
 
@@ -2576,7 +2643,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         style={{ background:C.surface, border:`1.5px solid ${isDragOver?C.accent:C.border}`, borderRadius:14, marginBottom:12, overflow:"hidden", transition:"border-color .15s, opacity .15s", opacity:draggingPanel===id?0.5:1, boxShadow:isDragOver?`0 0 0 3px ${C.accent}22`:"0 1px 4px rgba(0,0,0,.04)" }}>
         {/* Panel header — click to collapse, drag handle on left */}
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", cursor:"pointer", userSelect:"none", borderBottom:isOpen?`1px solid ${C.border}`:"none" }}
-          onClick={()=>setOpenPanels(p=>({...p,[id]:!p[id]}))}>
+          onClick={()=>setOpenPanels(p=>{ const next={...p,[id]:!p[id]}; try{localStorage.setItem(openPanelsKey,JSON.stringify(next));}catch{} return next; })}>
           <div title="Drag to reorder" style={{ color:C.text3, cursor:"grab", padding:"0 2px", display:"flex", flexShrink:0 }} onClick={e=>e.stopPropagation()}>
             <svg width="12" height="18" viewBox="0 0 12 18" fill="none"><circle cx="4" cy="4" r="1.5" fill="currentColor"/><circle cx="9" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="14" r="1.5" fill="currentColor"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/></svg>
           </div>
@@ -2821,6 +2888,84 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             <Ic n="activity" s={12} c={C.text3}/> Last contact {lastCommDate}
           </div>
         )}
+
+        {/* ── Record Search ── */}
+        <div ref={recordSearchRef} style={{ position:"relative", display:"flex", alignItems:"center" }}>
+          {recordSearchOpen ? (
+            <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", borderRadius:9,
+              border:`1.5px solid ${C.accent}`, background:C.surface, boxShadow:"0 2px 8px rgba(0,0,0,.08)" }}>
+              <Ic n="search" s={13} c={C.text3}/>
+              <input
+                ref={recordSearchInputRef}
+                value={recordSearch}
+                onChange={e=>setRecordSearch(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Escape"){ setRecordSearchOpen(false); setRecordSearch(""); }}}
+                placeholder="Search this record…"
+                autoFocus
+                style={{ border:"none", outline:"none", fontSize:13, fontFamily:F, color:C.text1,
+                  background:"transparent", width:200, fontWeight:400 }}/>
+              {recordSearch && (
+                <button onClick={()=>{ setRecordSearch(""); setRecordSearchResults([]); recordSearchInputRef.current?.focus(); }}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, display:"flex", padding:0 }}>
+                  <Ic n="x" s={12}/>
+                </button>
+              )}
+            </div>
+          ) : (
+            <button onClick={()=>{ setRecordSearchOpen(true); setTimeout(()=>recordSearchInputRef.current?.focus(),50); }}
+              title="Search this record (notes, files, activity…)"
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:9,
+                border:`1px solid ${C.border}`, background:"transparent", color:C.text3,
+                fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s" }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text3; }}>
+              <Ic n="search" s={13}/> Search
+            </button>
+          )}
+          {/* Search results dropdown */}
+          {recordSearchOpen && recordSearch.trim() && (
+            <div style={{ position:"absolute", top:"calc(100% + 8px)", right:0, zIndex:600,
+              background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
+              boxShadow:"0 12px 40px rgba(0,0,0,.14)", minWidth:340, maxWidth:440, maxHeight:380, overflowY:"auto" }}>
+              {recordSearchResults.length === 0 ? (
+                <div style={{ padding:"20px 16px", textAlign:"center", fontSize:13, color:C.text3 }}>
+                  No results for "<strong>{recordSearch}</strong>"
+                </div>
+              ) : (
+                <>
+                  <div style={{ padding:"8px 14px 6px", fontSize:11, fontWeight:700, color:C.text3,
+                    textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:`1px solid ${C.border}` }}>
+                    {recordSearchResults.length} result{recordSearchResults.length!==1?"s":""}
+                  </div>
+                  {recordSearchResults.map((r,i) => (
+                    <div key={i}
+                      onClick={()=>openPanelAndScroll(r.panelId)}
+                      style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 14px",
+                        cursor:"pointer", transition:"background .1s", borderBottom:`1px solid ${C.border}` }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div style={{ width:28, height:28, borderRadius:8, background:C.accentLight,
+                        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+                        <Ic n={r.icon} s={13} c={C.accent}/>
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:C.text1,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.label}</div>
+                        <div style={{ fontSize:11, color:C.text3, marginTop:2, display:"flex", gap:8 }}>
+                          <span style={{ background:`${C.accent}15`, color:C.accent, padding:"1px 6px", borderRadius:4, fontWeight:600 }}>{r.sub}</span>
+                          {r.created_at && <span>{new Date(r.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</span>}
+                        </div>
+                      </div>
+                      {r.panelId && (
+                        <Ic n="chevR" s={13} c={C.text3}/>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Destructive + close — far right, always visible */}
         <div style={{ display:"flex", gap:4, marginLeft:8 }}>
