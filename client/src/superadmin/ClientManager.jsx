@@ -126,6 +126,19 @@ export function ClientList({ onProvision, onSelectClient }) {
 export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
   const [client,setClient]=useState(null); const [stats,setStats]=useState(null);
   const [loading,setLoading]=useState(true); const [tab,setTab]=useState('overview');
+  const [loadingTD,setLoadingTD]=useState(false); const [tdResults,setTdResults]=useState({});
+
+  const handleLoadTestData = async (envId) => {
+    if (!confirm('Load standard test data? This adds 15 people, 8 jobs and 3 talent pools.')) return;
+    setLoadingTD(true);
+    try {
+      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed');
+      setTdResults(prev => ({ ...prev, [envId]: d }));
+    } catch(e) { alert('Error loading test data: ' + e.message); }
+    setLoadingTD(false);
+  };
 
   useEffect(()=>{
     Promise.all([sa.get(`/${clientId}`),sa.get(`/${clientId}/stats`)])
@@ -232,9 +245,19 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,color:C.text1}}>{e.name}</div>
                   <div style={{fontSize:11,color:C.text3,marginTop:2}}>{e.id} · {e.locale?.toUpperCase()} · {e.timezone}</div>
+                  {tdResults[e.id] && (
+                    <div style={{fontSize:11,color:'#065f46',marginTop:4}}>
+                      ✓ Test data: {tdResults[e.id].people} people · {tdResults[e.id].jobs} jobs · {tdResults[e.id].pools} pools
+                    </div>
+                  )}
                 </div>
                 <StatusBadge status={e.type||'production'}/>
                 <div style={{marginLeft:12}}><StatusBadge status={e.status||'active'}/></div>
+                <button onClick={()=>handleLoadTestData(e.id)} disabled={loadingTD||!!tdResults[e.id]}
+                  title={tdResults[e.id]?'Test data already loaded':'Load standard test data'}
+                  style={{marginLeft:12,padding:'5px 10px',borderRadius:6,border:`1.5px dashed ${tdResults[e.id]?C.border:'#6366f1'}`,background:'transparent',color:tdResults[e.id]?C.text3:'#6366f1',fontSize:11,fontWeight:600,cursor:tdResults[e.id]?'default':'pointer',whiteSpace:'nowrap'}}>
+                  {tdResults[e.id]?'✓ Loaded':'⚡ Test Data'}
+                </button>
               </div>
             ))
           }
@@ -293,6 +316,7 @@ export function ProvisionWizard({ onDone, onCancel }) {
   const [step,setStep]=useState(0); const [templates,setTemplates]=useState([]);
   const [submitting,setSubmitting]=useState(false); const [result,setResult]=useState(null);
   const [errors,setErrors]=useState({});
+  const [loadingTD,setLoadingTD]=useState(false); const [tdResult,setTdResult]=useState(null);
   const [form,setForm]=useState({
     client_name:'',industry:'',region:'Middle East',plan:'starter',size:'',
     contact_name:'',contact_email:'',contact_phone:'',website:'',notes:'',
@@ -326,6 +350,18 @@ export function ProvisionWizard({ onDone, onCancel }) {
       else setErrors({submit:d.error||'Provisioning failed'});
     } catch(e){ setErrors({submit:e.message}); }
     setSubmitting(false);
+  };
+
+  const handleLoadTestData = async (envId) => {
+    if (!confirm('Load standard test data? This adds 15 people, 8 jobs and 3 talent pools.')) return;
+    setLoadingTD(true); setTdResult(null);
+    try {
+      const r = await fetch('/api/superadmin/clients/load-test-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ environment_id: envId }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed');
+      setTdResult(d);
+    } catch(e) { alert('Error: ' + e.message); }
+    setLoadingTD(false);
   };
 
   const inp=(k,ph,type='text')=>(
@@ -401,6 +437,17 @@ export function ProvisionWizard({ onDone, onCancel }) {
           </div>
         ))}
       </div>
+      {tdResult ? (
+        <div style={{padding:'10px 14px',borderRadius:10,background:'#d1fae5',border:'1px solid #6ee7b7',marginBottom:12,fontSize:13,color:'#065f46',textAlign:'left'}}>
+          ✓ Test data loaded — {tdResult.people} people, {tdResult.jobs} jobs, {tdResult.pools} talent pools
+          {tdResult.errors?.length>0 && <div style={{marginTop:4,color:'#92400e',fontSize:11}}>{tdResult.errors[0]}</div>}
+        </div>
+      ) : (
+        <button onClick={()=>handleLoadTestData(result.environment?.id)} disabled={loadingTD}
+          style={{width:'100%',padding:'10px',marginBottom:10,borderRadius:8,border:'1.5px dashed #6366f1',background:'transparent',color:'#6366f1',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          {loadingTD ? '⟳ Loading test data…' : '⚡ Load Standard Test Data (15 people · 8 jobs · 3 pools)'}
+        </button>
+      )}
       <Btn onClick={onDone} style={{width:'100%',justifyContent:'center'}}>View all clients →</Btn>
     </div>
   );
