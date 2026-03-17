@@ -116,7 +116,17 @@ export const matchCandidateToJob = (candidate, job) => {
   return { score:Math.min(100,Math.max(0,score)), reasons, gaps };
 };
 
-// ── Compact match results list with 5-item limit + expand ────────────────────
+// ── Matching helpers (module-level so MatchResultsList can use them) ──────────
+const getTitle = (r, slug) => {
+  const d = r.data || {};
+  if (slug==="people") return [d.first_name,d.last_name].filter(Boolean).join(" ")||"Untitled";
+  if (slug==="jobs")   return d.job_title||d.name||"Untitled";
+  return d.pool_name||d.name||"Untitled";
+};
+const itemIcon  = (type) => type==="person" ? "user" : type==="job" ? "briefcase" : "layers";
+const itemColor = (type) => type==="person" ? "#3b5bdb" : type==="job" ? "#0ca678" : "#7c3aed";
+
+// ── Compact match results list with 5-item limit + expand ─────────────────────
 const MatchResultsList = ({ matches }) => {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? matches : matches.slice(0, 5);
@@ -272,20 +282,10 @@ export const MatchingEngine = ({ environment, initialObject, initialRecord }) =>
 
   const filtered = matches.filter(m=>m.score>=minScore);
 
-  const getTitle=(r,slug)=>{
-    const d=r.data||{};
-    if(slug==="people") return [d.first_name,d.last_name].filter(Boolean).join(" ")||"Untitled";
-    if(slug==="jobs")   return d.job_title||d.name||"Untitled";
-    return d.pool_name||d.name||"Untitled";
-  };
-
   const personName = lockedRecord ? getTitle(lockedRecord, mode==="job"?"jobs":"people") : "";
   const jobsObj    = objects.find(o=>o.slug==="jobs");
   const peopleObj  = objects.find(o=>o.slug==="people");
   const poolsObj   = objects.find(o=>o.slug==="talent-pools");
-
-  const itemColor = (type) => type==="person" ? (peopleObj?.color||"#3b5bdb") : type==="job" ? (jobsObj?.color||"#0ca678") : (poolsObj?.color||"#7c3aed");
-  const itemIcon  = (type) => type==="person" ? "user" : type==="job" ? "briefcase" : "layers";
 
   return (
     <div style={{fontFamily:F, padding:24}}>
