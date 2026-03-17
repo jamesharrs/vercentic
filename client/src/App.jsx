@@ -916,7 +916,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
       </div>
 
       {/* ── Right group: Calendar + Bell ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:8, flexShrink:0, borderLeft:"1px solid var(--t-border)", paddingLeft:10 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:"auto", flexShrink:0, borderLeft:"1px solid var(--t-border)", paddingLeft:10 }}>
 
         {/* Calendar */}
         <button onClick={() => onNavigateToCalendar?.()} title="Calendar"
