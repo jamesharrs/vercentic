@@ -133,7 +133,7 @@ const MatchResultsList = ({ matches }) => {
 
   return (
     <div>
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{display:"flex",flexDirection:"column",gap:3}}>
         {visible.map((m, i) => {
           const title = getTitle(m.item, m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools");
           const color = itemColor(m.type);
@@ -147,46 +147,46 @@ const MatchResultsList = ({ matches }) => {
           const allTags = [...(m.reasons||[]).map(r=>({text:r,ok:true})), ...(m.gaps||[]).map(g=>({text:g,ok:false}))];
 
           return (
-            <div key={m.item.id} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,display:"flex",alignItems:"stretch",overflow:"hidden",transition:"box-shadow .12s"}}
-              onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.08)"}
+            <div key={m.item.id} style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",overflow:"hidden",height:40,transition:"box-shadow .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)"}
               onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
 
-              {/* Score bar — left edge */}
-              <div style={{width:4,background:scoreCol,flexShrink:0}}/>
+              {/* Score bar */}
+              <div style={{width:3,alignSelf:"stretch",background:scoreCol,flexShrink:0}}/>
 
-              {/* Rank number */}
-              <div style={{width:28,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:"0 4px"}}>
-                <span style={{fontSize:10,fontWeight:800,color:C.text3}}>#{i+1}</span>
+              {/* Rank */}
+              <div style={{width:24,textAlign:"center",flexShrink:0}}>
+                <span style={{fontSize:9,fontWeight:800,color:C.text3}}>#{i+1}</span>
               </div>
 
-              {/* Icon */}
-              <div style={{width:30,height:30,borderRadius:8,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,alignSelf:"center",margin:"10px 8px 10px 0"}}>
-                <Ic n={itemIcon(m.type)} s={13} c="white"/>
+              {/* Icon chip */}
+              <div style={{width:24,height:24,borderRadius:6,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginRight:8}}>
+                <Ic n={itemIcon(m.type)} s={11} c="white"/>
               </div>
 
-              {/* Main content */}
-              <div style={{flex:1,minWidth:0,padding:"10px 8px 10px 0"}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                  <span style={{fontSize:13,fontWeight:700,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</span>
-                  {d.status && <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:d.status==="Active"||d.status==="Open"?"#f0fdf4":"#f1f5f9",color:d.status==="Active"||d.status==="Open"?"#0ca678":"#868e96",flexShrink:0}}>{d.status}</span>}
-                </div>
-                {sub && <div style={{fontSize:11,color:C.text3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub}</div>}
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  {allTags.slice(0,3).map((tag,ti)=>(
-                    <span key={ti} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:tag.ok?"#f0fdf4":"#fffbeb",color:tag.ok?"#0ca678":"#d97706",display:"inline-flex",alignItems:"center",gap:3}}>
-                      {tag.ok ? <Ic n="check" s={9} c="#0ca678"/> : "·"}{tag.text}
-                    </span>
-                  ))}
-                  {allTags.length>3 && <span style={{fontSize:10,color:C.text3,padding:"1px 5px"}}>+{allTags.length-3}</span>}
-                </div>
+              {/* Title */}
+              <span style={{fontSize:12,fontWeight:700,color:C.text1,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginRight:6}}>{title}</span>
+
+              {/* Status badge */}
+              {d.status && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:99,background:d.status==="Active"||d.status==="Open"?"#f0fdf4":"#f1f5f9",color:d.status==="Active"||d.status==="Open"?"#0ca678":"#6b7280",flexShrink:0,marginRight:6}}>{d.status}</span>}
+
+              {/* Subtitle */}
+              {sub && <span style={{fontSize:11,color:C.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:8}}>{sub}</span>}
+              {!sub && <div style={{flex:1}}/>}
+
+              {/* Tags inline */}
+              <div style={{display:"flex",gap:3,flexShrink:0,marginRight:10}}>
+                {allTags.slice(0,2).map((tag,ti)=>(
+                  <span key={ti} style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:tag.ok?"#f0fdf4":"#fffbeb",color:tag.ok?"#0ca678":"#d97706",whiteSpace:"nowrap"}}>
+                    {tag.ok?"✓ ":""}{tag.text}
+                  </span>
+                ))}
+                {allTags.length>2 && <span style={{fontSize:10,color:C.text3}}>+{allTags.length-2}</span>}
               </div>
 
-              {/* Score badge — right */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"0 14px",flexShrink:0}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
-                  <span style={{fontSize:18,fontWeight:900,color:scoreCol,lineHeight:1}}>{m.score}</span>
-                  <span style={{fontSize:9,color:C.text3,fontWeight:600,letterSpacing:"0.04em"}}>SCORE</span>
-                </div>
+              {/* Score */}
+              <div style={{width:44,textAlign:"center",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:14,fontWeight:900,color:scoreCol}}>{m.score}</span>
               </div>
             </div>
           );
