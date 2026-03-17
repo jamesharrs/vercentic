@@ -34,9 +34,15 @@ router.get('/:id', (req, res) => {
 router.get('/slug/:slug', (req, res) => {
   ensure();
   const store = getStore();
-  const portal = (store.portals || []).find(p => p.slug === req.params.slug && p.status === 'published' && !p.deleted_at);
+  // Normalise slug — strip leading slash if present, allow lookup either way
+  const slug = req.params.slug.startsWith('/') ? req.params.slug : '/' + req.params.slug;
+  const portal = (store.portals || []).find(p =>
+    (p.slug === slug || p.slug === req.params.slug) && p.status === 'published' && !p.deleted_at
+  );
   if (!portal) return res.status(404).json({ error: 'Not found or unpublished' });
-  res.json(portal);
+  // Expose branding alias so portal renderer works whether theme or branding is set
+  // Default type to 'career_site' if not set — covers legacy portals
+  res.json({ ...portal, branding: portal.theme || portal.branding || {}, type: portal.type || 'career_site' });
 });
 
 // POST / — create

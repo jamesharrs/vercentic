@@ -1007,6 +1007,14 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             onClick={()=>setPortal(p=>({...p,status:p.status==="published"?"draft":"published"}))}>
             {portal.status==="published"?"✓ Published":"Publish"}
           </Btn>
+          {portal.status==="published" && portal.slug && (
+            <button onClick={()=>{
+              const base = window.location.hostname==='localhost'?`http://localhost:5173`:`https://portal-renderer.vercel.app`;
+              window.open(`${base}?portal=${portal.slug}`,'_blank');
+            }} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.green}`,background:C.greenLight,color:C.green}}>
+              <Ic n="eye" s={11} c={C.green}/>View Live
+            </button>
+          )}
         </div>
       </div>
 
@@ -1065,6 +1073,20 @@ const PortalCard = ({ portal, onEdit, onDelete, onDuplicate }) => {
           <div style={{fontSize:11,color:C.text3}}>{portal.slug||"/"}</div>
         </div>
         <div style={{display:"flex",gap:4}}>
+          {portal.status==="published" && (
+            <button onClick={()=>{
+              // In dev portal renderer is on :5173; in prod it's the same origin
+              const base = window.location.hostname === 'localhost'
+                ? window.location.origin.replace(':3000', ':5173')
+                : window.location.origin;
+              const portalUrl = `${base}?portal=${portal.slug}`;
+              navigator.clipboard.writeText(portalUrl).catch(()=>{});
+              alert(`Copied: ${portalUrl}`);
+            }} title="Copy portal link"
+              style={{background:C.greenLight,border:`1px solid ${C.green}30`,borderRadius:6,cursor:"pointer",padding:"4px 8px",color:C.green,fontSize:10,fontWeight:700,fontFamily:F,display:"flex",alignItems:"center",gap:4}}>
+              <Ic n="link" s={11} c={C.green}/>Link
+            </button>
+          )}
           <button onClick={onDuplicate} title="Duplicate"
             style={{background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",padding:"4px 7px",color:C.text3}}>
             <Ic n="copy" s={12}/>

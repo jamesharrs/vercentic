@@ -3,6 +3,7 @@ import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import { RecordFormPanel } from "./Forms.jsx";
+import { TasksEventsPanel } from "./TasksEventsPanel.jsx";
 import { ScorecardPanel } from "./Scorecards.jsx";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
@@ -65,6 +66,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     expand:"M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
     activity:"M22 12h-4l-3 9L9 3l-3 9H2",
     paperclip:"M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
+    checkSquare:"M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
     messageSquare:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
     link:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
     upload:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
@@ -1743,6 +1745,7 @@ const mergePanel   = (order, targetRepId, newId) =>
   });
 
 export const PANEL_META = {
+  tasks:       { icon:"checkSquare",   label:"Tasks & Events", defaultOpen:true  },
   comms:       { icon:"mail",          label:"Communications", defaultOpen:true  },
   notes:       { icon:"messageSquare", label:"Notes",     defaultOpen:true  },
   attachments: { icon:"paperclip",     label:"Files",     defaultOpen:true  },
@@ -1757,7 +1760,7 @@ export const PANEL_META = {
 };
 
 export const getDefaultPanelOrder = (objectName) => {
-  const base = ["comms","notes","attachments","forms","activity","workflows"];
+  const base = ["tasks","comms","notes","attachments","forms","activity","workflows"];
   if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("scorecard");
@@ -2745,6 +2748,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
 
     if (id==="workflows") return <RecordWorkflows record={record} objectId={record.object_id} environment={environment} objectName={objectName} onNavigate={onNavigate}/>;
+    if (id==="tasks")     return <TasksEventsPanel record={record} environment={environment}/>;
     if (id==="forms")     return <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null}/>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;

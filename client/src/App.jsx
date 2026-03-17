@@ -22,6 +22,7 @@ import { AICopilot, MatchingEngine } from "./AI.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import { useI18n } from "./i18n/I18nContext.jsx";
 import LoginPage from "./LoginPage.jsx";
+import CalendarModule from "./Calendar.jsx";
 import BotInterview from "./BotInterview.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 
@@ -127,6 +128,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     "git-branch": "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
     "log-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
     calendar: "M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
+    "calendar-days": "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 14h.01M13 14h.01M17 14h.01M9 18h.01M13 18h.01",
     dollar: "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
     loader: "M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
     sparkles: "M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17z",
@@ -1075,6 +1077,7 @@ function App() {
       items: [
         { id: "orgchart",   icon: "git-branch",  label: t("nav.orgChart") },
         { id: "interviews", icon: "calendar",     label: t("nav.interviews") },
+        { id: "calendar",   icon: "calendar-days", label: t("nav.calendar") || "Calendar" },
         { id: "offers",     icon: "dollar",       label: "Offers" },
         { id: "agents",     icon: "zap",          label: "Agents" },
         { id: "matching",   icon: "zap",          label: t("nav.aiMatching") },
@@ -1363,6 +1366,8 @@ function App() {
           <div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}>
             <Interviews environment={selectedEnv} />
           </div>
+        ) : activeNav === "calendar" ? (
+          <CalendarModule environment={selectedEnv} />
         ) : activeNav === "offers" ? (
           <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
             <OffersModule environment={selectedEnv} />

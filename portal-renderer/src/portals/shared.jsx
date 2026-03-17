@@ -1,11 +1,11 @@
 // Shared utilities for all portal renderers
 
 export const css = (br = {}) => ({
-  primary:  br.primary_color  || '#4361EE',
-  bg:       br.bg_color       || '#F8FAFF',
-  text:     br.text_color     || '#0F1729',
-  button:   br.button_color   || br.primary_color || '#4361EE',
-  font:     `'${br.font || 'DM Sans'}', -apple-system, sans-serif`,
+  primary:  br.primary_color  || br.primaryColor  || '#4361EE',
+  bg:       br.bg_color       || br.bgColor        || '#F8FAFF',
+  text:     br.text_color     || br.textColor      || '#0F1729',
+  button:   br.button_color   || br.primaryColor   || br.primary_color || '#4361EE',
+  font:     `'${br.font || br.fontFamily?.replace(/'/g,'') || 'DM Sans'}', -apple-system, sans-serif`,
   surface:  '#FFFFFF',
   border:   '#E8ECF8',
   text2:    '#4B5675',
