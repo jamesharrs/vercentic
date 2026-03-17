@@ -4,7 +4,7 @@ const { query, insert, update, remove } = require('../db/init');
 
 // GET /api/email-templates?environment_id=X
 router.get('/', (req, res) => {
-  let all = query('email_templates', {});
+  let all = query('email_templates', () => true);
   if (req.query.environment_id) all = all.filter(t => t.environment_id === req.query.environment_id);
   all.sort((a, b) => (a.name||'').localeCompare(b.name||''));
   res.json(all);
