@@ -1077,9 +1077,9 @@ function App() {
       items: [
         { id: "orgchart",   icon: "git-branch",  label: t("nav.orgChart") },
         { id: "interviews", icon: "calendar",     label: t("nav.interviews") },
-        { id: "calendar",   icon: "calendar-days", label: t("nav.calendar") || "Calendar" },
-        { id: "offers",     icon: "dollar",       label: "Offers" },
-        { id: "agents",     icon: "zap",          label: "Agents" },
+        { id: "calendar",   icon: "calendar-days", label: t("nav.calendar") },
+        { id: "offers",     icon: "dollar",       label: t("nav.offers") || "Offers" },
+        { id: "agents",     icon: "zap",          label: t("nav.agents") || "Agents" },
         { id: "reports",    icon: "bar-chart-2",  label: t("nav.reports") },
         { id: "search",     icon: "search",       label: t("nav.search") },
       ]
