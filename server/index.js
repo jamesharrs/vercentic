@@ -82,5 +82,10 @@ initDB().then(() => {
       if (v && !v.startsWith('YOUR_')) process.env[k] = v;
     }
   }
-  app.listen(PORT, () => console.log(`TalentOS API → http://localhost:${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`TalentOS API → http://localhost:${PORT}`);
+    // Start agent scheduler
+    const { startScheduler } = require('./agent-engine');
+    startScheduler();
+  });
 }).catch(err => { console.error(err); process.exit(1); });

@@ -3,6 +3,10 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove } = require('../db/init');
 
+// Lazy-load agent engine to avoid circular deps at startup
+let agentEngine = null;
+const getEngine = () => { if (!agentEngine) agentEngine = require('../agent-engine'); return agentEngine; };
+
 // Cross-object quick search — used by the global search bar
 router.get('/search', (req, res) => {
   const { q, environment_id, limit=6 } = req.query;
@@ -74,6 +78,8 @@ router.post('/', (req, res) => {
   const org_unit_id = creator?.org_unit_id || null;
   const record = insert('records', {id:uuidv4(),object_id,environment_id,data,org_unit_id,created_by:created_by||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
   insert('activity', {id:uuidv4(),environment_id,record_id:record.id,object_id,action:'created',actor:created_by||null,changes:data,created_at:new Date().toISOString()});
+  // Fire agent triggers
+  getEngine().fireEventTrigger('record_created', record, null).catch(()=>{});
   res.status(201).json(record);
 });
 
@@ -93,6 +99,10 @@ router.patch('/:id', (req, res) => {
   } else {
     insert('activity', {id:uuidv4(),environment_id:record.environment_id,record_id:record.id,object_id:record.object_id,action:'updated',actor:updated_by||null,changes:data,created_at:new Date().toISOString()});
   }
+  // Fire agent triggers — check which fields changed
+  const changedFields = Object.keys(data || {});
+  getEngine().fireEventTrigger('record_updated', updated, changedFields).catch(()=>{});
+  getEngine().fireEventTrigger('stage_changed', updated, changedFields).catch(()=>{});
   res.json(updated);
 });
 
