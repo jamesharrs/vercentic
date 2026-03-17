@@ -223,24 +223,29 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
           <div style={{...cardSt,gridColumn:'1/-1'}}>
             <div style={{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em'}}>Client Login</div>
             <div style={{padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:12,color:C.text3,marginBottom:4}}>Production URL</div>
-                <a href={window.location.origin} target="_blank" rel="noreferrer"
-                  style={{fontFamily:'monospace',fontSize:13,color:C.accent,textDecoration:'none',fontWeight:600}}>
-                  {window.location.origin}
-                </a>
-              </div>
-              <button onClick={()=>{
+              {(() => {
+                const slug = client.tenant_slug;
+                const tenantUrl = slug ? `${window.location.origin}?tenant=${slug}` : window.location.origin;
                 const latest = (client.provision_log||[]).slice(-1)[0];
-                const txt = `TalentOS Login\nURL: ${window.location.origin}\nEmail: ${latest?.admin_email||'(see provision log)'}\nPassword: Admin1234! (or as set during provisioning)`;
-                navigator.clipboard.writeText(txt);
-              }} style={{background:C.accentLight,border:`1px solid ${C.accent}30`,borderRadius:8,cursor:'pointer',padding:'8px 14px',fontSize:12,fontWeight:700,color:C.accent,flexShrink:0}}>
-                Copy login info
-              </button>
-              <a href={window.location.origin} target="_blank" rel="noreferrer"
-                style={{background:C.accent,border:'none',borderRadius:8,cursor:'pointer',padding:'8px 14px',fontSize:12,fontWeight:700,color:'#fff',textDecoration:'none',flexShrink:0}}>
-                Open →
-              </a>
+                const copyTxt = `TalentOS Login\nURL: ${tenantUrl}\nTenant: ${slug||'(default)'}\nEmail: ${latest?.admin_email||'(see provision log)'}\nPassword: Admin1234! (or as set during provisioning)`;
+                return (<>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,color:C.text3,marginBottom:4}}>Login URL {slug && <code style={{background:'#EFF6FF',color:'#1D4ED8',padding:'1px 5px',borderRadius:3,fontSize:11}}>?tenant={slug}</code>}</div>
+                    <a href={tenantUrl} target="_blank" rel="noreferrer"
+                      style={{fontFamily:'monospace',fontSize:13,color:C.accent,textDecoration:'none',fontWeight:600}}>
+                      {tenantUrl}
+                    </a>
+                  </div>
+                  <button onClick={()=>navigator.clipboard.writeText(copyTxt)}
+                    style={{background:C.accentLight,border:`1px solid ${C.accent}30`,borderRadius:8,cursor:'pointer',padding:'8px 14px',fontSize:12,fontWeight:700,color:C.accent,flexShrink:0}}>
+                    Copy login info
+                  </button>
+                  <a href={tenantUrl} target="_blank" rel="noreferrer"
+                    style={{background:C.accent,border:'none',borderRadius:8,cursor:'pointer',padding:'8px 14px',fontSize:12,fontWeight:700,color:'#fff',textDecoration:'none',flexShrink:0}}>
+                    Open →
+                  </a>
+                </>);
+              })()}
             </div>
             {(client.provision_log||[]).length > 0 && (
               <div style={{padding:'0 18px 14px',fontSize:11,color:C.text3}}>
@@ -404,34 +409,50 @@ export function ProvisionWizard({ onDone, onCancel }) {
       <div style={{fontSize:20,fontWeight:800,color:C.text1,marginBottom:6}}>Client Provisioned!</div>
       <div style={{fontSize:13,color:C.text3,marginBottom:24}}>{result.client?.name} is ready to use.</div>
 
-      {/* Login URL */}
-      <div style={{background:'#EFF6FF',borderRadius:12,border:'1px solid #BFDBFE',padding:14,marginBottom:16,textAlign:'left'}}>
-        <div style={{fontSize:10,fontWeight:700,color:'#1D4ED8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Login URL</div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <a href={window.location.origin} target="_blank" rel="noreferrer"
-            style={{flex:1,fontFamily:'monospace',fontSize:12,color:'#1D4ED8',wordBreak:'break-all',textDecoration:'none'}}>
-            {window.location.origin}
-          </a>
-          <button onClick={()=>{navigator.clipboard.writeText(window.location.origin);}}
-            title="Copy URL"
-            style={{background:'#DBEAFE',border:'1px solid #93C5FD',borderRadius:6,cursor:'pointer',padding:'4px 10px',fontSize:11,fontWeight:700,color:'#1D4ED8',flexShrink:0}}>
-            Copy
-          </button>
-        </div>
-      </div>
+      {/* Login URL — includes ?tenant= param */}
+      {(() => {
+        const slug = result.tenant_slug || result.credentials?.tenant_slug;
+        const tenantUrl = slug
+          ? `${window.location.origin}?tenant=${slug}`
+          : window.location.origin;
+        return (
+          <div style={{background:'#EFF6FF',borderRadius:12,border:'1px solid #BFDBFE',padding:14,marginBottom:16,textAlign:'left'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#1D4ED8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Login URL</div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <a href={tenantUrl} target="_blank" rel="noreferrer"
+                style={{flex:1,fontFamily:'monospace',fontSize:12,color:'#1D4ED8',wordBreak:'break-all',textDecoration:'none'}}>
+                {tenantUrl}
+              </a>
+              <button onClick={()=>navigator.clipboard.writeText(tenantUrl)}
+                title="Copy URL"
+                style={{background:'#DBEAFE',border:'1px solid #93C5FD',borderRadius:6,cursor:'pointer',padding:'4px 10px',fontSize:11,fontWeight:700,color:'#1D4ED8',flexShrink:0}}>
+                Copy
+              </button>
+            </div>
+            {slug && <div style={{fontSize:11,color:'#3B82F6',marginTop:6}}>Tenant: <code style={{background:'#DBEAFE',padding:'1px 5px',borderRadius:4}}>{slug}</code></div>}
+          </div>
+        );
+      })()}
 
       {/* Credentials */}
       <div style={{background:C.surface2,borderRadius:12,border:`1px solid ${C.border}`,padding:18,textAlign:'left',marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em'}}>Credentials</div>
           <button onClick={()=>{
-            const txt = `TalentOS Login\nURL: ${window.location.origin}\nEmail: ${result.credentials?.email}\nPassword: ${result.credentials?.password}`;
+            const slug = result.tenant_slug || result.credentials?.tenant_slug;
+            const tenantUrl = slug ? `${window.location.origin}?tenant=${slug}` : window.location.origin;
+            const txt = `TalentOS Login\nURL: ${tenantUrl}\nTenant: ${slug||'(default)'}\nEmail: ${result.credentials?.email}\nPassword: ${result.credentials?.password}`;
             navigator.clipboard.writeText(txt);
           }} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,cursor:'pointer',padding:'3px 8px',fontSize:10,fontWeight:700,color:C.text2}}>
             Copy all
           </button>
         </div>
-        {[['Email',result.credentials?.email],['Password',result.credentials?.password],['Environment',result.environment?.name],['Env ID',result.environment?.id?.slice(0,8)+'…']].map(([k,v])=>(
+        {[
+          ['Email',    result.credentials?.email],
+          ['Password', result.credentials?.password],
+          ['Tenant',   result.tenant_slug || result.credentials?.tenant_slug || '(default)'],
+          ['Environment', result.environment?.name],
+        ].map(([k,v])=>(
           <div key={k} style={{display:'flex',alignItems:'center',padding:'6px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
             <span style={{color:C.text3,width:100,flexShrink:0}}>{k}</span>
             <span style={{flex:1,color:k==='Password'?C.amber:C.text1,fontFamily:'monospace'}}>{v}</span>
