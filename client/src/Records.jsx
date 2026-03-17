@@ -2128,13 +2128,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [recordSearchResults, setRecordSearchResults] = useState([]);
   const recordSearchRef = useRef(null);
   const recordSearchInputRef = useRef(null);
-  const [draggingPanel, setDraggingPanel] = useState(null);   // id being dragged
-  const [insertBefore,  setInsertBefore]  = useState(null);   // repId to insert before (null=end)
-  const [mergeTarget,   setMergeTarget]   = useState(null);   // repId to merge dragged into
-  const dragState    = useRef(null); // { id, repId, cardEls }
-  const insertRef    = useRef(null); // mirrors insertBefore for closures
-  const mergeRef     = useRef(null); // mirrors mergeTarget for closures
-  const rightColRef  = useRef(null);
+  const [draggingPanel, setDraggingPanel] = useState(null);  // panel id being dragged
+  const [overSlot,      setOverSlot]      = useState(null);  // repId currently hovered
+  const [overZone,      setOverZone]      = useState(null);  // 'top'|'middle'|'bottom'
+  // Refs so event closures always see fresh values
+  const draggingRef = useRef(null);
+  const overSlotRef = useRef(null);
+  const overZoneRef = useRef(null);
+  const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
   const storageKey = `talentos_panels_${objectName}`;
@@ -2369,93 +2370,76 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     setDocExtractResult(null); setDocExtractAtt(null); load();
   };
 
-  // ── Mouse-based panel drag-to-reorder / merge ─────────────────────────────
-  // Zones: top 28% → insert before; middle 44% → merge; bottom 28% → insert after
+  // ── Mouse-based panel drag: event-driven zone detection ──────────────────
+  // Each card reports its hovered zone via onMouseMove; mouseup reads the refs.
   const startPanelDrag = (id) => {
-    // Find the repId of the slot that contains this id
-    const containingSlot = panelOrder.find(s => Array.isArray(s) ? s.includes(id) : s === id) || id;
-    const slotRepId = repIdOf(containingSlot);
-
-    // Collect all slot-level elements (standalone cards + group cards)
-    const cardEls = [...document.querySelectorAll('[data-slot-id]')]
-      .map(el => ({ repId: el.dataset.slotId, el }))
-      .filter(x => PANEL_META[x.repId] || panelOrder.some(s => Array.isArray(s) && s[0] === x.repId));
-
-    insertRef.current = null;
-    mergeRef.current  = null;
-    dragState.current = { id, repId: slotRepId, cardEls };
+    draggingRef.current  = id;
+    overSlotRef.current  = null;
+    overZoneRef.current  = null;
     setDraggingPanel(id);
-    setInsertBefore(null);
-    setMergeTarget(null);
-
-    const onMove = (e) => {
-      if (!dragState.current) return;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const eligible = dragState.current.cardEls.filter(c => c.repId !== dragState.current.repId);
-
-      let newInsert = null;
-      let newMerge  = null;
-
-      for (let i = 0; i < eligible.length; i++) {
-        const { repId, el } = eligible[i];
-        const rect = el.getBoundingClientRect();
-        if (clientY < rect.top) { newInsert = repId; break; }    // above card → insert before it
-        if (clientY < rect.bottom) {
-          const zone = (clientY - rect.top) / rect.height;
-          if      (zone < 0.28) { newInsert = repId; }                                                  // top zone
-          else if (zone > 0.72) { newInsert = i + 1 < eligible.length ? eligible[i+1].repId : null; }  // bottom zone
-          else                  { newMerge  = repId; }                                                  // center zone
-          break;
-        }
-        // below this card — continue
-      }
-
-      if (insertRef.current !== newInsert || mergeRef.current !== newMerge) {
-        insertRef.current = newInsert;
-        mergeRef.current  = newMerge;
-        setInsertBefore(newInsert);
-        setMergeTarget(newMerge);
-      }
-    };
+    setOverSlot(null);
+    setOverZone(null);
 
     const onUp = () => {
-      if (!dragState.current) return;
-      const fromId  = dragState.current.id;
-      const iTarget = insertRef.current;
-      const mTarget = mergeRef.current;
-      dragState.current = null;
+      const fromId = draggingRef.current;
+      const slot   = overSlotRef.current;
+      const zone   = overZoneRef.current;
+      draggingRef.current = null;
+      setDraggingPanel(null);
+      setOverSlot(null);
+      setOverZone(null);
 
+      if (!fromId || !slot) {
+        // dropped outside any card — no change
+        window.removeEventListener("mouseup",  onUp);
+        window.removeEventListener("touchend", onUp);
+        return;
+      }
+
+      // Find what's currently in that slot
       let newOrder = removePanel(panelOrder, fromId);
 
-      if (mTarget !== null) {
+      if (zone === "middle") {
         // Merge into the target slot
-        newOrder = mergePanel(newOrder, mTarget, fromId);
+        newOrder = mergePanel(newOrder, slot, fromId);
       } else {
-        // Insert as standalone before the target slot (or at end)
-        const idx = iTarget === null
-          ? newOrder.length
-          : newOrder.findIndex(s => repIdOf(s) === iTarget);
-        if (idx !== -1) newOrder.splice(idx, 0, fromId);
-        else            newOrder.push(fromId);
+        // Insert as standalone before or after the target slot
+        const idx = newOrder.findIndex(s => repIdOf(s) === slot);
+        const insertIdx = zone === "bottom" ? idx + 1 : idx;
+        if (insertIdx < 0 || insertIdx > newOrder.length) newOrder.push(fromId);
+        else newOrder.splice(insertIdx, 0, fromId);
       }
 
       savePanelOrder(newOrder);
-      setDraggingPanel(null);
-      setInsertBefore(null);
-      setMergeTarget(null);
-      insertRef.current = null;
-      mergeRef.current  = null;
-
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend",  onUp);
+      window.removeEventListener("mouseup",  onUp);
+      window.removeEventListener("touchend", onUp);
     };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
-    window.addEventListener("touchmove", onMove, { passive: true });
-    window.addEventListener("touchend",  onUp);
+    window.addEventListener("mouseup",  onUp);
+    window.addEventListener("touchend", onUp);
+  };
+
+  // Called by each card's onMouseMove to report its zone
+  const reportZone = (repId, e, el) => {
+    if (!draggingRef.current || repIdOf(panelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current) || draggingRef.current) === repId) return;
+    const rect = el.getBoundingClientRect();
+    const pct  = (e.clientY - rect.top) / rect.height;
+    const zone = pct < 0.3 ? "top" : pct > 0.7 ? "bottom" : "middle";
+    if (overSlotRef.current !== repId || overZoneRef.current !== zone) {
+      overSlotRef.current = repId;
+      overZoneRef.current = zone;
+      setOverSlot(repId);
+      setOverZone(zone);
+    }
+  };
+
+  const clearZone = (repId) => {
+    if (overSlotRef.current === repId) {
+      overSlotRef.current = null;
+      overZoneRef.current = null;
+      setOverSlot(null);
+      setOverZone(null);
+    }
   };
 
   const title = recordTitle(record, fields);
@@ -2736,32 +2720,59 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const PanelCard = ({ id, compact }) => {
     const meta = PANEL_META[id];
     if (!meta) return null;
-    const isOpen     = compact ? true : openPanels[id];       // inside a group → always open
+    const isOpen     = compact ? true : openPanels[id];
     const isDragging = draggingPanel === id;
-    const isMerge    = mergeTarget && repIdOf(panelOrder.find(s => (Array.isArray(s)?s[0]:s) === mergeTarget) || mergeTarget) === id;
-    const badge = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
+    const myRepId    = id; // standalone → repId === id
+    const isOver     = overSlot === myRepId && !isDragging;
+    const zone       = isOver ? overZone : null;
+    const badge      = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
 
-    if (compact) {
-      // Inside a group — no header chrome, just the content
-      return <div style={{ padding:"16px" }}><PanelContent id={id}/></div>;
-    }
+    const cardRef = useRef(null);
+
+    if (compact) return <div style={{ padding:"16px" }}><PanelContent id={id}/></div>;
+
+    const borderColor = zone === "middle" ? C.accent : C.border;
+    const shadow = zone === "middle"
+      ? `0 0 0 3px ${C.accent}50, 0 4px 20px rgba(59,91,219,.2)`
+      : "0 1px 4px rgba(0,0,0,.04)";
 
     return (
-      <div
-        data-slot-id={id}
+      <div ref={cardRef}
+        onMouseMove={e => cardRef.current && reportZone(myRepId, e, cardRef.current)}
+        onMouseLeave={() => clearZone(myRepId)}
         style={{
           background: C.surface,
-          border: `1.5px solid ${isMerge ? C.accent : C.border}`,
+          border: `1.5px solid ${borderColor}`,
           borderRadius: 14, marginBottom: 12, overflow: "hidden",
-          transition: "opacity .15s, box-shadow .15s, transform .1s, border-color .15s",
-          opacity:   isDragging ? 0.35 : 1,
-          boxShadow: isMerge ? `0 0 0 3px ${C.accent}40, 0 4px 20px rgba(59,91,219,.18)` : "0 1px 4px rgba(0,0,0,.04)",
+          transition: "opacity .12s, box-shadow .1s, border-color .1s, transform .1s",
+          opacity:   isDragging ? 0.3 : 1,
+          boxShadow: shadow,
           transform: isDragging ? "scale(0.97)" : "scale(1)",
+          position: "relative",
         }}>
+        {/* Zone hint overlay */}
+        {isOver && zone !== "middle" && (
+          <div style={{
+            position:"absolute", left:0, right:0, height:3, background:C.accent, zIndex:10,
+            borderRadius:2, boxShadow:`0 0 6px ${C.accent}80`,
+            top: zone === "top" ? 0 : "auto", bottom: zone === "bottom" ? 0 : "auto",
+          }}/>
+        )}
+        {isOver && zone === "middle" && (
+          <div style={{ position:"absolute", inset:0, borderRadius:12,
+            background:`${C.accent}08`, zIndex:1, pointerEvents:"none",
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <span style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.accentLight,
+              padding:"3px 10px", borderRadius:8, boxShadow:`0 1px 4px ${C.accent}30` }}>
+              Group together
+            </span>
+          </div>
+        )}
+
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
-          userSelect:"none", borderBottom: isOpen ? `1px solid ${C.border}` : "none" }}>
+          userSelect:"none", borderBottom: isOpen ? `1px solid ${C.border}` : "none", position:"relative", zIndex:2 }}>
           {/* Grip */}
-          <div title="Drag to reorder or drop onto another panel to group"
+          <div title="Drag: reorder between cards · drop onto card center to group"
             onMouseDown={e => { e.preventDefault(); startPanelDrag(id); }}
             onClick={e => e.stopPropagation()}
             style={{ color:C.text3, cursor:"grab", padding:"2px 3px", display:"flex", flexShrink:0,
@@ -2782,13 +2793,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             <Ic n={meta.icon} s={14} c={C.accent}/>
             <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
             {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
-            {isMerge && <span style={{ fontSize:11, color:C.accent, fontWeight:700, padding:"2px 8px", borderRadius:6, background:C.accentLight }}>Drop to group</span>}
             <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
               <Ic n="chevD" s={14} c={C.text3}/>
             </span>
           </div>
         </div>
-        {isOpen && <div style={{ padding:"16px" }}><PanelContent id={id}/></div>}
+        {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}><PanelContent id={id}/></div>}
       </div>
     );
   };
@@ -2796,9 +2806,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // ── Tabbed group card ──────────────────────────────────────────────────────
   const GroupCard = ({ ids }) => {
     const repId   = ids[0];
-    const isMerge = mergeTarget === repId;
+    const cardRef = useRef(null);
+    const isOver  = overSlot === repId;
+    const zone    = isOver ? overZone : null;
     const groupOpenKey = `grp_${ids.join("_")}`;
-    const isGroupOpen  = openPanels[groupOpenKey] !== false; // default open
+    const isGroupOpen  = openPanels[groupOpenKey] !== false;
     const [activeTab, setActiveTab] = useState(ids[0]);
     // If active tab was ejected, fall back to first remaining
     const safeActive = ids.includes(activeTab) ? activeTab : ids[0];
@@ -2810,15 +2822,31 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     };
 
     return (
-      <div
-        data-slot-id={repId}
+      <div ref={cardRef}
+        onMouseMove={e => cardRef.current && reportZone(repId, e, cardRef.current)}
+        onMouseLeave={() => clearZone(repId)}
         style={{
           background: C.surface,
-          border: `1.5px solid ${isMerge ? C.accent : C.border}`,
+          border: `1.5px solid ${zone === "middle" ? C.accent : C.border}`,
           borderRadius: 14, marginBottom: 12, overflow: "hidden",
-          boxShadow: isMerge ? `0 0 0 3px ${C.accent}40, 0 4px 20px rgba(59,91,219,.18)` : "0 1px 4px rgba(0,0,0,.04)",
-          transition: "border-color .15s, box-shadow .15s",
+          boxShadow: zone === "middle" ? `0 0 0 3px ${C.accent}50, 0 4px 20px rgba(59,91,219,.2)` : "0 1px 4px rgba(0,0,0,.04)",
+          transition: "border-color .1s, box-shadow .1s",
+          position: "relative",
         }}>
+        {/* Zone line indicators */}
+        {isOver && zone !== "middle" && (
+          <div style={{ position:"absolute", left:0, right:0, height:3, background:C.accent, zIndex:10,
+            borderRadius:2, boxShadow:`0 0 6px ${C.accent}80`,
+            top: zone === "top" ? 0 : "auto", bottom: zone === "bottom" ? 0 : "auto" }}/>
+        )}
+        {isOver && zone === "middle" && (
+          <div style={{ position:"absolute", inset:0, borderRadius:12,
+            background:`${C.accent}08`, zIndex:1, pointerEvents:"none",
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <span style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.accentLight,
+              padding:"3px 10px", borderRadius:8 }}>Add to group</span>
+          </div>
+        )}
 
         {/* Tab strip header */}
         <div style={{ display:"flex", alignItems:"stretch", borderBottom:`1px solid ${C.border}`,
@@ -2910,13 +2938,17 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
   };
 
-  // ── Drag indicators ────────────────────────────────────────────────────────
-  // Blue line shown between slots while dragging (reorder mode)
-  const DropIndicator = ({ beforeRepId }) => {
-    if (!draggingPanel || mergeTarget) return null;  // hide when in merge mode
-    if (insertBefore !== beforeRepId) return null;
-    return <div style={{ height:3, borderRadius:2, background:C.accent, margin:"0 0 12px",
-      boxShadow:`0 0 8px ${C.accent}60` }}/>;
+  // ── Drag zone indicator (thin line between cards) ─────────────────────────
+  const DropIndicator = ({ beforeRepId, afterRepId }) => {
+    if (!draggingPanel) return null;
+    if (overZone === "middle") return null;  // merging — no line needed
+    // Show before-line when hovered top zone matches this slot
+    const showBefore = beforeRepId && overSlot === beforeRepId && overZone === "top";
+    // Show after-line when hovered bottom zone matches previous slot
+    const showAfter  = afterRepId  && overSlot === afterRepId  && overZone === "bottom";
+    if (!showBefore && !showAfter) return null;
+    return <div style={{ height:3, borderRadius:2, background:C.accent,
+      margin:"0 0 12px", boxShadow:`0 0 8px ${C.accent}70` }}/>;
   };
 
 
@@ -3278,35 +3310,40 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {/* RIGHT COL — Panel cards (standalone or grouped) */}
         <div ref={rightColRef} style={{ flex:1, overflow:"auto", padding:"16px 20px 24px", background:"#F4F6FB",
           userSelect: draggingPanel ? "none" : "auto" }}>
-          {panelOrder.map((slot) => {
+          {panelOrder.map((slot, idx) => {
+            const slots  = panelOrder.filter(s => Array.isArray(s) ? s.some(id => PANEL_META[id]) : PANEL_META[s]);
+            const prevSlot = idx > 0 ? panelOrder[idx - 1] : null;
+            const prevRepId = prevSlot ? repIdOf(prevSlot) : null;
+
             if (Array.isArray(slot)) {
-              // Tabbed group
               const validIds = slot.filter(id => PANEL_META[id]);
               if (validIds.length === 0) return null;
               if (validIds.length === 1) {
-                // Degenerate single-item group — render as standalone
                 const id = validIds[0];
-                return <div key={id}><DropIndicator beforeRepId={id}/><PanelCard id={id}/></div>;
+                return <div key={id}><DropIndicator beforeRepId={id} afterRepId={prevRepId}/><PanelCard id={id}/></div>;
               }
               const repId = validIds[0];
               return (
                 <div key={repId}>
-                  <DropIndicator beforeRepId={repId}/>
+                  <DropIndicator beforeRepId={repId} afterRepId={prevRepId}/>
                   <GroupCard ids={validIds}/>
                 </div>
               );
             }
-            // Standalone panel
             if (!PANEL_META[slot]) return null;
             return (
               <div key={slot}>
-                <DropIndicator beforeRepId={slot}/>
+                <DropIndicator beforeRepId={slot} afterRepId={prevRepId}/>
                 <PanelCard id={slot}/>
               </div>
             );
           })}
-          {/* Drop indicator at the very end (append) */}
-          <DropIndicator beforeRepId={null}/>
+          {/* Drop line at very bottom — when last card's bottom zone is hovered */}
+          {panelOrder.length > 0 && (() => {
+            const last = panelOrder[panelOrder.length - 1];
+            const lastRepId = repIdOf(last);
+            return <DropIndicator beforeRepId={null} afterRepId={lastRepId}/>;
+          })()}
         </div>
       </div>
     </div>
