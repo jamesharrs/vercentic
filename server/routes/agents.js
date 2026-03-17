@@ -1,0 +1,274 @@
+// server/routes/agents.js
+const express = require('express');
+const router = express.Router();
+const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
+const { v4: uuidv4 } = require('uuid');
+
+// ── Init store collections ────────────────────────────────────────────────────
+const store = getStore();
+if (!store.agents)       { store.agents = [];       saveStore(); }
+if (!store.agent_runs)   { store.agent_runs = [];   saveStore(); }
+
+const TRIGGER_TYPES = {
+  record_created:   { label: 'Record Created',   description: 'Fires when a new record is added to an object' },
+  record_updated:   { label: 'Record Updated',   description: 'Fires when a record field changes' },
+  stage_changed:    { label: 'Stage Changed',    description: 'Fires when a pipeline stage changes' },
+  form_submitted:   { label: 'Form Submitted',   description: 'Fires when a form response is submitted' },
+  schedule_daily:   { label: 'Daily Schedule',   description: 'Runs at a set time every day' },
+  schedule_weekly:  { label: 'Weekly Schedule',  description: 'Runs once a week on a chosen day' },
+  manual:           { label: 'Manual Trigger',   description: 'Run on demand from a record or the agents page' },
+};
+
+const ACTION_TYPES = {
+  ai_analyse:       { label: 'AI Analyse',        description: 'Use AI to evaluate the record and produce a result' },
+  ai_draft_email:   { label: 'AI Draft Email',    description: 'Draft a personalised email using AI — holds for approval' },
+  ai_summarise:     { label: 'AI Summarise',      description: 'Generate an AI summary and save it to a field' },
+  ai_score:         { label: 'AI Score',          description: 'Score the record against criteria and save the result' },
+  send_email:       { label: 'Send Email',        description: 'Send an email using a template' },
+  update_field:     { label: 'Update Field',      description: 'Set a field value on the record' },
+  add_note:         { label: 'Add Note',          description: 'Log a note on the record' },
+  add_to_pool:      { label: 'Add to Pool',       description: 'Add the person to a talent pool' },
+  create_task:      { label: 'Create Task',       description: 'Create a follow-up task for a user' },
+  notify_user:      { label: 'Notify User',       description: 'Send an in-app notification to a user' },
+  webhook:          { label: 'Call Webhook',      description: 'POST record data to an external URL' },
+  human_review:     { label: 'Request Approval',  description: 'Pause and wait for a human to approve before continuing' },
+};
+
+// GET all agents
+router.get('/', (req, res) => {
+  const { environment_id } = req.query;
+  let agents = query('agents', a => !a.deleted_at);
+  if (environment_id) agents = agents.filter(a => a.environment_id === environment_id);
+  const runs = query('agent_runs', () => true);
+  const enriched = agents.map(a => {
+    const agentRuns = runs.filter(r => r.agent_id === a.id).sort((x,y) => new Date(y.created_at) - new Date(x.created_at));
+    return { ...a, last_run: agentRuns[0] || null, run_count: agentRuns.length, pending_approvals: agentRuns.filter(r => r.status === 'pending_approval').length };
+  });
+  res.json(enriched);
+});
+
+router.get('/meta', (req, res) => res.json({ trigger_types: TRIGGER_TYPES, action_types: ACTION_TYPES }));
+
+router.get('/approvals/pending', (req, res) => {
+  const { environment_id } = req.query;
+  let runs = query('agent_runs', r => r.status === 'pending_approval');
+  if (environment_id) runs = runs.filter(r => r.environment_id === environment_id);
+  res.json(runs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+});
+
+router.get('/:id', (req, res) => {
+  const agent = query('agents', a => a.id === req.params.id && !a.deleted_at)[0];
+  if (!agent) return res.status(404).json({ error: 'Not found' });
+  res.json(agent);
+});
+
+router.get('/:id/runs', (req, res) => {
+  const runs = query('agent_runs', r => r.agent_id === req.params.id)
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 50);
+  res.json(runs);
+});
+
+router.post('/', (req, res) => {
+  const { name, description, environment_id, trigger_type, trigger_config, conditions, actions, is_active, schedule_time, target_object_id } = req.body;
+  if (!name || !environment_id || !trigger_type) return res.status(400).json({ error: 'name, environment_id, trigger_type required' });
+  const agent = insert('agents', {
+    id: uuidv4(), name, description: description||'', environment_id, trigger_type,
+    trigger_config: trigger_config || {}, conditions: conditions || [], actions: actions || [],
+    target_object_id: target_object_id || null, schedule_time: schedule_time || '09:00',
+    is_active: is_active !== false ? 1 : 0, run_count: 0,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+  res.status(201).json(agent);
+});
+
+router.patch('/:id', (req, res) => {
+  const s = getStore();
+  const idx = s.agents.findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  s.agents[idx] = { ...s.agents[idx], ...req.body, updated_at: new Date().toISOString() };
+  saveStore();
+  res.json(s.agents[idx]);
+});
+
+router.delete('/:id', (req, res) => {
+  const s = getStore();
+  const idx = s.agents.findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  s.agents[idx].deleted_at = new Date().toISOString();
+  saveStore();
+  res.json({ success: true });
+});
+
+router.post('/:id/run', async (req, res) => {
+  const agent = query('agents', a => a.id === req.params.id && !a.deleted_at)[0];
+  if (!agent) return res.status(404).json({ error: 'Not found' });
+  const { record_id, environment_id } = req.body;
+  const run = insert('agent_runs', {
+    id: uuidv4(), agent_id: agent.id, agent_name: agent.name, trigger: 'manual',
+    record_id: record_id || null, environment_id: environment_id || agent.environment_id,
+    status: 'running', steps: [], ai_output: null, pending_actions: [],
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+  executeAgent(agent, run, record_id).catch(err => {
+    console.error('Agent run error:', err);
+    const s = getStore();
+    const idx = s.agent_runs.findIndex(r => r.id === run.id);
+    if (idx !== -1) { s.agent_runs[idx].status = 'failed'; s.agent_runs[idx].error = err.message; s.agent_runs[idx].updated_at = new Date().toISOString(); saveStore(); }
+  });
+  res.json({ run_id: run.id, status: 'running' });
+});
+
+router.post('/runs/:run_id/approve', async (req, res) => {
+  const { action_index, approved, modifier_note } = req.body;
+  const s = getStore();
+  const run = s.agent_runs.find(r => r.id === req.params.run_id);
+  if (!run) return res.status(404).json({ error: 'Run not found' });
+  const pendingAction = run.pending_actions[action_index];
+  if (!pendingAction) return res.status(400).json({ error: 'Action not found' });
+  pendingAction.approved = approved;
+  pendingAction.modifier_note = modifier_note || '';
+  pendingAction.reviewed_at = new Date().toISOString();
+  if (approved) {
+    try {
+      await executeAction(pendingAction.action, run.record_id, run.environment_id, run.ai_output, modifier_note);
+      pendingAction.executed = true;
+      run.steps.push({ step: `Approved action executed: ${pendingAction.action.type}`, timestamp: new Date().toISOString() });
+    } catch(err) { pendingAction.error = err.message; }
+  } else {
+    run.steps.push({ step: `Action rejected: ${pendingAction.action.type}`, timestamp: new Date().toISOString() });
+  }
+  if (run.pending_actions.every(a => a.approved !== undefined)) run.status = 'completed';
+  run.updated_at = new Date().toISOString();
+  saveStore();
+  res.json(run);
+});
+
+async function executeAgent(agent, run, record_id) {
+  const s = getStore();
+  const runIdx = s.agent_runs.findIndex(r => r.id === run.id);
+  const addStep = (step) => { s.agent_runs[runIdx].steps.push({ step, timestamp: new Date().toISOString() }); saveStore(); };
+  try {
+    addStep('Agent started');
+    let record = null, fields = [];
+    if (record_id) {
+      record = query('records', r => r.id === record_id)[0] || null;
+      if (record) { fields = query('field_definitions', f => f.object_id === record.object_id && !f.deleted_at); addStep(`Loaded record: ${record_id}`); }
+    }
+    if (agent.conditions && agent.conditions.length > 0) {
+      if (!evaluateConditions(agent.conditions, record)) {
+        s.agent_runs[runIdx].status = 'skipped'; s.agent_runs[runIdx].skip_reason = 'Conditions not met';
+        s.agent_runs[runIdx].updated_at = new Date().toISOString(); saveStore();
+        addStep('Conditions not met — agent skipped'); return;
+      }
+      addStep('All conditions passed');
+    }
+    let recordContext = '';
+    if (record && fields.length > 0) {
+      recordContext = fields.map(f => { const v = record.data?.[f.api_key]; return v != null ? `${f.name}: ${v}` : null; }).filter(Boolean).join('\n');
+    }
+    let aiOutput = null;
+    const pendingActions = [];
+    for (let i = 0; i < agent.actions.length; i++) {
+      const action = agent.actions[i];
+      addStep(`Running action ${i+1}: ${action.type}`);
+      if (['ai_analyse','ai_draft_email','ai_summarise','ai_score'].includes(action.type)) {
+        aiOutput = await runAiAction(action, recordContext, record, fields, aiOutput);
+        s.agent_runs[runIdx].ai_output = aiOutput; saveStore();
+        addStep(`AI action completed`);
+      } else if (action.type === 'human_review') {
+        pendingActions.push({ action, action_index: pendingActions.length, ai_output: aiOutput, record_preview: recordContext.slice(0,300), approved: undefined, created_at: new Date().toISOString() });
+        addStep('Paused — awaiting human approval');
+      } else {
+        const lastPending = pendingActions[pendingActions.length - 1];
+        if (lastPending && lastPending.approved === undefined) { pendingActions.push({ action, action_index: pendingActions.length, queued: true }); }
+        else { await executeAction(action, record_id, agent.environment_id, aiOutput); addStep(`Action executed: ${action.type}`); }
+      }
+    }
+    const hasPending = pendingActions.some(a => a.approved === undefined);
+    s.agent_runs[runIdx].status = hasPending ? 'pending_approval' : 'completed';
+    s.agent_runs[runIdx].pending_actions = pendingActions;
+    s.agent_runs[runIdx].updated_at = new Date().toISOString();
+    const agentIdx = s.agents.findIndex(a => a.id === agent.id);
+    if (agentIdx !== -1) { s.agents[agentIdx].run_count = (s.agents[agentIdx].run_count || 0) + 1; s.agents[agentIdx].last_run_at = new Date().toISOString(); }
+    saveStore();
+    addStep(hasPending ? 'Awaiting approval' : 'Agent completed successfully');
+  } catch(err) {
+    s.agent_runs[runIdx].status = 'failed'; s.agent_runs[runIdx].error = err.message;
+    s.agent_runs[runIdx].updated_at = new Date().toISOString(); saveStore(); throw err;
+  }
+}
+
+function evaluateConditions(conditions, record) {
+  if (!record) return true;
+  return conditions.every(c => {
+    const val = record.data?.[c.field] ?? record[c.field];
+    switch(c.operator) {
+      case 'equals': return String(val||'').toLowerCase() === String(c.value||'').toLowerCase();
+      case 'not_equals': return String(val||'').toLowerCase() !== String(c.value||'').toLowerCase();
+      case 'contains': return String(val||'').toLowerCase().includes(String(c.value||'').toLowerCase());
+      case 'greater_than': return Number(val) > Number(c.value);
+      case 'less_than': return Number(val) < Number(c.value);
+      case 'is_empty': return !val || val === '';
+      case 'is_not_empty': return !!val && val !== '';
+      case 'includes': return Array.isArray(val) && val.includes(c.value);
+      default: return true;
+    }
+  });
+}
+
+async function runAiAction(action, recordContext, record, fields, previousAiOutput) {
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) return '[AI unavailable — no API key]';
+  let prompt = '';
+  switch(action.type) {
+    case 'ai_analyse': prompt = action.prompt || `Analyse this record and provide a concise assessment:\n\n${recordContext}`; break;
+    case 'ai_draft_email': prompt = `Draft a professional, personalised email. Subject on first line prefixed "Subject: ".\nRecord: ${recordContext}\nPurpose: ${action.email_purpose||'follow up'}\nTone: ${action.tone||'professional'}`; break;
+    case 'ai_summarise': prompt = `Write a concise 2-3 sentence summary of this record for a recruiter:\n\n${recordContext}`; break;
+    case 'ai_score': prompt = `Score this candidate 0-100. Return ONLY JSON: {"score":85,"reasoning":"...","strengths":["..."],"gaps":["..."]}\nCriteria: ${action.criteria||'overall suitability'}\nData:\n${recordContext}`; break;
+    default: prompt = action.prompt || `Analyse this record:\n${recordContext}`;
+  }
+  if (previousAiOutput) prompt += `\n\nPrevious AI analysis:\n${previousAiOutput}`;
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
+  });
+  const data = await response.json();
+  return data.content?.[0]?.text || '[No response]';
+}
+
+async function executeAction(action, record_id, environment_id, aiOutput, modifierNote) {
+  const s = getStore();
+  switch(action.type) {
+    case 'add_note': {
+      if (!record_id) break;
+      const content = action.note_template ? action.note_template.replace('{{ai_output}}', aiOutput||'') : (aiOutput||'Agent note');
+      insert('notes', { id: uuidv4(), record_id, content: modifierNote ? `${content}\n\n_Reviewer note: ${modifierNote}_` : content, created_by: 'Agent', created_at: new Date().toISOString() });
+      break;
+    }
+    case 'update_field': {
+      if (!record_id || !action.field_key) break;
+      const idx = s.records.findIndex(r => r.id === record_id);
+      if (idx !== -1) { s.records[idx].data = { ...s.records[idx].data, [action.field_key]: action.field_value || aiOutput || '' }; s.records[idx].updated_at = new Date().toISOString(); saveStore(); }
+      break;
+    }
+    case 'send_email': case 'ai_draft_email': {
+      if (record_id) {
+        const lines = (aiOutput||'').split('\n');
+        const subjectLine = lines.find(l => l.startsWith('Subject:'));
+        insert('communications', { id: uuidv4(), record_id, environment_id, type: 'email', direction: 'outbound',
+          subject: subjectLine ? subjectLine.replace('Subject:','').trim() : (action.email_subject||'Agent email'),
+          body: lines.filter(l => !l.startsWith('Subject:')).join('\n').trim() || action.email_body || '',
+          status: action.type === 'ai_draft_email' ? 'draft' : 'sent', sent_by: 'Agent', created_at: new Date().toISOString() });
+      }
+      break;
+    }
+    case 'webhook': {
+      if (!action.webhook_url) break;
+      await fetch(action.webhook_url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record_id, environment_id, ai_output: aiOutput, timestamp: new Date().toISOString() }) }).catch(() => {});
+      break;
+    }
+  }
+}
+
+module.exports = router;

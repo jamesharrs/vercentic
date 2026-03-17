@@ -1,0 +1,608 @@
+// client/src/Agents.jsx
+import { useState, useEffect, useCallback } from "react";
+
+const F = "'DM Sans', -apple-system, sans-serif";
+const C = {
+  bg: "var(--t-bg, #EEF2FF)", card: "white", accent: "var(--t-accent, #4361EE)",
+  accentLight: "var(--t-accent-light, #EEF2FF)", text1: "#111827", text2: "#374151",
+  text3: "#6B7280", border: "#E5E7EB", green: "#0CA678", amber: "#F08C00",
+  red: "#E03131", purple: "#7048E8",
+};
+
+const api = {
+  get: (url) => fetch(url).then(r => r.json()),
+  post: (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
+  patch: (url, body) => fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
+  del: (url) => fetch(url, { method: 'DELETE' }).then(r => r.json()),
+};
+
+const Ic = ({ n, s = 16, c = C.text3 }) => {
+  const paths = {
+    plus: "M12 5v14M5 12h14", x: "M18 6 6 18M6 6l12 12",
+    edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+    trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
+    play: "M5 3l14 9-14 9V3z",
+    check: "M20 6 9 17l-5-5",
+    zap: "M13 2 3 14h9l-1 8 10-12h-9l1-8z",
+    clock: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2",
+    alert: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+    refresh: "M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15",
+    chevD: "M6 9l6 6 6-6", chevR: "M9 18l6-6-6-6",
+    users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
+    sparkles: "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0L9.937 15.5z",
+    loader: "M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
+    eye: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+    thumbUp: "M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3",
+    thumbDown: "M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10zM17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17",
+    calendar: "M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
+    settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+  };
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d={paths[n] || paths.zap} />
+    </svg>
+  );
+};
+
+const TRIGGER_ICONS = { record_created:"plus", record_updated:"edit", stage_changed:"chevR", form_submitted:"check", schedule_daily:"clock", schedule_weekly:"calendar", manual:"play" };
+const TRIGGER_COLORS = { record_created:"#4361EE", record_updated:"#F08C00", stage_changed:"#7048E8", form_submitted:"#0CA678", schedule_daily:"#E03131", schedule_weekly:"#E03131", manual:"#374151" };
+const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye" };
+const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700" };
+
+function statusColor(s) { return {active:C.green,inactive:C.text3,running:C.amber,failed:C.red,completed:C.green,pending_approval:"#E67700",skipped:C.text3}[s]||C.text3; }
+function relTime(ts) { if(!ts) return 'Never'; const diff=Date.now()-new Date(ts).getTime(),m=Math.floor(diff/60000); if(m<1) return 'Just now'; if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; }
+
+// ── AGENT CARD ────────────────────────────────────────────────────────────────
+function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
+  const [running, setRunning] = useState(false);
+  const handleRun = async (e) => { e.stopPropagation(); setRunning(true); await onRun(agent.id); setRunning(false); };
+  const trigColor = TRIGGER_COLORS[agent.trigger_type] || C.accent;
+  return (
+    <div onClick={() => onSelect(agent)} style={{ background:"white", borderRadius:14, border:`1.5px solid ${selected?C.accent:C.border}`, padding:0, cursor:"pointer", transition:"all .15s", overflow:"hidden", boxShadow:selected?`0 0 0 3px ${C.accentLight}`:"0 1px 4px rgba(0,0,0,.04)" }}
+      onMouseEnter={e=>{if(!selected)e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";}}
+      onMouseLeave={e=>{if(!selected)e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)";}}>
+      <div style={{height:3,background:trigColor}}/>
+      <div style={{padding:"14px 16px"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
+          <div style={{width:36,height:36,borderRadius:10,background:`${trigColor}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n={TRIGGER_ICONS[agent.trigger_type]||"zap"} s={16} c={trigColor}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.text1,marginBottom:2}}>{agent.name}</div>
+            {agent.description&&<div style={{fontSize:12,color:C.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{agent.description}</div>}
+          </div>
+          <div onClick={async e=>{e.stopPropagation();await api.patch(`/api/agents/${agent.id}`,{is_active:agent.is_active?0:1});onEdit(agent);}}
+            style={{width:34,height:20,borderRadius:10,background:agent.is_active?C.green:"#D1D5DB",cursor:"pointer",position:"relative",flexShrink:0,transition:"background .2s"}}>
+            <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:agent.is_active?16:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>
+          {(agent.actions||[]).slice(0,4).map((a,i)=>{const ac=ACTION_COLORS[a.type]||C.text3;return(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:6,background:`${ac}10`,border:`1px solid ${ac}20`}}>
+              <Ic n={ACTION_ICONS[a.type]||"zap"} s={10} c={ac}/>
+              <span style={{fontSize:10,color:ac,fontWeight:600,textTransform:"capitalize"}}>{(a.type||'').replace(/_/g,' ')}</span>
+            </div>
+          );})}
+          {(agent.actions||[]).length>4&&<div style={{fontSize:10,color:C.text3,padding:"2px 6px"}}>+{agent.actions.length-4} more</div>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {agent.pending_approvals>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"#FFF3CD",border:"1px solid #F08C00"}}>
+              <Ic n="eye" s={11} c="#F08C00"/><span style={{fontSize:11,color:"#F08C00",fontWeight:700}}>{agent.pending_approvals} pending</span>
+            </div>
+          )}
+          <div style={{flex:1}}/>
+          <span style={{fontSize:11,color:C.text3}}>{relTime(agent.last_run_at)}</span>
+          <span style={{fontSize:11,color:statusColor(agent.is_active?'active':'inactive'),fontWeight:600}}>{agent.is_active?'Active':'Inactive'}</span>
+          <button onClick={handleRun} disabled={running} style={{padding:"4px 10px",borderRadius:7,border:"none",background:C.accent,color:"white",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:4}}>
+            {running?<Ic n="loader" s={11} c="white"/>:<Ic n="play" s={11} c="white"/>}{running?'Running…':'Run'}
+          </button>
+          <button onClick={e=>{e.stopPropagation();onEdit(agent);}} style={{padding:"4px 6px",borderRadius:7,border:`1px solid ${C.border}`,background:"white",cursor:"pointer"}}><Ic n="edit" s={13} c={C.text3}/></button>
+          <button onClick={e=>{e.stopPropagation();onDelete(agent.id);}} style={{padding:"4px 6px",borderRadius:7,border:`1px solid ${C.border}`,background:"white",cursor:"pointer"}}><Ic n="trash" s={13} c={C.red}/></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AGENT BUILDER MODAL ────────────────────────────────────────────────────────
+function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
+  const isEdit = !!agent?.id;
+  const [tab, setTab] = useState('trigger');
+  const [meta, setMeta] = useState({ trigger_types: {}, action_types: {} });
+  const [fields, setFields] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: agent?.name||'', description: agent?.description||'', trigger_type: agent?.trigger_type||'manual',
+    trigger_config: agent?.trigger_config||{}, target_object_id: agent?.target_object_id||'',
+    conditions: agent?.conditions||[], actions: agent?.actions||[],
+    is_active: agent?.is_active!==undefined?agent.is_active:1, schedule_time: agent?.schedule_time||'09:00',
+  });
+
+  useEffect(()=>{ api.get('/api/agents/meta').then(setMeta).catch(()=>{}); },[]);
+  useEffect(()=>{ if(form.target_object_id) api.get(`/api/fields?object_id=${form.target_object_id}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{}); },[form.target_object_id]);
+
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const addCondition = () => set('conditions',[...form.conditions,{field:'',operator:'equals',value:''}]);
+  const updateCondition = (i,k,v) => { const c=[...form.conditions]; c[i]={...c[i],[k]:v}; set('conditions',c); };
+  const removeCondition = (i) => set('conditions',form.conditions.filter((_,idx)=>idx!==i));
+  const addAction = (type) => set('actions',[...form.actions,{type,prompt:'',field_key:'',field_value:'',note_template:'',email_subject:'',email_body:'',webhook_url:'',criteria:'',email_purpose:'',tone:'professional'}]);
+  const updateAction = (i,k,v) => { const a=[...form.actions]; a[i]={...a[i],[k]:v}; set('actions',a); };
+  const removeAction = (i) => set('actions',form.actions.filter((_,idx)=>idx!==i));
+  const moveAction = (i,dir) => { const a=[...form.actions]; const j=i+dir; if(j<0||j>=a.length) return; [a[i],a[j]]=[a[j],a[i]]; set('actions',a); };
+  const isAiAction = (type) => ['ai_analyse','ai_draft_email','ai_summarise','ai_score'].includes(type);
+
+  const handleSave = async () => {
+    if(!form.name||!form.trigger_type) return;
+    setSaving(true);
+    try {
+      const payload={...form,environment_id:environment?.id};
+      if(isEdit) await api.patch(`/api/agents/${agent.id}`,payload);
+      else await api.post('/api/agents',payload);
+      onSave();
+    } finally { setSaving(false); }
+  };
+
+  const TABS=['trigger','conditions','actions','settings'];
+  const TAB_LABELS={trigger:'Trigger',conditions:'Conditions',actions:'Actions',settings:'Settings'};
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"white",borderRadius:18,width:680,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}
+        onMouseDown={e=>e.stopPropagation()}>
+        <div style={{padding:"20px 24px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <div style={{width:40,height:40,borderRadius:12,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Ic n="zap" s={20} c={C.purple}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:16,fontWeight:800,color:C.text1}}>{isEdit?'Edit Agent':'New Agent'}</div>
+              <div style={{fontSize:12,color:C.text3}}>Configure trigger, conditions, and actions</div>
+            </div>
+            <button onClick={onClose} style={{padding:6,border:"none",background:"transparent",cursor:"pointer"}}><Ic n="x" s={18} c={C.text3}/></button>
+          </div>
+          <input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Agent name…"
+            style={{width:"100%",border:"none",fontSize:18,fontWeight:700,color:C.text1,outline:"none",marginBottom:12,fontFamily:F,background:"transparent"}}/>
+          <div style={{display:"flex",gap:0}}>
+            {TABS.map(t=>(
+              <button key={t} onClick={()=>setTab(t)} style={{padding:"8px 16px",border:"none",background:"transparent",cursor:"pointer",fontFamily:F,fontSize:13,fontWeight:tab===t?700:500,color:tab===t?C.accent:C.text3,borderBottom:`2px solid ${tab===t?C.accent:"transparent"}`,marginBottom:-1}}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+
+          {/* TRIGGER TAB */}
+          {tab==='trigger'&&(
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>What starts this agent?</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+                {Object.entries(meta.trigger_types||{}).map(([key,def])=>(
+                  <div key={key} onClick={()=>set('trigger_type',key)} style={{padding:"12px 14px",borderRadius:10,border:`2px solid ${form.trigger_type===key?C.accent:C.border}`,background:form.trigger_type===key?C.accentLight:"white",cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"flex-start",gap:10}}>
+                    <Ic n={TRIGGER_ICONS[key]||"zap"} s={16} c={form.trigger_type===key?C.accent:C.text3}/>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:form.trigger_type===key?C.accent:C.text1}}>{def.label}</div>
+                      <div style={{fontSize:11,color:C.text3,marginTop:2,lineHeight:1.4}}>{def.description}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {['record_created','record_updated','stage_changed'].includes(form.trigger_type)&&(
+                <div style={{marginBottom:12}}>
+                  <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Target Object</label>
+                  <select value={form.target_object_id} onChange={e=>set('target_object_id',e.target.value)}
+                    style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,background:"white",color:C.text1}}>
+                    <option value="">All objects</option>
+                    {objects.map(o=><option key={o.id} value={o.id}>{o.plural_name||o.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {['schedule_daily','schedule_weekly'].includes(form.trigger_type)&&(
+                <div style={{display:"flex",gap:12}}>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Time</label>
+                    <input type="time" value={form.schedule_time} onChange={e=>set('schedule_time',e.target.value)}
+                      style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F}}/>
+                  </div>
+                  {form.trigger_type==='schedule_weekly'&&(
+                    <div style={{flex:1}}>
+                      <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Day</label>
+                      <select value={form.trigger_config?.day_of_week||'monday'} onChange={e=>set('trigger_config',{...form.trigger_config,day_of_week:e.target.value})}
+                        style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,background:"white"}}>
+                        {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=><option key={d} value={d.toLowerCase()}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{marginTop:16}}>
+                <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Description (optional)</label>
+                <textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={2} placeholder="What does this agent do?"
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          {/* CONDITIONS TAB */}
+          {tab==='conditions'&&(
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Run only when…</div>
+              <div style={{fontSize:12,color:C.text3,marginBottom:16}}>All conditions must be true. Leave empty to always run.</div>
+              {form.conditions.map((c,i)=>(
+                <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                  <select value={c.field} onChange={e=>updateCondition(i,'field',e.target.value)}
+                    style={{flex:2,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                    <option value="">Pick field…</option>
+                    {fields.map(f=><option key={f.id} value={f.api_key}>{f.name}</option>)}
+                  </select>
+                  <select value={c.operator} onChange={e=>updateCondition(i,'operator',e.target.value)}
+                    style={{flex:1.5,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                    {['equals','not_equals','contains','greater_than','less_than','is_empty','is_not_empty','includes'].map(op=><option key={op} value={op}>{op.replace(/_/g,' ')}</option>)}
+                  </select>
+                  {!['is_empty','is_not_empty'].includes(c.operator)&&(
+                    <input value={c.value} onChange={e=>updateCondition(i,'value',e.target.value)} placeholder="Value…"
+                      style={{flex:2,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                  )}
+                  <button onClick={()=>removeCondition(i)} style={{padding:"6px",border:"none",background:"transparent",cursor:"pointer"}}><Ic n="x" s={14} c={C.red}/></button>
+                </div>
+              ))}
+              <button onClick={addCondition} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:`1.5px dashed ${C.border}`,background:"transparent",cursor:"pointer",color:C.text3,fontSize:13,fontFamily:F}}>
+                <Ic n="plus" s={14} c={C.text3}/> Add condition
+              </button>
+            </div>
+          )}
+
+          {/* ACTIONS TAB */}
+          {tab==='actions'&&(
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Then do…</div>
+              <div style={{fontSize:12,color:C.text3,marginBottom:16}}>Actions run in sequence. AI actions run first and their output is available to later actions.</div>
+              {form.actions.map((a,i)=>{
+                const ac=ACTION_COLORS[a.type]||C.text3;
+                return(
+                  <div key={i} style={{marginBottom:10,border:`1.5px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:`${ac}08`}}>
+                      <div style={{display:"flex",gap:2}}>
+                        <button onClick={()=>moveAction(i,-1)} style={{padding:2,border:"none",background:"transparent",cursor:"pointer"}}>▲</button>
+                        <button onClick={()=>moveAction(i,1)} style={{padding:2,border:"none",background:"transparent",cursor:"pointer"}}>▼</button>
+                      </div>
+                      <div style={{width:28,height:28,borderRadius:8,background:`${ac}20`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic n={ACTION_ICONS[a.type]||"zap"} s={14} c={ac}/></div>
+                      <span style={{flex:1,fontSize:13,fontWeight:700,color:C.text1,textTransform:"capitalize"}}>{(a.type||'').replace(/_/g,' ')}</span>
+                      {isAiAction(a.type)&&<span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:`${C.purple}15`,color:C.purple,fontWeight:700}}>AI</span>}
+                      <button onClick={()=>removeAction(i)} style={{padding:4,border:"none",background:"transparent",cursor:"pointer"}}><Ic n="x" s={13} c={C.red}/></button>
+                    </div>
+                    <div style={{padding:"10px 12px"}}>
+                      {isAiAction(a.type)&&a.type!=='ai_draft_email'&&(
+                        <textarea value={a.prompt} onChange={e=>updateAction(i,'prompt',e.target.value)}
+                          placeholder={a.type==='ai_score'?"Scoring criteria…":"Custom prompt (leave empty for default)…"}
+                          rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>
+                      )}
+                      {a.type==='ai_draft_email'&&(
+                        <div style={{display:"flex",gap:8}}>
+                          <input value={a.email_purpose} onChange={e=>updateAction(i,'email_purpose',e.target.value)} placeholder="Email purpose…" style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                          <select value={a.tone} onChange={e=>updateAction(i,'tone',e.target.value)} style={{width:130,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                            {['professional','warm','formal','friendly','concise'].map(t=><option key={t}>{t}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {a.type==='update_field'&&(
+                        <div style={{display:"flex",gap:8}}>
+                          <select value={a.field_key} onChange={e=>updateAction(i,'field_key',e.target.value)} style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                            <option value="">Select field…</option>
+                            {fields.map(f=><option key={f.id} value={f.api_key}>{f.name}</option>)}
+                          </select>
+                          <input value={a.field_value} onChange={e=>updateAction(i,'field_value',e.target.value)} placeholder="Value (or empty for AI output)…" style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                        </div>
+                      )}
+                      {a.type==='add_note'&&(<textarea value={a.note_template} onChange={e=>updateAction(i,'note_template',e.target.value)} placeholder="Note text. Use {{ai_output}} to include AI result…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>)}
+                      {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
+                      {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.text3,marginBottom:8}}>Add action</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                  {Object.entries(meta.action_types||{}).map(([key,def])=>{const ac=ACTION_COLORS[key]||C.text3;return(
+                    <button key={key} onClick={()=>addAction(key)} style={{padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"white",cursor:"pointer",display:"flex",alignItems:"center",gap:7,textAlign:"left",fontFamily:F,transition:"all .1s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.border=`1.5px solid ${ac}`;e.currentTarget.style.background=`${ac}08`;}}
+                      onMouseLeave={e=>{e.currentTarget.style.border=`1.5px solid ${C.border}`;e.currentTarget.style.background="white";}}>
+                      <Ic n={ACTION_ICONS[key]||"zap"} s={13} c={ac}/><span style={{fontSize:11,fontWeight:600,color:C.text2}}>{def.label}</span>
+                    </button>
+                  );})}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SETTINGS TAB */}
+          {tab==='settings'&&(
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:`1px solid ${C.border}`}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:C.text1}}>Active</div><div style={{fontSize:11,color:C.text3}}>Enable or disable this agent</div></div>
+              <div onClick={()=>set('is_active',form.is_active?0:1)} style={{width:40,height:24,borderRadius:12,background:form.is_active?C.green:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s"}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:"white",position:"absolute",top:3,left:form.is_active?19:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{padding:"14px 24px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"9px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"white",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:F}}>Cancel</button>
+          <button onClick={handleSave} disabled={saving||!form.name} style={{padding:"9px 24px",borderRadius:10,border:"none",background:C.accent,color:"white",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:F,display:"flex",alignItems:"center",gap:8,opacity:saving||!form.name?.6:1}}>
+            {saving&&<Ic n="loader" s={13} c="white"/>}{isEdit?'Save Changes':'Create Agent'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APPROVAL INBOX ────────────────────────────────────────────────────────────
+function ApprovalInbox({ environmentId, onRefresh }) {
+  const [approvals, setApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState({});
+  const [processing, setProcessing] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const data = await api.get(`/api/agents/approvals/pending?environment_id=${environmentId}`);
+    setApprovals(Array.isArray(data) ? data : []);
+    setLoading(false);
+  }, [environmentId]);
+
+  useEffect(()=>{load();},[load]);
+
+  const handle = async (runId, actionIndex, approved) => {
+    setProcessing(p=>({...p,[`${runId}-${actionIndex}`]:true}));
+    await api.post(`/api/agents/runs/${runId}/approve`,{action_index:actionIndex,approved,modifier_note:notes[`${runId}-${actionIndex}`]||''});
+    load(); onRefresh();
+    setProcessing(p=>({...p,[`${runId}-${actionIndex}`]:false}));
+  };
+
+  if(loading) return <div style={{padding:40,textAlign:"center",color:C.text3}}>Loading…</div>;
+  if(approvals.length===0) return (
+    <div style={{padding:60,textAlign:"center"}}>
+      <div style={{width:56,height:56,borderRadius:"50%",background:`${C.green}15`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Ic n="check" s={24} c={C.green}/></div>
+      <div style={{fontSize:15,fontWeight:700,color:C.text1,marginBottom:4}}>All clear</div>
+      <div style={{fontSize:13,color:C.text3}}>No pending approvals</div>
+    </div>
+  );
+
+  return (
+    <div>
+      {approvals.map(run=>(
+        <div key={run.id} style={{background:"white",borderRadius:12,border:`1.5px solid ${C.amber}40`,padding:"16px",marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{width:32,height:32,borderRadius:8,background:`${C.amber}15`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic n="eye" s={15} c={C.amber}/></div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text1}}>{run.agent_name}</div>
+              <div style={{fontSize:11,color:C.text3}}>{relTime(run.created_at)} · Record: {run.record_id?.slice(0,8)||'N/A'}</div>
+            </div>
+          </div>
+          {run.ai_output&&(
+            <div style={{padding:"10px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:12,color:C.text2,marginBottom:12,lineHeight:1.6,whiteSpace:"pre-wrap",maxHeight:120,overflowY:"auto"}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.purple,marginBottom:4}}>AI OUTPUT</div>{run.ai_output}
+            </div>
+          )}
+          {(run.pending_actions||[]).filter(a=>a.approved===undefined).map((pa,idx)=>{
+            const key=`${run.id}-${pa.action_index}`;
+            return(
+              <div key={idx} style={{border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:8,textTransform:"capitalize"}}>Action: {(pa.action?.type||'').replace(/_/g,' ')}</div>
+                <textarea value={notes[key]||''} onChange={e=>setNotes(n=>({...n,[key]:e.target.value}))} placeholder="Add a note before approving (optional)…" rows={2}
+                  style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical",marginBottom:8}}/>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>handle(run.id,pa.action_index,false)} style={{flex:1,padding:"8px",borderRadius:8,border:`1.5px solid ${C.red}`,background:"transparent",color:C.red,fontWeight:700,cursor:"pointer",fontFamily:F,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    <Ic n="thumbDown" s={13} c={C.red}/> Reject
+                  </button>
+                  <button onClick={()=>handle(run.id,pa.action_index,true)} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:C.green,color:"white",fontWeight:700,cursor:"pointer",fontFamily:F,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    <Ic n="thumbUp" s={13} c="white"/> Approve & Execute
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── AGENT DETAIL PANEL ────────────────────────────────────────────────────────
+function AgentDetail({ agent, onEdit, onClose }) {
+  const [runs, setRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(()=>{
+    if(!agent) return;
+    api.get(`/api/agents/${agent.id}/runs`).then(d=>{setRuns(Array.isArray(d)?d:[]);setLoading(false);});
+  },[agent?.id]);
+
+  if(!agent) return null;
+  const trigColor=TRIGGER_COLORS[agent.trigger_type]||C.accent;
+
+  return (
+    <div style={{background:"white",borderRadius:14,border:`1.5px solid ${C.border}`,overflow:"hidden",height:"100%"}}>
+      <div style={{height:3,background:trigColor}}/>
+      <div style={{padding:"16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <div style={{width:40,height:40,borderRadius:12,background:`${trigColor}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Ic n={TRIGGER_ICONS[agent.trigger_type]||"zap"} s={18} c={trigColor}/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:700,color:C.text1}}>{agent.name}</div>
+            <div style={{fontSize:12,color:C.text3}}>{agent.description||'No description'}</div>
+          </div>
+          <button onClick={()=>{onEdit(agent);}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:"white",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:F}}>Edit</button>
+          <button onClick={onClose} style={{padding:6,border:"none",background:"transparent",cursor:"pointer"}}><Ic n="x" s={16} c={C.text3}/></button>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {[{label:"Runs",value:agent.run_count||0},{label:"Pending",value:agent.pending_approvals||0,color:agent.pending_approvals>0?C.amber:C.text3},{label:"Status",value:agent.is_active?"Active":"Inactive",color:agent.is_active?C.green:C.text3}].map(s=>(
+            <div key={s.label} style={{flex:1,padding:"10px 12px",borderRadius:10,background:C.bg,textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:800,color:s.color||C.text1}}>{s.value}</div>
+              <div style={{fontSize:11,color:C.text3,fontWeight:500}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Run history</div>
+        {loading?<div style={{color:C.text3,fontSize:13}}>Loading…</div>:runs.length===0?(
+          <div style={{textAlign:"center",padding:"20px 0",color:C.text3,fontSize:13}}>No runs yet</div>
+        ):(
+          <div style={{maxHeight:340,overflowY:"auto"}}>
+            {runs.map(r=>(
+              <div key={r.id} style={{marginBottom:6,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+                <div onClick={()=>setExpanded(expanded===r.id?null:r.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",cursor:"pointer",background:"white"}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:statusColor(r.status),flexShrink:0}}/>
+                  <span style={{flex:1,fontSize:12,color:C.text2,fontWeight:600,textTransform:"capitalize"}}>{r.status.replace(/_/g,' ')}</span>
+                  <span style={{fontSize:11,color:C.text3}}>{relTime(r.created_at)}</span>
+                  <Ic n={expanded===r.id?"chevD":"chevR"} s={12} c={C.text3}/>
+                </div>
+                {expanded===r.id&&(
+                  <div style={{borderTop:`1px solid ${C.border}`,padding:"8px 10px",background:"#FAFAFA"}}>
+                    {r.skip_reason&&<div style={{fontSize:11,color:C.amber,marginBottom:4}}>⚠ {r.skip_reason}</div>}
+                    {r.error&&<div style={{fontSize:11,color:C.red,marginBottom:4}}>✗ {r.error}</div>}
+                    {r.ai_output&&<div style={{fontSize:11,color:C.text2,marginBottom:6,padding:"6px 8px",background:`${C.purple}08`,borderRadius:6,lineHeight:1.5,maxHeight:80,overflowY:"auto",whiteSpace:"pre-wrap"}}><strong style={{color:C.purple}}>AI: </strong>{r.ai_output}</div>}
+                    {(r.steps||[]).map((s,si)=><div key={si} style={{fontSize:11,color:C.text3,display:"flex",gap:6,marginBottom:2}}><span>→</span><span>{s.step}</span></div>)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN AGENTS PAGE ──────────────────────────────────────────────────────────
+export default function AgentsModule({ environment }) {
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [objects, setObjects] = useState([]);
+  const [view, setView] = useState('agents');
+  const [pendingCount, setPendingCount] = useState(0);
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [editAgent, setEditAgent] = useState(null);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const load = useCallback(async () => {
+    if(!environment?.id) return;
+    setLoading(true);
+    const [agentsData, objectsData] = await Promise.all([
+      api.get(`/api/agents?environment_id=${environment.id}`),
+      api.get(`/api/objects?environment_id=${environment.id}`),
+    ]);
+    const aList = Array.isArray(agentsData) ? agentsData : [];
+    setAgents(aList);
+    setObjects(Array.isArray(objectsData) ? objectsData : []);
+    setPendingCount(aList.reduce((s,a) => s+(a.pending_approvals||0), 0));
+    setLoading(false);
+  }, [environment?.id]);
+
+  useEffect(()=>{load();},[load]);
+
+  const handleDelete = async (id) => {
+    if(!window.confirm('Delete this agent?')) return;
+    await api.del(`/api/agents/${id}`);
+    load();
+  };
+  const handleRun = async (id) => {
+    await api.post(`/api/agents/${id}/run`,{environment_id:environment?.id});
+    setTimeout(load, 1500);
+  };
+  const handleEdit = (agent) => { setEditAgent(agent); setShowBuilder(true); };
+
+  const filtered = agents.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.description||'').toLowerCase().includes(search.toLowerCase()));
+  const stats = { total:agents.length, active:agents.filter(a=>a.is_active).length, pending:pendingCount, ran_today:agents.filter(a=>a.last_run_at&&new Date(a.last_run_at).toDateString()===new Date().toDateString()).length };
+
+  return (
+    <div style={{fontFamily:F,minHeight:"100vh",padding:"0 0 40px"}}>
+      <div style={{padding:"24px 0 20px",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+          <div style={{width:44,height:44,borderRadius:14,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Ic n="zap" s={22} c={C.purple}/>
+          </div>
+          <div>
+            <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.text1}}>Agents</h1>
+            <p style={{margin:0,fontSize:13,color:C.text3}}>AI-powered automation with human oversight</p>
+          </div>
+          <div style={{flex:1}}/>
+          <button onClick={()=>{setEditAgent(null);setShowBuilder(true);}}
+            style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:10,border:"none",background:C.accent,color:"white",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:F}}>
+            <Ic n="plus" s={15} c="white"/> New Agent
+          </button>
+        </div>
+
+        {/* Stat cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+          {[
+            {label:"Total Agents",value:stats.total,icon:"zap",color:C.accent},
+            {label:"Active",value:stats.active,icon:"play",color:C.green},
+            {label:"Pending Approvals",value:stats.pending,icon:"eye",color:stats.pending>0?C.amber:C.text3},
+            {label:"Ran Today",value:stats.ran_today,icon:"clock",color:C.purple},
+          ].map(s=>(
+            <div key={s.label} style={{background:"white",borderRadius:12,padding:"14px 16px",border:`1.5px solid ${C.border}`,display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:`${s.color}12`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic n={s.icon} s={16} c={s.color}/></div>
+              <div><div style={{fontSize:22,fontWeight:800,color:s.color}}>{s.value}</div><div style={{fontSize:11,color:C.text3}}>{s.label}</div></div>
+            </div>
+          ))}
+        </div>
+
+        {/* View toggle + search */}
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,padding:3}}>
+            {['agents','approvals'].map(v=>(
+              <button key={v} onClick={()=>setView(v)} style={{padding:"6px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F,fontSize:13,fontWeight:view===v?700:500,background:view===v?C.accent:"transparent",color:view===v?"white":C.text3}}>
+                {v==='agents'?'All Agents':`Approvals${pendingCount>0?` (${pendingCount})`:''}`}
+              </button>
+            ))}
+          </div>
+          {view==='agents'&&(
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agents…"
+              style={{flex:1,maxWidth:300,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F}}/>
+          )}
+          <button onClick={load} style={{padding:"8px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"white",cursor:"pointer"}}><Ic n="refresh" s={15} c={C.text3}/></button>
+        </div>
+      </div>
+
+      {/* Content */}
+      {view==='approvals' ? (
+        <ApprovalInbox environmentId={environment?.id} onRefresh={load}/>
+      ) : (
+        <div style={{display:"grid",gridTemplateColumns:selectedAgent?"1fr 380px":"1fr",gap:16}}>
+          <div>
+            {loading ? (
+              <div style={{padding:60,textAlign:"center",color:C.text3}}>Loading…</div>
+            ) : filtered.length===0 ? (
+              <div style={{textAlign:"center",padding:"60px 0"}}>
+                <div style={{width:60,height:60,borderRadius:"50%",background:`${C.purple}12`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Ic n="zap" s={26} c={C.purple}/></div>
+                <div style={{fontSize:16,fontWeight:700,color:C.text1,marginBottom:6}}>{search?'No agents match':'No agents yet'}</div>
+                <div style={{fontSize:13,color:C.text3,marginBottom:20}}>{search?'Try a different search.':'Create your first agent to automate tasks with AI.'}</div>
+                {!search&&<button onClick={()=>{setEditAgent(null);setShowBuilder(true);}} style={{padding:"10px 20px",borderRadius:10,border:"none",background:C.accent,color:"white",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:F}}>Create Agent</button>}
+              </div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:selectedAgent?"1fr":"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
+                {filtered.map(a=>(
+                  <AgentCard key={a.id} agent={a} onEdit={handleEdit} onDelete={handleDelete} onRun={handleRun} onSelect={setSelectedAgent} selected={selectedAgent?.id===a.id}/>
+                ))}
+              </div>
+            )}
+          </div>
+          {selectedAgent&&<AgentDetail agent={selectedAgent} onEdit={handleEdit} onClose={()=>setSelectedAgent(null)}/>}
+        </div>
+      )}
+
+      {showBuilder&&(
+        <AgentBuilderModal agent={editAgent} environment={environment} objects={objects}
+          onClose={()=>{setShowBuilder(false);setEditAgent(null);}}
+          onSave={()=>{setShowBuilder(false);setEditAgent(null);load();}}/>
+      )}
+    </div>
+  );
+}
