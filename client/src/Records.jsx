@@ -2631,6 +2631,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
 
   // ── Collapsible draggable panel card (right col) ──
+  // gripActive ref: only allow drag when the grip handle initiated it
+  const gripActive = useRef(false);
+
   const PanelCard = ({ id }) => {
     const meta = PANEL_META[id];
     if (!meta) return null;
@@ -2638,20 +2641,77 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const badge = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
     const isDragOver = dragOverPanel===id;
 
+    const handleDragStart = (e) => {
+      if (!gripActive.current) { e.preventDefault(); return; }
+      onPanelDragStart(e, id);
+    };
+    const handleDragEnd = () => {
+      gripActive.current = false;
+      setDraggingPanel(null);
+      setDragOverPanel(null);
+    };
+
     return (
-      <div draggable onDragStart={e=>onPanelDragStart(e,id)} onDragOver={e=>onPanelDragOver(e,id)} onDrop={()=>onPanelDrop(id)} onDragEnd={()=>{setDraggingPanel(null);setDragOverPanel(null);}}
-        style={{ background:C.surface, border:`1.5px solid ${isDragOver?C.accent:C.border}`, borderRadius:14, marginBottom:12, overflow:"hidden", transition:"border-color .15s, opacity .15s", opacity:draggingPanel===id?0.5:1, boxShadow:isDragOver?`0 0 0 3px ${C.accent}22`:"0 1px 4px rgba(0,0,0,.04)" }}>
-        {/* Panel header — click to collapse, drag handle on left */}
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", cursor:"pointer", userSelect:"none", borderBottom:isOpen?`1px solid ${C.border}`:"none" }}
-          onClick={()=>setOpenPanels(p=>{ const next={...p,[id]:!p[id]}; try{localStorage.setItem(openPanelsKey,JSON.stringify(next));}catch{} return next; })}>
-          <div title="Drag to reorder" style={{ color:C.text3, cursor:"grab", padding:"0 2px", display:"flex", flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-            <svg width="12" height="18" viewBox="0 0 12 18" fill="none"><circle cx="4" cy="4" r="1.5" fill="currentColor"/><circle cx="9" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="14" r="1.5" fill="currentColor"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/></svg>
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={e=>onPanelDragOver(e,id)}
+        onDrop={()=>onPanelDrop(id)}
+        onDragEnd={handleDragEnd}
+        style={{
+          background:C.surface,
+          border:`1.5px solid ${isDragOver?C.accent:C.border}`,
+          borderRadius:14, marginBottom:12, overflow:"hidden",
+          transition:"border-color .15s, opacity .15s, box-shadow .15s",
+          opacity:draggingPanel===id?0.45:1,
+          boxShadow:isDragOver?`0 0 0 3px ${C.accent}28, 0 4px 16px rgba(0,0,0,.08)`:"0 1px 4px rgba(0,0,0,.04)",
+          transform:draggingPanel===id?"scale(0.98)":"scale(1)",
+        }}>
+
+        {/* Panel header — grip handle initiates drag; rest of header clicks to collapse */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
+          userSelect:"none", borderBottom:isOpen?`1px solid ${C.border}`:"none" }}>
+
+          {/* ⠿ Grip — mousedown arms drag; cursor shows affordance */}
+          <div
+            title="Drag to reorder"
+            onMouseDown={()=>{ gripActive.current = true; }}
+            onMouseUp={()=>{ gripActive.current = false; }}
+            onClick={e=>e.stopPropagation()}
+            style={{ color:C.text3, cursor:"grab", padding:"2px 3px", display:"flex",
+              flexShrink:0, borderRadius:4, transition:"color .12s, background .12s" }}
+            onMouseEnter={e=>{ e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
+            onMouseLeave={e=>{ e.currentTarget.style.color=C.text3; e.currentTarget.style.background="transparent"; }}>
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
+              <circle cx="4" cy="4"  r="1.5" fill="currentColor"/>
+              <circle cx="9" cy="4"  r="1.5" fill="currentColor"/>
+              <circle cx="4" cy="9"  r="1.5" fill="currentColor"/>
+              <circle cx="9" cy="9"  r="1.5" fill="currentColor"/>
+              <circle cx="4" cy="14" r="1.5" fill="currentColor"/>
+              <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
+            </svg>
           </div>
-          <Ic n={meta.icon} s={14} c={C.accent}/>
-          <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
-          {badge>0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
-          <span style={{ display:"flex", transition:"transform .2s", transform:isOpen?"rotate(180deg)":"rotate(0deg)" }}><Ic n="chevD" s={14} c={C.text3}/></span>
+
+          {/* Clickable area — collapses/expands the panel */}
+          <div style={{ display:"flex", alignItems:"center", gap:10, flex:1, cursor:"pointer" }}
+            onClick={()=>setOpenPanels(p=>{
+              const next={...p,[id]:!p[id]};
+              try{localStorage.setItem(openPanelsKey,JSON.stringify(next));}catch{}
+              return next;
+            })}>
+            <Ic n={meta.icon} s={14} c={C.accent}/>
+            <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
+            {badge>0 && (
+              <span style={{ background:C.accentLight, color:C.accent, fontSize:11,
+                fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>
+            )}
+            <span style={{ display:"flex", transition:"transform .2s",
+              transform:isOpen?"rotate(180deg)":"rotate(0deg)" }}>
+              <Ic n="chevD" s={14} c={C.text3}/>
+            </span>
+          </div>
         </div>
+
         {isOpen && <div style={{ padding:"16px" }}><PanelContent id={id}/></div>}
       </div>
     );
