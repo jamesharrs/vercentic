@@ -87,3 +87,69 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+
+// ── Career site: submit application ──────────────────────────────────────────
+// POST /api/portals/:id/apply
+// Creates a Person record + activity log entry for the application.
+// Public endpoint — no auth required (portal candidates aren't users).
+router.post('/:id/apply', async (req, res) => {
+  try {
+    const store = getStore();
+    const portal = (store.portals || []).find(p => p.id === req.params.id);
+    if (!portal) return res.status(404).json({ error: 'Portal not found' });
+
+    const { first_name, last_name, email, phone, cover_note, job_id, job_title } = req.body;
+    if (!email || !first_name) return res.status(400).json({ error: 'first_name and email required' });
+
+    // Find the People object for this environment
+    const peopleObj = (store.objects || []).find(
+      o => o.environment_id === portal.environment_id && o.slug === 'people'
+    );
+    if (!peopleObj) return res.status(400).json({ error: 'People object not found' });
+
+    // Check for duplicate — don't create two records for the same email
+    const existing = (store.records || []).find(
+      r => r.object_id === peopleObj.id && r.data?.email === email
+    );
+
+    let personRecord;
+    if (existing) {
+      personRecord = existing;
+    } else {
+      personRecord = {
+        id: uid(), object_id: peopleObj.id, environment_id: portal.environment_id,
+        data: { first_name, last_name: last_name || '', email, phone: phone || '',
+                status: 'Active', source: 'Career Site', person_type: 'Candidate' },
+        created_by: 'portal', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      if (!store.records) store.records = [];
+      store.records.push(personRecord);
+    }
+
+    // Log the application in activity
+    if (!store.activity) store.activity = [];
+    store.activity.push({
+      id: uid(), record_id: personRecord.id, object_id: peopleObj.id,
+      environment_id: portal.environment_id,
+      action: 'applied', actor: 'portal',
+      details: { job_id, job_title, portal_id: portal.id, portal_name: portal.name, cover_note },
+      created_at: new Date().toISOString(),
+    });
+
+    // Add a note with cover letter if provided
+    if (cover_note) {
+      if (!store.notes) store.notes = [];
+      store.notes.push({
+        id: uid(), record_id: personRecord.id,
+        content: `Applied via ${portal.name || 'career site'}${job_title ? ` for ${job_title}` : ''}.\n\n${cover_note}`,
+        author: 'Career Site', source: 'portal', created_at: new Date().toISOString(),
+      });
+    }
+
+    saveStore();
+    res.json({ success: true, person_id: personRecord.id, is_new: !existing });
+  } catch (e) {
+    console.error('Apply error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});

@@ -58,21 +58,31 @@ const JobDetail = ({ job, portal, onApply, onBack }) => {
   )
 }
 
-const ApplyForm = ({ job, portal, onBack, onSuccess }) => {
+const ApplyForm = ({ job, portal, onBack, onSuccess, api }) => {
   const c = css(portal.branding)
+  const d = job.data || {}
   const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', cover_note:'' })
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const [error, setError] = useState('')
   const set = (k, v) => setForm(f => ({...f, [k]:v}))
 
   const handleSubmit = async () => {
     if (!form.first_name || !form.email) return
-    setSubmitting(true)
-    // In production this would POST to a portal submissions endpoint
-    await new Promise(r => setTimeout(r, 1200))
-    setSubmitting(false)
-    setDone(true)
-    setTimeout(onSuccess, 2500)
+    setSubmitting(true); setError('')
+    try {
+      const result = await api.post(`/portals/${portal.id}/apply`, {
+        ...form,
+        job_id: job.id,
+        job_title: d.job_title || '',
+      })
+      if (result.error) { setError(result.error); setSubmitting(false); return }
+      setDone(true)
+      setTimeout(onSuccess, 2500)
+    } catch (e) {
+      setError('Something went wrong. Please try again.')
+      setSubmitting(false)
+    }
   }
 
   if (done) return (
@@ -111,6 +121,7 @@ const ApplyForm = ({ job, portal, onBack, onSuccess }) => {
             <Btn color={c.button} onClick={handleSubmit} disabled={submitting||!form.first_name||!form.email} full>
               {submitting ? 'Submitting…' : 'Submit Application'}
             </Btn>
+            {error && <p style={{ color:'#dc2626', fontSize:13, margin:'8px 0 0', textAlign:'center' }}>{error}</p>}
           </div>
         </div>
       </Section>
@@ -145,7 +156,7 @@ export default function CareerSite({ portal, objects, api }) {
     return matchSearch && matchDept
   })
 
-  if (view === 'apply') return <ApplyForm job={selected} portal={portal} onBack={()=>setView('detail')} onSuccess={()=>setView('list')}/>
+  if (view === 'apply') return <ApplyForm job={selected} portal={portal} api={api} onBack={()=>setView('detail')} onSuccess={()=>setView('list')}/>
   if (view === 'detail') return <JobDetail job={selected} portal={portal} onApply={()=>setView('apply')} onBack={()=>setView('list')}/>
 
   return (

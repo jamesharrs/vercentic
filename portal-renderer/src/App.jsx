@@ -37,13 +37,13 @@ export default function App() {
   const botToken = window.location.pathname.match(/^\/bot\/(.+)$/)?.[1];
   if (botToken) return <BotInterview token={botToken}/>;
 
-  // Read token from URL: ?portal=TOKEN or /portal/TOKEN
+  // Read slug from URL: ?portal=SLUG or /portal/SLUG
   const token = new URLSearchParams(window.location.search).get('portal')
     || window.location.pathname.split('/portal/')[1]
 
   useEffect(() => {
-    if (!token) { setError('No portal token provided. Add ?portal=YOUR_TOKEN to the URL.'); setLoading(false); return; }
-    api.get(`/portals/token/${token}`)
+    if (!token) { setError('No portal provided. Add ?portal=YOUR_SLUG to the URL.'); setLoading(false); return; }
+    api.get(`/portals/slug/${token}`)
       .then(async p => {
         setPortal(p)
         // Inject branding into document
