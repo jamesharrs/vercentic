@@ -51,7 +51,7 @@ export function ClientList({ onProvision, onSelectClient }) {
   const load = useCallback(async()=>{ 
     setLoading(true); setError(null);
     try {
-      const d = await sa.get('/'); 
+      const d = await sa.get(''); 
       setClients(Array.isArray(d) ? d : []);
     } catch(e) { 
       setError(e.message); 
