@@ -133,7 +133,7 @@ const MatchResultsList = ({ matches }) => {
 
   return (
     <div>
-      <div style={{display:"flex",flexDirection:"column",gap:3}}>
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {visible.map((m, i) => {
           const title = getTitle(m.item, m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools");
           const color = itemColor(m.type);
@@ -147,7 +147,7 @@ const MatchResultsList = ({ matches }) => {
           const allTags = [...(m.reasons||[]).map(r=>({text:r,ok:true})), ...(m.gaps||[]).map(g=>({text:g,ok:false}))];
 
           return (
-            <div key={m.item.id} style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",overflow:"hidden",height:40,transition:"box-shadow .12s"}}
+            <div key={m.item.id} style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",overflow:"hidden",height:48,transition:"box-shadow .12s"}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)"}
               onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
 
@@ -184,9 +184,9 @@ const MatchResultsList = ({ matches }) => {
                 {allTags.length>2 && <span style={{fontSize:10,color:C.text3}}>+{allTags.length-2}</span>}
               </div>
 
-              {/* Score */}
-              <div style={{width:44,textAlign:"center",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:14,fontWeight:900,color:scoreCol}}>{m.score}</span>
+              {/* Score ring */}
+              <div style={{padding:"0 10px",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <ScoreRing score={m.score} size={34}/>
               </div>
             </div>
           );
