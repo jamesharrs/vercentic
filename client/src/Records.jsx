@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
