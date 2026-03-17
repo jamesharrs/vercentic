@@ -26,12 +26,30 @@ const C = {
 
 // Type config
 const TYPE_META = {
-  email:     { label:"Email",     color:"#6366f1", bg:"#eef2ff", icon:"✉️" },
-  sms:       { label:"SMS",       color:"#0891b2", bg:"#ecfeff", icon:"💬" },
-  whatsapp:  { label:"WhatsApp",  color:"#16a34a", bg:"#f0fdf4", icon:"📱" },
-  call:      { label:"Call",      color:"#d97706", bg:"#fffbeb", icon:"📞" },
-  note:      { label:"Note",      color:"#7c3aed", bg:"#f5f3ff", icon:"📝" },
+  email:    { label:"Email",    color:"#6366f1", bg:"#eef2ff" },
+  sms:      { label:"SMS",      color:"#0891b2", bg:"#ecfeff" },
+  whatsapp: { label:"WhatsApp", color:"#16a34a", bg:"#f0fdf4" },
+  call:     { label:"Call",     color:"#d97706", bg:"#fffbeb" },
+  note:     { label:"Note",     color:"#7c3aed", bg:"#f5f3ff" },
 };
+
+const ICON_PATHS = {
+  email:    ["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z","M22 6l-10 7L2 6"],
+  sms:      ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"],
+  whatsapp: ["M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z","M12 18h.01"],
+  call:     ["M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"],
+  note:     ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6","M16 13H8","M16 17H8","M10 9H8"],
+};
+
+function TypeIcon({ type, size=16, color }) {
+  const paths = ICON_PATHS[type] || ["M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"];
+  const col = color || TYPE_META[type]?.color || "#64748b";
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+      {paths.map((p, i) => <path key={i} d={p}/>)}
+    </svg>
+  );
+}
 
 const DIR_META = {
   outbound: { label:"Sent",     badge:"→", color:"#2563eb" },
@@ -181,7 +199,7 @@ function ComposeModal({ type, record, environment, onSave, onClose }) {
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:isSimulated?8:20 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:20 }}>{meta.icon}</span>
+            <TypeIcon type={type} size={18}/>
             <span style={{ fontWeight:700, fontSize:16 }}>{type==="call" ? "Log Call" : `New ${meta.label}`}</span>
           </div>
           <button onClick={onClose} style={{ border:"none", background:"none", cursor:"pointer", fontSize:20, color:C.text3 }}>×</button>
@@ -292,7 +310,7 @@ function CommDetail({ item, onClose, onDelete }) {
       <div style={{ width:480, background:C.surface, height:"100%", overflowY:"auto", padding:28, boxShadow:"-8px 0 40px rgba(0,0,0,.12)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:22 }}>{meta.icon}</span>
+            <TypeIcon type={item.type} size={20}/>
             <div>
               <div style={{ fontWeight:700, fontSize:15 }}>{meta.label}</div>
               <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:dir.color, fontWeight:600 }}>
@@ -342,8 +360,8 @@ function CommItem({ item, onClick }) {
       onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"}
       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
       {/* Type badge */}
-      <div style={{ width:36, height:36, borderRadius:10, background:meta.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16 }}>
-        {meta.icon}
+      <div style={{ width:36, height:36, borderRadius:10, background:meta.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <TypeIcon type={item.type} size={18} color={meta.color}/>
       </div>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
@@ -386,7 +404,7 @@ function FilterBar({ activeType, setActiveType, search, setSearch, total, counts
                 background:activeType===t?(meta?.bg||C.accentLight):"none",
                 color:activeType===t?(meta?.color||C.accent):C.text2,
                 fontSize:12, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
-              {meta?.icon && <span>{meta.icon}</span>}
+              <TypeIcon type={t} size={14} color={activeType===t?(meta?.color||C.accent):C.text3}/>
               {t==="all" ? "All" : meta?.label}
               {count>0 && <span style={{ background:activeType===t?(meta?.color||C.accent):"#e2e8f0", color:activeType===t?"#fff":C.text2, borderRadius:10, padding:"1px 6px", fontSize:10 }}>{count}</span>}
             </button>
@@ -481,7 +499,7 @@ export default function CommunicationsPanel({ record, environment, externalCompo
                 : <>
                     <div style={{ display:"flex", justifyContent:"center", gap:10, marginBottom:14 }}>
                       {["email","sms","whatsapp","call"].map(t=>(
-                        <div key={t} style={{ width:44, height:44, borderRadius:12, background:TYPE_META[t].bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>{TYPE_META[t].icon}</div>
+                        <div key={t} style={{ width:44, height:44, borderRadius:12, background:TYPE_META[t].bg, display:"flex", alignItems:"center", justifyContent:"center" }}><TypeIcon type={t} size={20} color={TYPE_META[t].color}/></div>
                       ))}
                     </div>
                     <div style={{ fontWeight:700, fontSize:14, color:C.text1, marginBottom:6 }}>No communications yet</div>
