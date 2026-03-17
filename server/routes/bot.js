@@ -136,8 +136,8 @@ router.get('/sessions/by-interview/:interview_id', (req, res) => {
   const store = getStore();
   const session = store.bot_sessions?.find(s => s.interview_id === req.params.interview_id);
   if (!session) return res.status(404).json({ error: 'No bot session for this interview' });
-  const { token, ...safe } = session;
-  res.json(safe);
+  // Include token so frontend can build the bot URL
+  res.json({ id: session.id, token: session.token, interview_id: session.interview_id, candidate_name: session.candidate_name, status: session.status, bot_url: `/bot/${session.token}` });
 });
 
 router.get('/sessions/:token', (req, res) => {
@@ -212,14 +212,6 @@ router.get('/sessions', (req, res) => {
   if (candidate_id) sessions = sessions.filter(s => s.candidate_id === candidate_id);
   if (environment_id) sessions = sessions.filter(s => s.environment_id === environment_id);
   res.json(sessions.map(({ token, ...s }) => s));
-});
-
-router.get('/sessions/by-interview/:interview_id', (req, res) => {
-  const store = getStore();
-  const session = store.bot_sessions?.find(s => s.interview_id === req.params.interview_id);
-  if (!session) return res.status(404).json({ error: 'No bot session for this interview' });
-  const { token, ...safe } = session;
-  res.json(safe);
 });
 
 router.get('/scorecards', (req, res) => {
