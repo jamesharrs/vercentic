@@ -1712,6 +1712,24 @@ function ReportingPanel({ record, environment }) {
 }
 
 // Panel registry — future: load custom panels from object config (Settings > Objects > Panels)
+// ── Panel order helpers — order is (string | string[])[] ─────────────────────
+// A string entry is a standalone panel; a string[] entry is a tabbed group.
+const flatPanelIds = (order) => order.flatMap(s => Array.isArray(s) ? s : [s]);
+const repIdOf      = (slot)  => Array.isArray(slot) ? slot[0] : slot;
+const removePanel  = (order, id) =>
+  order.map(s => {
+    if (!Array.isArray(s)) return s === id ? null : s;
+    const next = s.filter(x => x !== id);
+    if (next.length === 0) return null;
+    if (next.length === 1) return next[0]; // unwrap singleton → standalone
+    return next;
+  }).filter(Boolean);
+const mergePanel   = (order, targetRepId, newId) =>
+  order.map(s => {
+    if (repIdOf(s) !== targetRepId) return s;
+    return Array.isArray(s) ? [...s, newId] : [s, newId];
+  });
+
 export const PANEL_META = {
   comms:       { icon:"mail",          label:"Communications", defaultOpen:true  },
   notes:       { icon:"messageSquare", label:"Notes",     defaultOpen:true  },
@@ -2111,9 +2129,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const recordSearchRef = useRef(null);
   const recordSearchInputRef = useRef(null);
   const [draggingPanel, setDraggingPanel] = useState(null);   // id being dragged
-  const [insertBefore,  setInsertBefore]  = useState(null);   // id to insert before (null = end)
-  const dragState    = useRef(null); // { id, cardEls }
-  const insertRef    = useRef(null); // mirrors insertBefore for use inside event closures
+  const [insertBefore,  setInsertBefore]  = useState(null);   // repId to insert before (null=end)
+  const [mergeTarget,   setMergeTarget]   = useState(null);   // repId to merge dragged into
+  const dragState    = useRef(null); // { id, repId, cardEls }
+  const insertRef    = useRef(null); // mirrors insertBefore for closures
+  const mergeRef     = useRef(null); // mirrors mergeTarget for closures
   const rightColRef  = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
@@ -2122,9 +2142,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
       if (!saved) return getDefaultPanelOrder(objectName);
-      // Merge any new panels not yet in saved order
+      // Merge any new panels not yet in saved order (handles groups)
       const defaults = getDefaultPanelOrder(objectName);
-      const merged = [...saved, ...defaults.filter(id => !saved.includes(id))];
+      const savedFlat = flatPanelIds(saved);
+      const merged = [...saved, ...defaults.filter(id => !savedFlat.includes(id))];
       return merged;
     }
     catch { return getDefaultPanelOrder(objectName); }
@@ -2348,51 +2369,82 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     setDocExtractResult(null); setDocExtractAtt(null); load();
   };
 
-  // ── Mouse-based panel drag-to-reorder ─────────────────────────────────────
+  // ── Mouse-based panel drag-to-reorder / merge ─────────────────────────────
+  // Zones: top 28% → insert before; middle 44% → merge; bottom 28% → insert after
   const startPanelDrag = (id) => {
-    // Collect card DOM elements in current order
-    const cardEls = panelOrder
-      .filter(pid => PANEL_META[pid])
-      .map(pid => ({ id: pid, el: document.querySelector(`[data-panel-id="${pid}"]`) }))
-      .filter(x => x.el);
+    // Find the repId of the slot that contains this id
+    const containingSlot = panelOrder.find(s => Array.isArray(s) ? s.includes(id) : s === id) || id;
+    const slotRepId = repIdOf(containingSlot);
+
+    // Collect all slot-level elements (standalone cards + group cards)
+    const cardEls = [...document.querySelectorAll('[data-slot-id]')]
+      .map(el => ({ repId: el.dataset.slotId, el }))
+      .filter(x => PANEL_META[x.repId] || panelOrder.some(s => Array.isArray(s) && s[0] === x.repId));
 
     insertRef.current = null;
-    dragState.current = { id, cardEls };
+    mergeRef.current  = null;
+    dragState.current = { id, repId: slotRepId, cardEls };
     setDraggingPanel(id);
     setInsertBefore(null);
+    setMergeTarget(null);
 
     const onMove = (e) => {
       if (!dragState.current) return;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      // Find which gap the cursor is in — scan each card's midpoint
-      let before = null;
-      for (const { id: pid, el } of dragState.current.cardEls) {
-        if (pid === dragState.current.id) continue;
+      const eligible = dragState.current.cardEls.filter(c => c.repId !== dragState.current.repId);
+
+      let newInsert = null;
+      let newMerge  = null;
+
+      for (let i = 0; i < eligible.length; i++) {
+        const { repId, el } = eligible[i];
         const rect = el.getBoundingClientRect();
-        if (clientY < rect.top + rect.height / 2) { before = pid; break; }
+        if (clientY < rect.top) { newInsert = repId; break; }    // above card → insert before it
+        if (clientY < rect.bottom) {
+          const zone = (clientY - rect.top) / rect.height;
+          if      (zone < 0.28) { newInsert = repId; }                                                  // top zone
+          else if (zone > 0.72) { newInsert = i + 1 < eligible.length ? eligible[i+1].repId : null; }  // bottom zone
+          else                  { newMerge  = repId; }                                                  // center zone
+          break;
+        }
+        // below this card — continue
       }
-      if (insertRef.current !== before) {
-        insertRef.current = before;
-        setInsertBefore(before);
+
+      if (insertRef.current !== newInsert || mergeRef.current !== newMerge) {
+        insertRef.current = newInsert;
+        mergeRef.current  = newMerge;
+        setInsertBefore(newInsert);
+        setMergeTarget(newMerge);
       }
     };
 
     const onUp = () => {
       if (!dragState.current) return;
-      const fromId = dragState.current.id;
-      const target = insertRef.current;
+      const fromId  = dragState.current.id;
+      const iTarget = insertRef.current;
+      const mTarget = mergeRef.current;
       dragState.current = null;
 
-      // Reorder
-      const next = panelOrder.filter(pid => pid !== fromId);
-      const idx  = target === null ? next.length : next.indexOf(target);
-      if (idx !== -1) next.splice(idx, 0, fromId);
-      else next.push(fromId);
-      savePanelOrder(next);
+      let newOrder = removePanel(panelOrder, fromId);
 
+      if (mTarget !== null) {
+        // Merge into the target slot
+        newOrder = mergePanel(newOrder, mTarget, fromId);
+      } else {
+        // Insert as standalone before the target slot (or at end)
+        const idx = iTarget === null
+          ? newOrder.length
+          : newOrder.findIndex(s => repIdOf(s) === iTarget);
+        if (idx !== -1) newOrder.splice(idx, 0, fromId);
+        else            newOrder.push(fromId);
+      }
+
+      savePanelOrder(newOrder);
       setDraggingPanel(null);
       setInsertBefore(null);
+      setMergeTarget(null);
       insertRef.current = null;
+      mergeRef.current  = null;
 
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup",   onUp);
@@ -2680,55 +2732,47 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
 
 
-  // ── Collapsible draggable panel card (right col) ──
-  const gripActive = useRef(false);
-
-  const PanelCard = ({ id }) => {
+  // ── Standalone panel card ──────────────────────────────────────────────────
+  const PanelCard = ({ id, compact }) => {
     const meta = PANEL_META[id];
     if (!meta) return null;
-    const isOpen    = openPanels[id];
+    const isOpen     = compact ? true : openPanels[id];       // inside a group → always open
     const isDragging = draggingPanel === id;
+    const isMerge    = mergeTarget && repIdOf(panelOrder.find(s => (Array.isArray(s)?s[0]:s) === mergeTarget) || mergeTarget) === id;
     const badge = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
+
+    if (compact) {
+      // Inside a group — no header chrome, just the content
+      return <div style={{ padding:"16px" }}><PanelContent id={id}/></div>;
+    }
 
     return (
       <div
-        data-panel-id={id}
+        data-slot-id={id}
         style={{
           background: C.surface,
-          border: `1.5px solid ${C.border}`,
+          border: `1.5px solid ${isMerge ? C.accent : C.border}`,
           borderRadius: 14, marginBottom: 12, overflow: "hidden",
-          transition: "opacity .15s, box-shadow .15s, transform .1s",
+          transition: "opacity .15s, box-shadow .15s, transform .1s, border-color .15s",
           opacity:   isDragging ? 0.35 : 1,
-          boxShadow: isDragging ? "none" : "0 1px 4px rgba(0,0,0,.04)",
+          boxShadow: isMerge ? `0 0 0 3px ${C.accent}40, 0 4px 20px rgba(59,91,219,.18)` : "0 1px 4px rgba(0,0,0,.04)",
           transform: isDragging ? "scale(0.97)" : "scale(1)",
-          cursor: isDragging ? "grabbing" : "default",
         }}>
-
-        {/* Panel header */}
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
           userSelect:"none", borderBottom: isOpen ? `1px solid ${C.border}` : "none" }}>
-
-          {/* ⠿ Grip handle */}
-          <div
-            title="Drag to reorder"
+          {/* Grip */}
+          <div title="Drag to reorder or drop onto another panel to group"
             onMouseDown={e => { e.preventDefault(); startPanelDrag(id); }}
-            onTouchStart={e => { startPanelDrag(id); }}
             onClick={e => e.stopPropagation()}
-            style={{ color: C.text3, cursor: "grab", padding: "2px 3px",
-              display:"flex", flexShrink:0, borderRadius:4, transition:"color .12s, background .12s" }}
+            style={{ color:C.text3, cursor:"grab", padding:"2px 3px", display:"flex", flexShrink:0,
+              borderRadius:4, transition:"color .12s, background .12s" }}
             onMouseEnter={e=>{ e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
             onMouseLeave={e=>{ e.currentTarget.style.color=C.text3;  e.currentTarget.style.background="transparent"; }}>
             <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
-              <circle cx="4" cy="4"  r="1.5" fill="currentColor"/>
-              <circle cx="9" cy="4"  r="1.5" fill="currentColor"/>
-              <circle cx="4" cy="9"  r="1.5" fill="currentColor"/>
-              <circle cx="9" cy="9"  r="1.5" fill="currentColor"/>
-              <circle cx="4" cy="14" r="1.5" fill="currentColor"/>
-              <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
+              {[4,9,14].flatMap(y=>[4,9].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.5" fill="currentColor"/>))}
             </svg>
           </div>
-
-          {/* Clickable label row — collapses/expands */}
+          {/* Collapse toggle */}
           <div style={{ display:"flex", alignItems:"center", gap:10, flex:1, cursor:"pointer" }}
             onClick={() => setOpenPanels(p => {
               const next = { ...p, [id]: !p[id] };
@@ -2737,30 +2781,142 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             })}>
             <Ic n={meta.icon} s={14} c={C.accent}/>
             <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
-            {badge > 0 && (
-              <span style={{ background:C.accentLight, color:C.accent, fontSize:11,
-                fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>
-            )}
-            <span style={{ display:"flex", transition:"transform .2s",
-              transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+            {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
+            {isMerge && <span style={{ fontSize:11, color:C.accent, fontWeight:700, padding:"2px 8px", borderRadius:6, background:C.accentLight }}>Drop to group</span>}
+            <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
               <Ic n="chevD" s={14} c={C.text3}/>
             </span>
           </div>
         </div>
-
         {isOpen && <div style={{ padding:"16px" }}><PanelContent id={id}/></div>}
       </div>
     );
   };
 
-  // Thin blue line shown between panels while dragging
-  const DropIndicator = ({ beforeId }) => {
-    if (!draggingPanel) return null;
-    if (insertBefore !== beforeId) return null;
+  // ── Tabbed group card ──────────────────────────────────────────────────────
+  const GroupCard = ({ ids }) => {
+    const repId   = ids[0];
+    const isMerge = mergeTarget === repId;
+    const groupOpenKey = `grp_${ids.join("_")}`;
+    const isGroupOpen  = openPanels[groupOpenKey] !== false; // default open
+    const [activeTab, setActiveTab] = useState(ids[0]);
+    // If active tab was ejected, fall back to first remaining
+    const safeActive = ids.includes(activeTab) ? activeTab : ids[0];
+
+    const ejectTab = (id, e) => {
+      e.stopPropagation();
+      // Remove from group; becomes standalone at end
+      savePanelOrder(removePanel(panelOrder, id));
+    };
+
     return (
-      <div style={{ height:3, borderRadius:2, background:C.accent,
-        margin:"0 0 12px 0", boxShadow:`0 0 6px ${C.accent}60`, transition:"opacity .1s" }}/>
+      <div
+        data-slot-id={repId}
+        style={{
+          background: C.surface,
+          border: `1.5px solid ${isMerge ? C.accent : C.border}`,
+          borderRadius: 14, marginBottom: 12, overflow: "hidden",
+          boxShadow: isMerge ? `0 0 0 3px ${C.accent}40, 0 4px 20px rgba(59,91,219,.18)` : "0 1px 4px rgba(0,0,0,.04)",
+          transition: "border-color .15s, box-shadow .15s",
+        }}>
+
+        {/* Tab strip header */}
+        <div style={{ display:"flex", alignItems:"stretch", borderBottom:`1px solid ${C.border}`,
+          background:"#f8f9fc", userSelect:"none" }}>
+
+          {/* Group grip (move whole group) */}
+          <div title="Drag group"
+            onMouseDown={e => { e.preventDefault(); startPanelDrag(repId); }}
+            onClick={e => e.stopPropagation()}
+            style={{ display:"flex", alignItems:"center", padding:"0 8px 0 12px",
+              color:C.text3, cursor:"grab", flexShrink:0, transition:"color .12s" }}
+            onMouseEnter={e=>e.currentTarget.style.color=C.accent}
+            onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+            <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
+              {[3,8,13].flatMap(y=>[2,7].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.3" fill="currentColor"/>))}
+            </svg>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display:"flex", flex:1, overflowX:"auto" }}>
+            {ids.map(id => {
+              const meta = PANEL_META[id];
+              if (!meta) return null;
+              const isActive = id === safeActive;
+              const isDraggingThis = draggingPanel === id;
+              return (
+                <div key={id} style={{ display:"flex", alignItems:"center", gap:6,
+                  padding:"10px 12px", cursor:"pointer", flexShrink:0, position:"relative",
+                  borderRight:`1px solid ${C.border}`,
+                  background: isActive ? C.surface : "transparent",
+                  borderBottom: isActive ? `2px solid ${C.accent}` : "2px solid transparent",
+                  opacity: isDraggingThis ? 0.4 : 1,
+                  transition:"background .1s, opacity .15s" }}>
+                  {/* Tab grip — drag to eject */}
+                  <div title="Drag to move out of group"
+                    onMouseDown={e => { e.preventDefault(); startPanelDrag(id); }}
+                    onClick={e => e.stopPropagation()}
+                    style={{ color: isActive ? C.accent : C.text3, cursor:"grab",
+                      display:"flex", opacity:0.5, transition:"opacity .12s" }}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                    onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>
+                    <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
+                      {[2,6,10].flatMap(y=>[1,5].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.1" fill="currentColor"/>))}
+                    </svg>
+                  </div>
+                  {/* Tab label */}
+                  <div onClick={() => setActiveTab(id)}
+                    style={{ display:"flex", alignItems:"center", gap:5 }}>
+                    <Ic n={meta.icon} s={13} c={isActive ? C.accent : C.text3}/>
+                    <span style={{ fontSize:12, fontWeight: isActive ? 700 : 500,
+                      color: isActive ? C.accent : C.text2, whiteSpace:"nowrap" }}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  {/* Eject × */}
+                  <button onClick={e => ejectTab(id, e)} title="Remove from group"
+                    style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 2px",
+                      color:C.text3, display:"flex", opacity:0.4, lineHeight:1, fontSize:13,
+                      transition:"opacity .1s, color .1s" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.opacity="1"; e.currentTarget.style.color="#ef4444"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.opacity="0.4"; e.currentTarget.style.color=C.text3; }}>
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Collapse toggle for the whole group */}
+          <button onClick={() => setOpenPanels(p => {
+              const next = { ...p, [groupOpenKey]: !isGroupOpen };
+              try { localStorage.setItem(openPanelsKey, JSON.stringify(next)); } catch {}
+              return next;
+            })}
+            style={{ background:"none", border:"none", cursor:"pointer", padding:"0 14px",
+              display:"flex", alignItems:"center", color:C.text3, flexShrink:0,
+              transition:"transform .2s", transform: isGroupOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+            <Ic n="chevD" s={14} c={C.text3}/>
+          </button>
+        </div>
+
+        {/* Active tab content */}
+        {isGroupOpen && (
+          <div style={{ padding:"16px" }}>
+            <PanelContent id={safeActive}/>
+          </div>
+        )}
+      </div>
     );
+  };
+
+  // ── Drag indicators ────────────────────────────────────────────────────────
+  // Blue line shown between slots while dragging (reorder mode)
+  const DropIndicator = ({ beforeRepId }) => {
+    if (!draggingPanel || mergeTarget) return null;  // hide when in merge mode
+    if (insertBefore !== beforeRepId) return null;
+    return <div style={{ height:3, borderRadius:2, background:C.accent, margin:"0 0 12px",
+      boxShadow:`0 0 8px ${C.accent}60` }}/>;
   };
 
 
@@ -3119,17 +3275,38 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
         </div>
 
-        {/* RIGHT COL — Panel cards */}
+        {/* RIGHT COL — Panel cards (standalone or grouped) */}
         <div ref={rightColRef} style={{ flex:1, overflow:"auto", padding:"16px 20px 24px", background:"#F4F6FB",
           userSelect: draggingPanel ? "none" : "auto" }}>
-          {panelOrder.filter(id=>PANEL_META[id]).map(id=>(
-            <div key={id}>
-              <DropIndicator beforeId={id}/>
-              <PanelCard id={id}/>
-            </div>
-          ))}
-          {/* Drop indicator at the very end */}
-          <DropIndicator beforeId={null}/>
+          {panelOrder.map((slot) => {
+            if (Array.isArray(slot)) {
+              // Tabbed group
+              const validIds = slot.filter(id => PANEL_META[id]);
+              if (validIds.length === 0) return null;
+              if (validIds.length === 1) {
+                // Degenerate single-item group — render as standalone
+                const id = validIds[0];
+                return <div key={id}><DropIndicator beforeRepId={id}/><PanelCard id={id}/></div>;
+              }
+              const repId = validIds[0];
+              return (
+                <div key={repId}>
+                  <DropIndicator beforeRepId={repId}/>
+                  <GroupCard ids={validIds}/>
+                </div>
+              );
+            }
+            // Standalone panel
+            if (!PANEL_META[slot]) return null;
+            return (
+              <div key={slot}>
+                <DropIndicator beforeRepId={slot}/>
+                <PanelCard id={slot}/>
+              </div>
+            );
+          })}
+          {/* Drop indicator at the very end (append) */}
+          <DropIndicator beforeRepId={null}/>
         </div>
       </div>
     </div>
