@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
 // ─── Shared helpers (inline to avoid circular imports) ───────────────────────
@@ -191,8 +192,8 @@ function ComposeModal({ type, record, environment, onSave, onClose }) {
 
   const isSimulated = providerStatus && type !== "call" && direction === "outbound" && providerStatus[type] === "simulation";
 
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:1800, pointerEvents:"none" }}>
+  return ReactDOM.createPortal(
+    <div style={{ position:"fixed", inset:0, zIndex:9000, pointerEvents:"none" }}>
       {/* Backdrop — only dims slightly, doesn't block the record panel */}
       <div style={{ position:"absolute", inset:0, background:"rgba(15,23,41,.25)", pointerEvents:"auto" }} onClick={onClose}/>
 
@@ -322,7 +323,8 @@ function ComposeModal({ type, record, environment, onSave, onClose }) {
           </button>
         </div>
       </div>{/* end popout window */}
-    </div>
+    </div>,
+    document.body
   );
 }
 
