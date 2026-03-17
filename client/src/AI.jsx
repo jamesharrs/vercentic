@@ -57,19 +57,22 @@ const Badge = ({ children, color="#6b7280", light }) => (
 
 /* ─── Score ring ─────────────────────────────────────────────────────────── */
 const ScoreRing = ({ score, size=52 }) => {
-  const r = (size-8)/2;
+  const sw = size <= 32 ? 3 : size <= 40 ? 4 : 6;
+  const r = (size-sw*2)/2;
   const circ = 2*Math.PI*r;
   const dash = (score/100)*circ;
   const color = score>=75?"#0ca678":score>=50?"#f59f00":"#e03131";
+  const numSize = size <= 32 ? 9 : size <= 40 ? 11 : 12;
+  const pctSize = size <= 32 ? 6 : 8;
   return (
     <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
       <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f0f0f0" strokeWidth={6}/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6} strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" style={{ transition:"stroke-dasharray .6s ease" }}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f0f0f0" strokeWidth={sw}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={sw} strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" style={{ transition:"stroke-dasharray .6s ease" }}/>
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <span style={{ fontSize:12, fontWeight:800, color, lineHeight:1 }}>{score}</span>
-        <span style={{ fontSize:8, color, fontWeight:600, opacity:0.8 }}>%</span>
+        <span style={{ fontSize:numSize, fontWeight:800, color, lineHeight:1 }}>{score}</span>
+        <span style={{ fontSize:pctSize, color, fontWeight:600, opacity:0.8 }}>%</span>
       </div>
     </div>
   );
@@ -185,8 +188,8 @@ const MatchResultsList = ({ matches }) => {
               </div>
 
               {/* Score ring */}
-              <div style={{padding:"0 10px",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <ScoreRing score={m.score} size={34}/>
+              <div style={{padding:"0 8px",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <ScoreRing score={m.score} size={28}/>
               </div>
             </div>
           );
