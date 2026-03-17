@@ -8,7 +8,8 @@ const C = {
 };
 
 const sa = {
-  get:   p     => fetch(`/api/superadmin/clients${p}`).then(r=>r.json()),
+const sa = {
+  get:   p     => fetch(`/api/superadmin/clients${p}`).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }),
   post:  (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
   patch: (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
   del:   p     => fetch(`/api/superadmin/clients${p}`,{method:'DELETE'}).then(r=>r.json()),
@@ -47,7 +48,17 @@ export function ClientList({ onProvision, onSelectClient }) {
   const [clients,setClients]=useState([]); const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState(''); const [filter,setFilter]=useState('all');
 
-  const load = useCallback(async()=>{ setLoading(true); const d=await sa.get('/'); setClients(Array.isArray(d)?d:[]); setLoading(false); },[]);
+  const [error, setError] = useState(null);
+  const load = useCallback(async()=>{ 
+    setLoading(true); setError(null);
+    try {
+      const d = await sa.get('/'); 
+      setClients(Array.isArray(d) ? d : []);
+    } catch(e) { 
+      setError(e.message); 
+    }
+    setLoading(false); 
+  },[]);
   useEffect(()=>{ load(); },[load]);
 
   const filtered = clients.filter(c=>{
@@ -69,6 +80,11 @@ export function ClientList({ onProvision, onSelectClient }) {
         <Btn onClick={onProvision}>⚡ Provision new client</Btn>
       </div>
       {loading && <div style={{color:C.text3,padding:40,textAlign:'center'}}>Loading…</div>}
+      {!loading && error && (
+        <div style={{padding:'16px 20px',borderRadius:10,background:'#2d1b1b',border:'1px solid #ef444440',color:'#fca5a5',fontSize:13,marginBottom:16}}>
+          Failed to load clients: {error} — <span style={{cursor:'pointer',textDecoration:'underline'}} onClick={load}>retry</span>
+        </div>
+      )}
       {!loading && filtered.length===0 && (
         <div style={{...cardSt,padding:'60px 40px',textAlign:'center'}}>
           <div style={{width:52,height:52,borderRadius:16,background:`${C.accent}15`,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}>
