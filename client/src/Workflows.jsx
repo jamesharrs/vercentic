@@ -70,6 +70,61 @@ const STEP_TYPES = AUTOMATION_TYPES;
 const automationDef = (type) => AUTOMATION_TYPES.find(s => s.type === type);
 const stepDef = (type) => automationDef(type) || { type:"placeholder", label:"Stage", icon:"chevRight", color:"#9ca3af", desc:"Process stage" };
 
+// Build a human-readable summary of what a step's actions do
+function stepAutomationSummary(step) {
+  const actions = step?.actions || [];
+  if (!actions.length) return null;
+  return actions.map(a => {
+    const def = automationDef(a.type);
+    if (!def) return null;
+    const cfg = a.config || {};
+    let detail = def.desc;
+    if (a.type === 'run_agent' && cfg.agent_name) detail = `Run agent: "${cfg.agent_name}"`;
+    if (a.type === 'send_email' && cfg.subject) detail = `Email: "${cfg.subject}"`;
+    if (a.type === 'send_invitation_email') detail = `Send AI interview link to candidate`;
+    if (a.type === 'stage_change' && cfg.to_stage) detail = `Move to: ${cfg.to_stage}`;
+    if (a.type === 'update_field' && cfg.field_key) detail = `Set ${cfg.field_key} = ${cfg.field_value}`;
+    return { label: def.label, color: def.color, icon: def.icon, detail };
+  }).filter(Boolean);
+}
+
+// Floating tooltip for automation actions
+function AutoTooltip({ step, children }) {
+  const [show, setShow] = useState(false);
+  const summary = stepAutomationSummary(step);
+  if (!summary?.length) return children;
+  return (
+    <div style={{ position:"relative", display:"inline-flex" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <div style={{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)",
+          background:"#1a1a2e", borderRadius:10, padding:"10px 12px", zIndex:500,
+          minWidth:200, maxWidth:280, boxShadow:"0 8px 24px rgba(0,0,0,.25)", pointerEvents:"none" }}>
+          {/* Arrow */}
+          <div style={{ position:"absolute", bottom:-5, left:"50%", transform:"translateX(-50%)",
+            width:10, height:10, background:"#1a1a2e", rotate:"45deg" }}/>
+          <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
+            letterSpacing:"0.07em", marginBottom:7 }}>⚡ When moved to this stage</div>
+          {summary.map((a, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom: i<summary.length-1?6:0 }}>
+              <div style={{ width:18, height:18, borderRadius:5, background:a.color+"22",
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+                <Ic n={a.icon} s={10} c={a.color}/>
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:"white" }}>{a.label}</div>
+                <div style={{ fontSize:10, color:"#9ca3af", lineHeight:1.4 }}>{a.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── RecipientPicker ──────────────────────────────────────────────────────────
 // Shown above the email body in send_email and send_invitation_email actions.
 function RecipientPicker({ cfg, fields, onChange }) {
@@ -1323,8 +1378,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   >
                     {/* Automation indicator dot */}
                     {hasAuto && (
-                      <span title={`Auto: ${(step.actions||[]).map(a=>a.type).join(', ')}`}
-                        style={{ width:6, height:6, borderRadius:"50%", background: isActive?"#fbbf24":"#f59e0b", flexShrink:0, boxShadow:"0 0 4px rgba(245,158,11,.6)" }}/>
+                      <AutoTooltip step={step}>
+                        <span style={{ width:6, height:6, borderRadius:"50%", background: isActive?"#fbbf24":"#f59e0b",
+                          flexShrink:0, boxShadow:"0 0 4px rgba(245,158,11,.6)", cursor:"help" }}/>
+                      </AutoTooltip>
                     )}
                     <span style={{ fontSize:11, fontWeight:600, color: isActive?"white":hasCount?"#7c3aed":"#9ca3af" }}>
                       {step.name || `Stage ${i+1}`}
@@ -1657,7 +1714,10 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                 color:"#6d28d9", cursor:"pointer", fontFamily:F, whiteSpace:"nowrap", maxWidth:120 }}>
               {/* Automation dot if current step has actions */}
               {(currentStep?.actions||[]).some(a=>a.type) && (
-                <span style={{ width:5, height:5, borderRadius:"50%", background:"#f59e0b", flexShrink:0 }}/>
+                <AutoTooltip step={currentStep}>
+                  <span style={{ width:5, height:5, borderRadius:"50%", background:"#f59e0b",
+                    flexShrink:0, cursor:"help", boxShadow:"0 0 3px rgba(245,158,11,.5)" }}/>
+                </AutoTooltip>
               )}
               <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{currentStep?.name || "Stage"}</span>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.6 }}>
@@ -1684,8 +1744,10 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                         : <span style={{ width:12, flexShrink:0 }}/>}
                       <span style={{ fontSize:12, fontWeight: isCurrent?700:400, color: isCurrent?"#6d28d9":"#374151", flex:1 }}>{step.name}</span>
                       {hasAuto && (
-                        <span title={`Auto: ${(step.actions||[]).map(a=>a.type).join(', ')}`}
-                          style={{ fontSize:9, background:"#fef3c7", color:"#92400e", padding:"1px 5px", borderRadius:99, fontWeight:700, whiteSpace:"nowrap" }}>⚡ auto</span>
+                        <AutoTooltip step={step}>
+                          <span style={{ fontSize:9, background:"#fef3c7", color:"#92400e", padding:"1px 5px",
+                            borderRadius:99, fontWeight:700, whiteSpace:"nowrap", cursor:"help" }}>⚡ auto</span>
+                        </AutoTooltip>
                       )}
                     </button>
                   );

@@ -877,6 +877,87 @@ const FilterBar = ({ fields, filters, onChange }) => {
 };
 
 /* ─── Bulk Action Bar ─────────────────────────────────────────────────────── */
+// ─── Bulk Confirm Modal ───────────────────────────────────────────────────────
+function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, onConfirm, onCancel }) {
+  const field = fields?.find(f => f.id === fieldId);
+  const isDanger = action === "delete";
+
+  const summary = action === "delete"
+    ? [`Permanently delete ${count} ${objectName} records`, "This cannot be undone"]
+    : [
+        `Update ${count} ${objectName} records`,
+        field ? `Set "${field.name}" to: ${value ?? "—"}` : "Apply field change to all selected records",
+      ];
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:2000,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div style={{ background:"white", borderRadius:16, padding:"28px 28px 24px", maxWidth:420, width:"90%",
+        boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+          <div style={{ width:40, height:40, borderRadius:12,
+            background: isDanger ? "#fef2f2" : "#eff6ff",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isDanger?"#ef4444":"#3b82f6"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {isDanger
+                ? <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>
+                : <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>}
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#111827" }}>
+              {isDanger ? "Confirm Bulk Delete" : "Confirm Bulk Edit"}
+            </div>
+            <div style={{ fontSize:12, color:"#6b7280", marginTop:1 }}>
+              {count} records selected — above your warning threshold
+            </div>
+          </div>
+        </div>
+
+        {/* What will happen */}
+        <div style={{ background: isDanger?"#fef2f2":"#eff6ff", borderRadius:10, padding:"14px 16px", marginBottom:20 }}>
+          <div style={{ fontSize:11, fontWeight:700, color: isDanger?"#ef4444":"#3b82f6",
+            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>
+            Here's what will happen
+          </div>
+          {summary.map((line, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom: i<summary.length-1?6:0 }}>
+              <span style={{ color: isDanger?"#ef4444":"#3b82f6", marginTop:1, flexShrink:0 }}>
+                {i===0 ? "→" : "·"}
+              </span>
+              <span style={{ fontSize:13, color: isDanger?"#7f1d1d":"#1e3a5f", fontWeight: i===0?600:400 }}>{line}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Tip */}
+        <p style={{ fontSize:11, color:"#9ca3af", margin:"0 0 20px", lineHeight:1.5 }}>
+          You can change the threshold for this warning in{" "}
+          <strong style={{ color:"#6b7280" }}>Settings → Appearance → Bulk Action Warning</strong>.
+        </p>
+
+        {/* Buttons */}
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onCancel}
+            style={{ flex:1, padding:"10px", borderRadius:9, border:"1.5px solid #e5e7eb",
+              background:"white", color:"#374151", fontSize:13, fontWeight:600,
+              cursor:"pointer", fontFamily:"inherit" }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            style={{ flex:2, padding:"10px", borderRadius:9, border:"none",
+              background: isDanger?"#ef4444":"#3b82f6", color:"white",
+              fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+            {isDanger ? `Delete ${count} Records` : `Update ${count} Records`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit }) => {
   const [showEditPicker, setShowEditPicker] = useState(false);
   const [editFieldId,    setEditFieldId]    = useState("");
@@ -4229,6 +4310,21 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setRecords(rs => rs.map(r => r.id===id ? updated : r));
   };
 
+  // ── Bulk warning confirmation ────────────────────────────────────────────────
+  const [bulkConfirm, setBulkConfirm] = useState(null); // { action:'delete'|'edit', fieldId, value }
+
+  const getBulkThreshold = () => parseInt(localStorage.getItem("talentos_bulk_threshold") || "20", 10);
+
+  const guardedBulkAction = (action, payload = {}) => {
+    const threshold = getBulkThreshold();
+    if (selectedIds.size > threshold) {
+      setBulkConfirm({ action, ...payload });
+    } else {
+      if (action === "delete") handleBulkDelete();
+      if (action === "edit")   handleBulkEdit(payload.fieldId, payload.value);
+    }
+  };
+
   const handleBulkDelete = async () => {
     await Promise.all([...selectedIds].map(id => api.del(`/records/${id}`)));
     setSelectedIds(new Set());
@@ -4505,6 +4601,24 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         </div>
       )}
 
+      {/* Bulk confirm modal */}
+      {bulkConfirm && (
+        <BulkConfirmModal
+          action={bulkConfirm.action}
+          count={selectedIds.size}
+          objectName={object?.name || "record"}
+          fieldId={bulkConfirm.fieldId}
+          value={bulkConfirm.value}
+          fields={fields}
+          onConfirm={() => {
+            setBulkConfirm(null);
+            if (bulkConfirm.action === "delete") handleBulkDelete();
+            if (bulkConfirm.action === "edit")   handleBulkEdit(bulkConfirm.fieldId, bulkConfirm.value);
+          }}
+          onCancel={() => setBulkConfirm(null)}
+        />
+      )}
+
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <BulkActionBar
@@ -4513,8 +4627,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           fields={fields}
           onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
           onClearAll={() => setSelectedIds(new Set())}
-          onDelete={handleBulkDelete}
-          onEdit={handleBulkEdit}
+          onDelete={() => guardedBulkAction("delete")}
+          onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
         />
       )}
 
