@@ -786,7 +786,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
   };
 
   const search = async (q) => {
-    if (!q.trim() || !selectedEnv) { setResults([]); return; }
+    if (!q.trim() || !selectedEnv?.id) { setResults([]); return; }
     setLoading(true);
     try {
       const data = await fetch(`/api/records/search?q=${encodeURIComponent(q)}&environment_id=${selectedEnv.id}&limit=6`).then(r => r.json());

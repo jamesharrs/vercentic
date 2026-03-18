@@ -156,15 +156,14 @@ const applyFilters = (records, filters, fields) => {
 
 /* ─── Result Card ─────────────────────────────────────────────────────────── */
 const ResultCard = ({ record, fields, object, onClick }) => {
-  const nameF  = fields.find(f=>["first_name","name","job_title","pool_name"].includes(f.api_key));
-  const lastF  = fields.find(f=>f.api_key==="last_name");
-  const subF   = fields.find(f=>["current_title","department","category"].includes(f.api_key));
-  const bodyFs = fields.filter(f=>f.show_in_list&&!["first_name","last_name"].includes(f.api_key)).slice(0,4);
-
-  const first = nameF ? record.data?.[nameF.api_key] : "";
-  const last  = lastF ? record.data?.[lastF.api_key]  : "";
-  const title = [first,last].filter(Boolean).join(" ") || record.id?.slice(0,8);
-  const sub   = subF ? record.data?.[subF.api_key] : null;
+  const d = record.data || {};
+  // Build display name from data directly — don't depend on fields being loaded
+  const title = [d.first_name, d.last_name].filter(Boolean).join(" ")
+    || d.name || d.job_title || d.pool_name || d.title
+    || (fields.find(f=>f.api_key==="first_name") ? "" : Object.values(d).find(v=>typeof v==="string"&&v.length>1))
+    || record.id?.slice(0,8);
+  const sub = d.current_title || d.department || d.category || d.description?.slice(0,60) || d.email || "";
+  const bodyFs = fields.filter(f=>f.show_in_list&&!["first_name","last_name","name"].includes(f.api_key)).slice(0,4);
 
   return (
     <div onClick={onClick} style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:"14px 16px", cursor:"pointer", transition:"all .12s", display:"flex", alignItems:"flex-start", gap:12 }}
@@ -234,21 +233,23 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
     }
   }, []);
 
-  // Load objects + fields on mount
+  // Load objects + fields on mount — set fields BEFORE marking objects as ready
   useEffect(() => {
     if (!environment?.id) return;
-    api.get(`/objects?environment_id=${environment.id}`).then(async objs => {
-      if (!Array.isArray(objs)) return;
-      setObjects(objs);
-      if (objs.length) setActiveObject(objs[0]);
-      // Load fields for all objects
+    const load = async () => {
+      const objs = await api.get(`/objects?environment_id=${environment.id}`);
+      if (!Array.isArray(objs) || !objs.length) return;
+      // Load all fields first, then set objects so search can't run with empty fields
       const fieldMap = {};
       await Promise.all(objs.map(async obj => {
         const fs = await api.get(`/fields?object_id=${obj.id}`);
         fieldMap[obj.id] = Array.isArray(fs) ? fs : [];
       }));
       setFields(fieldMap);
-    });
+      setObjects(objs);
+      if (objs.length) setActiveObject(objs[0]);
+    };
+    load();
   }, [environment?.id]);
 
   // Auto-search if query was pre-filled from global search bar
@@ -275,9 +276,11 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
 
   const handleSearch = useCallback(async () => {
     if (!query.trim() && !filters.length) return;
+    if (!objects.length) return; // wait for objects to load
     setLoading(true);
     setSearched(true);
-    const recordMap = Object.keys(allRecords).length ? allRecords : await loadAllRecords();
+    // Always reload records — stale cache from a different object set causes missed results
+    const recordMap = await loadAllRecords();
 
     let combined = [];
     for (const obj of objects) {
@@ -296,12 +299,13 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
     setLoading(false);
   }, [query, filters, objects, allRecords, loadAllRecords, activeObject, fields]);
 
-  // Live search as user types
+  // Live search as user types — also re-run when objects finish loading
   useEffect(() => {
     if (!query.trim() && !filters.length) { setResults([]); setSearched(false); return; }
+    if (!objects.length) return; // don't fire until objects are loaded
     const t = setTimeout(handleSearch, 300);
     return () => clearTimeout(t);
-  }, [query, handleSearch]);
+  }, [query, handleSearch, objects.length]);
 
   const handleSaveSearch = () => {
     if (!saveName.trim()) return;

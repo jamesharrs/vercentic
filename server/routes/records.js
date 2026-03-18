@@ -12,22 +12,37 @@ router.get('/search', (req, res) => {
   const { q, environment_id, limit=6 } = req.query;
   if (!q || !environment_id) return res.json([]);
   const term = q.toLowerCase();
+  const lim  = parseInt(limit);
   const objects = query('objects', o => o.environment_id === environment_id);
-  const results = [];
+
+  // Collect up to `limit` matches per object so every object type gets representation
+  const perObject = [];
   for (const obj of objects) {
     const records = query('records', r => r.object_id === obj.id && r.environment_id === environment_id && !r.deleted_at);
+    const hits = [];
     for (const r of records) {
       if (JSON.stringify(r.data).toLowerCase().includes(term)) {
         const d = r.data || {};
-        const display_name = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.job_title || d.pool_name || d.name || 'Untitled';
-        results.push({ ...r, object_name: obj.name, object_slug: obj.slug, object_color: obj.color, display_name });
-        if (results.length >= parseInt(limit) * 3) break;
+        const display_name = [d.first_name, d.last_name].filter(Boolean).join(' ')
+          || d.job_title || d.pool_name || d.name || d.title || 'Untitled';
+        hits.push({ ...r, object_name: obj.name, object_slug: obj.slug, object_color: obj.color, display_name });
+        if (hits.length >= lim) break;
       }
     }
-    if (results.length >= parseInt(limit) * 3) break;
+    if (hits.length) perObject.push(hits);
   }
-  results.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  res.json(results.slice(0, parseInt(limit)));
+
+  // Round-robin merge so results are spread across object types
+  const merged = [];
+  const maxRounds = lim;
+  for (let i = 0; i < maxRounds && merged.length < lim * 2; i++) {
+    for (const objHits of perObject) {
+      if (i < objHits.length) merged.push(objHits[i]);
+    }
+  }
+
+  merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(merged.slice(0, lim));
 });
 
 router.get('/', (req, res) => {
