@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
   const runs = query('agent_runs', () => true);
   const enriched = agents.map(a => {
     const agentRuns = runs.filter(r => r.agent_id === a.id).sort((x,y) => new Date(y.created_at) - new Date(x.created_at));
-    return { ...a, last_run: agentRuns[0] || null, run_count: agentRuns.length, pending_approvals: agentRuns.filter(r => r.status === 'pending_approval').length };
+    return { ...a, last_run: agentRuns[0] || null, run_count: Math.max(agentRuns.length, a.run_count || 0), pending_approvals: agentRuns.filter(r => r.status === 'pending_approval').length };
   });
   res.json(enriched);
 });
@@ -345,6 +345,16 @@ async function executeAgent(agent, run, record_id) {
     if (agentIdx !== -1) { s.agents[agentIdx].run_count = (s.agents[agentIdx].run_count || 0) + 1; s.agents[agentIdx].last_run_at = new Date().toISOString(); }
     saveStore();
     addStep(hasPending ? 'Awaiting approval' : 'Agent completed successfully');
+    // Sync run stats to Postgres
+    try {
+      const pg = require('../db/postgres');
+      const { getCurrentTenant } = require('../db/init');
+      const tenant = getCurrentTenant() || 'master';
+      if (pg.isEnabled()) {
+        await pg.saveCollection(tenant, 'agent_runs', s.agent_runs);
+        await pg.saveCollection(tenant, 'agents', s.agents);
+      }
+    } catch(e) { console.error('[agents run] pg sync error:', e.message); }
   } catch(err) {
     s.agent_runs[runIdx].status = 'failed'; s.agent_runs[runIdx].error = err.message;
     s.agent_runs[runIdx].updated_at = new Date().toISOString(); saveStore(); throw err;

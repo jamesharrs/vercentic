@@ -82,6 +82,40 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
     // Force-sync agent_tokens to Postgres so the interview link survives restarts
     try { const pg = require('../db/postgres'); if (pg.isEnabled()) await pg.saveCollection('master','agent_tokens',s.agent_tokens); } catch(e) {}
 
+    // ── Track the run on the agent record ────────────────────────────────────
+    const s2 = getStore();
+    // Insert an agent_run record so the run appears in stats
+    if (!s2.agent_runs) s2.agent_runs = [];
+    s2.agent_runs.push({
+      id: uuidv4(),
+      agent_id: agent.id,
+      record_id,
+      environment_id,
+      status: 'done',
+      triggered_by: 'workflow_stage',
+      steps: [{ step: `✓ AI Interview token created — ${scorecardQs.length} questions`, timestamp: new Date().toISOString() }],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    // Increment run_count on the agent
+    const agentIdx = (s2.agents || []).findIndex(a => a.id === agent.id);
+    if (agentIdx >= 0) {
+      s2.agents[agentIdx].run_count = (s2.agents[agentIdx].run_count || 0) + 1;
+      s2.agents[agentIdx].updated_at = new Date().toISOString();
+    }
+    saveStore(s2);
+    // Sync both collections to Postgres
+    try {
+      const pg = require('../db/postgres');
+      const { getCurrentTenant } = require('../db/init');
+      const tenant = getCurrentTenant() || 'master';
+      if (pg.isEnabled()) {
+        await pg.saveCollection(tenant, 'agent_runs', s2.agent_runs);
+        await pg.saveCollection(tenant, 'agents',     s2.agents);
+      }
+    } catch(e) { console.error('[executeAgentActions] pg sync error:', e.message); }
+    // ─────────────────────────────────────────────────────────────────────────
+
     logs.push({ step: `✓ AI Interview link generated — ${scorecardQs.length} questions from ${sourceLabel}`, token, status: 'done' });
   }
   return logs;
