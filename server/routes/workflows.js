@@ -79,6 +79,8 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
     if (!s.record_notes) s.record_notes = [];
     s.record_notes.push({ id: uuidv4(), record_id, content: `AI Interview link generated via workflow — ${scorecardQs.length} questions from ${sourceLabel}. Link: /interview/${token}`, created_by: 'workflow', created_at: new Date().toISOString() });
     saveStore(s);
+    // Force-sync agent_tokens to Postgres so the interview link survives restarts
+    try { const pg = require('../db/postgres'); if (pg.isEnabled()) await pg.saveCollection('master','agent_tokens',s.agent_tokens); } catch(e) {}
 
     logs.push({ step: `✓ AI Interview link generated — ${scorecardQs.length} questions from ${sourceLabel}`, token, status: 'done' });
   }
@@ -516,7 +518,6 @@ router.patch('/people-links/:id', async (req, res) => {
               if (resolved.error) { actionOutput = `⚠ ${resolved.error}`; actionStatus = 'warning'; }
               else {
                 const toList = resolved.emails.map(r => r.email).join(', ');
-                // Resolve {{interview_link}} from latest pending token for this person
                 const latestToken = (s.agent_tokens || [])
                   .filter(t => t.candidate_id === person.id && t.status === 'pending')
                   .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
@@ -525,7 +526,7 @@ router.patch('/people-links/:id', async (req, res) => {
                   : null;
                 const interpolate = (str) => (str || '')
                   .replace(/\{\{(\w+)\}\}/g, (_, k) => person.data?.[k] ?? `{{${k}}}`)
-                  .replace(/\{\{interview_link\}\}/g, interviewUrl || '{{interview_link}}');
+                  .replace(/\{\{interview_link\}\}/g, interviewUrl || '[interview link]');
                 const subject = interpolate(cfg.subject);
                 const body    = interpolate(cfg.body);
                 try {
@@ -533,6 +534,12 @@ router.patch('/people-links/:id', async (req, res) => {
                   for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>') });
                   actionOutput = `Email → ${toList}: "${subject}"`;
                 } catch(e) { actionOutput = `[Demo] Email → ${toList}: "${subject}"`; }
+                // Save to communications so it appears on the person's record
+                if (!s.communications) s.communications = [];
+                s.communications.push({ id: uuidv4(), record_id: person.id, type: 'email', direction: 'outbound', subject, body, status: 'sent', created_by: 'workflow-auto', created_at: new Date().toISOString() });
+                require('../db/init').saveStore();
+                // Force-sync to Postgres
+                try { const pg = require('../db/postgres'); const { getCurrentTenant } = require('../db/init'); if (pg.isEnabled()) await pg.saveCollection(getCurrentTenant()||'master','communications',s.communications); } catch(e){}
               }
             } else if (action.type === 'send_invitation_email') {
               const s = getStore();
@@ -555,6 +562,7 @@ router.patch('/people-links/:id', async (req, res) => {
                   if (!s.communications) s.communications = [];
                   s.communications.push({ id: uuidv4(), record_id: person.id, type:'email', direction:'outbound', subject, body, status:'sent', created_by:'workflow-auto', created_at: new Date().toISOString() });
                   require('../db/init').saveStore();
+                  try { const pg = require('../db/postgres'); const { getCurrentTenant } = require('../db/init'); if (pg.isEnabled()) await pg.saveCollection(getCurrentTenant()||'master','communications',s.communications); } catch(e){}
                 }
               }
             } else if (action.type === 'stage_change') {

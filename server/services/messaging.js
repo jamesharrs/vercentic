@@ -32,6 +32,10 @@ const SENDGRID_CONFIGURED = !!(
   process.env.SENDGRID_API_KEY &&
   process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_KEY'
 );
+const RESEND_CONFIGURED = !!(
+  process.env.RESEND_API_KEY &&
+  process.env.RESEND_API_KEY !== 'YOUR_RESEND_KEY'
+);
 
 let twilioClient = null;
 if (TWILIO_CONFIGURED) {
@@ -89,32 +93,61 @@ async function sendWhatsApp({ to, body }) {
   return { sid: msg.sid, status: msg.status };
 }
 
-// ─── Email (SendGrid) ─────────────────────────────────────────────────────────
-async function sendEmail({ to, toName, subject, body, htmlBody }) {
-  if (!SENDGRID_CONFIGURED) {
-    return { simulated: true, messageId: `sim_${Date.now()}`, status: 'simulated' };
+// ─── Email (SendGrid or Resend) ───────────────────────────────────────────────
+async function sendEmail({ to, toName, subject, body, text, html }) {
+  const textBody = text || body || '';
+  const htmlBody = html || textBody.replace(/\n/g, '<br>');
+
+  // Try Resend first (simpler setup, free tier)
+  if (RESEND_CONFIGURED) {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `${process.env.SENDGRID_FROM_NAME || 'TalentOS'} <${process.env.SENDGRID_FROM_EMAIL || 'onboarding@resend.dev'}>`,
+        to: toName ? [{ email: to, name: toName }] : [to],
+        subject,
+        text: textBody,
+        html: htmlBody,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Resend error');
+    return { messageId: data.id, status: 'sent', provider: 'resend' };
   }
-  const sgMail = require('@sendgrid/mail');
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  const [response] = await sgMail.send({
-    to: toName ? { email: to, name: toName } : to,
-    from: {
-      email: process.env.SENDGRID_FROM_EMAIL || 'noreply@talentos.io',
-      name:  process.env.SENDGRID_FROM_NAME  || 'TalentOS',
-    },
-    subject,
-    text: body,
-    html: htmlBody || body.replace(/\n/g, '<br>'),
-  });
-  return { messageId: response.headers['x-message-id'], status: 'sent' };
+
+  // Fall back to SendGrid
+  if (SENDGRID_CONFIGURED) {
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    const [response] = await sgMail.send({
+      to: toName ? { email: to, name: toName } : to,
+      from: {
+        email: process.env.SENDGRID_FROM_EMAIL || 'noreply@talentos.io',
+        name:  process.env.SENDGRID_FROM_NAME  || 'TalentOS',
+      },
+      subject,
+      text: textBody,
+      html: htmlBody,
+    });
+    return { messageId: response.headers['x-message-id'], status: 'sent', provider: 'sendgrid' };
+  }
+
+  // Simulation mode
+  console.log(`[email-sim] To: ${to} | Subject: ${subject}`);
+  return { simulated: true, messageId: `sim_${Date.now()}`, status: 'simulated' };
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 function getProviderStatus() {
   return {
-    sms:       TWILIO_CONFIGURED   ? 'live' : 'simulation',
-    whatsapp:  TWILIO_CONFIGURED   ? 'live' : 'simulation',
-    email:     SENDGRID_CONFIGURED ? 'live' : 'simulation',
+    sms:       TWILIO_CONFIGURED                       ? 'live' : 'simulation',
+    whatsapp:  TWILIO_CONFIGURED                       ? 'live' : 'simulation',
+    email:     RESEND_CONFIGURED || SENDGRID_CONFIGURED ? 'live' : 'simulation',
+    email_provider: RESEND_CONFIGURED ? 'resend' : SENDGRID_CONFIGURED ? 'sendgrid' : 'none',
   };
 }
 
