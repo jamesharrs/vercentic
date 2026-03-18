@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { matchCandidateToJob } from "./AI.jsx";
 
 const F = "'DM Sans', -apple-system, sans-serif";
@@ -69,6 +69,150 @@ const STEP_TYPES = AUTOMATION_TYPES;
 
 const automationDef = (type) => AUTOMATION_TYPES.find(s => s.type === type);
 const stepDef = (type) => automationDef(type) || { type:"placeholder", label:"Stage", icon:"chevRight", color:"#9ca3af", desc:"Process stage" };
+
+// ─── EmailBodyEditor ──────────────────────────────────────────────────────────
+// Reusable subject + body editor with inline variable picker and live preview.
+const EMAIL_VARS = [
+  { group:"Candidate", vars:[
+    { key:"first_name",      label:"First name" },
+    { key:"last_name",       label:"Last name" },
+    { key:"email",           label:"Email" },
+    { key:"phone",           label:"Phone" },
+    { key:"current_title",   label:"Current title" },
+    { key:"location",        label:"Location" },
+  ]},
+  { group:"Job", vars:[
+    { key:"job_title",       label:"Job title" },
+    { key:"department",      label:"Department" },
+    { key:"job_location",    label:"Job location" },
+    { key:"hiring_manager",  label:"Hiring manager" },
+  ]},
+  { group:"Interview", vars:[
+    { key:"interview_link",  label:"Interview link" },
+    { key:"interview_expiry",label:"Link expiry" },
+  ]},
+  { group:"System", vars:[
+    { key:"today",           label:"Today's date" },
+    { key:"company_name",    label:"Company name" },
+  ]},
+];
+
+function EmailBodyEditor({ subject, body, onSubjectChange, onBodyChange, extraVars = [] }) {
+  const [showVars, setShowVars]     = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [activeField, setActiveField] = useState("body"); // "subject" | "body"
+  const subjectRef = useRef(null);
+  const bodyRef    = useRef(null);
+  const dropRef    = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = e => { if (dropRef.current && !dropRef.current.contains(e.target)) setShowVars(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const insertVar = (key) => {
+    const tag = `{{${key}}}`;
+    const isSubject = activeField === "subject";
+    const ref = isSubject ? subjectRef : bodyRef;
+    const el = ref.current;
+    if (!el) { isSubject ? onSubjectChange((subject||"") + tag) : onBodyChange((body||"") + tag); setShowVars(false); return; }
+    const start = el.selectionStart ?? (isSubject ? subject : body)?.length ?? 0;
+    const end   = el.selectionEnd   ?? start;
+    const current = isSubject ? (subject||"") : (body||"");
+    const next = current.slice(0, start) + tag + current.slice(end);
+    isSubject ? onSubjectChange(next) : onBodyChange(next);
+    // Restore cursor after React re-render
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + tag.length, start + tag.length); }, 0);
+    setShowVars(false);
+  };
+
+  // Build preview by substituting sample values
+  const previewText = (text) => (text||"").replace(/\{\{(\w+)\}\}/g, (_, k) => {
+    const samples = { first_name:"Alex", last_name:"Johnson", email:"alex@example.com", phone:"+971 50 123 4567", current_title:"Product Manager", location:"Dubai", job_title:"Senior PM", department:"Product", job_location:"Dubai, UAE", hiring_manager:"Sarah Lee", interview_link:"https://app.talentos.io/interview/abc123", interview_expiry:"in 72 hours", today: new Date().toLocaleDateString(), company_name:"Acme Corp" };
+    return `<span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:0 3px;font-weight:600">${samples[k]||k}</span>`;
+  });
+
+  const allVars = [...EMAIL_VARS, ...(extraVars.length ? [{ group:"Custom fields", vars: extraVars }] : [])];
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      {/* Subject */}
+      <div style={{ position:"relative" }}>
+        <input
+          ref={subjectRef}
+          value={subject||""}
+          onChange={e => onSubjectChange(e.target.value)}
+          onFocus={() => setActiveField("subject")}
+          placeholder="Subject — e.g. Your interview invite, {{first_name}}"
+          style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}
+        />
+      </div>
+
+      {/* Body + toolbar */}
+      <div style={{ position:"relative" }}>
+        {/* Toolbar row */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+          <span style={{ fontSize:11, fontWeight:600, color:C.text3 }}>Body</span>
+          <div style={{ flex:1 }}/>
+          {/* Preview toggle */}
+          <button type="button" onClick={() => setShowPreview(p => !p)}
+            style={{ fontSize:11, padding:"2px 9px", borderRadius:5, border:`1px solid ${C.border}`, background: showPreview ? C.accent : "white", color: showPreview ? "white" : C.text3, cursor:"pointer", fontFamily:F, fontWeight:600 }}>
+            {showPreview ? "Edit" : "Preview"}
+          </button>
+          {/* Variables button + dropdown */}
+          <div ref={dropRef} style={{ position:"relative" }}>
+            <button type="button" onClick={() => { setShowVars(v => !v); if (activeField === "subject") setActiveField("body"); }}
+              style={{ fontSize:11, padding:"2px 9px", borderRadius:5, border:`1.5px solid ${C.accent}`, background: showVars ? C.accent : "white", color: showVars ? "white" : C.accent, cursor:"pointer", fontFamily:F, fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 9h8M8 13h5"/><rect x="2" y="3" width="20" height="18" rx="3"/></svg>
+              Variables
+            </button>
+            {showVars && (
+              <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, width:240, background:"white", borderRadius:10, border:`1.5px solid ${C.border}`, boxShadow:"0 8px 24px rgba(0,0,0,.12)", zIndex:200, overflow:"hidden" }}>
+                <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em" }}>
+                  Click to insert into {activeField === "subject" ? "subject" : "body"}
+                </div>
+                <div style={{ maxHeight:280, overflowY:"auto" }}>
+                  {allVars.map(grp => (
+                    <div key={grp.group}>
+                      <div style={{ padding:"6px 10px 3px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", background:"#f9fafb" }}>{grp.group}</div>
+                      {grp.vars.map(v => (
+                        <div key={v.key} onClick={() => insertVar(v.key)}
+                          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"6px 12px", cursor:"pointer", fontSize:12 }}
+                          onMouseEnter={e => e.currentTarget.style.background="#f0f4ff"}
+                          onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                          <span style={{ color:C.text1, fontWeight:500 }}>{v.label}</span>
+                          <code style={{ fontSize:10, color:C.accent, background:"#eef2ff", padding:"1px 5px", borderRadius:3 }}>{`{{${v.key}}}`}</code>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Preview mode */}
+        {showPreview ? (
+          <div style={{ minHeight:80, padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, lineHeight:1.7, color:C.text1, background:"#fafafa", whiteSpace:"pre-wrap" }}
+            dangerouslySetInnerHTML={{ __html: previewText(body) }}/>
+        ) : (
+          <textarea
+            ref={bodyRef}
+            value={body||""}
+            onChange={e => onBodyChange(e.target.value)}
+            onFocus={() => setActiveField("body")}
+            rows={5}
+            placeholder={"Hi {{first_name}},\n\nWe wanted to update you on your application…\n\nBest regards,\nThe Recruitment Team"}
+            style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", resize:"vertical", color:C.text1, lineHeight:1.6 }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Step Card ────────────────────────────────────────────────────────────────
 const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, envId }) => {
@@ -211,13 +355,12 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
             )}
 
             {step.automation_type === "send_email" && (
-              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                <input value={cfg.subject||""} onChange={e=>setConfig("subject", e.target.value)} placeholder="Subject — e.g. Update for {{first_name}}"
-                  style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
-                <textarea value={cfg.body||""} onChange={e=>setConfig("body", e.target.value)} rows={3}
-                  placeholder="Hi {{first_name}}, we wanted to update you…"
-                  style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", resize:"vertical", color:C.text1, lineHeight:1.5 }}/>
-              </div>
+              <EmailBodyEditor
+                subject={cfg.subject} body={cfg.body}
+                onSubjectChange={v => setConfig("subject", v)}
+                onBodyChange={v => setConfig("body", v)}
+                extraVars={fields.map(f => ({ key: f.api_key, label: f.name }))}
+              />
             )}
 
             {step.automation_type === "webhook" && (
@@ -334,15 +477,14 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
             {step.automation_type === "send_invitation_email" && (
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 <div style={{ padding:"8px 12px", borderRadius:8, background:"#ecfeff", border:"1px solid #a5f3fc", fontSize:11, color:"#0e7490", lineHeight:1.5 }}>
-                  Sends the candidate an email containing their AI interview link. Run a <strong>Run Agent</strong> step first to generate the link.
-                  Use <code style={{background:"#cffafe",padding:"1px 4px",borderRadius:3}}>{"{{interview_link}}"}</code> in the body to insert the link.
+                  Sends the candidate an email with their AI interview link. Run a <strong>Run Agent</strong> step first to generate the link.
                 </div>
-                <input value={cfg.subject||""} onChange={e=>setConfig("subject", e.target.value)}
-                  placeholder="Subject — e.g. Your AI Interview invitation for {{job_title}}"
-                  style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
-                <textarea value={cfg.body||""} onChange={e=>setConfig("body", e.target.value)} rows={5}
-                  placeholder={`Hi {{first_name}},\n\nThank you for applying. Please complete your AI interview here:\n{{interview_link}}\n\nThe link is valid for 72 hours.\n\nBest,\nThe Recruitment Team`}
-                  style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", resize:"vertical", color:C.text1, lineHeight:1.5 }}/>
+                <EmailBodyEditor
+                  subject={cfg.subject} body={cfg.body}
+                  onSubjectChange={v => setConfig("subject", v)}
+                  onBodyChange={v => setConfig("body", v)}
+                  extraVars={fields.map(f => ({ key: f.api_key, label: f.name }))}
+                />
               </div>
             )}
           </div>
