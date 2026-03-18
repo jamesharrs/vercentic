@@ -50,8 +50,8 @@ const TRIGGER_ICONS = { record_created:"plus", record_updated:"edit", stage_chan
 const TRIGGER_COLORS = { record_created:"#4361EE", record_updated:"#F08C00", stage_changed:"#7048E8", form_submitted:"#0CA678", schedule_daily:"#E03131", schedule_weekly:"#E03131", manual:"#374151" };
 // Whether a trigger fires automatically (vs manually)
 const AUTO_TRIGGERS = new Set(["record_created","record_updated","stage_changed","form_submitted","schedule_daily","schedule_weekly"]);
-const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye", conduct_interview:"users" };
-const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700", conduct_interview:"#7048E8" };
+const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye", ai_interview:"users" };
+const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700", ai_interview:"#7048E8" };
 
 const VOICES = [
   {id:'en-US',label:'English (US)'},{id:'en-GB',label:'English (UK)'},
@@ -319,7 +319,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                       {a.type==='add_note'&&(<textarea value={a.note_template} onChange={e=>updateAction(i,'note_template',e.target.value)} placeholder="Note text. Use {{ai_output}} to include AI result…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>)}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
                       {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
-                      {a.type==='conduct_interview'&&(
+                      {a.type==='ai_interview'&&(
                         <div>
                           <div style={{display:"flex",gap:8,marginBottom:8}}>
                             <input value={a.persona_name||''} onChange={e=>updateAction(i,'persona_name',e.target.value)} placeholder="Interviewer name (e.g. Alex)…" style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
@@ -329,30 +329,48 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                           </div>
                           <textarea value={a.persona_description||''} onChange={e=>updateAction(i,'persona_description',e.target.value)} placeholder="Interviewer style / description (optional)…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical",marginBottom:8}}/>
                           <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Avatar colour</div>
-                          <div style={{display:"flex",gap:6,marginBottom:10}}>
+                          <div style={{display:"flex",gap:6,marginBottom:12}}>
                             {AVATAR_COLORS_LIST.map(col=>(
                               <div key={col} onClick={()=>updateAction(i,'avatar_color',col)} style={{width:22,height:22,borderRadius:"50%",background:col,cursor:"pointer",border:`2.5px solid ${(a.avatar_color||'#6366f1')===col?"white":"transparent"}`,boxShadow:(a.avatar_color||'#6366f1')===col?`0 0 0 2px ${col}`:"none"}}/>
                             ))}
                           </div>
-                          <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Questions — {(a.question_ids||[]).length} selected</div>
-                          <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
-                            {questions.length===0
-                              ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet. Add them in Settings → Question Bank.</div>
-                              :questions.map(q=>{
-                                const sel=(a.question_ids||[]).includes(q.id);
-                                return(
-                                  <div key={q.id} onClick={()=>{const ids=a.question_ids||[];updateAction(i,'question_ids',sel?ids.filter(x=>x!==q.id):[...ids,q.id]);}}
-                                    style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.accent}08`:"transparent",marginBottom:2}}>
-                                    <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                                      {sel&&<Ic n="check" s={9} c="white"/>}
-                                    </div>
-                                    <span style={{flex:1,fontSize:11,color:C.text1}}>{q.text}</span>
-                                    <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${Q_TYPE_COLORS[q.type]||C.text3}18`,color:Q_TYPE_COLORS[q.type]||C.text3,fontWeight:700}}>{q.type}</span>
-                                  </div>
-                                );
-                              })
-                            }
+
+                          {/* Use job questions toggle */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:8,border:`1.5px solid ${a.use_job_questions?C.accent:C.border}`,background:a.use_job_questions?`${C.accent}08`:"white",marginBottom:10,cursor:"pointer"}}
+                            onClick={()=>updateAction(i,'use_job_questions',!a.use_job_questions)}>
+                            <div style={{flex:1,paddingRight:12}}>
+                              <div style={{fontSize:12,fontWeight:700,color:a.use_job_questions?C.accent:C.text1}}>Use questions from linked job</div>
+                              <div style={{fontSize:11,color:C.text3,marginTop:2,lineHeight:1.4}}>At run time, pulls questions assigned to the candidate's linked job and stores them on their record</div>
+                            </div>
+                            <div style={{width:36,height:20,borderRadius:10,background:a.use_job_questions?C.accent:"#D1D5DB",flexShrink:0,position:"relative",transition:"background .2s"}}>
+                              <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:a.use_job_questions?18:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                            </div>
                           </div>
+
+                          {/* Manual question picker — shown when NOT using job questions */}
+                          {!a.use_job_questions&&(
+                            <>
+                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Questions — {(a.question_ids||[]).length} selected</div>
+                              <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
+                                {questions.length===0
+                                  ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet. Add them in Settings → Question Bank.</div>
+                                  :questions.map(q=>{
+                                    const sel=(a.question_ids||[]).includes(q.id);
+                                    return(
+                                      <div key={q.id} onClick={()=>{const ids=a.question_ids||[];updateAction(i,'question_ids',sel?ids.filter(x=>x!==q.id):[...ids,q.id]);}}
+                                        style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.accent}08`:"transparent",marginBottom:2}}>
+                                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                          {sel&&<Ic n="check" s={9} c="white"/>}
+                                        </div>
+                                        <span style={{flex:1,fontSize:11,color:C.text1}}>{q.text}</span>
+                                        <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${Q_TYPE_COLORS[q.type]||C.text3}18`,color:Q_TYPE_COLORS[q.type]||C.text3,fontWeight:700}}>{q.type}</span>
+                                      </div>
+                                    );
+                                  })
+                                }
+                              </div>
+                            </>
+                          )}
                           <div style={{marginTop:8,padding:"7px 10px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:11,color:C.purple}}>
                             ✨ When this agent runs on a candidate record, an AI interview link will be auto-generated and a note added to their profile.
                           </div>
