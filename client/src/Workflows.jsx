@@ -1148,6 +1148,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [personRecords, setPersonRecords] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [selectedStage, setSelectedStage] = useState(null);
+  const [selectedLinks, setSelectedLinks] = useState([]);
+  const [pipelineView, setPipelineView]   = useState("card"); // "card" | "list"
   const [addingPerson, setAddingPerson]   = useState(false);
   const [personSearch, setPersonSearch]   = useState("");
   const [saving, setSaving]               = useState(false);
@@ -1233,6 +1235,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const pInit  = (p) => pLabel(p).charAt(0).toUpperCase();
 
   const countByStage = plSteps.reduce((acc, s) => { acc[s.id] = peopleLinks.filter(l => l.stage_id === s.id).length; return acc; }, {});
+
+  // Clear selection when stage filter changes
+  useEffect(() => { setSelectedLinks([]); }, [selectedStage]);
 
   // Compute AI match scores for each person against the linked record (if it's a job-like object)
   const matchScores = useMemo(() => {
@@ -1377,25 +1382,117 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
       {/* Expanded people list */}
       {hasStages && selectedStage && (
         <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8, background:"white", borderTop:`1px solid #f3f0ff` }}>
+              {/* Section header with bulk controls and view toggle */}
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                {/* Select all checkbox */}
+                {visiblePeople.length > 0 && (
+                  <input type="checkbox"
+                    checked={selectedLinks.length === visiblePeople.length && visiblePeople.length > 0}
+                    onChange={e => setSelectedLinks(e.target.checked ? visiblePeople.map(l=>l.id) : [])}
+                    style={{ width:14, height:14, cursor:"pointer", accentColor:"#7c3aed", flexShrink:0 }}/>
+                )}
                 <span style={{ fontSize:11, fontWeight:700, color:"#7c3aed", flex:1 }}>
-                  {selectedStage === "__all__"
-                    ? `All — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
-                    : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
+                  {selectedLinks.length > 0
+                    ? `${selectedLinks.length} selected`
+                    : selectedStage === "__all__"
+                      ? `All — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
+                      : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
                 </span>
+                {/* Bulk move */}
+                {selectedLinks.length > 0 && (
+                  <select onChange={e => { if(!e.target.value) return; const s=plSteps.find(st=>st.id===e.target.value); if(s) { selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); } e.target.value=""; }}
+                    style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
+                    <option value="">Move to stage…</option>
+                    {plSteps.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                )}
+                {/* View toggle: card / list */}
+                <button onClick={()=>setPipelineView(v=>v==="card"?"list":"card")}
+                  title={pipelineView==="card"?"Switch to list view":"Switch to card view"}
+                  style={{ background:"none", border:`1px solid #e5e7eb`, borderRadius:6, padding:"3px 7px", cursor:"pointer", display:"flex", alignItems:"center", gap:4, color:"#6b7280", fontSize:11 }}>
+                  <Ic n={pipelineView==="card"?"list":"grid"} s={12}/>
+                  {pipelineView==="card"?"List":"Cards"}
+                </button>
                 <button onClick={openAddPerson}
                   style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"2px 6px" }}>
                   + Add
                 </button>
               </div>
+
               {visiblePeople.length === 0 && (
                 <div style={{ textAlign:"center", padding:"14px 0", color:"#c4b5fd", fontSize:12 }}>No people in this stage yet.</div>
               )}
-              {visiblePeople.map(link => (
+
+              {/* List view */}
+              {pipelineView === "list" && visiblePeople.length > 0 && (
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                  <thead>
+                    <tr style={{ borderBottom:`1.5px solid #ede9fe` }}>
+                      <th style={{ width:20, padding:"5px 8px 5px 0", textAlign:"left" }}>
+                        <input type="checkbox"
+                          checked={selectedLinks.length===visiblePeople.length&&visiblePeople.length>0}
+                          onChange={e=>setSelectedLinks(e.target.checked?visiblePeople.map(l=>l.id):[])}
+                          style={{ accentColor:"#7c3aed", cursor:"pointer" }}/>
+                      </th>
+                      {["Name","Linked Job","Stage","Match"].map(h=>(
+                        <th key={h} style={{ padding:"5px 8px", textAlign:"left", fontWeight:700, color:"#7c3aed", fontSize:11 }}>{h}</th>
+                      ))}
+                      <th style={{ width:24 }}/>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePeople.map(link => {
+                      const d = link.person_data || {};
+                      const name = [d.first_name,d.last_name].filter(Boolean).join(" ")||d.email||"—";
+                      const jobName = link.target_title || link.target_data?.job_title || link.target_object_name || "—";
+                      const score = matchScores[link.id]?.score ?? null;
+                      const scoreColor = score===null?"#9ca3af":score>=75?"#059669":score>=50?"#d97706":"#dc2626";
+                      return (
+                        <tr key={link.id} style={{ borderBottom:`1px solid #f5f3ff` }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#faf5ff"}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <td style={{ padding:"7px 8px 7px 0" }}>
+                            <input type="checkbox" checked={selectedLinks.includes(link.id)}
+                              onChange={e=>setSelectedLinks(prev=>e.target.checked?[...prev,link.id]:prev.filter(x=>x!==link.id))}
+                              style={{ accentColor:"#7c3aed", cursor:"pointer" }}/>
+                          </td>
+                          <td style={{ padding:"7px 8px" }}>
+                            <span onClick={()=>onNavigate&&onNavigate(link.person_record_id)}
+                              style={{ fontWeight:600, color:"#7c3aed", cursor:"pointer", textDecoration:"underline" }}>{name}</span>
+                          </td>
+                          <td style={{ padding:"7px 8px", color:"#6b7280" }}>{jobName}</td>
+                          <td style={{ padding:"7px 8px" }}>
+                            <select value={link.stage_id||""} onChange={e=>{const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);}}
+                              style={{ padding:"3px 7px", borderRadius:20, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
+                              {plSteps.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding:"7px 8px", color:scoreColor, fontWeight:700, fontSize:12 }}>
+                            {score!==null?`${score}%`:"—"}
+                          </td>
+                          <td style={{ padding:"7px 4px" }}>
+                            <button onClick={()=>removeLink(link.id)} title="Remove"
+                              style={{ background:"none", border:"none", cursor:"pointer", padding:0, color:"#d1d5db" }}
+                              onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+                              onMouseLeave={e=>e.currentTarget.style.color="#d1d5db"}>
+                              <Ic n="x" s={12}/>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Card view */}
+              {pipelineView === "card" && visiblePeople.map(link => (
                 <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
                   matchScore={matchScores[link.id]}
                   personData={link.person_data}
+                  selected={selectedLinks.includes(link.id)}
+                  onSelect={id=>setSelectedLinks(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
                   onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
               ))}
             </div>
@@ -1453,7 +1550,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   );
 }
 // ─── PipelinePersonRow ────────────────────────────────────────────────────────
-function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, personData, onMove, onRemove, onNavigate }) {
+function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, personData, selected, onSelect, onMove, onRemove, onNavigate }) {
   const currentIdx  = steps.findIndex(s => s.id === link.stage_id);
   const currentStep = steps[currentIdx] || steps[0];
   const prevStep    = currentIdx > 0 ? steps[currentIdx - 1] : null;
@@ -1473,8 +1570,12 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
     : "#fef2f2";
 
   return (
-    <div style={{ background:"#faf5ff", border:`1px solid #e9d5ff`, borderRadius:10,
+    <div style={{ background: selected ? "#f5f3ff" : "#faf5ff", border:`1px solid ${selected ? "#c4b5fd" : "#e9d5ff"}`, borderRadius:10,
       padding:"9px 12px", display:"flex", alignItems:"center", gap:10 }}>
+      {/* Checkbox */}
+      <input type="checkbox" checked={!!selected}
+        onChange={e => { e.stopPropagation(); onSelect && onSelect(link.id); }}
+        style={{ width:14, height:14, cursor:"pointer", accentColor:"#7c3aed", flexShrink:0 }}/>
       {/* Avatar */}
       <div style={{ width:30, height:30, borderRadius:"50%", background:"#7c3aed",
         display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -1494,7 +1595,10 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
 
       {/* Name + location */}
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</div>
+        <div onClick={() => onNavigate && onNavigate(link.person_record_id)}
+          style={{ fontSize:13, fontWeight:600, color: onNavigate ? "#7c3aed" : C.text1,
+            cursor: onNavigate ? "pointer" : "default", overflow:"hidden", textOverflow:"ellipsis",
+            whiteSpace:"nowrap", textDecoration: onNavigate ? "underline" : "none" }}>{label}</div>
         <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:1, flexWrap:"wrap" }}>
           {subtitle && <span style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{subtitle}</span>}
           {location && (
