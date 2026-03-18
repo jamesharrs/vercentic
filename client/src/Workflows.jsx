@@ -1305,13 +1305,15 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               const count    = countByStage[step.id] || 0;
               const isActive = selectedStage === step.id;
               const hasCount = count > 0;
+              const hasAuto  = (step.actions || []).some(a => a.type && a.type !== 'placeholder');
               return (
                 <div key={step.id} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                   <button
                     onClick={() => setSelectedStage(isActive ? null : step.id)}
+                    title={hasAuto ? `Automation: ${(step.actions||[]).map(a=>a.type).join(', ')}` : step.name}
                     style={{
                       display:"flex", alignItems:"center", gap:5,
-                      padding:"4px 11px", borderRadius:99,
+                      padding:"4px 11px", borderRadius:99, position:"relative",
                       background: isActive ? "#7c3aed" : hasCount ? "#f5f3ff" : "#fafafa",
                       border: `1.5px solid ${isActive ? "#7c3aed" : hasCount ? "#ddd6fe" : "#e5e7eb"}`,
                       cursor:"pointer", fontFamily:F, transition:"all .15s", whiteSpace:"nowrap",
@@ -1319,6 +1321,11 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background="#ede9fe";e.currentTarget.style.borderColor="#c4b5fd";}}}
                     onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background=hasCount?"#f5f3ff":"#fafafa";e.currentTarget.style.borderColor=hasCount?"#ddd6fe":"#e5e7eb";}}}
                   >
+                    {/* Automation indicator dot */}
+                    {hasAuto && (
+                      <span title={`Auto: ${(step.actions||[]).map(a=>a.type).join(', ')}`}
+                        style={{ width:6, height:6, borderRadius:"50%", background: isActive?"#fbbf24":"#f59e0b", flexShrink:0, boxShadow:"0 0 4px rgba(245,158,11,.6)" }}/>
+                    )}
                     <span style={{ fontSize:11, fontWeight:600, color: isActive?"white":hasCount?"#7c3aed":"#9ca3af" }}>
                       {step.name || `Stage ${i+1}`}
                     </span>
@@ -1403,7 +1410,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   <select onChange={e => { if(!e.target.value) return; const s=plSteps.find(st=>st.id===e.target.value); if(s) { selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); } e.target.value=""; }}
                     style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
                     <option value="">Move to stage…</option>
-                    {plSteps.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                    {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
                   </select>
                 )}
                 {/* Open in People list */}
@@ -1473,7 +1480,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                           <td style={{ padding:"7px 8px" }}>
                             <select value={link.stage_id||""} onChange={e=>{const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);}}
                               style={{ padding:"3px 7px", borderRadius:20, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
-                              {plSteps.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                              {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
                             </select>
                           </td>
                           <td style={{ padding:"7px 8px", color:scoreColor, fontWeight:700, fontSize:12 }}>
@@ -1564,9 +1571,19 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
   const currentStep = steps[currentIdx] || steps[0];
   const prevStep    = currentIdx > 0 ? steps[currentIdx - 1] : null;
   const nextStep    = currentIdx >= 0 && currentIdx < steps.length - 1 ? steps[currentIdx + 1] : null;
+  const [showStageMenu, setShowStageMenu] = useState(false);
+  const stageRef = useRef(null);
 
   const score = matchScore?.score ?? null;
   const location = personData?.location || null;
+
+  // Close stage menu on outside click
+  useEffect(() => {
+    if (!showStageMenu) return;
+    const h = e => { if (stageRef.current && !stageRef.current.contains(e.target)) setShowStageMenu(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [showStageMenu]);
 
   // Score colour
   const scoreColor = score === null ? "#9ca3af"
@@ -1630,16 +1647,52 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
               display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, padding:0 }}>
             ‹
           </button>
-          {/* Current stage dropdown */}
-          <select value={link.stage_id || steps[0]?.id || ""}
-            onChange={e => { const s = steps.find(st => st.id === e.target.value); if(s) onMove(link.id, s); }}
-            style={{ padding:"4px 8px", borderRadius:20, fontSize:11, fontWeight:700,
-              border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9",
-              cursor:"pointer", fontFamily:F, outline:"none", maxWidth:110, textOverflow:"ellipsis" }}>
-            {steps.map(step => (
-              <option key={step.id} value={step.id}>{step.name || "Stage"}</option>
-            ))}
-          </select>
+          {/* Custom stage pill dropdown */}
+          <div ref={stageRef} style={{ position:"relative" }}>
+            <button onClick={() => setShowStageMenu(v => !v)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 10px 4px 11px",
+                borderRadius:20, fontSize:11, fontWeight:700,
+                border:`1.5px solid ${showStageMenu ? "#7c3aed" : "#c4b5fd"}`,
+                background: showStageMenu ? "#ede9fe" : "#f5f3ff",
+                color:"#6d28d9", cursor:"pointer", fontFamily:F, whiteSpace:"nowrap", maxWidth:120 }}>
+              {/* Automation dot if current step has actions */}
+              {(currentStep?.actions||[]).some(a=>a.type) && (
+                <span style={{ width:5, height:5, borderRadius:"50%", background:"#f59e0b", flexShrink:0 }}/>
+              )}
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{currentStep?.name || "Stage"}</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.6 }}>
+                <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {showStageMenu && (
+              <div style={{ position:"absolute", top:"calc(100% + 4px)", left:"50%", transform:"translateX(-50%)",
+                background:"white", border:`1px solid #e5e7eb`, borderRadius:10,
+                boxShadow:"0 6px 20px rgba(0,0,0,.12)", zIndex:200, minWidth:140, overflow:"hidden" }}>
+                {steps.map((step, si) => {
+                  const isCurrent = step.id === link.stage_id;
+                  const hasAuto = (step.actions||[]).some(a=>a.type);
+                  return (
+                    <button key={step.id}
+                      onClick={() => { onMove(link.id, step); setShowStageMenu(false); }}
+                      style={{ width:"100%", display:"flex", alignItems:"center", gap:8,
+                        padding:"8px 12px", border:"none", background: isCurrent ? "#f5f3ff" : "white",
+                        cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .1s" }}
+                      onMouseEnter={e => !isCurrent && (e.currentTarget.style.background="#faf5ff")}
+                      onMouseLeave={e => !isCurrent && (e.currentTarget.style.background="white")}>
+                      {isCurrent
+                        ? <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#7c3aed" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
+                        : <span style={{ width:12, flexShrink:0 }}/>}
+                      <span style={{ fontSize:12, fontWeight: isCurrent?700:400, color: isCurrent?"#6d28d9":"#374151", flex:1 }}>{step.name}</span>
+                      {hasAuto && (
+                        <span title={`Auto: ${(step.actions||[]).map(a=>a.type).join(', ')}`}
+                          style={{ fontSize:9, background:"#fef3c7", color:"#92400e", padding:"1px 5px", borderRadius:99, fontWeight:700, whiteSpace:"nowrap" }}>⚡ auto</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {/* Forward */}
           <button onClick={() => nextStep && onMove(link.id, nextStep)}
             disabled={!nextStep}
