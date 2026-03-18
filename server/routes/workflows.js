@@ -3,6 +3,77 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove, getStore, saveStore } = require('../db/init');
 
+// Helper: execute an agent's ai_interview actions against a record
+// Returns array of step log objects { step, status }
+async function executeAgentActions(agent, record_id, record, environment_id) {
+  const s = getStore();
+  const logs = [];
+
+  for (const action of (agent.actions || [])) {
+    if (action.type !== 'ai_interview') continue;
+
+    const questionSource = action.question_source || 'job';
+    let qIds = [];
+    let sourceLabel = '';
+
+    if (questionSource === 'manual') {
+      qIds = action.question_ids || [];
+      sourceLabel = 'manually selected';
+      if (!qIds.length) { logs.push({ step: '⚠ AI Interview skipped — no questions selected on agent', status: 'warning' }); continue; }
+    } else {
+      const link = (s.people_links || []).find(l => l.person_record_id === record_id || l.person_id === record_id);
+      const linkedJobId = link?.target_record_id || link?.record_id || null;
+      if (!linkedJobId) { logs.push({ step: '⚠ AI Interview skipped — candidate is not linked to any job', status: 'warning' }); continue; }
+      const jobRec = (s.records || []).find(r => r.id === linkedJobId);
+      const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
+      const jobAssignments = (s.job_questions || []).filter(a => a.job_id === linkedJobId);
+      qIds = jobAssignments.map(a => a.question_id);
+      if (!qIds.length) { logs.push({ step: `⚠ AI Interview skipped — "${jobName}" has no questions assigned. Add questions via Settings → Question Library`, status: 'warning' }); continue; }
+      sourceLabel = `linked job "${jobName}"`;
+    }
+
+    const allQs = s.question_bank_v2 || [];
+    const scorecardQs = qIds.map(id => allQs.find(q => q.id === id)).filter(Boolean)
+      .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
+
+    if (!scorecardQs.length) { logs.push({ step: '⚠ AI Interview skipped — questions could not be resolved', status: 'warning' }); continue; }
+
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+    const d = record.data || {};
+
+    if (!s.agent_tokens) s.agent_tokens = [];
+    s.agent_tokens.push({
+      id: uuidv4(), token, agent_id: agent.id,
+      persona_name: action.persona_name || 'Alex',
+      persona_description: action.persona_description || '',
+      avatar_color: action.avatar_color || '#6366f1',
+      voice: action.voice || 'en-US',
+      candidate_id: record_id,
+      candidate_name: [d.first_name, d.last_name].filter(Boolean).join(' ') || 'Candidate',
+      candidate_email: d.email || null,
+      environment_id, scorecard_questions: scorecardQs,
+      question_source: questionSource,
+      status: 'pending', created_at: new Date().toISOString(), expires_at: expiresAt,
+      started_at: null, completed_at: null,
+    });
+
+    // Tag candidate with question IDs
+    const recIdx = (s.records || []).findIndex(r => r.id === record_id);
+    if (recIdx >= 0) {
+      s.records[recIdx].data = { ...s.records[recIdx].data, _interview_question_ids: qIds, _interview_question_source: questionSource };
+    }
+
+    // Add note
+    if (!s.record_notes) s.record_notes = [];
+    s.record_notes.push({ id: uuidv4(), record_id, content: `AI Interview link generated via workflow — ${scorecardQs.length} questions from ${sourceLabel}. Link: /interview/${token}`, created_by: 'workflow', created_at: new Date().toISOString() });
+    saveStore(s);
+
+    logs.push({ step: `✓ AI Interview link generated — ${scorecardQs.length} questions from ${sourceLabel}`, token, status: 'done' });
+  }
+  return logs;
+}
+
 // Ensure tables exist
 const ensureTables = () => {
   const store = getStore();
@@ -246,6 +317,64 @@ router.post('/:id/run', async (req, res) => {
 
         stepResult.output = `Offer created (Draft) — ${offer_currency || cfg.currency || 'USD'} ${Number(offer_salary).toLocaleString()} for ${offer.candidate_name}`;
         stepResult.status = 'done';
+
+      } else if (step.automation_type === 'run_agent') {
+        // Run a specific agent against this record
+        const agentId = step.config?.agent_id;
+        if (!agentId) { stepResult.status = 'skipped'; stepResult.output = 'No agent selected'; }
+        else {
+          const agent = findOne('agents', a => a.id === agentId && !a.deleted_at);
+          if (!agent) { stepResult.status = 'error'; stepResult.output = `Agent not found: ${agentId}`; }
+          else {
+            // Execute the agent's ai_interview action directly (same logic as agents route)
+            const agentResults = await executeAgentActions(agent, record_id, record, wf.environment_id || record.environment_id);
+            stepResult.output = agentResults.map(r => r.step).join(' | ');
+            stepResult.status = agentResults.some(r => r.step?.startsWith('⚠')) ? 'warning' : 'done';
+            // Merge any generated tokens/notes back into step context
+            stepResult.agent_run = agentResults;
+          }
+        }
+
+      } else if (step.automation_type === 'send_invitation_email') {
+        // Send candidate an interview invitation email with the link
+        const s = getStore();
+        // Find the most recent interview token for this candidate
+        const token = (s.agent_tokens || [])
+          .filter(t => t.candidate_id === record_id && t.status === 'pending')
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+        const candidateName = record.data ? [record.data.first_name, record.data.last_name].filter(Boolean).join(' ') || 'Candidate' : 'Candidate';
+        const candidateEmail = record.data?.email;
+        const interviewUrl = token ? `${process.env.APP_URL || 'http://localhost:3000'}/interview/${token.token}` : null;
+
+        if (!candidateEmail) {
+          stepResult.status = 'warning';
+          stepResult.output = `⚠ No email address on record — invitation not sent to ${candidateName}`;
+        } else if (!token) {
+          stepResult.status = 'warning';
+          stepResult.output = `⚠ No pending interview link found for ${candidateName} — run the AI Interview agent step first`;
+        } else {
+          const subject = step.config?.subject || `You're invited to an AI interview — ${token.job_name || 'your application'}`;
+          const body = step.config?.body || `Hi ${candidateName},\n\nThank you for your interest. We'd like to invite you to complete a short AI-powered interview at your convenience.\n\nClick the link below to begin:\n${interviewUrl}\n\nThis link is valid for 72 hours.\n\nGood luck!\nThe Recruitment Team`;
+          const interpolated = body.replace(/\{\{(\w+)\}\}/g, (_, k) => record.data?.[k] ?? `{{${k}}}`).replace('{{interview_link}}', interviewUrl);
+
+          // Use messaging service if configured, otherwise log
+          try {
+            const messaging = require('../services/messaging');
+            const result = await messaging.sendEmail({ to: candidateEmail, subject, text: interpolated, html: interpolated.replace(/\n/g, '<br>') });
+            stepResult.output = result.simulated
+              ? `[Simulated] Invitation email queued for ${candidateEmail} — subject: "${subject}"`
+              : `Invitation email sent to ${candidateEmail}`;
+          } catch(e) {
+            stepResult.output = `[Demo] Invitation email would be sent to ${candidateEmail} — link: ${interviewUrl}`;
+          }
+
+          // Save as a communication record
+          if (!s.communications) s.communications = [];
+          s.communications.push({ id: uuidv4(), record_id, type: 'email', direction: 'outbound', subject, body: interpolated, status: 'sent', created_by: 'workflow', created_at: new Date().toISOString() });
+          saveStore(s);
+          stepResult.status = 'done';
+        }
 
       } else {
         stepResult.status = 'skipped';

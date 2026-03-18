@@ -52,14 +52,16 @@ const Ic = ({ n, s=16, c="currentColor" }) => (
 
 // ─── Step type definitions ────────────────────────────────────────────────────
 const AUTOMATION_TYPES = [
-  { type:"ai_prompt",          label:"AI Prompt",          icon:"cpu",       color:"#7c3aed", desc:"Run an AI prompt against this record" },
-  { type:"stage_change",       label:"Change Stage",       icon:"tag",       color:"#3b5bdb", desc:"Update the record's status/stage field" },
-  { type:"update_field",       label:"Update Field",       icon:"edit",      color:"#0ca678", desc:"Set a field to a specific value" },
-  { type:"send_email",         label:"Send Email",         icon:"mail",      color:"#f59f00", desc:"Send an email to the candidate" },
-  { type:"webhook",            label:"Webhook",            icon:"webhook",   color:"#e03131", desc:"POST record data to an external URL" },
-  { type:"schedule_interview", label:"Schedule Interview", icon:"briefcase", color:"#0891b2", desc:"Schedule an interview with the person" },
-  { type:"ai_interview",       label:"AI Interview",       icon:"cpu",       color:"#7048e8", desc:"Send candidate an AI voice interview link using questions from their linked job" },
-  { type:"create_offer",       label:"Create Offer",       icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
+  { type:"ai_prompt",             label:"AI Prompt",            icon:"cpu",       color:"#7c3aed", desc:"Run an AI prompt against this record" },
+  { type:"stage_change",          label:"Change Stage",         icon:"tag",       color:"#3b5bdb", desc:"Update the record's status/stage field" },
+  { type:"update_field",          label:"Update Field",         icon:"edit",      color:"#0ca678", desc:"Set a field to a specific value" },
+  { type:"send_email",            label:"Send Email",           icon:"mail",      color:"#f59f00", desc:"Send an email to the candidate" },
+  { type:"send_invitation_email", label:"Interview Invitation", icon:"mail",      color:"#0891b2", desc:"Email the candidate their AI interview link" },
+  { type:"webhook",               label:"Webhook",              icon:"webhook",   color:"#e03131", desc:"POST record data to an external URL" },
+  { type:"schedule_interview",    label:"Schedule Interview",   icon:"briefcase", color:"#0891b2", desc:"Schedule an interview with the person" },
+  { type:"run_agent",             label:"Run Agent",            icon:"zap",       color:"#7048e8", desc:"Execute an agent against this record (e.g. AI Interview)" },
+  { type:"ai_interview",          label:"AI Interview",         icon:"cpu",       color:"#7048e8", desc:"Send candidate an AI voice interview link using questions from their linked job" },
+  { type:"create_offer",          label:"Create Offer",         icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
 ];
 
 // Keep STEP_TYPES as alias for display in run results etc.
@@ -84,6 +86,11 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
     if (step.automation_type === "ai_interview" && envId) {
       api.get(`/agents?environment_id=${envId}`)
         .then(d => setAgents((Array.isArray(d) ? d : []).filter(a => (a.actions||[]).some(x => x.type === 'ai_interview'))))
+        .catch(()=>{});
+    }
+    if (step.automation_type === "run_agent" && envId) {
+      api.get(`/agents?environment_id=${envId}`)
+        .then(d => setAgents(Array.isArray(d) ? d.filter(a => a.is_active) : []))
         .catch(()=>{});
     }
   }, [step.automation_type, envId]);
@@ -281,6 +288,59 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
                     </select>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Run Agent */}
+            {step.automation_type === "run_agent" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#7048e8", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Select Agent</div>
+                  <select value={cfg.agent_id||""} onChange={e=>{
+                    const a = agents.find(x=>x.id===e.target.value);
+                    setConfig("agent_id", e.target.value);
+                    setConfig("agent_name", a?.name||"");
+                  }} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+                    <option value="">— Choose an agent —</option>
+                    {agents.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}{(a.actions||[]).some(x=>x.type==='ai_interview') ? ' · AI Interview' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {cfg.agent_id && (()=>{
+                  const a = agents.find(x=>x.id===cfg.agent_id);
+                  const hasInterview = (a?.actions||[]).some(x=>x.type==='ai_interview');
+                  return (
+                    <div style={{ padding:"9px 12px", borderRadius:8, background: hasInterview ? "#f5f3ff" : "#f8fafc", border:`1px solid ${hasInterview ? "#ddd6fe" : "#e5e7eb"}`, fontSize:11, color:"#6b7280", lineHeight:1.5 }}>
+                      {hasInterview
+                        ? <>✦ This agent will generate an AI interview link. <strong style={{color:"#7048e8"}}>Questions are pulled from the candidate's linked job at runtime.</strong> If no questions are set on the job, this step will log a warning and skip.</>
+                        : `Agent "${a?.name}" will run its configured actions against the candidate record.`}
+                    </div>
+                  );
+                })()}
+                {agents.length === 0 && (
+                  <div style={{ fontSize:11, color:"#f59f00", padding:"8px 10px", borderRadius:8, background:"#fffbeb", border:"1px solid #fde68a" }}>
+                    No active agents found. Create an agent in Settings → Agents first.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Interview Invitation Email */}
+            {step.automation_type === "send_invitation_email" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ padding:"8px 12px", borderRadius:8, background:"#ecfeff", border:"1px solid #a5f3fc", fontSize:11, color:"#0e7490", lineHeight:1.5 }}>
+                  Sends the candidate an email containing their AI interview link. Run a <strong>Run Agent</strong> step first to generate the link.
+                  Use <code style={{background:"#cffafe",padding:"1px 4px",borderRadius:3}}>{"{{interview_link}}"}</code> in the body to insert the link.
+                </div>
+                <input value={cfg.subject||""} onChange={e=>setConfig("subject", e.target.value)}
+                  placeholder="Subject — e.g. Your AI Interview invitation for {{job_title}}"
+                  style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
+                <textarea value={cfg.body||""} onChange={e=>setConfig("body", e.target.value)} rows={5}
+                  placeholder={`Hi {{first_name}},\n\nThank you for applying. Please complete your AI interview here:\n{{interview_link}}\n\nThe link is valid for 72 hours.\n\nBest,\nThe Recruitment Team`}
+                  style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", resize:"vertical", color:C.text1, lineHeight:1.5 }}/>
               </div>
             )}
           </div>
