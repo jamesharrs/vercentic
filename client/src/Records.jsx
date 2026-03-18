@@ -1753,19 +1753,23 @@ const TYPE_LABELS_Q = { knockout:"Eligibility / Knockout", competency:"Competenc
 const TYPE_BADGE_COLORS = { knockout:"#ef4444", competency:"#3b82f6", technical:"#8b5cf6", culture:"#10b981" };
 
 const GeneratePreviewModal = ({ preview, onConfirm, onClose, saving }) => {
-  const [qs, setQs] = useState(preview.questions);
+  const [qs, setQs] = useState(() => preview.questions.map(q => ({...q, _selected:true, _addToLibrary: q._addToLibrary !== false})));
   const allSelected = qs.every(q => q._selected);
   const selectedCount = qs.filter(q => q._selected).length;
+  const libraryCount = qs.filter(q => q._selected && q._addToLibrary).length;
+  const jobOnlyCount = qs.filter(q => q._selected && !q._addToLibrary).length;
 
   const toggleQ = (i) => setQs(prev => prev.map((q,idx) => idx===i ? {...q, _selected:!q._selected} : q));
   const toggleAll = () => setQs(prev => prev.map(q => ({...q, _selected:!allSelected})));
+  const toggleLibrary = (i, e) => { e.stopPropagation(); setQs(prev => prev.map((q,idx) => idx===i ? {...q, _addToLibrary:!q._addToLibrary} : q)); };
+  const setAllLibrary = (val) => setQs(prev => prev.map(q => ({...q, _addToLibrary:val})));
 
   return ReactDOM.createPortal(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{background:"white",borderRadius:16,width:"100%",maxWidth:640,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+      <div style={{background:"white",borderRadius:16,width:"100%",maxWidth:680,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
         {/* Header */}
         <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #f0f0f0",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
             <div style={{width:32,height:32,borderRadius:9,background:"#1e1b4b",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="2"><path d="M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0L9.937 15.5z"/></svg>
             </div>
@@ -1778,18 +1782,36 @@ const GeneratePreviewModal = ({ preview, onConfirm, onClose, saving }) => {
             </div>
             <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",padding:4,color:"#6b7280",fontSize:18,lineHeight:1}}>×</button>
           </div>
-          {/* Select all + info */}
-          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8,padding:"6px 10px",background:"#f8fafc",borderRadius:8}}>
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{cursor:"pointer"}} />
-            <span style={{fontSize:12,color:"#374151",fontWeight:500}}>Select all ({selectedCount}/{qs.length} selected)</span>
-            <span style={{marginLeft:"auto",fontSize:11,color:"#9ca3af"}}>Uncheck any you don't want added to the library</span>
+
+          {/* Column headers */}
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:"#f8fafc",borderRadius:8}}>
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{cursor:"pointer",flexShrink:0}} />
+            <span style={{fontSize:12,color:"#374151",fontWeight:500,flex:1}}>Select all ({selectedCount}/{qs.length})</span>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#6b7280"}}>
+              <span>Add to library</span>
+              <button onClick={()=>setAllLibrary(true)} style={{fontSize:10,padding:"2px 7px",borderRadius:4,border:"1px solid #d1d5db",background:"white",cursor:"pointer",color:"#374151",fontWeight:600}}>All</button>
+              <button onClick={()=>setAllLibrary(false)} style={{fontSize:10,padding:"2px 7px",borderRadius:4,border:"1px solid #d1d5db",background:"white",cursor:"pointer",color:"#374151",fontWeight:600}}>None</button>
+            </div>
+          </div>
+
+          {/* Library vs job-only legend */}
+          <div style={{display:"flex",gap:14,marginTop:7,padding:"0 10px",fontSize:11,color:"#6b7280"}}>
+            <span style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:8,height:8,borderRadius:2,background:"#4f46e5"}}/>
+              <strong style={{color:"#4f46e5"}}>{libraryCount}</strong> added to Question Library + this job
+            </span>
+            <span style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:8,height:8,borderRadius:2,background:"#0891b2"}}/>
+              <strong style={{color:"#0891b2"}}>{jobOnlyCount}</strong> this job only
+            </span>
           </div>
         </div>
 
         {/* Question list */}
         <div style={{overflowY:"auto",flex:1,padding:"8px 20px"}}>
           {qs.map((q, i) => (
-            <div key={i} onClick={() => toggleQ(i)} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 8px",borderRadius:8,cursor:"pointer",borderBottom:"1px solid #f9fafb",opacity:q._selected?1:0.45,transition:"opacity .15s"}}>
+            <div key={i} onClick={() => toggleQ(i)}
+              style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 8px",borderRadius:8,cursor:"pointer",borderBottom:"1px solid #f9fafb",opacity:q._selected?1:0.4,transition:"opacity .15s"}}>
               <input type="checkbox" checked={q._selected} onChange={() => toggleQ(i)} onClick={e=>e.stopPropagation()} style={{marginTop:2,cursor:"pointer",flexShrink:0}} />
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,color:"#111827",lineHeight:1.45,marginBottom:4}}>{q.text}</div>
@@ -1799,15 +1821,25 @@ const GeneratePreviewModal = ({ preview, onConfirm, onClose, saving }) => {
                   {(q.tags||[]).map(t => <span key={t} style={{fontSize:10,color:"#6b7280",padding:"2px 6px",borderRadius:99,background:"#f3f4f6"}}>#{t}</span>)}
                 </div>
               </div>
+              {/* Add to library toggle */}
+              <div onClick={e=>toggleLibrary(i,e)} title={q._addToLibrary?"In library — click to make job-only":"Job only — click to add to library"}
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:6,border:`1.5px solid ${q._addToLibrary?"#4f46e5":"#0891b2"}`,background:q._addToLibrary?"#eef2ff":"#e0f2fe",cursor:"pointer",userSelect:"none",opacity:q._selected?1:0.35}}>
+                <div style={{width:7,height:7,borderRadius:2,background:q._addToLibrary?"#4f46e5":"#0891b2",flexShrink:0}}/>
+                <span style={{fontSize:10,fontWeight:700,color:q._addToLibrary?"#4338ca":"#0369a1",whiteSpace:"nowrap"}}>{q._addToLibrary?"Library":"Job only"}</span>
+              </div>
             </div>
           ))}
         </div>
 
         {/* Footer */}
         <div style={{padding:"14px 20px",borderTop:"1px solid #f0f0f0",display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
-          <span style={{fontSize:12,color:"#6b7280",flex:1}}>{selectedCount} question{selectedCount!==1?"s":""} will be added to the library and assigned</span>
+          <div style={{flex:1,fontSize:11,color:"#6b7280",lineHeight:1.5}}>
+            {libraryCount > 0 && <div><strong style={{color:"#4338ca"}}>{libraryCount}</strong> added to Question Library and this job</div>}
+            {jobOnlyCount > 0 && <div><strong style={{color:"#0369a1"}}>{jobOnlyCount}</strong> assigned to this job only (not in library)</div>}
+          </div>
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #e5e7eb",background:"white",fontSize:13,fontWeight:600,cursor:"pointer",color:"#374151"}}>Cancel</button>
-          <button onClick={() => onConfirm(qs.filter(q=>q._selected))} disabled={saving||!selectedCount} style={{padding:"8px 16px",borderRadius:8,border:"none",background: selectedCount?"#1e1b4b":"#e5e7eb",color:selectedCount?"#e0e7ff":"#9ca3af",fontSize:13,fontWeight:700,cursor:selectedCount?"pointer":"not-allowed",display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={() => onConfirm(qs.filter(q=>q._selected))} disabled={saving||!selectedCount}
+            style={{padding:"8px 16px",borderRadius:8,border:"none",background:selectedCount?"#1e1b4b":"#e5e7eb",color:selectedCount?"#e0e7ff":"#9ca3af",fontSize:13,fontWeight:700,cursor:selectedCount?"pointer":"not-allowed",display:"flex",alignItems:"center",gap:6}}>
             {saving?"Saving…":`Add ${selectedCount} Question${selectedCount!==1?"s":""}`}
           </button>
         </div>
@@ -1893,11 +1925,36 @@ const JobQuestionsPanel = ({ record, environment }) => {
     if (!selectedQs.length) { setGenPreview(null); return; }
     setSaving(true);
     try {
-      const saved = await Promise.all(selectedQs.map(q =>
-        fetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) }).then(r=>r.json())
-      ));
-      const ids = [...assigned.map(q=>q.id), ...saved.map(q=>q.id)];
-      await save(ids);
+      const libraryQs  = selectedQs.filter(q => q._addToLibrary !== false);
+      const jobOnlyQs  = selectedQs.filter(q => q._addToLibrary === false);
+
+      // Library questions: save to question bank, then assign by ID
+      let libraryIds = [];
+      if (libraryQs.length) {
+        const saved = await Promise.all(libraryQs.map(q =>
+          fetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) }).then(r=>r.json())
+        ));
+        libraryIds = saved.map(q => q.id).filter(Boolean);
+      }
+
+      // Assign library questions to the job
+      if (libraryIds.length) {
+        const ids = [...assigned.map(q=>q.id), ...libraryIds];
+        await fetch(`/api/question-bank/jobs/${record.id}`, {
+          method:"PUT", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ question_ids: ids }),
+        });
+      }
+
+      // Job-only questions: save directly on the job (no library entry)
+      if (jobOnlyQs.length) {
+        await fetch(`/api/question-bank/jobs/${record.id}/direct`, {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ questions: jobOnlyQs }),
+        });
+      }
+
+      load();
     } catch(e) { console.error(e); }
     setGenPreview(null);
     setSaving(false);
@@ -1969,9 +2026,19 @@ const JobQuestionsPanel = ({ record, environment }) => {
                               <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:99,background:`${TYPE_COLORS_Q[q.type]}14`,color:TYPE_COLORS_Q[q.type]}}>{TYPE_LABELS_Q[q.type]}</span>
                               <span style={{fontSize:10,color:C.text3}}>{q.weight} pts</span>
                               {q.options&&<span style={{fontSize:10,color:C.text3}}>Options: {q.options.join(", ")}</span>}
+                              {q._job_only&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:"#e0f2fe",color:"#0369a1"}}>Job only</span>}
                             </div>
                           </div>
-                          <button onClick={()=>{ const ids=assigned.filter(a=>a.id!==q.id).map(a=>a.id); save(ids); }} title="Remove" style={{background:"none",border:"none",cursor:"pointer",color:C.text3,padding:4,borderRadius:6,flexShrink:0}}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                          <button onClick={async ()=>{
+                            if (q._job_only) {
+                              // Remove job-only question via the direct endpoint
+                              await fetch(`/api/question-bank/jobs/${record.id}/direct/${q.id}`, {method:"DELETE"});
+                              load();
+                            } else {
+                              const ids=assigned.filter(a=>a.id!==q.id&&!a._job_only).map(a=>a.id);
+                              save(ids);
+                            }
+                          }} title="Remove" style={{background:"none",border:"none",cursor:"pointer",color:C.text3,padding:4,borderRadius:6,flexShrink:0}}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
                         </div>
                       ))}
                     </div>

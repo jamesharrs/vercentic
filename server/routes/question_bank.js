@@ -116,8 +116,17 @@ router.get('/jobs/:job_id', (req, res) => {
   const store = getStore();
   const assignments = (store.job_questions||[]).filter(jq=>jq.job_id===req.params.job_id);
   const qIds = assignments.map(a=>a.question_id);
-  const questions = (store.question_bank_v2||[]).filter(q=>qIds.includes(q.id));
-  const ordered = assignments.map(a=>({...questions.find(q=>q.id===a.question_id),order:a.order})).filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0));
+  // Library questions
+  const libraryQs = (store.question_bank_v2||[]).filter(q=>qIds.includes(q.id));
+  // Job-only (inline) questions stored directly on the assignment
+  const ordered = assignments.map(a=>{
+    if (a.question_data) {
+      // Job-only question — data lives on the assignment itself
+      return { ...a.question_data, id: a.question_id, order: a.order, _job_only: true };
+    }
+    const q = libraryQs.find(q=>q.id===a.question_id);
+    return q ? { ...q, order: a.order } : null;
+  }).filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0));
   res.json(ordered);
 });
 
@@ -126,10 +135,52 @@ router.put('/jobs/:job_id', (req, res) => {
   if (!Array.isArray(question_ids)) return res.status(400).json({error:'question_ids array required'});
   const store = getStore();
   if (!store.job_questions) store.job_questions=[];
+  // Keep job-only assignments (question_data set) — only replace library-linked ones
+  const jobOnlyExisting = store.job_questions.filter(jq=>jq.job_id===req.params.job_id && jq.question_data);
   store.job_questions = store.job_questions.filter(jq=>jq.job_id!==req.params.job_id);
-  question_ids.forEach((qid,i)=>store.job_questions.push({id:uuidv4(),job_id:req.params.job_id,question_id:qid,order:i,created_at:new Date().toISOString()}));
+  // Re-add job-only first, then library ones
+  jobOnlyExisting.forEach(a=>store.job_questions.push(a));
+  question_ids.forEach((qid,i)=>store.job_questions.push({id:uuidv4(),job_id:req.params.job_id,question_id:qid,order:jobOnlyExisting.length+i,created_at:new Date().toISOString()}));
   saveStore(store);
-  res.json({job_id:req.params.job_id,question_count:question_ids.length});
+  res.json({job_id:req.params.job_id,question_count:question_ids.length+jobOnlyExisting.length});
+});
+
+// Save job-only questions (not added to the library)
+router.post('/jobs/:job_id/direct', (req, res) => {
+  const { questions } = req.body;
+  if (!Array.isArray(questions)||!questions.length) return res.status(400).json({error:'questions array required'});
+  const store = getStore();
+  if (!store.job_questions) store.job_questions=[];
+  const existing = store.job_questions.filter(jq=>jq.job_id===req.params.job_id);
+  const startOrder = existing.length;
+  const added = [];
+  questions.forEach((q,i) => {
+    const qid = uuidv4();
+    const record = {
+      id: uuidv4(),
+      job_id: req.params.job_id,
+      question_id: qid,
+      order: startOrder + i,
+      question_data: { ...q, id: qid, created_at: new Date().toISOString() },
+      created_at: new Date().toISOString(),
+    };
+    store.job_questions.push(record);
+    added.push({ ...q, id: qid });
+  });
+  saveStore(store);
+  res.json({ added, count: added.length });
+});
+
+// Remove a single job-only question
+router.delete('/jobs/:job_id/direct/:question_id', (req, res) => {
+  const store = getStore();
+  if (!store.job_questions) return res.json({ deleted: false });
+  const before = store.job_questions.length;
+  store.job_questions = store.job_questions.filter(jq =>
+    !(jq.job_id === req.params.job_id && jq.question_id === req.params.question_id && jq.question_data)
+  );
+  saveStore(store);
+  res.json({ deleted: store.job_questions.length < before });
 });
 
 // AI-generate questions for a job
@@ -146,7 +197,12 @@ router.post('/jobs/:job_id/generate', async (req, res) => {
   // Also fetch already-assigned questions for this job
   const assignments = query('question_bank_job_assignments', r => r.job_id === job_id);
   const assignedIds = new Set(assignments.map(a => a.question_id));
-  const assignedTexts = existing.filter(q => assignedIds.has(q.id)).map(q => q.text).join('\n- ');
+  // Include both library questions and job-only inline questions in dedup
+  const jobOnlyTexts = assignments.filter(a => a.question_data).map(a => a.question_data.text);
+  const assignedTexts = [
+    ...existing.filter(q => assignedIds.has(q.id)).map(q => q.text),
+    ...jobOnlyTexts,
+  ].join('\n- ');
 
   const prompt = `You are an expert recruiter creating interview questions for a ${job_title||'role'} role${department?` in ${department}`:''}.\n${description?`Job description: ${description}\n`:''}${skills?`Required skills: ${Array.isArray(skills)?skills.join(', '):skills}\n`:''}\n\nGenerate exactly ${count} high-quality, ROLE-SPECIFIC interview questions. Aim for:\n- 1-2 knockout/eligibility checks (type: "knockout")\n- 2-3 competency/behavioural questions specific to this role (type: "competency")\n- 1-2 technical questions about the required skills (type: "technical")\n- 1-2 culture fit questions (type: "culture")\n\n${existingTexts ? `IMPORTANT - The following questions already exist in the library. Do NOT generate anything similar or overlapping:\n- ${existingTexts}\n\n` : ''}${assignedTexts ? `These questions are already assigned to this job - do not repeat them:\n- ${assignedTexts}\n\n` : ''}Make every question specific to the role, not generic. Avoid generic questions like "Tell me about yourself" or "What are your strengths".\n\nRespond with valid JSON array only:\n[{"text":"...","type":"knockout|competency|technical|culture","competency":"...","weight":10,"tags":["..."],"options":null,"pass_value":null}]\nFor knockout questions add options like ["Yes","No"] and pass_value.`;
   try {
@@ -171,8 +227,8 @@ router.post('/jobs/:job_id/generate', async (req, res) => {
       });
     });
 
-    // Return as preview — don't save yet, let the client decide which to keep
-    res.json({ preview: deduped, filtered_count: generated.length - deduped.length });
+    // Return as preview — don't save yet, let the client decide which to keep + whether to add to library
+    res.json({ preview: deduped.map(q=>({...q, _addToLibrary:true})), filtered_count: generated.length - deduped.length });
   } catch(err) { console.error('AI gen error:',err); res.status(500).json({error:'Failed to generate questions'}); }
 });
 
