@@ -470,8 +470,9 @@ router.patch('/people-links/:id', async (req, res) => {
   // Auto-execute actions on the step they just moved into
   let stepRunLog = [];
   if (stage_id && person) {
-    const s2 = getStore();  // fresh store ref after update
+    const s2 = getStore();
     const step = (s2.workflow_steps || []).find(s => s.id === stage_id);
+    console.log(`[stage-move] stage_id=${stage_id} person=${person?.id?.slice(0,8)} step=${step?.name} actions=${JSON.stringify((step?.actions||[]).map(a=>a.type))}`);
     if (step) {
       const actions = stepActions(step);
       if (actions.length > 0) {
