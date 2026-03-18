@@ -1078,6 +1078,7 @@ function StagePill({ linkInfo, onStageChange }) {
   const [open, setOpen]     = useState(false);
   const [pos,  setPos]      = useState({ top:0, left:0 });
   const [saving, setSaving] = useState(false);
+  const [hovered, setHovered] = useState(null);
   const btnRef = useRef(null);
 
   // Close on outside click
@@ -1127,18 +1128,20 @@ function StagePill({ linkInfo, onStageChange }) {
     }}>
       {linkInfo.steps.map(step => {
         const isCurrent = step.id === linkInfo.stage_id;
+        const isHov     = hovered === step.id;
         const hasAuto   = (step.actions||[]).some(a => a.type);
         return (
           <button key={step.id}
             onClick={e => { e.stopPropagation(); handlePick(step); }}
+            onMouseEnter={() => setHovered(step.id)}
+            onMouseLeave={() => setHovered(null)}
             style={{
               width:'100%', display:'flex', alignItems:'center', gap:8,
               padding:'9px 12px', border:'none',
-              background: isCurrent ? '#f5f3ff' : 'white',
+              background: isCurrent ? '#f5f3ff' : isHov ? '#faf5ff' : 'white',
               cursor:'pointer', fontFamily:'inherit', textAlign:'left',
-            }}
-            onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background='#faf5ff'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = isCurrent?'#f5f3ff':'white'; }}>
+              transition:'background .1s',
+            }}>
             {isCurrent
               ? <svg width="12" height="12" viewBox="0 0 12 12" style={{flexShrink:0}}><path d="M2 6l3 3 5-5" stroke={accent} strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
               : <span style={{ width:12, flexShrink:0 }}/>}
