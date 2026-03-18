@@ -50,8 +50,8 @@ const TRIGGER_ICONS = { record_created:"plus", record_updated:"edit", stage_chan
 const TRIGGER_COLORS = { record_created:"#4361EE", record_updated:"#F08C00", stage_changed:"#7048E8", form_submitted:"#0CA678", schedule_daily:"#E03131", schedule_weekly:"#E03131", manual:"#374151" };
 // Whether a trigger fires automatically (vs manually)
 const AUTO_TRIGGERS = new Set(["record_created","record_updated","stage_changed","form_submitted","schedule_daily","schedule_weekly"]);
-const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye", ai_interview:"users" };
-const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700", ai_interview:"#7048E8" };
+const ACTION_ICONS  = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye", ai_interview:"users", interview_coordinator:"calendar" };
+const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700", ai_interview:"#7048E8", interview_coordinator:"#0891b2" };
 
 const VOICES = [
   {id:'en-US',label:'English (US)'},{id:'en-GB',label:'English (UK)'},
@@ -319,6 +319,42 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                       {a.type==='add_note'&&(<textarea value={a.note_template} onChange={e=>updateAction(i,'note_template',e.target.value)} placeholder="Note text. Use {{ai_output}} to include AI result…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>)}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
                       {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
+                      {a.type==='interview_coordinator'&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          <div style={{padding:"8px 12px",borderRadius:8,background:"#e0f7fa",border:"1px solid #0891b2",fontSize:12,color:"#0e4f5c",lineHeight:1.5}}>
+                            📅 Automatically emails the hiring manager and candidate to collect availability, finds the first mutual slot and sends confirmations to both.
+                          </div>
+                          <div style={{display:"flex",gap:8}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:4}}>Duration (minutes)</div>
+                              <input type="number" value={a.duration_minutes||45} min={15} max={240} step={15}
+                                onChange={e=>updateAction(i,'duration_minutes',parseInt(e.target.value)||45)}
+                                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                            </div>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:4}}>Send availability requests</div>
+                              <select value={a.parallel_availability===false?"sequential":"parallel"}
+                                onChange={e=>updateAction(i,'parallel_availability',e.target.value==="parallel")}
+                                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                                <option value="parallel">In parallel (faster)</option>
+                                <option value="sequential">HM first, then candidate</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:4}}>HM availability message (optional)</div>
+                            <textarea value={a.hm_message||''} onChange={e=>updateAction(i,'hm_message',e.target.value)}
+                              placeholder="Leave blank to use the default message…" rows={2}
+                              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>
+                          </div>
+                          <div>
+                            <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:4}}>Candidate message (optional)</div>
+                            <textarea value={a.candidate_message||''} onChange={e=>updateAction(i,'candidate_message',e.target.value)}
+                              placeholder="Leave blank to use the default message…" rows={2}
+                              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>
+                          </div>
+                        </div>
+                      )}
                       {a.type==='ai_interview'&&(
                         <div>
                           {/* Persona row */}
