@@ -50,8 +50,16 @@ const TRIGGER_ICONS = { record_created:"plus", record_updated:"edit", stage_chan
 const TRIGGER_COLORS = { record_created:"#4361EE", record_updated:"#F08C00", stage_changed:"#7048E8", form_submitted:"#0CA678", schedule_daily:"#E03131", schedule_weekly:"#E03131", manual:"#374151" };
 // Whether a trigger fires automatically (vs manually)
 const AUTO_TRIGGERS = new Set(["record_created","record_updated","stage_changed","form_submitted","schedule_daily","schedule_weekly"]);
-const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye" };
-const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700" };
+const ACTION_ICONS = { ai_analyse:"sparkles", ai_draft_email:"sparkles", ai_summarise:"sparkles", ai_score:"sparkles", send_email:"mail", update_field:"edit", add_note:"edit", add_to_pool:"users", create_task:"check", notify_user:"alert", webhook:"zap", human_review:"eye", conduct_interview:"users" };
+const ACTION_COLORS = { ai_analyse:"#7048E8", ai_draft_email:"#7048E8", ai_summarise:"#7048E8", ai_score:"#7048E8", send_email:"#4361EE", update_field:"#F08C00", add_note:"#0CA678", add_to_pool:"#0CA678", create_task:"#F08C00", notify_user:"#E03131", webhook:"#374151", human_review:"#E67700", conduct_interview:"#7048E8" };
+
+const VOICES = [
+  {id:'en-US',label:'English (US)'},{id:'en-GB',label:'English (UK)'},
+  {id:'en-AU',label:'English (AU)'},{id:'ar-SA',label:'Arabic (Gulf)'},
+  {id:'fr-FR',label:'French'},{id:'de-DE',label:'German'},
+];
+const AVATAR_COLORS_LIST = ['#6366f1','#0891b2','#059669','#d97706','#e03131','#7c3aed','#db2777','#0284c7'];
+const Q_TYPE_COLORS = { knockout:'#dc2626', competency:'#2563eb', technical:'#7c3aed', culture:'#059669' };
 
 function statusColor(s) { return {active:C.green,inactive:C.text3,running:C.amber,failed:C.red,completed:C.green,pending_approval:"#E67700",skipped:C.text3}[s]||C.text3; }
 function relTime(ts) { if(!ts) return 'Never'; const diff=Date.now()-new Date(ts).getTime(),m=Math.floor(diff/60000); if(m<1) return 'Just now'; if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; }
@@ -121,6 +129,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
   const [tab, setTab] = useState('trigger');
   const [meta, setMeta] = useState({ trigger_types: {}, action_types: {} });
   const [fields, setFields] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: agent?.name||'', description: agent?.description||'', trigger_type: agent?.trigger_type||'manual',
@@ -130,6 +139,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
   });
 
   useEffect(()=>{ api.get('/api/agents/meta').then(setMeta).catch(()=>{}); },[]);
+  useEffect(()=>{ api.get('/api/question-bank').then(d=>setQuestions(Array.isArray(d)?d:[])).catch(()=>{}); },[]);
   useEffect(()=>{ if(form.target_object_id) api.get(`/api/fields?object_id=${form.target_object_id}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{}); },[form.target_object_id]);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -309,6 +319,45 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                       {a.type==='add_note'&&(<textarea value={a.note_template} onChange={e=>updateAction(i,'note_template',e.target.value)} placeholder="Note text. Use {{ai_output}} to include AI result…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>)}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
                       {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
+                      {a.type==='conduct_interview'&&(
+                        <div>
+                          <div style={{display:"flex",gap:8,marginBottom:8}}>
+                            <input value={a.persona_name||''} onChange={e=>updateAction(i,'persona_name',e.target.value)} placeholder="Interviewer name (e.g. Alex)…" style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                            <select value={a.voice||'en-US'} onChange={e=>updateAction(i,'voice',e.target.value)} style={{width:150,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                              {VOICES.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}
+                            </select>
+                          </div>
+                          <textarea value={a.persona_description||''} onChange={e=>updateAction(i,'persona_description',e.target.value)} placeholder="Interviewer style / description (optional)…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical",marginBottom:8}}/>
+                          <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Avatar colour</div>
+                          <div style={{display:"flex",gap:6,marginBottom:10}}>
+                            {AVATAR_COLORS_LIST.map(col=>(
+                              <div key={col} onClick={()=>updateAction(i,'avatar_color',col)} style={{width:22,height:22,borderRadius:"50%",background:col,cursor:"pointer",border:`2.5px solid ${(a.avatar_color||'#6366f1')===col?"white":"transparent"}`,boxShadow:(a.avatar_color||'#6366f1')===col?`0 0 0 2px ${col}`:"none"}}/>
+                            ))}
+                          </div>
+                          <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Questions — {(a.question_ids||[]).length} selected</div>
+                          <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
+                            {questions.length===0
+                              ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet. Add them in Settings → Question Bank.</div>
+                              :questions.map(q=>{
+                                const sel=(a.question_ids||[]).includes(q.id);
+                                return(
+                                  <div key={q.id} onClick={()=>{const ids=a.question_ids||[];updateAction(i,'question_ids',sel?ids.filter(x=>x!==q.id):[...ids,q.id]);}}
+                                    style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.accent}08`:"transparent",marginBottom:2}}>
+                                    <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                      {sel&&<Ic n="check" s={9} c="white"/>}
+                                    </div>
+                                    <span style={{flex:1,fontSize:11,color:C.text1}}>{q.text}</span>
+                                    <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${Q_TYPE_COLORS[q.type]||C.text3}18`,color:Q_TYPE_COLORS[q.type]||C.text3,fontWeight:700}}>{q.type}</span>
+                                  </div>
+                                );
+                              })
+                            }
+                          </div>
+                          <div style={{marginTop:8,padding:"7px 10px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:11,color:C.purple}}>
+                            ✨ When this agent runs on a candidate record, an AI interview link will be auto-generated and a note added to their profile.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

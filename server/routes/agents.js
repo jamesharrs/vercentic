@@ -31,7 +31,8 @@ const ACTION_TYPES = {
   create_task:      { label: 'Create Task',       description: 'Create a follow-up task for a user' },
   notify_user:      { label: 'Notify User',       description: 'Send an in-app notification to a user' },
   webhook:          { label: 'Call Webhook',      description: 'POST record data to an external URL' },
-  human_review:     { label: 'Request Approval',  description: 'Pause and wait for a human to approve before continuing' },
+  human_review:      { label: 'Request Approval',   description: 'Pause and wait for a human to approve before continuing' },
+  conduct_interview: { label: 'Conduct AI Interview', description: 'Send the candidate a link to an AI-powered voice interview' },
 };
 
 // GET all agents
@@ -344,6 +345,37 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
     case 'webhook': {
       if (!action.webhook_url) break;
       await fetch(action.webhook_url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record_id, environment_id, ai_output: aiOutput, timestamp: new Date().toISOString() }) }).catch(() => {});
+      break;
+    }
+    case 'conduct_interview': {
+      // Auto-generate an interview link for the candidate record
+      const s2 = getStore();
+      if (!s2.agent_tokens) s2.agent_tokens = [];
+      const rec2 = (s2.records || []).find(r => r.id === record_id);
+      if (rec2) {
+        const d2 = rec2.data || {};
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        const qIds = action.question_ids || [];
+        const scorecardQuestions = qIds.map(id=>(s2.question_bank_v2||[]).find(q=>q.id===id)).filter(Boolean)
+          .map(q=>({id:q.id,text:q.text,type:q.type,competency:q.competency,weight:q.weight,follow_ups:q.follow_ups||[],good_answer_guidance:q.good_answer_guidance||'',red_flags:q.red_flags||''}));
+        s2.agent_tokens.push({
+          id: require('uuid').v4(), token, agent_id,
+          persona_name: action.persona_name || 'Alex', persona_description: action.persona_description || '',
+          avatar_color: action.avatar_color || '#6366f1', voice: action.voice || 'en-US',
+          candidate_id: record_id, candidate_name: [d2.first_name,d2.last_name].filter(Boolean).join(' ')||'Candidate',
+          candidate_email: d2.email || null,
+          environment_id, scorecard_questions: scorecardQuestions,
+          status: 'pending', created_at: new Date().toISOString(), expires_at: expiresAt,
+          started_at: null, completed_at: null,
+        });
+        saveStore();
+        run.steps.push({ step: `Interview link generated: /interview/${token}`, timestamp: new Date().toISOString() });
+        // Add a note to the record with the link
+        if (!s2.record_notes) s2.record_notes = [];
+        s2.record_notes.push({ id: require('uuid').v4(), record_id, content: `AI Interview link sent to candidate. Expires in 72 hours.`, created_by: 'agent', created_at: new Date().toISOString() });
+        saveStore();
+      }
       break;
     }
   }
