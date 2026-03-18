@@ -123,6 +123,13 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/workflows/:id/steps/debug — inspect raw step data
+router.get('/:id/steps/debug', (req, res) => {
+  ensureTables();
+  const steps = (getStore().workflow_steps || []).filter(s => s.workflow_id === req.params.id);
+  res.json({ count: steps.length, steps: steps.map(s => ({ id: s.id, name: s.name, actions: (s.actions||[]).map(a=>a.type), automation_type: s.automation_type })) });
+});
+
 // PUT /api/workflows/:id/steps  — replace all steps
 router.put('/:id/steps', async (req, res) => {
   ensureTables();
