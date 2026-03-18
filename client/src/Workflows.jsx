@@ -1406,13 +1406,22 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     {plSteps.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 )}
-                {/* View toggle: card / list */}
-                <button onClick={()=>setPipelineView(v=>v==="card"?"list":"card")}
-                  title={pipelineView==="card"?"Switch to list view":"Switch to card view"}
-                  style={{ background:"none", border:`1px solid #e5e7eb`, borderRadius:6, padding:"3px 7px", cursor:"pointer", display:"flex", alignItems:"center", gap:4, color:"#6b7280", fontSize:11 }}>
-                  <Ic n={pipelineView==="card"?"list":"grid"} s={12}/>
-                  {pipelineView==="card"?"List":"Cards"}
-                </button>
+                {/* Open in People list */}
+                {visiblePeople.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const stageName = selectedStage === '__all__' ? 'All Stages' : (plSteps.find(s => s.id === selectedStage)?.name || 'Stage');
+                      const ids = visiblePeople.map(l => l.person_record_id).filter(Boolean);
+                      window.dispatchEvent(new CustomEvent('talentos:open-people-list', {
+                        detail: { personIds: ids, stageName, label: `Pipeline: ${stageName}` }
+                      }));
+                    }}
+                    title="Open these people in the People list view"
+                    style={{ background:"none", border:`1px solid #e5e7eb`, borderRadius:6, padding:"3px 8px", cursor:"pointer", display:"flex", alignItems:"center", gap:4, color:"#6b7280", fontSize:11 }}>
+                    <Ic n="users" s={12}/>
+                    List
+                  </button>
+                )}
                 <button onClick={openAddPerson}
                   style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"2px 6px" }}>
                   + Add

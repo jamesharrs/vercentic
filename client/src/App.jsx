@@ -1306,6 +1306,20 @@ function App() {
     return () => window.removeEventListener("talentos:filter-navigate", handler);
   }, [activeNav, navObjects]);
 
+  // Navigate to People list filtered to specific person IDs (from pipeline widget)
+  useEffect(() => {
+    const handler = (e) => {
+      const { personIds, label } = e.detail || {};
+      if (!personIds?.length) return;
+      const peopleObj = navObjects.find(o => o.slug === 'people' || o.name?.toLowerCase() === 'person' || o.slug?.includes('people'));
+      if (!peopleObj) return;
+      setFilterPreset({ fieldKey: '__ids__', fieldValue: personIds.join(','), label: label || 'Pipeline filter' });
+      setActiveNav(`obj_${peopleObj.id}`);
+    };
+    window.addEventListener("talentos:open-people-list", handler);
+    return () => window.removeEventListener("talentos:open-people-list", handler);
+  }, [navObjects]);
+
   // Show login page if no session
   if (!session) {
     return <LoginPage onLogin={(s) => setSession(s)} />;

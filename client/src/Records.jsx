@@ -4040,11 +4040,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     const loaded = r.records||[];
     // Apply active filter chip client-side
     const filtered = filterChip
-      ? loaded.filter(rec => {
-          const v = rec.data?.[filterChip.fieldKey];
-          if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === filterChip.fieldValue.toLowerCase());
-          return String(v || "").toLowerCase() === filterChip.fieldValue.toLowerCase();
-        })
+      ? (() => {
+          if (filterChip.fieldKey === '__ids__') {
+            const ids = filterChip.fieldValue.split(',').map(s => s.trim()).filter(Boolean);
+            return loaded.filter(rec => ids.includes(rec.id));
+          }
+          return loaded.filter(rec => {
+            const v = rec.data?.[filterChip.fieldKey];
+            if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === filterChip.fieldValue.toLowerCase());
+            return String(v || "").toLowerCase() === filterChip.fieldValue.toLowerCase();
+          });
+        })()
       : loaded;
     setRecords(filtered);
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
@@ -4178,7 +4184,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px 5px 12px", borderRadius:20,
             background:C.accentLight, border:`1.5px solid ${C.accent}`, fontSize:12, color:C.accent, fontWeight:600 }}>
             <Ic n="filter" s={11} c={C.accent}/>
-            {filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldValue}</span>
+            {filterChip.fieldKey === '__ids__'
+              ? filterChip.label || `${filterChip.fieldValue.split(',').length} people`
+              : <>{filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldValue}</span></>
+            }
             <button onClick={()=>{setFilterChip(null);setPage(1);}}
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
