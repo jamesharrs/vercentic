@@ -58,6 +58,7 @@ const AUTOMATION_TYPES = [
   { type:"send_email",         label:"Send Email",         icon:"mail",      color:"#f59f00", desc:"Send an email to the candidate" },
   { type:"webhook",            label:"Webhook",            icon:"webhook",   color:"#e03131", desc:"POST record data to an external URL" },
   { type:"schedule_interview", label:"Schedule Interview", icon:"briefcase", color:"#0891b2", desc:"Schedule an interview with the person" },
+  { type:"ai_interview",       label:"AI Interview",       icon:"cpu",       color:"#7048e8", desc:"Send candidate an AI voice interview link using questions from their linked job" },
   { type:"create_offer",       label:"Create Offer",       icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
 ];
 
@@ -71,6 +72,7 @@ const stepDef = (type) => automationDef(type) || { type:"placeholder", label:"St
 const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, envId }) => {
   const [showAutomationPicker, setShowAutomationPicker] = useState(false);
   const [interviewTypes, setInterviewTypes] = useState([]);
+  const [agents, setAgents] = useState([]);
   const cfg = step.config || {};
   const auto = automationDef(step.automation_type);
 
@@ -78,6 +80,11 @@ const StepCard = ({ step, index, total, onChange, onDelete, onMoveUp, onMoveDown
     if (step.automation_type === "schedule_interview" && envId) {
       api.get(`/interview-types?environment_id=${envId}`)
         .then(d => setInterviewTypes(Array.isArray(d) ? d : [])).catch(()=>{});
+    }
+    if (step.automation_type === "ai_interview" && envId) {
+      api.get(`/agents?environment_id=${envId}`)
+        .then(d => setAgents((Array.isArray(d) ? d : []).filter(a => (a.actions||[]).some(x => x.type === 'ai_interview'))))
+        .catch(()=>{});
     }
   }, [step.automation_type, envId]);
 

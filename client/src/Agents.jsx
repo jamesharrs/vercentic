@@ -321,6 +321,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                       {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
                       {a.type==='ai_interview'&&(
                         <div>
+                          {/* Persona row */}
                           <div style={{display:"flex",gap:8,marginBottom:8}}>
                             <input value={a.persona_name||''} onChange={e=>updateAction(i,'persona_name',e.target.value)} placeholder="Interviewer name (e.g. Alex)…" style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
                             <select value={a.voice||'en-US'} onChange={e=>updateAction(i,'voice',e.target.value)} style={{width:150,padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
@@ -335,31 +336,46 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                             ))}
                           </div>
 
-                          {/* Use job questions toggle */}
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:8,border:`1.5px solid ${a.use_job_questions?C.accent:C.border}`,background:a.use_job_questions?`${C.accent}08`:"white",marginBottom:10,cursor:"pointer"}}
-                            onClick={()=>updateAction(i,'use_job_questions',!a.use_job_questions)}>
-                            <div style={{flex:1,paddingRight:12}}>
-                              <div style={{fontSize:12,fontWeight:700,color:a.use_job_questions?C.accent:C.text1}}>Use questions from linked job</div>
-                              <div style={{fontSize:11,color:C.text3,marginTop:2,lineHeight:1.4}}>At run time, pulls questions assigned to the candidate's linked job and stores them on their record</div>
-                            </div>
-                            <div style={{width:36,height:20,borderRadius:10,background:a.use_job_questions?C.accent:"#D1D5DB",flexShrink:0,position:"relative",transition:"background .2s"}}>
-                              <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:a.use_job_questions?18:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                            </div>
+                          {/* Question source: two-mode toggle */}
+                          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".05em",marginBottom:8}}>Question source</div>
+                          <div style={{display:"flex",gap:6,marginBottom:10}}>
+                            {[
+                              {val:"job",   label:"From linked job", desc:"Pulled at runtime from the candidate's linked job"},
+                              {val:"manual",label:"Select manually",  desc:"Pick questions now from the question bank"},
+                            ].map(opt=>{
+                              const active=(a.question_source||"job")===opt.val;
+                              return(
+                                <div key={opt.val} onClick={()=>updateAction(i,'question_source',opt.val)}
+                                  style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${active?C.purple:C.border}`,background:active?`${C.purple}08`:"white",cursor:"pointer",transition:"all .12s"}}>
+                                  <div style={{fontSize:12,fontWeight:700,color:active?C.purple:C.text1,marginBottom:2}}>{opt.label}</div>
+                                  <div style={{fontSize:10,color:C.text3,lineHeight:1.4}}>{opt.desc}</div>
+                                </div>
+                              );
+                            })}
                           </div>
 
-                          {/* Manual question picker — shown when NOT using job questions */}
-                          {!a.use_job_questions&&(
+                          {/* Linked-job mode info box */}
+                          {(a.question_source||"job")==="job"&&(
+                            <div style={{padding:"9px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}25`,fontSize:11,color:C.text2,lineHeight:1.5}}>
+                              Questions are pulled from the job the candidate is linked to when the agent runs.
+                              If the linked job has no questions assigned, the agent will <strong>log a warning and skip</strong> the interview.
+                              Assign questions to jobs via <strong>Settings → Question Bank</strong>.
+                            </div>
+                          )}
+
+                          {/* Manual mode: question checklist */}
+                          {a.question_source==="manual"&&(
                             <>
-                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Questions — {(a.question_ids||[]).length} selected</div>
-                              <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
+                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>{(a.question_ids||[]).length} question{(a.question_ids||[]).length!==1?"s":""} selected</div>
+                              <div style={{maxHeight:200,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
                                 {questions.length===0
-                                  ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet. Add them in Settings → Question Bank.</div>
+                                  ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet — add them in Settings → Question Bank.</div>
                                   :questions.map(q=>{
                                     const sel=(a.question_ids||[]).includes(q.id);
                                     return(
                                       <div key={q.id} onClick={()=>{const ids=a.question_ids||[];updateAction(i,'question_ids',sel?ids.filter(x=>x!==q.id):[...ids,q.id]);}}
-                                        style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.accent}08`:"transparent",marginBottom:2}}>
-                                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                        style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.purple}08`:"transparent",marginBottom:2}}>
+                                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.purple:C.border}`,background:sel?C.purple:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                                           {sel&&<Ic n="check" s={9} c="white"/>}
                                         </div>
                                         <span style={{flex:1,fontSize:11,color:C.text1}}>{q.text}</span>
@@ -371,9 +387,6 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                               </div>
                             </>
                           )}
-                          <div style={{marginTop:8,padding:"7px 10px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:11,color:C.purple}}>
-                            ✨ When this agent runs on a candidate record, an AI interview link will be auto-generated and a note added to their profile.
-                          </div>
                         </div>
                       )}
                     </div>

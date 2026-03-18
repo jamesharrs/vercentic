@@ -348,73 +348,101 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       break;
     }
     case 'ai_interview': {
-      // Auto-generate an interview link for the candidate record
+      // Auto-generate an interview link — questions come from the linked job OR manual selection
       const s2 = getStore();
       if (!s2.agent_tokens) s2.agent_tokens = [];
       const rec2 = (s2.records || []).find(r => r.id === record_id);
-      if (rec2) {
-        const d2 = rec2.data || {};
-        const token = require('crypto').randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+      if (!rec2) break;
 
-        // Resolve questions: if use_job_questions is set, pull from the job the candidate is linked to
-        let qIds = action.question_ids || [];
-        let questionSource = 'agent';
-        if (action.use_job_questions) {
-          // Find any job this candidate is linked to via people_links
-          const link = (s2.people_links || []).find(l => l.person_id === record_id);
-          if (link?.record_id) {
-            // Get job question assignments for that job
-            const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === link.record_id);
-            if (jobAssignments.length > 0) {
-              qIds = jobAssignments.map(a => a.question_id);
-              questionSource = `job:${link.record_id}`;
-            }
-          }
+      const d2 = rec2.data || {};
+      const questionSource = action.question_source || 'job'; // 'job' | 'manual'
+
+      let qIds = [];
+      let sourceLabel = '';
+
+      if (questionSource === 'manual') {
+        // Use the question IDs selected by the admin when building the agent
+        qIds = action.question_ids || [];
+        sourceLabel = 'manually selected';
+        if (qIds.length === 0) {
+          run.steps.push({ step: `⚠ AI Interview skipped — no questions selected. Edit this agent and choose questions manually.`, timestamp: new Date().toISOString() });
+          break;
+        }
+      } else {
+        // 'job' mode: resolve from the candidate's linked job at runtime
+        const link = (s2.people_links || []).find(l => l.person_id === record_id);
+        const linkedJobId = link?.record_id || null;
+
+        if (!linkedJobId) {
+          run.steps.push({ step: `⚠ AI Interview skipped — candidate is not linked to any job. Link the candidate to a job first.`, timestamp: new Date().toISOString() });
+          break;
         }
 
-        const allQuestions = s2.question_bank_v2 || [];
-        const scorecardQuestions = qIds
-          .map(id => allQuestions.find(q => q.id === id))
-          .filter(Boolean)
-          .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
+        const jobRec = (s2.records || []).find(r => r.id === linkedJobId);
+        const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
+        const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === linkedJobId);
+        qIds = jobAssignments.map(a => a.question_id);
 
-        s2.agent_tokens.push({
-          id: require('uuid').v4(), token, agent_id,
-          persona_name: action.persona_name || 'Alex', persona_description: action.persona_description || '',
-          avatar_color: action.avatar_color || '#6366f1', voice: action.voice || 'en-US',
-          candidate_id: record_id,
-          candidate_name: [d2.first_name, d2.last_name].filter(Boolean).join(' ') || 'Candidate',
-          candidate_email: d2.email || null,
-          environment_id, scorecard_questions: scorecardQuestions,
-          question_source: questionSource,
-          status: 'pending', created_at: new Date().toISOString(), expires_at: expiresAt,
-          started_at: null, completed_at: null,
-        });
-
-        // Store the resolved question IDs on the candidate record so they're visible
-        if (action.use_job_questions && questionSource.startsWith('job:')) {
-          rec2.data = rec2.data || {};
-          rec2.data._interview_question_ids = qIds;
-          rec2.data._interview_question_source = questionSource;
-          rec2.updated_at = new Date().toISOString();
+        if (qIds.length === 0) {
+          run.steps.push({ step: `⚠ AI Interview skipped — "${jobName}" has no questions assigned. Add questions via Settings → Question Bank.`, timestamp: new Date().toISOString() });
+          break;
         }
+        sourceLabel = `linked job "${jobName}"`;
 
-        saveStore();
-        run.steps.push({
-          step: `AI Interview link generated — ${scorecardQuestions.length} questions from ${questionSource === 'agent' ? 'agent config' : 'linked job'}. Link: /interview/${token}`,
-          timestamp: new Date().toISOString()
-        });
-
-        // Add a note to the candidate record with the link
-        if (!s2.record_notes) s2.record_notes = [];
-        s2.record_notes.push({
-          id: require('uuid').v4(), record_id,
-          content: `AI Interview link generated with ${scorecardQuestions.length} question${scorecardQuestions.length !== 1 ? 's' : ''} (source: ${questionSource === 'agent' ? 'agent config' : 'linked job'}). Interview expires in 72 hours.`,
-          created_by: 'agent', created_at: new Date().toISOString(),
-        });
-        saveStore();
+        // Tag the candidate so we can see which job drove the interview
+        rec2.data._interview_job_id = linkedJobId;
       }
+
+      // Resolve full question objects
+      const allQuestions = s2.question_bank_v2 || [];
+      const scorecardQuestions = qIds
+        .map(id => allQuestions.find(q => q.id === id))
+        .filter(Boolean)
+        .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
+
+      if (scorecardQuestions.length === 0) {
+        run.steps.push({ step: `⚠ AI Interview skipped — the selected questions could not be resolved in the question bank.`, timestamp: new Date().toISOString() });
+        break;
+      }
+
+      // Generate the interview token
+      const token = require('crypto').randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+
+      s2.agent_tokens.push({
+        id: require('uuid').v4(), token, agent_id,
+        persona_name: action.persona_name || 'Alex',
+        persona_description: action.persona_description || '',
+        avatar_color: action.avatar_color || '#6366f1',
+        voice: action.voice || 'en-US',
+        candidate_id: record_id,
+        candidate_name: [d2.first_name, d2.last_name].filter(Boolean).join(' ') || 'Candidate',
+        candidate_email: d2.email || null,
+        environment_id, scorecard_questions: scorecardQuestions,
+        question_source: questionSource,
+        status: 'pending',
+        created_at: new Date().toISOString(), expires_at: expiresAt,
+        started_at: null, completed_at: null,
+      });
+
+      // Store resolved question IDs on the candidate record
+      rec2.data._interview_question_ids = qIds;
+      rec2.data._interview_question_source = questionSource;
+      rec2.updated_at = new Date().toISOString();
+
+      // Add a note to the candidate
+      if (!s2.record_notes) s2.record_notes = [];
+      s2.record_notes.push({
+        id: require('uuid').v4(), record_id,
+        content: `AI Interview link generated — ${scorecardQuestions.length} question${scorecardQuestions.length !== 1 ? 's' : ''} from ${sourceLabel}. Link expires in 72 hours: /interview/${token}`,
+        created_by: 'agent', created_at: new Date().toISOString(),
+      });
+
+      saveStore();
+      run.steps.push({
+        step: `✓ AI Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}. Link: /interview/${token}`,
+        timestamp: new Date().toISOString(),
+      });
       break;
     }
   }
