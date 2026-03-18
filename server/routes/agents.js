@@ -69,6 +69,80 @@ router.get('/runs/all', (req, res) => {
   res.json(runs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
 });
 
+// ── Dashboard stats ────────────────────────────────────────────────────────────
+router.get('/dashboard', (req, res) => {
+  const { environment_id } = req.query;
+  const s = getStore();
+
+  let agents = query('agents', a => !a.deleted_at);
+  if (environment_id) agents = agents.filter(a => a.environment_id === environment_id);
+
+  let runs = query('agent_runs', () => true);
+  if (environment_id) runs = runs.filter(r => r.environment_id === environment_id);
+
+  const now = new Date();
+  const today  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const week   = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+
+  // Aggregate run stats
+  const runsToday     = runs.filter(r => new Date(r.created_at) >= today);
+  const runsThisWeek  = runs.filter(r => new Date(r.created_at) >= week);
+  const failedRuns    = runs.filter(r => r.status === 'failed');
+  const pendingRuns   = runs.filter(r => r.status === 'pending_approval');
+  const completedRuns = runs.filter(r => r.status === 'completed');
+
+  // Interview links generated (via agent ai_interview action)
+  const interviewTokens = (s.agent_tokens || []).filter(t =>
+    !environment_id || t.environment_id === environment_id
+  );
+  const interviewsCompleted = interviewTokens.filter(t => t.status === 'completed').length;
+  const interviewsPending   = interviewTokens.filter(t => t.status === 'pending').length;
+
+  // Runs per day for the last 7 days (for sparkline)
+  const dailyCounts = [];
+  for (let d = 0; d < 7; d++) {
+    const dayStart = new Date(today.getTime() - (6 - d) * 24 * 60 * 60 * 1000);
+    const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    dailyCounts.push({
+      date: dayStart.toISOString().slice(0, 10),
+      runs: runs.filter(r => {
+        const t = new Date(r.created_at);
+        return t >= dayStart && t < dayEnd;
+      }).length,
+    });
+  }
+
+  // Recent runs with agent name enriched
+  const agentMap = Object.fromEntries(agents.map(a => [a.id, a.name]));
+  const recentRuns = runs
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 10)
+    .map(r => ({ ...r, agent_name: agentMap[r.agent_id] || 'Unknown agent' }));
+
+  // Per-agent summary
+  const agentSummary = agents.map(a => {
+    const ar = runs.filter(r => r.agent_id === a.id);
+    return {
+      id: a.id, name: a.name, is_active: a.is_active,
+      trigger_type: a.trigger_type,
+      total_runs: ar.length,
+      runs_today: ar.filter(r => new Date(r.created_at) >= today).length,
+      failed: ar.filter(r => r.status === 'failed').length,
+      pending_approval: ar.filter(r => r.status === 'pending_approval').length,
+      last_run: ar.sort((x,y) => new Date(y.created_at) - new Date(x.created_at))[0]?.created_at || null,
+    };
+  });
+
+  res.json({
+    agents:       { total: agents.length, active: agents.filter(a => a.is_active).length, inactive: agents.filter(a => !a.is_active).length },
+    runs:         { today: runsToday.length, this_week: runsThisWeek.length, total: runs.length, failed: failedRuns.length, pending_approval: pendingRuns.length, completed: completedRuns.length },
+    interviews:   { total: interviewTokens.length, completed: interviewsCompleted, pending: interviewsPending },
+    daily:        dailyCounts,
+    recent_runs:  recentRuns,
+    agent_summary: agentSummary,
+  });
+});
+
 // ── GDPR: Right to Erasure — purge all AI run data for a record ───────────────
 router.delete('/runs/by-record/:record_id', (req, res) => {
   const s = getStore();

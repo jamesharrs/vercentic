@@ -1431,7 +1431,7 @@ const NAV_GROUPS = [
       { id:"datamodel",  icon:"database",    label:"Data model" },
       { id:"file_types", icon:"paperclip",   label:"File types" },
       { id:"forms",      icon:"form",        label:"Forms" },
-      { id:"questions",  icon:"help-circle", label:"Question bank" },
+      { id:"questions",  icon:"help-circle", label:"Question library" },
       { id:"agents",     icon:"bot",         label:"Agents" },
     ],
   },

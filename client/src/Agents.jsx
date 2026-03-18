@@ -576,6 +576,7 @@ function AgentDetail({ agent, onEdit, onClose }) {
 // ── MAIN AGENTS PAGE ──────────────────────────────────────────────────────────
 export default function AgentsModule({ environment }) {
   const [agents, setAgents] = useState([]);
+  const [dash, setDash] = useState(null);
   const [loading, setLoading] = useState(true);
   const [objects, setObjects] = useState([]);
   const [view, setView] = useState('agents');
@@ -584,28 +585,26 @@ export default function AgentsModule({ environment }) {
   const [editAgent, setEditAgent] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [search, setSearch] = useState('');
+  const [expandRun, setExpandRun] = useState(null);
 
   const load = useCallback(async () => {
     if(!environment?.id) return;
     setLoading(true);
-    const [agentsData, objectsData] = await Promise.all([
+    const [agentsData, objectsData, dashData] = await Promise.all([
       api.get(`/api/agents?environment_id=${environment.id}`),
       api.get(`/api/objects?environment_id=${environment.id}`),
+      api.get(`/api/agents/dashboard?environment_id=${environment.id}`),
     ]);
     const aList = Array.isArray(agentsData) ? agentsData : [];
     setAgents(aList);
     setObjects(Array.isArray(objectsData) ? objectsData : []);
+    setDash(dashData && !dashData.error ? dashData : null);
     setPendingCount(aList.reduce((s,a) => s+(a.pending_approvals||0), 0));
     setLoading(false);
   }, [environment?.id]);
 
   useEffect(()=>{load();},[load]);
-
-  // Auto-refresh every 30s to catch agents fired by server-side triggers
-  useEffect(()=>{
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-  },[load]);
+  useEffect(()=>{ const t=setInterval(load,30000); return ()=>clearInterval(t); },[load]);
 
   const handleDelete = async (id) => {
     if(!window.confirm('Delete this agent?')) return;
@@ -619,56 +618,162 @@ export default function AgentsModule({ environment }) {
   const handleEdit = (agent) => { setEditAgent(agent); setShowBuilder(true); };
 
   const filtered = agents.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.description||'').toLowerCase().includes(search.toLowerCase()));
-  const stats = { total:agents.length, active:agents.filter(a=>a.is_active).length, pending:pendingCount, ran_today:agents.filter(a=>a.last_run_at&&new Date(a.last_run_at).toDateString()===new Date().toDateString()).length };
+
+  // ── Sparkline bar helper
+  const Spark = ({ data }) => {
+    const max = Math.max(...data.map(d=>d.runs), 1);
+    return (
+      <div style={{display:"flex",alignItems:"flex-end",gap:2,height:28}}>
+        {data.map((d,i)=>(
+          <div key={i} title={`${d.date}: ${d.runs} runs`} style={{flex:1,borderRadius:2,background:d.runs>0?C.accent:`${C.accent}20`,height:`${Math.max(3,(d.runs/max)*28)}px`,transition:"height .2s"}}/>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div style={{fontFamily:F,minHeight:"100vh",padding:"0 0 40px"}}>
-      <div style={{padding:"24px 0 20px",marginBottom:20}}>
-        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-          <div style={{width:44,height:44,borderRadius:14,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <Ic n="zap" s={22} c={C.purple}/>
-          </div>
-          <div>
-            <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.text1}}>Agents</h1>
-            <p style={{margin:0,fontSize:13,color:C.text3}}>AI-powered automation with human oversight</p>
-          </div>
-          <div style={{flex:1}}/>
-          <button onClick={()=>{setEditAgent(null);setShowBuilder(true);}}
-            style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:10,border:"none",background:C.accent,color:"white",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:F}}>
-            <Ic n="plus" s={15} c="white"/> New Agent
-          </button>
-        </div>
 
-        {/* Stat cards */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-          {[
-            {label:"Total Agents",value:stats.total,icon:"zap",color:C.accent},
-            {label:"Active",value:stats.active,icon:"play",color:C.green},
-            {label:"Pending Approvals",value:stats.pending,icon:"eye",color:stats.pending>0?C.amber:C.text3},
-            {label:"Ran Today",value:stats.ran_today,icon:"clock",color:C.purple},
-          ].map(s=>(
-            <div key={s.label} style={{background:"white",borderRadius:12,padding:"14px 16px",border:`1.5px solid ${C.border}`,display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:36,height:36,borderRadius:10,background:`${s.color}12`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic n={s.icon} s={16} c={s.color}/></div>
-              <div><div style={{fontSize:22,fontWeight:800,color:s.color}}>{s.value}</div><div style={{fontSize:11,color:C.text3}}>{s.label}</div></div>
+      {/* ── Page header ── */}
+      <div style={{display:"flex",alignItems:"center",gap:14,padding:"24px 0 18px"}}>
+        <div style={{width:44,height:44,borderRadius:14,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Ic n="zap" s={22} c={C.purple}/>
+        </div>
+        <div>
+          <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.text1}}>Agents</h1>
+          <p style={{margin:0,fontSize:13,color:C.text3}}>Automate tasks, trigger actions, and coordinate AI workflows</p>
+        </div>
+        <div style={{flex:1}}/>
+        <button onClick={load} style={{padding:"8px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"white",cursor:"pointer"}}><Ic n="refresh" s={15} c={C.text3}/></button>
+        <button onClick={()=>{setEditAgent(null);setShowBuilder(true);}}
+          style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:10,border:"none",background:C.accent,color:"white",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:F}}>
+          <Ic n="plus" s={15} c="white"/> New Agent
+        </button>
+      </div>
+
+      {/* ── Dashboard ── */}
+      {dash && (
+        <div style={{marginBottom:24}}>
+
+          {/* Row 1 — KPI cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:10}}>
+            {[
+              {label:"Total",       value:dash.agents.total,       sub:"agents",         icon:"zap",      color:C.accent},
+              {label:"Active",      value:dash.agents.active,      sub:"running",        icon:"play",     color:C.green},
+              {label:"Ran today",   value:dash.runs.today,         sub:"executions",     icon:"clock",    color:C.purple},
+              {label:"This week",   value:dash.runs.this_week,     sub:"total runs",     icon:"calendar", color:"#0891b2"},
+              {label:"Need review", value:dash.runs.pending_approval, sub:"approvals",   icon:"eye",      color:dash.runs.pending_approval>0?C.amber:C.text3},
+              {label:"Failed",      value:dash.runs.failed,        sub:"runs",           icon:"alert",    color:dash.runs.failed>0?C.red:C.text3},
+            ].map(s=>(
+              <div key={s.label} style={{background:"white",borderRadius:12,padding:"12px 14px",border:`1.5px solid ${s.value>0&&(s.label==="Need review"||s.label==="Failed")?s.color+"50":C.border}`,display:"flex",flexDirection:"column",gap:4}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".05em"}}>{s.label}</span>
+                  <div style={{width:24,height:24,borderRadius:7,background:`${s.color}15`,display:"flex",alignItems:"center",justifyContent:"center"}}><Ic n={s.icon} s={11} c={s.color}/></div>
+                </div>
+                <div style={{fontSize:26,fontWeight:800,color:s.value>0&&(s.label==="Need review"||s.label==="Failed")?s.color:C.text1,lineHeight:1}}>{s.value}</div>
+                <div style={{fontSize:11,color:C.text3}}>{s.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Row 2 — Sparkline + interviews + recent runs */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 200px 1fr",gap:10}}>
+
+            {/* Activity sparkline */}
+            <div style={{background:"white",borderRadius:12,padding:"14px 16px",border:`1.5px solid ${C.border}`}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.text1}}>Runs — last 7 days</span>
+                <span style={{fontSize:11,color:C.text3}}>{dash.runs.this_week} total</span>
+              </div>
+              {dash.daily && <Spark data={dash.daily}/>}
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:9,color:C.text3}}>{dash.daily?.[0]?.date?.slice(5)}</span>
+                <span style={{fontSize:9,color:C.text3}}>today</span>
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* View toggle + search */}
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{display:"flex",background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,padding:3}}>
-            {['agents','approvals'].map(v=>(
+            {/* AI Interviews card */}
+            <div style={{background:`${C.purple}08`,borderRadius:12,padding:"14px 16px",border:`1px solid ${C.purple}25`,display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.purple,display:"flex",alignItems:"center",gap:6}}>
+                <Ic n="users" s={13} c={C.purple}/> AI Interviews
+              </div>
+              {[
+                {label:"Generated", value:dash.interviews.total,     color:C.purple},
+                {label:"Completed", value:dash.interviews.completed, color:C.green},
+                {label:"Pending",   value:dash.interviews.pending,   color:C.amber},
+              ].map(r=>(
+                <div key={r.label} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:C.text2}}>{r.label}</span>
+                  <span style={{fontSize:15,fontWeight:800,color:r.value>0?r.color:C.text3}}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Recent runs feed */}
+            <div style={{background:"white",borderRadius:12,padding:"14px 16px",border:`1.5px solid ${C.border}`}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.text1,marginBottom:8}}>Recent runs</div>
+              {(!dash.recent_runs||dash.recent_runs.length===0)
+                ?<div style={{color:C.text3,fontSize:12,padding:"8px 0"}}>No runs yet</div>
+                :<div style={{maxHeight:120,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+                  {dash.recent_runs.slice(0,8).map(r=>(
+                    <div key={r.id} onClick={()=>setExpandRun(expandRun===r.id?null:r.id)} style={{display:"flex",alignItems:"center",gap:7,padding:"4px 6px",borderRadius:6,cursor:"pointer",background:expandRun===r.id?C.bg:"transparent"}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:statusColor(r.status),flexShrink:0}}/>
+                      <span style={{flex:1,fontSize:11,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.agent_name}</span>
+                      <span style={{fontSize:10,color:C.text3,flexShrink:0}}>{relTime(r.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              }
+            </div>
+          </div>
+
+          {/* Row 3 — Per-agent table (collapsed by default if many agents) */}
+          {dash.agent_summary && dash.agent_summary.length > 0 && (
+            <div style={{background:"white",borderRadius:12,border:`1.5px solid ${C.border}`,overflow:"hidden",marginTop:10}}>
+              <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,fontSize:12,fontWeight:700,color:C.text1}}>Agent performance</div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:C.bg}}>
+                      {["Agent","Trigger","Status","Total runs","Today","Failed","Pending","Last run"].map(h=>(
+                        <th key={h} style={{padding:"7px 12px",textAlign:"left",fontWeight:600,color:C.text3,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dash.agent_summary.map(a=>(
+                      <tr key={a.id} style={{borderTop:`1px solid ${C.border}`}}>
+                        <td style={{padding:"7px 12px",fontWeight:600,color:C.text1}}>{a.name}</td>
+                        <td style={{padding:"7px 12px",color:C.text3,textTransform:"capitalize"}}>{(a.trigger_type||'').replace(/_/g,' ')}</td>
+                        <td style={{padding:"7px 12px"}}><span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:a.is_active?`${C.green}15`:"#F3F4F6",color:a.is_active?C.green:C.text3,fontWeight:700}}>{a.is_active?"Active":"Inactive"}</span></td>
+                        <td style={{padding:"7px 12px",color:C.text2,fontWeight:600}}>{a.total_runs}</td>
+                        <td style={{padding:"7px 12px",color:a.runs_today>0?C.purple:C.text3,fontWeight:a.runs_today>0?700:400}}>{a.runs_today}</td>
+                        <td style={{padding:"7px 12px",color:a.failed>0?C.red:C.text3,fontWeight:a.failed>0?700:400}}>{a.failed}</td>
+                        <td style={{padding:"7px 12px",color:a.pending_approval>0?C.amber:C.text3,fontWeight:a.pending_approval>0?700:400}}>{a.pending_approval}</td>
+                        <td style={{padding:"7px 12px",color:C.text3}}>{relTime(a.last_run)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Section header: toggle + search ── */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <div style={{display:"flex",background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,padding:3}}>
+          {['agents','approvals'].map(v=>(
               <button key={v} onClick={()=>setView(v)} style={{padding:"6px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F,fontSize:13,fontWeight:view===v?700:500,background:view===v?C.accent:"transparent",color:view===v?"white":C.text3}}>
                 {v==='agents'?'All Agents':`Approvals${pendingCount>0?` (${pendingCount})`:''}`}
               </button>
-            ))}
-          </div>
-          {view==='agents'&&(
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agents…"
-              style={{flex:1,maxWidth:300,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F}}/>
-          )}
-          <button onClick={load} style={{padding:"8px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"white",cursor:"pointer"}}><Ic n="refresh" s={15} c={C.text3}/></button>
+          ))}
         </div>
+        {view==='agents'&&(
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agents…"
+            style={{flex:1,maxWidth:300,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F}}/>
+        )}
       </div>
 
       {/* Content */}
