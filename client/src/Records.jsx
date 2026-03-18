@@ -1073,8 +1073,96 @@ function getSystemValue(record, col, linkedJobs) {
   return '—';
 }
 
+// ── Inline stage pill with dropdown — used in the list table ─────────────────
+function StagePill({ linkInfo, onStageChange }) {
+  const [open, setOpen]     = useState(false);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  if (!linkInfo?.stage) return <span style={{ fontSize:12, color:'#9ca3af' }}>—</span>;
+
+  const hasSteps = linkInfo.steps?.length > 0;
+  const accent   = '#7c3aed';
+
+  const handlePick = async (step) => {
+    if (!linkInfo.link_id || saving) return;
+    setSaving(true);
+    setOpen(false);
+    try {
+      await fetch(`/api/workflows/people-links/${linkInfo.link_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage_id: step.id, stage_name: step.name }),
+      });
+      onStageChange?.({ ...linkInfo, stage: step.name, stage_id: step.id });
+    } catch(e) { console.error('stage update failed', e); }
+    setSaving(false);
+  };
+
+  return (
+    <div ref={ref} style={{ position:'relative', display:'inline-flex' }}>
+      <button
+        onClick={e => { e.stopPropagation(); if (hasSteps) setOpen(v => !v); }}
+        disabled={saving}
+        style={{
+          display:'inline-flex', alignItems:'center', gap:5,
+          padding:'3px 10px 3px 11px', borderRadius:20, fontSize:11, fontWeight:700,
+          border:`1.5px solid ${open ? accent : '#c4b5fd'}`,
+          background: open ? '#ede9fe' : '#f5f3ff',
+          color: accent, cursor: hasSteps ? 'pointer' : 'default',
+          fontFamily:'inherit', whiteSpace:'nowrap', opacity: saving ? 0.6 : 1,
+          transition:'all .12s',
+        }}>
+        {saving ? '…' : linkInfo.stage}
+        {hasSteps && (
+          <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.7 }}>
+            <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+          </svg>
+        )}
+      </button>
+      {open && (
+        <div style={{
+          position:'absolute', top:'calc(100% + 4px)', left:'50%', transform:'translateX(-50%)',
+          background:'white', border:'1px solid #e5e7eb', borderRadius:10,
+          boxShadow:'0 6px 20px rgba(0,0,0,.12)', zIndex:200, minWidth:140, overflow:'hidden',
+        }}>
+          {linkInfo.steps.map(step => {
+            const isCurrent = step.id === linkInfo.stage_id;
+            const hasAuto   = (step.actions||[]).some(a => a.type);
+            return (
+              <button key={step.id}
+                onClick={e => { e.stopPropagation(); handlePick(step); }}
+                style={{
+                  width:'100%', display:'flex', alignItems:'center', gap:8,
+                  padding:'8px 12px', border:'none',
+                  background: isCurrent ? '#f5f3ff' : 'white',
+                  cursor:'pointer', fontFamily:'inherit', textAlign:'left',
+                }}
+                onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background='#faf5ff'; }}
+                onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background= isCurrent?'#f5f3ff':'white'; }}>
+                {isCurrent
+                  ? <svg width="12" height="12" viewBox="0 0 12 12" style={{flexShrink:0}}><path d="M2 6l3 3 5-5" stroke={accent} strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
+                  : <span style={{ width:12, flexShrink:0 }}/>}
+                <span style={{ fontSize:12, fontWeight: isCurrent?700:400, color: isCurrent?accent:'#374151', flex:1 }}>{step.name}</span>
+                {hasAuto && <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:99, fontWeight:700 }}>⚡</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Enhanced TableView ─────────────────────────────────────────────────────────
-const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs }) => {
+const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, onStageChange }) => {
   const listFields = visibleFieldIds
     ? visibleFieldIds.map(id => fields.find(f => f.id === id) || SYSTEM_COLS.find(s => s.id === id)).filter(Boolean)
     : fields.filter(f => f.show_in_list).slice(0, 6);
@@ -1211,9 +1299,14 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
                             {f.isSystem ? val : <FieldValue field={f} value={val}/>}
                           </span>
-                        : f.isSystem
-                          ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
-                          : <FieldValue field={f} value={val}/>
+                        : f.apiKey === '_stage'
+                          ? <StagePill
+                              linkInfo={linkedJobs?.[record.id]}
+                              onStageChange={updated => onStageChange?.(record.id, updated)}
+                            />
+                          : f.isSystem
+                            ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
+                            : <FieldValue field={f} value={val}/>
                       }
                     </td>
                   );
@@ -4419,8 +4512,11 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           const pid = l.person_record_id;
           if (pid && !map[pid]) {
             map[pid] = {
-              title: l.target_title || l.target_data?.job_title || l.target_data?.title || '',
-              stage: l.stage_name || ''
+              title:    l.target_title || l.target_data?.job_title || l.target_data?.title || '',
+              stage:    l.stage_name  || '',
+              stage_id: l.stage_id    || null,
+              link_id:  l.id          || null,
+              steps:    l.workflow_steps || [],
             };
           }
         });
@@ -4660,7 +4756,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             onColumnFilter={handleColumnFilter}
             colWidths={colWidths} onResizeCol={handleResizeCol}
             visibleColOrder={visibleColOrder} onReorderCols={setVisibleColOrder}
-            linkedJobs={linkedJobs}/>
+            linkedJobs={linkedJobs}
+            onStageChange={(recordId, updated) => setLinkedJobs(prev => ({ ...prev, [recordId]: updated }))}/>
         )}
       </div>
 
