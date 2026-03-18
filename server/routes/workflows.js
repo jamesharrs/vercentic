@@ -15,6 +15,7 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
     const questionSource = action.question_source || action.config?.question_source || 'job';
     let qIds = [];
     let sourceLabel = '';
+    let linkedJobId = null;  // hoisted so fallback block can access it
 
     if (questionSource === 'manual') {
       qIds = action.question_ids || [];
@@ -22,7 +23,7 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
       if (!qIds.length) { logs.push({ step: '⚠ AI Interview skipped — no questions selected on agent', status: 'warning' }); continue; }
     } else {
       const link = (s.people_links || []).find(l => l.person_record_id === record_id || l.person_id === record_id);
-      const linkedJobId = link?.target_record_id || link?.record_id || null;
+      linkedJobId = link?.target_record_id || link?.record_id || null;
       if (!linkedJobId) { logs.push({ step: '⚠ AI Interview skipped — candidate is not linked to any job', status: 'warning' }); continue; }
       const jobRec = (s.records || []).find(r => r.id === linkedJobId);
       const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
