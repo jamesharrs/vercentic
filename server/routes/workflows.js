@@ -12,7 +12,7 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
   for (const action of (agent.actions || [])) {
     if (action.type !== 'ai_interview') continue;
 
-    const questionSource = action.question_source || 'job';
+    const questionSource = action.question_source || action.config?.question_source || 'job';
     let qIds = [];
     let sourceLabel = '';
 
@@ -489,10 +489,23 @@ router.patch('/people-links/:id', async (req, res) => {
               if (resolved.error) { actionOutput = `⚠ ${resolved.error}`; actionStatus = 'warning'; }
               else {
                 const toList = resolved.emails.map(r => r.email).join(', ');
-                const subject = (cfg.subject || '').replace(/\{\{(\w+)\}\}/g, (_, k) => person.data?.[k] ?? `{{${k}}}`);
-                const body    = (cfg.body    || '').replace(/\{\{(\w+)\}\}/g, (_, k) => person.data?.[k] ?? `{{${k}}}`);
-                try { const msg = require('../services/messaging'); for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g,'<br>') }); actionOutput = `Email → ${toList}`; }
-                catch(e) { actionOutput = `[Demo] Email → ${toList}: "${subject}"`; }
+                // Resolve {{interview_link}} from latest pending token for this person
+                const latestToken = (s.agent_tokens || [])
+                  .filter(t => t.candidate_id === person.id && t.status === 'pending')
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+                const interviewUrl = latestToken
+                  ? `${process.env.APP_URL || 'https://client-lovat-nu-33.vercel.app'}/interview/${latestToken.token}`
+                  : null;
+                const interpolate = (str) => (str || '')
+                  .replace(/\{\{(\w+)\}\}/g, (_, k) => person.data?.[k] ?? `{{${k}}}`)
+                  .replace(/\{\{interview_link\}\}/g, interviewUrl || '{{interview_link}}');
+                const subject = interpolate(cfg.subject);
+                const body    = interpolate(cfg.body);
+                try {
+                  const msg = require('../services/messaging');
+                  for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>') });
+                  actionOutput = `Email → ${toList}: "${subject}"`;
+                } catch(e) { actionOutput = `[Demo] Email → ${toList}: "${subject}"`; }
               }
             } else if (action.type === 'send_invitation_email') {
               const s = getStore();
