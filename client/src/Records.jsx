@@ -4302,15 +4302,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // Load linked jobs for system columns (people_links)
   useEffect(() => {
     if (!object || !environment) return;
-    const isPersonObject = object.slug === 'people' || object.name?.toLowerCase() === 'person';
-    if (!isPersonObject) return;
     api.get(`/workflows/people-links?environment_id=${environment.id}`)
       .then(links => {
         if (!Array.isArray(links)) return;
         const map = {};
         links.forEach(l => {
-          if (!map[l.person_record_id]) {
-            map[l.person_record_id] = { title: l.target_title || l.target_data?.job_title || '', stage: l.stage_name || '' };
+          const pid = l.person_record_id;
+          if (pid && !map[pid]) {
+            map[pid] = {
+              title: l.target_title || l.target_data?.job_title || l.target_data?.title || '',
+              stage: l.stage_name || ''
+            };
           }
         });
         setLinkedJobs(map);
