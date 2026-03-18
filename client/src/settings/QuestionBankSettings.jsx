@@ -205,18 +205,45 @@ export default function QuestionBankSettings() {
               </button>
             ))}
           </div>
-          {/* Grouped questions */}
-          {Object.entries(grouped).map(([type,qs])=>(
-            qs.length===0?null:
-            <div key={type} style={{marginBottom:20}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{fontSize:11,fontWeight:700,color:TYPE_COLORS[type],textTransform:"uppercase",letterSpacing:"0.06em"}}>{TYPE_LABELS[type]}</span>
-                <span style={{fontSize:11,background:`${TYPE_COLORS[type]}14`,color:TYPE_COLORS[type],padding:"1px 7px",borderRadius:99,fontWeight:600}}>{qs.length}</span>
-              </div>
-              {qs.map(q=><QuestionCard key={q.id} q={q} onEdit={setEditQ} onDelete={handleDeleteQ}/>)}
+          {/* Table view */}
+          <div style={{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 130px 140px 60px 80px",gap:0,padding:"9px 16px",borderBottom:`1px solid ${C.border}`,background:"#f8fafc"}}>
+              {["Question","Type","Competency","Pts",""].map((h,i)=>(
+                <div key={i} style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</div>
+              ))}
             </div>
-          ))}
-          {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:C.text3,fontSize:13}}>No questions match your filter.</div>}
+            {/* Rows */}
+            {filtered.length===0
+              ? <div style={{padding:40,textAlign:"center",color:C.text3,fontSize:13}}>No questions match your filter.</div>
+              : filtered.map((q,i)=>{
+                  const col=TYPE_COLORS[q.type]||"#6b7280";
+                  return (
+                    <div key={q.id} style={{display:"grid",gridTemplateColumns:"1fr 130px 140px 60px 80px",gap:0,padding:"11px 16px",borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",alignItems:"center",transition:"background .1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      {/* Question text */}
+                      <div style={{fontSize:13,color:C.text1,lineHeight:1.45,paddingRight:12}}>
+                        <span>{q.text}</span>
+                        {(q.tags||[]).length>0&&<span style={{marginLeft:8}}>{(q.tags||[]).map(t=><span key={t} style={{fontSize:10,color:C.text3,background:"#f1f5f9",padding:"1px 5px",borderRadius:99,marginLeft:3}}>#{t}</span>)}</span>}
+                        {q.is_system&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:"#64748b",background:"#f1f5f9",padding:"1px 5px",borderRadius:99}}>system</span>}
+                      </div>
+                      {/* Type badge */}
+                      <div><span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${col}14`,color:col}}>{TYPE_LABELS[q.type]||q.type}</span></div>
+                      {/* Competency */}
+                      <div style={{fontSize:12,color:C.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.competency||"—"}</div>
+                      {/* Weight */}
+                      <div style={{fontSize:12,color:C.text2,fontWeight:600}}>{q.weight||10}</div>
+                      {/* Actions */}
+                      <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
+                        {!q.is_system&&<button onClick={()=>setEditQ(q)} style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",borderRadius:6,color:C.text3}} title="Edit"><Ic n="edit" s={13}/></button>}
+                        {q.is_custom&&<button onClick={()=>handleDeleteQ(q.id)} style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",borderRadius:6,color:C.text3}} title="Delete"><Ic n="trash" s={13}/></button>}
+                      </div>
+                    </div>
+                  );
+              })
+            }
+          </div>
         </div>
       )}
 
