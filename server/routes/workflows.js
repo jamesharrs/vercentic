@@ -124,7 +124,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // PUT /api/workflows/:id/steps  — replace all steps
-router.put('/:id/steps', (req, res) => {
+router.put('/:id/steps', async (req, res) => {
   ensureTables();
   const { steps } = req.body;
   const store = getStore();
@@ -136,7 +136,12 @@ router.put('/:id/steps', (req, res) => {
     store.workflow_steps.push(step);
     return step;
   });
+  // Force-sync to Postgres immediately (not debounced) so steps survive restarts
   require('../db/init').saveStore();
+  try {
+    const pg = require('../db/postgres');
+    if (pg.isEnabled()) await pg.saveCollection(require('../db/init').getCurrentTenant?.() || 'master', 'workflow_steps', store.workflow_steps);
+  } catch(e) { /* ignore */ }
   res.json(saved);
 });
 
@@ -458,7 +463,8 @@ router.patch('/people-links/:id', async (req, res) => {
   // Auto-execute actions on the step they just moved into
   let stepRunLog = [];
   if (stage_id && person) {
-    const step = findOne('workflow_steps', s => s.id === stage_id);
+    const s2 = getStore();  // fresh store ref after update
+    const step = (s2.workflow_steps || []).find(s => s.id === stage_id);
     if (step) {
       const actions = stepActions(step);
       if (actions.length > 0) {
