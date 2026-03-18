@@ -476,7 +476,9 @@ router.patch('/people-links/:id', async (req, res) => {
   const link = update('people_links', l => l.id === req.params.id, { stage_id, stage_name, updated_at: new Date().toISOString() });
   if (!link) return res.status(404).json({ error: 'Not found' });
 
-  const person = findOne('records', r => r.id === link.person_record_id);
+  // Find person record — use environment_id from link to ensure correct scope
+  const person = (getStore().records || []).find(r => r.id === link.person_record_id);
+  console.log(`[stage-move] link=${req.params.id.slice(0,8)} person_id=${link.person_record_id?.slice(0,8)} person_found=${!!person} stage_id=${stage_id?.slice(0,8)} records_in_store=${getStore().records?.length || 0}`);
 
   // Auto-execute actions on the step they just moved into
   let stepRunLog = [];
