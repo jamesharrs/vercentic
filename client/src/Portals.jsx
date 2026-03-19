@@ -78,12 +78,12 @@ const PALETTES = [
   { name:"Forest",   primary:"#16A34A", secondary:"#15803D", bg:"#F0FDF4", text:"#14532D" },
 ];
 
-const api = {
-  get:    p     => fetch(`/api${p}`).then(r=>r.json()),
-  post:   (p,b) => fetch(`/api${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (p,b) => fetch(`/api${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  delete: p     => fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
 
 const uid = () => Math.random().toString(36).slice(2,10);
 

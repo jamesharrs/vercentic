@@ -7,12 +7,12 @@ const C = {
   green:"#0CAF77", red:"#EF4444", amber:"#F79009", purple:"#7C3AED",
 };
 
-const api = {
-  get:   p     => fetch(p).then(r=>r.json()),
-  post:  (p,b) => fetch(p,{method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch: (p,b) => fetch(p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:   p     => fetch(p,{method:'DELETE'}).then(r=>r.json()),
-};
+import api from '../apiClient.js';
+
+
+
+
+
 
 const TYPE_COLORS = ['#4361EE','#0CAF77','#F79009','#7C3AED','#EF4444','#0891B2','#EC4899','#9DA8C7'];
 const TYPE_ICONS  = [{slug:'file-text',label:'Document'},{slug:'shield',label:'Shield'},{slug:'credit-card',label:'ID Card'},{slug:'award',label:'Award'},{slug:'file',label:'File'},{slug:'layers',label:'Layers'},{slug:'paperclip',label:'Paperclip'},{slug:'image',label:'Image'}];

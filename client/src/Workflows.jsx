@@ -14,13 +14,7 @@ const C = {
   red: "#e03131", redLight: "#fef2f2",
 };
 
-const api = {
-  get:    (p)    => fetch(`/api${p}`).then(r=>r.json()),
-  post:   (p, b) => fetch(`/api${p}`, {method:"POST",   headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (p, b) => fetch(`/api${p}`, {method:"PATCH",  headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}).then(r=>r.json()),
-  put:    (p, b) => fetch(`/api${p}`, {method:"PUT",    headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}).then(r=>r.json()),
-  delete: (p)    => fetch(`/api${p}`, {method:"DELETE"}).then(r=>r.json()),
-};
+import api from './apiClient.js';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const PATHS = {

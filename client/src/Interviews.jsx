@@ -7,12 +7,12 @@ const C = {
   accent:"#4361EE", accentLight:"#EEF2FF",
   green:"#0CAF77", amber:"#F79009", purple:"#7C3AED", red:"#EF4444",
 };
-const api = {
-  get:    p      => fetch(`/api${p}`).then(r=>r.json()),
-  post:   (p,b)  => fetch(`/api${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (p,b)  => fetch(`/api${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:    p      => fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
 
 const INTERVIEW_TYPES = [
   { value:"phone_screen",  label:"Phone Screen",        iconName:"phone",      color:"#0CAF77" },

@@ -14,12 +14,7 @@ import { TasksEventsPanel } from "./TasksEventsPanel.jsx";
 import { ScorecardPanel } from "./Scorecards.jsx";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
-const api = {
-  get:    p     => fetch(`/api${p}`).then(r=>r.json()),
-  post:   (p,b) => fetch(`/api${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (p,b) => fetch(`/api${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:    p     => fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()),
-};
+import api from './apiClient.js';
 
 const F  = "'DM Sans', -apple-system, sans-serif";
 const C  = {

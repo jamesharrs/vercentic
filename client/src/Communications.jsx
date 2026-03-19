@@ -3,13 +3,13 @@ import ReactDOM from "react-dom";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
 // ─── Shared helpers (inline to avoid circular imports) ───────────────────────
-const api = {
-  base: "/api",
-  get: (p) => fetch(`/api${p}`).then(r => r.json()),
-  post: (p, b) => fetch(`/api${p}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b) }).then(r => r.json()),
-  patch: (p, b) => fetch(`/api${p}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b) }).then(r => r.json()),
-  del: (p) => fetch(`/api${p}`, { method:"DELETE" }).then(r => r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
+
 
 // Theme colours — match CSS variables used in Records.jsx
 const C = {

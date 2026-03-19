@@ -41,12 +41,12 @@ const REL_META_LIST = Object.entries(REL_META)
   .filter(([k]) => k !== "manages")
   .map(([value, v]) => ({ value, ...v }));
 
-const api = {
-  get:  p     => fetch(`${API}${p}`).then(r=>r.json()),
-  post: (p,b) => fetch(`${API}${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:(p,b) => fetch(`${API}${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:  p     => fetch(`${API}${p}`,{method:"DELETE"}).then(r=>r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
 
 // ── Tree layout ───────────────────────────────────────────────────────────────
 function computeLayout(nodes, getParentId) {

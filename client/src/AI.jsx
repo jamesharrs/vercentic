@@ -8,10 +8,8 @@ const C = {
   ai:"#7c3aed", aiLight:"#f5f3ff",
 };
 
-const api = {
-  get:  p     => fetch(`/api${p}`).then(r=>r.json()),
-  post: (p,b) => fetch(`/api${p}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-};
+import api from './apiClient.js';
+
 
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const P = {

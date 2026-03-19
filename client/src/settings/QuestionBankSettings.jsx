@@ -3,16 +3,16 @@ import { useState, useEffect, useCallback } from "react";
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const C = { bg:"#EEF2FF", surface:"#FFFFFF", border:"#E8ECF8", text1:"#0F1729", text2:"#4B5675", text3:"#9DA8C7", accent:"#4361EE", accentLight:"#EEF2FF", green:"#0CAF77", amber:"#F79009", purple:"#7C3AED", red:"#EF4444" };
-const api = { get:p=>fetch(`/api${p}`).then(r=>r.json()), post:(p,b)=>fetch(`/api${p}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()), patch:(p,b)=>fetch(`/api${p}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()), del:p=>fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()), put:(p,b)=>fetch(`/api${p}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()) };
+import api from '../apiClient.js';
 
-const TYPE_COLORS = { knockout:"#dc2626", competency:"#2563eb", technical:"#7c3aed", culture:"#059669" };
-const TYPE_LABELS = { knockout:"Eligibility / Knockout", competency:"Competency / Behavioural", technical:"Technical", culture:"Culture Fit" };
-const CATEGORY_COLORS = { General:"#4361EE", Technology:"#7C3AED", Management:"#F79009", Culture:"#0CAF77", Custom:"#6b7280" };
 
-const Ic = ({n,s=16,c="currentColor"}) => {
-  const P = { plus:"M12 5v14M5 12h14", x:"M18 6L6 18M6 6l12 12", trash:"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6", edit:"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z", check:"M20 6L9 17l-5-5", search:"M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0", sparkles:"M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0L9.937 15.5z", list:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01", copy:"M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2v-2", chevD:"M6 9l6 6 6-6", "grid":"M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" };
-  return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={P[n]||""}/></svg>;
-};
+
+
+
+
+
+
+
 const Btn = ({children,onClick,v="primary",sz="md",icon,disabled,style={}})=>{
   const base={display:"inline-flex",alignItems:"center",gap:6,fontFamily:F,fontWeight:700,cursor:disabled?"not-allowed":"pointer",borderRadius:9,transition:"all .12s",border:"none",opacity:disabled?0.5:1,...(sz==="sm"?{padding:"5px 10px",fontSize:11}:{padding:"8px 16px",fontSize:13})};
   const vs={primary:{background:C.accent,color:"#fff"},secondary:{background:"#f1f5f9",color:C.text2},ghost:{background:"transparent",color:C.text2,border:`1px solid ${C.border}`},danger:{background:"#fef2f2",color:C.red,border:`1px solid #fecaca`},green:{background:C.green,color:"#fff"}};

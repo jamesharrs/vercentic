@@ -25,12 +25,12 @@ const STATUS_CONFIG = {
   withdrawn:        { label:"Withdrawn",        color:C.red,     bg:C.redLight,      icon:"M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" },
 };
 
-const api = {
-  get:    (url)       => fetch(url).then(r => r.json()),
-  post:   (url, body) => fetch(url, { method:"POST",  headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }).then(r => r.json()),
-  patch:  (url, body) => fetch(url, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }).then(r => r.json()),
-  del:    (url)       => fetch(url, { method:"DELETE" }).then(r => r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
 
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const paths = {

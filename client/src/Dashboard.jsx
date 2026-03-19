@@ -13,9 +13,9 @@ const C = {
 };
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-const api = {
-  get: p => fetch(`/api${p}`).then(r => r.json()),
-};
+import api from './apiClient.js';
+
+
 
 const _cache = {};
 

@@ -10,12 +10,12 @@ const C = {
   green:"#0CA678", amber:"#F08C00", red:"#E03131", purple:"#7048E8",
 };
 
-const api = {
-  get:(u)=>fetch(u).then(r=>r.json()),
-  post:(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:(u,b)=>fetch(u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:(u)=>fetch(u,{method:'DELETE'}).then(r=>r.json()),
-};
+import api from '../apiClient.js';
+
+
+
+
+
 
 const Ic = ({n,s=16,c=C.text3})=>{
   const p={

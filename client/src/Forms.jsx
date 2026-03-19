@@ -7,12 +7,12 @@ const C = {
   green:"#0CAF77", red:"#EF4444", amber:"#F79009", purple:"#7C3AED", cyan:"#0891B2",
 };
 
-const api = {
-  get:   p     => fetch(p).then(r=>r.json()),
-  post:  (p,b) => fetch(p,{method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch: (p,b) => fetch(p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:   p     => fetch(p,{method:'DELETE'}).then(r=>r.json()),
-};
+import api from './apiClient.js';
+
+
+
+
+
 
 const FIELD_TYPES = [
   {type:'text',        label:'Short Text',   icon:'T'},
