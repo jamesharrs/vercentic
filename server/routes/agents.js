@@ -195,6 +195,16 @@ router.get('/approvals/pending', (req, res) => {
   res.json(runs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
 });
 
+// GET /api/agents/templates — must be BEFORE /:id to avoid route conflict
+router.get('/templates', (req, res) => {
+  try {
+    const templates = require('../data/agent_templates');
+    res.json(templates);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/:id', (req, res) => {
   const agent = query('agents', a => a.id === req.params.id && !a.deleted_at)[0];
   if (!agent) return res.status(404).json({ error: 'Not found' });
@@ -607,16 +617,6 @@ router.post('/:id/generate-token', (req, res) => {
   });
 });
 
-
-// GET /api/agents/templates — return the standard template library
-router.get('/templates', (req, res) => {
-  try {
-    const templates = require('../data/agent_templates');
-    res.json(templates);
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 module.exports = router;
 
