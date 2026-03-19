@@ -56,6 +56,16 @@ export default function DemoDataManager() {
   const [status,     setStatus]     = useState(null);
   const logRef = useRef(null);
 
+  // Get the tenant slug for the currently selected environment
+  const selectedTenantSlug = envs.find(e => e.id === envId)?.tenant_slug || null;
+
+  // Build headers — include X-Tenant-Slug when seeding a client tenant env
+  const tenantHeaders = (extra = {}) => ({
+    'Content-Type': 'application/json',
+    ...(selectedTenantSlug ? { 'X-Tenant-Slug': selectedTenantSlug } : {}),
+    ...extra,
+  });
+
   useEffect(() => {
     fetch(apiUrl('/superadmin/demo/environments'))
       .then(r => r.json())
@@ -77,7 +87,9 @@ export default function DemoDataManager() {
   useEffect(() => {
     if (!envId) return;
     setStatus(null);
-    fetch(apiUrl(`/superadmin/demo/status?environment_id=${envId}`))
+    fetch(apiUrl(`/superadmin/demo/status?environment_id=${envId}`), {
+      headers: selectedTenantSlug ? { 'X-Tenant-Slug': selectedTenantSlug } : {},
+    })
       .then(r => r.json()).then(setStatus).catch(() => {});
   }, [envId]);
 
@@ -98,7 +110,7 @@ export default function DemoDataManager() {
     console.log('[DemoSeed] Seeding environment_id:', envId, 'name:', selectedEnv?.name);
     try {
       const res = await fetch(apiUrl('/superadmin/demo/seed'), {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: tenantHeaders(),
         body:JSON.stringify({ environment_id:envId, clear_first:clearFirst }),
       });
       const reader  = res.body.getReader();
@@ -118,7 +130,9 @@ export default function DemoDataManager() {
             if (evt.step === 'complete') {
               setResults(evt.results);
               addLog(`✓ Done! ${evt.results.candidates} candidates, ${evt.results.jobs} jobs`, 'success');
-              fetch(apiUrl(`/superadmin/demo/status?environment_id=${envId}`)).then(r=>r.json()).then(setStatus);
+              fetch(apiUrl(`/superadmin/demo/status?environment_id=${envId}`), {
+                headers: selectedTenantSlug ? { 'X-Tenant-Slug': selectedTenantSlug } : {},
+              }).then(r=>r.json()).then(setStatus);
             }
             if (evt.step === 'error') setError(evt.message);
           } catch {}
@@ -134,7 +148,7 @@ export default function DemoDataManager() {
     setClearing(true); addLog('Clearing demo data…', 'dim');
     try {
       const res = await fetch(apiUrl('/superadmin/demo/clear'), {
-        method:'DELETE', headers:{'Content-Type':'application/json'},
+        method:'DELETE', headers: tenantHeaders(),
         body:JSON.stringify({ environment_id:envId }),
       });
       const data = await res.json();

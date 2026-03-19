@@ -325,36 +325,58 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
 // ── Routes ─────────────────────────────────────────────────────────────────────
 
 router.get('/environments', (req, res) => {
-  const store = getStore();
-  const clients     = store.clients || [];
-  const clientEnvs  = store.client_environments || [];
+  const { getStore: _getStore, tenantStorage, listTenants } = require('../db/init');
 
-  const envs = (store.environments || []).map(e => {
-    // Look up client from client_environments first, then direct client_id on env
-    const clientEnv = clientEnvs.find(ce => ce.id === e.id);
-    const clientId  = clientEnv?.client_id || e.client_id || null;
-    const client    = clientId ? clients.find(c => c.id === clientId) : null;
+  // Master store first
+  const masterStore = _getStore();
+  const allClients  = masterStore.clients || [];
+  const allClientEnvs = masterStore.client_environments || [];
 
-    return {
-      id:           e.id,
-      name:         e.name,
-      client_name:  client?.name || null,
-      is_default:   e.is_default,
-      record_count: (store.records || []).filter(r => r.environment_id === e.id).length,
-      demo_count:   (store.records || []).filter(r => r.environment_id === e.id && r._demo).length,
-    };
-  });
+  // Build result starting with master environments
+  const result = [];
+
+  const addEnvsFromStore = (store, tenantSlug) => {
+    const envs = store.environments || [];
+    for (const e of envs) {
+      const clientEnv = allClientEnvs.find(ce => ce.id === e.id);
+      const clientId  = clientEnv?.client_id || e.client_id || null;
+      const client    = clientId ? allClients.find(c => c.id === clientId) : null;
+      result.push({
+        id:           e.id,
+        name:         e.name,
+        client_name:  client?.name || null,
+        tenant_slug:  tenantSlug,   // null = master store
+        is_default:   e.is_default,
+        record_count: (store.records || []).filter(r => r.environment_id === e.id).length,
+        demo_count:   (store.records || []).filter(r => r.environment_id === e.id && r._demo).length,
+      });
+    }
+  };
+
+  addEnvsFromStore(masterStore, null);
+
+  // Also scan each provisioned tenant store
+  const tenants = listTenants ? listTenants() : [];
+  for (const slug of tenants) {
+    try {
+      // Load/read tenant store directly
+      const tenantStore = tenantStorage.run(slug, () => _getStore());
+      if (tenantStore && tenantStore !== masterStore) {
+        addEnvsFromStore(tenantStore, slug);
+      }
+    } catch { /* skip broken tenant stores */ }
+  }
 
   // Sort: master Production first, then by client name + env name
-  envs.sort((a, b) => {
-    if (a.name === 'Production' && !a.client_name) return -1;
-    if (b.name === 'Production' && !b.client_name) return 1;
+  result.sort((a, b) => {
+    if (!a.tenant_slug && a.name === 'Production') return -1;
+    if (!b.tenant_slug && b.name === 'Production') return 1;
     const aLabel = a.client_name || a.name;
     const bLabel = b.client_name || b.name;
     return aLabel.localeCompare(bLabel);
   });
 
-  res.json(envs);
+  res.json(result);
 });
 
 router.get('/status', (req, res) => {
