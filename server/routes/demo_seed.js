@@ -326,10 +326,35 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
 
 router.get('/environments', (req, res) => {
   const store = getStore();
-  res.json((store.environments || []).map(e => ({
-    id:e.id, name:e.name, is_default:e.is_default,
-    record_count:(store.records||[]).filter(r=>r.environment_id===e.id).length,
-  })));
+  const clients     = store.clients || [];
+  const clientEnvs  = store.client_environments || [];
+
+  const envs = (store.environments || []).map(e => {
+    // Look up client from client_environments first, then direct client_id on env
+    const clientEnv = clientEnvs.find(ce => ce.id === e.id);
+    const clientId  = clientEnv?.client_id || e.client_id || null;
+    const client    = clientId ? clients.find(c => c.id === clientId) : null;
+
+    return {
+      id:           e.id,
+      name:         e.name,
+      client_name:  client?.name || null,
+      is_default:   e.is_default,
+      record_count: (store.records || []).filter(r => r.environment_id === e.id).length,
+      demo_count:   (store.records || []).filter(r => r.environment_id === e.id && r._demo).length,
+    };
+  });
+
+  // Sort: master Production first, then by client name + env name
+  envs.sort((a, b) => {
+    if (a.name === 'Production' && !a.client_name) return -1;
+    if (b.name === 'Production' && !b.client_name) return 1;
+    const aLabel = a.client_name || a.name;
+    const bLabel = b.client_name || b.name;
+    return aLabel.localeCompare(bLabel);
+  });
+
+  res.json(envs);
 });
 
 router.get('/status', (req, res) => {

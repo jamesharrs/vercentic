@@ -155,20 +155,25 @@ export default function DemoDataManager() {
         <div style={S.desc}>Select an environment to seed. Runs against any provisioned environment.</div>
         <label style={S.label}>Target Environment</label>
         <select style={S.select} value={envId} onChange={e=>setEnvId(e.target.value)} disabled={seeding}>
-          {envs.map(e => <option key={e.id} value={e.id}>{e.name} ({e.record_count.toLocaleString()} records){e.is_default?' ★':''}</option>)}
+          {envs.map(e => {
+            const clientLabel = e.client_name ? `${e.client_name}  /  ${e.name}` : `⭐ ${e.name} (master)`;
+            const demoNote = e.demo_count > 0 ? ` [${e.demo_count} demo]` : '';
+            return <option key={e.id} value={e.id}>{clientLabel} — {e.record_count} records{demoNote}</option>;
+          })}
         </select>
         {status && (
           <div style={{ marginBottom:16, padding:'10px 14px', borderRadius:8,
             background:status.has_demo_data?'#1c1917':'#0f172a',
             border:`1px solid ${status.has_demo_data?'#78350f':'#1e293b'}` }}>
-            {status.has_demo_data
-              ? <span style={{fontSize:12,color:'#d97706'}}>
-                  ⚠ Demo data exists in <strong>{envs.find(e=>e.id===envId)?.name||envId}</strong> —{' '}
-                  <strong>{status.counts.records}</strong> records, <strong>{status.counts.links}</strong> pipeline links
-                </span>
-              : <span style={{fontSize:12,color:'#4ade80'}}>
-                  ✓ No demo data in <strong>{envs.find(e=>e.id===envId)?.name||envId}</strong>
-                </span>}
+            {(() => {
+              const e = envs.find(ev=>ev.id===envId);
+              const label = e ? (e.client_name ? `${e.client_name} / ${e.name}` : e.name) : envId;
+              return status.has_demo_data
+                ? <span style={{fontSize:12,color:'#d97706'}}>
+                    ⚠ Demo data exists in <strong>{label}</strong> — <strong>{status.counts.records}</strong> records, <strong>{status.counts.links}</strong> pipeline links
+                  </span>
+                : <span style={{fontSize:12,color:'#4ade80'}}>✓ No demo data in <strong>{label}</strong></span>;
+            })()}
           </div>
         )}
         <div style={S.row}>
@@ -207,6 +212,15 @@ export default function DemoDataManager() {
       {results && (
         <div style={S.card}>
           <div style={S.title}>✓ Demo Data Generated</div>
+          {(() => {
+            const e = envs.find(ev=>ev.id===envId);
+            const label = e ? (e.client_name ? `${e.client_name} / ${e.name}` : e.name) : envId;
+            return (
+              <div style={{padding:'8px 12px',borderRadius:8,background:'#0f172a',border:'1px solid #1e293b',marginBottom:12,fontSize:12,color:'#94a3b8'}}>
+                📍 Seeded to: <strong style={{color:'#a5b4fc'}}>{label}</strong> — to view this data, log into that environment in the main app and select <strong style={{color:'#a5b4fc'}}>{e?.name||'this environment'}</strong> from the environment selector.
+              </div>
+            );
+          })()}
           <div style={S.grid}>
             <Stat label="Candidates"     value={results.candidates}/>
             <Stat label="Jobs"           value={results.jobs}/>
