@@ -1172,6 +1172,10 @@ function App() {
   const canGlobal = (action) => {
     if (!session) return false;
     if (_sessionRole === "super_admin" || _sessionRole === "admin") return true;
+    // If no __global__ permissions exist in session yet (e.g. not seeded on live server),
+    // fall back to showing the item rather than hiding it
+    const hasGlobalPerms = _sessionPerms.some(p => p.object_slug === "__global__");
+    if (!hasGlobalPerms) return true; // optimistic — don't hide on empty/unseeded data
     return _sessionPerms.some(p => p.object_slug === "__global__" && p.action === action && p.allowed);
   };
   const can = (objectSlug, action) => {

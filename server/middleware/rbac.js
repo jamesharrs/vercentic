@@ -106,7 +106,9 @@ function getUserPermissions(user) {
 
 function seedDefaultPermissions(store) {
   if (!store.permissions) store.permissions = [];
-  if (store.permissions.length > 0) return;
+  // Re-run if no __global__ entries exist (covers partial seeds from older versions)
+  const hasGlobal = store.permissions.some(p => p.object_slug === '__global__');
+  if (store.permissions.length > 0 && hasGlobal) return;
   const { v4: uuidv4 } = require('uuid');
   const now = new Date().toISOString();
   const roleDefaults = {
