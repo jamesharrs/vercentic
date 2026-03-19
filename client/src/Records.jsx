@@ -3651,6 +3651,93 @@ const StableMatchPanel = memo(({ recordId, objectName, environment, record }) =>
 );
 
 
+// ── PanelCard — defined at module level (uses useRef, can't be nested) ──
+const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, PanelContent, startPanelDrag, overSlot, overZone }) => {
+  const meta = PANEL_META[id];
+  if (!meta) return null;
+  const isOpen     = compact ? true : openPanels[id];
+  const isDragging = draggingPanel === id;
+  const myRepId    = id; // standalone → repId === id
+  const isOver     = overSlot === myRepId && !isDragging;
+  const zone       = isOver ? overZone : null;
+  const badge      = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
+
+  const cardRef = useRef(null);
+
+  if (compact) return <div style={{ padding:"16px" }}>{PanelContent({id})}</div>;
+
+  const borderColor = zone === "middle" ? C.accent : C.border;
+  const shadow = zone === "middle"
+    ? `0 0 0 3px ${C.accent}50, 0 4px 20px rgba(59,91,219,.2)`
+    : "0 1px 4px rgba(0,0,0,.04)";
+
+  return (
+    <div ref={cardRef}
+      onMouseMove={e => cardRef.current && reportZone(myRepId, e, cardRef.current)}
+      onMouseLeave={() => clearZone(myRepId)}
+      style={{
+        background: C.surface,
+        border: `1.5px solid ${borderColor}`,
+        borderRadius: 14, marginBottom: 12, overflow: "hidden",
+        transition: "opacity .12s, box-shadow .1s, border-color .1s, transform .1s",
+        opacity:   isDragging ? 0.3 : 1,
+        boxShadow: shadow,
+        transform: isDragging ? "scale(0.97)" : "scale(1)",
+        position: "relative",
+      }}>
+      {/* Zone hint overlay */}
+      {isOver && zone !== "middle" && (
+        <div style={{
+          position:"absolute", left:0, right:0, height:3, background:C.accent, zIndex:10,
+          borderRadius:2, boxShadow:`0 0 6px ${C.accent}80`,
+          top: zone === "top" ? 0 : "auto", bottom: zone === "bottom" ? 0 : "auto",
+        }}/>
+      )}
+      {isOver && zone === "middle" && (
+        <div style={{ position:"absolute", inset:0, borderRadius:12,
+          background:`${C.accent}08`, zIndex:1, pointerEvents:"none",
+          display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.accentLight,
+            padding:"3px 10px", borderRadius:8, boxShadow:`0 1px 4px ${C.accent}30` }}>
+            Group together
+          </span>
+        </div>
+      )}
+
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
+        userSelect:"none", borderBottom: isOpen ? `1px solid ${C.border}` : "none", position:"relative", zIndex:2 }}>
+        {/* Grip */}
+        <div title="Drag: reorder between cards · drop onto card center to group"
+          onMouseDown={e => { e.preventDefault(); startPanelDrag(id); }}
+          onClick={e => e.stopPropagation()}
+          style={{ color:C.text3, cursor:"grab", padding:"2px 3px", display:"flex", flexShrink:0,
+            borderRadius:4, transition:"color .12s, background .12s" }}
+          onMouseEnter={e=>{ e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
+          onMouseLeave={e=>{ e.currentTarget.style.color=C.text3;  e.currentTarget.style.background="transparent"; }}>
+          <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
+            {[4,9,14].flatMap(y=>[4,9].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.5" fill="currentColor"/>))}
+          </svg>
+        </div>
+        {/* Collapse toggle */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, flex:1, cursor:"pointer" }}
+          onClick={() => setOpenPanels(p => {
+            const next = { ...p, [id]: !p[id] };
+            try { localStorage.setItem(openPanelsKey, JSON.stringify(next)); } catch {}
+            return next;
+          })}>
+          <Ic n={meta.icon} s={14} c={C.accent}/>
+          <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
+          {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
+          <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+            <Ic n="chevD" s={14} c={C.text3}/>
+          </span>
+        </div>
+      </div>
+      {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}>{PanelContent({id})}</div>}
+    </div>
+  );
+};
+
 // ── Tabbed group card — defined at module level (hooks must not be in nested functions) ──
 const GroupCard = ({ ids, overSlot, overZone, openPanels, setOpenPanels, openPanelsKey, panelOrder, savePanelOrder, removePanel, PanelContent, startPanelDrag }) => {
   const repId   = ids[0];
@@ -4495,92 +4582,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels]);
 
 
-  // ── Standalone panel card ──────────────────────────────────────────────────
-  const PanelCard = ({ id, compact }) => {
-    const meta = PANEL_META[id];
-    if (!meta) return null;
-    const isOpen     = compact ? true : openPanels[id];
-    const isDragging = draggingPanel === id;
-    const myRepId    = id; // standalone → repId === id
-    const isOver     = overSlot === myRepId && !isDragging;
-    const zone       = isOver ? overZone : null;
-    const badge      = id==="notes" ? notes.length : id==="attachments" ? attachments.length : 0;
-
-    const cardRef = useRef(null);
-
-    if (compact) return <div style={{ padding:"16px" }}>{PanelContent({id})}</div>;
-
-    const borderColor = zone === "middle" ? C.accent : C.border;
-    const shadow = zone === "middle"
-      ? `0 0 0 3px ${C.accent}50, 0 4px 20px rgba(59,91,219,.2)`
-      : "0 1px 4px rgba(0,0,0,.04)";
-
-    return (
-      <div ref={cardRef}
-        onMouseMove={e => cardRef.current && reportZone(myRepId, e, cardRef.current)}
-        onMouseLeave={() => clearZone(myRepId)}
-        style={{
-          background: C.surface,
-          border: `1.5px solid ${borderColor}`,
-          borderRadius: 14, marginBottom: 12, overflow: "hidden",
-          transition: "opacity .12s, box-shadow .1s, border-color .1s, transform .1s",
-          opacity:   isDragging ? 0.3 : 1,
-          boxShadow: shadow,
-          transform: isDragging ? "scale(0.97)" : "scale(1)",
-          position: "relative",
-        }}>
-        {/* Zone hint overlay */}
-        {isOver && zone !== "middle" && (
-          <div style={{
-            position:"absolute", left:0, right:0, height:3, background:C.accent, zIndex:10,
-            borderRadius:2, boxShadow:`0 0 6px ${C.accent}80`,
-            top: zone === "top" ? 0 : "auto", bottom: zone === "bottom" ? 0 : "auto",
-          }}/>
-        )}
-        {isOver && zone === "middle" && (
-          <div style={{ position:"absolute", inset:0, borderRadius:12,
-            background:`${C.accent}08`, zIndex:1, pointerEvents:"none",
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:11, fontWeight:700, color:C.accent, background:C.accentLight,
-              padding:"3px 10px", borderRadius:8, boxShadow:`0 1px 4px ${C.accent}30` }}>
-              Group together
-            </span>
-          </div>
-        )}
-
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
-          userSelect:"none", borderBottom: isOpen ? `1px solid ${C.border}` : "none", position:"relative", zIndex:2 }}>
-          {/* Grip */}
-          <div title="Drag: reorder between cards · drop onto card center to group"
-            onMouseDown={e => { e.preventDefault(); startPanelDrag(id); }}
-            onClick={e => e.stopPropagation()}
-            style={{ color:C.text3, cursor:"grab", padding:"2px 3px", display:"flex", flexShrink:0,
-              borderRadius:4, transition:"color .12s, background .12s" }}
-            onMouseEnter={e=>{ e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
-            onMouseLeave={e=>{ e.currentTarget.style.color=C.text3;  e.currentTarget.style.background="transparent"; }}>
-            <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
-              {[4,9,14].flatMap(y=>[4,9].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.5" fill="currentColor"/>))}
-            </svg>
-          </div>
-          {/* Collapse toggle */}
-          <div style={{ display:"flex", alignItems:"center", gap:10, flex:1, cursor:"pointer" }}
-            onClick={() => setOpenPanels(p => {
-              const next = { ...p, [id]: !p[id] };
-              try { localStorage.setItem(openPanelsKey, JSON.stringify(next)); } catch {}
-              return next;
-            })}>
-            <Ic n={meta.icon} s={14} c={C.accent}/>
-            <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
-            {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
-            <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-              <Ic n="chevD" s={14} c={C.text3}/>
-            </span>
-          </div>
-        </div>
-        {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}>{PanelContent({id})}</div>}
-      </div>
-    );
-  };
+  // PanelCard is defined at module level above RecordDetail
 
   // GroupCard is defined at module level above RecordDetail
 
@@ -4966,13 +4968,13 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               if (validIds.length === 0) return null;
               if (validIds.length === 1) {
                 const id = validIds[0];
-                return <div key={id}>{DropIndicator({beforeRepId:id, afterRepId:prevRepId})}{PanelCard({id})}</div>;
+                return <div key={id}>{DropIndicator({beforeRepId:id, afterRepId:prevRepId})}<PanelCard id={id} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} PanelContent={PanelContent} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone}/></div>;
               }
               const repId = validIds[0];
               return (
                 <div key={repId}>
                   {DropIndicator({beforeRepId:repId, afterRepId:prevRepId})}
-                  {GroupCard({ids:validIds, overSlot, overZone, openPanels, setOpenPanels, openPanelsKey, panelOrder, savePanelOrder, removePanel, PanelContent, startPanelDrag})}
+                  <GroupCard ids={validIds} overSlot={overSlot} overZone={overZone} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} panelOrder={panelOrder} savePanelOrder={savePanelOrder} removePanel={removePanel} PanelContent={PanelContent} startPanelDrag={startPanelDrag}/>
                 </div>
               );
             }
@@ -4980,7 +4982,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             return (
               <div key={slot}>
                 {DropIndicator({beforeRepId:slot, afterRepId:prevRepId})}
-                {PanelCard({id:slot})}
+                <PanelCard id={slot} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} PanelContent={PanelContent} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone}/>
               </div>
             );
           })}
