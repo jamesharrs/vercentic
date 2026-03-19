@@ -4475,7 +4475,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
         {/* Tab strip header */}
         <div style={{ display:"flex", alignItems:"stretch", borderBottom:`1px solid ${C.border}`,
-          background:"#f8f9fc", userSelect:"none" }}>
+          background:"#fafbfc", userSelect:"none", padding:"4px 0" }}>
 
           {/* Group grip (move whole group) */}
           <div title="Drag group"
@@ -4491,7 +4491,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
 
           {/* Tabs */}
-          <div ref={tabStripRef} style={{ display:"flex", flex:1, overflowX:"auto", userSelect:"none" }}>
+          <div ref={tabStripRef} style={{ display:"flex", flex:1, overflowX:"auto", userSelect:"none",
+            gap:2, padding:"0 4px", alignItems:"center" }}>
             {ids.map(id => {
               const meta = PANEL_META[id];
               if (!meta) return null;
@@ -4499,39 +4500,39 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               const isDraggingThis  = draggingTab === id;
               const showInsertLine  = tabInsertBefore === id && draggingTab && draggingTab !== id;
               return (
-                <div key={id} data-tab-id={id} style={{ display:"flex", alignItems:"center", gap:6,
-                  padding:"10px 12px", cursor:"pointer", flexShrink:0, position:"relative",
-                  borderRight:`1px solid ${C.border}`,
-                  background: isActive ? C.surface : "transparent",
-                  borderBottom: isActive ? `2px solid ${C.accent}` : "2px solid transparent",
+                <div key={id} data-tab-id={id} style={{ display:"flex", alignItems:"center", gap:5,
+                  padding:"5px 10px", cursor:"pointer", flexShrink:0, position:"relative",
+                  borderRadius:8,
+                  background: isActive ? `${C.accent}12` : "transparent",
+                  border: isActive ? `1px solid ${C.accent}30` : "1px solid transparent",
                   opacity: isDraggingThis ? 0.35 : 1,
-                  transition:"background .1s, opacity .12s" }}>
+                  transition:"background .15s, border .15s, opacity .12s" }}>
 
-                  {/* Vertical insert indicator — left edge of tab */}
+                  {/* Vertical insert indicator */}
                   {showInsertLine && (
-                    <div style={{ position:"absolute", left:0, top:4, bottom:4, width:2.5,
+                    <div style={{ position:"absolute", left:-2, top:4, bottom:4, width:2.5,
                       background:C.accent, borderRadius:2, boxShadow:`0 0 6px ${C.accent}80`, zIndex:10 }}/>
                   )}
 
-                  {/* Tab grip — drag to reorder within group */}
+                  {/* Tab grip */}
                   <div
                     title="Drag to reorder tabs"
                     onMouseDown={e => startTabDrag(id, e)}
                     onClick={e => e.stopPropagation()}
                     style={{ color: isActive ? C.accent : C.text3, cursor:"grab",
-                      display:"flex", opacity:0.5, transition:"opacity .12s, color .12s",
+                      display:"flex", opacity:0.4, transition:"opacity .12s, color .12s",
                       flexShrink:0 }}
                     onMouseEnter={e=>{ e.currentTarget.style.opacity="1"; e.currentTarget.style.color=C.accent; }}
-                    onMouseLeave={e=>{ e.currentTarget.style.opacity="0.5"; e.currentTarget.style.color=isActive?C.accent:C.text3; }}>
+                    onMouseLeave={e=>{ e.currentTarget.style.opacity="0.4"; e.currentTarget.style.color=isActive?C.accent:C.text3; }}>
                     <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
                       {[2,6,10].flatMap(y=>[1,5].map(x=><circle key={`${x}${y}`} cx={x} cy={y} r="1.1" fill="currentColor"/>))}
                     </svg>
                   </div>
 
-                  {/* Tab label — click to activate */}
+                  {/* Tab label */}
                   <div onClick={() => setActiveTab(id)}
                     style={{ display:"flex", alignItems:"center", gap:5 }}>
-                    <Ic n={meta.icon} s={13} c={isActive ? C.accent : C.text3}/>
+                    <Ic n={meta.icon} s={12} c={isActive ? C.accent : C.text3}/>
                     <span style={{ fontSize:12, fontWeight: isActive ? 700 : 500,
                       color: isActive ? C.accent : C.text2, whiteSpace:"nowrap" }}>
                       {meta.label}

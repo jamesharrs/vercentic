@@ -611,9 +611,13 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
     setResponses(prev=>({...prev,[formId]:Array.isArray(d)?d:[]}));
   };
 
-  if (loading) return <div style={{color:C.text3,fontSize:12,padding:'8px 0'}}>Loading forms…</div>;
+  if (loading) return (
+    <div style={{color:"#d1d5db",fontSize:12,textAlign:'center',padding:'20px 0'}}>
+      No forms yet
+    </div>
+  );
   if (!forms.length) return (
-    <div style={{color:C.text3,fontSize:12,textAlign:'center',padding:'16px 0'}}>
+    <div style={{color:"#9ca3af",fontSize:12,textAlign:'center',padding:'20px 0'}}>
       No forms configured for this record type.<br/>
       <span style={{fontSize:11}}>Go to Settings → Forms to create one.</span>
     </div>
