@@ -16,6 +16,18 @@ function getObjectSlug(objectId) {
   return obj ? obj.slug : null;
 }
 
+// Categorise an activity entry for filtering
+function categorise(a) {
+  if (a.action === 'created') return 'created';
+  if (a.action === 'field_changed') return 'field_change';
+  if (a.action === 'note_added' || a.action === 'note_deleted') return 'note';
+  if (['email_sent','sms_sent','whatsapp_sent','call_logged'].includes(a.action)) return 'communication';
+  if (a.action === 'file_uploaded' || a.action === 'file_deleted') return 'file';
+  if (['stage_changed','linked','unlinked'].includes(a.action)) return 'pipeline';
+  if (a.action === 'status_changed') return 'status';
+  return 'other';
+}
+
 // Auto-number field resolver — sets REQ-0001 style values on new records
 function resolveAutoNumbers(objectId, data) {
   const store = getStore();
@@ -210,7 +222,31 @@ router.delete('/:id', (req, res) => {
 });
 
 router.get('/:id/activity', (req, res) => {
-  res.json(query('activity', a=>a.record_id===req.params.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,50));
+  const { page=1, limit=10, search='', category='' } = req.query;
+  let items = query('activity', a => a.record_id === req.params.id)
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Category filter
+  if (category && category !== 'all') {
+    items = items.filter(a => categorise(a) === category);
+  }
+
+  // Search — matches actor, action, field_name, or stringified value
+  if (search) {
+    const q = search.toLowerCase();
+    items = items.filter(a => {
+      const haystack = [a.actor, a.action, a.changes?.field_name,
+        JSON.stringify(a.changes)].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  const total = items.length;
+  const pg = Math.max(1, parseInt(page));
+  const lm = Math.min(50, Math.max(1, parseInt(limit)));
+  const paged = items.slice((pg-1)*lm, pg*lm);
+
+  res.json({ items: paged, total, page: pg, limit: lm, pages: Math.ceil(total/lm) });
 });
 
 module.exports = router;

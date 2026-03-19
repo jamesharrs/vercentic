@@ -3332,6 +3332,245 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
   );
 };
 
+// ── Activity Panel ─────────────────────────────────────────────────────────
+const ACTIVITY_CATEGORIES = [
+  { id:"all",           label:"All",          color:"#6b7280" },
+  { id:"field_change",  label:"Field edits",  color:"#3b5bdb" },
+  { id:"note",          label:"Notes",        color:"#f59f00" },
+  { id:"communication", label:"Comms",        color:"#0891b2" },
+  { id:"file",          label:"Files",        color:"#7048e8" },
+  { id:"pipeline",      label:"Pipeline",     color:"#0ca678" },
+  { id:"status",        label:"Status",       color:"#e03131" },
+  { id:"created",       label:"Created",      color:"#16a34a" },
+];
+
+const ACT_META = {
+  created:       { icon:"plus",      bg:"#f0fdf4", ic:"#16a34a" },
+  field_changed: { icon:"edit",      bg:"#eff6ff", ic:"#3b5bdb" },
+  note_added:    { icon:"file-text", bg:"#fffbeb", ic:"#f59f00" },
+  note_deleted:  { icon:"trash",     bg:"#fef2f2", ic:"#e03131" },
+  email_sent:    { icon:"mail",      bg:"#f0f9ff", ic:"#0891b2" },
+  sms_sent:      { icon:"phone",     bg:"#f0f9ff", ic:"#0891b2" },
+  whatsapp_sent: { icon:"phone",     bg:"#f0f9ff", ic:"#0891b2" },
+  call_logged:   { icon:"phone",     bg:"#f0f9ff", ic:"#0891b2" },
+  file_uploaded: { icon:"paperclip", bg:"#f5f3ff", ic:"#7048e8" },
+  file_deleted:  { icon:"trash",     bg:"#fef2f2", ic:"#e03131" },
+  stage_changed: { icon:"trending",  bg:"#f0fdf4", ic:"#0ca678" },
+  linked:        { icon:"link",      bg:"#f0fdf4", ic:"#0ca678" },
+  unlinked:      { icon:"x",         bg:"#fef2f2", ic:"#e03131" },
+  status_changed:{ icon:"activity",  bg:"#fef2f2", ic:"#e03131" },
+  updated:       { icon:"edit",      bg:"#eff6ff", ic:"#3b5bdb" },
+};
+
+const ActivityPanel = memo(({ record }) => {
+  const [items,    setItems]    = useState([]);
+  const [total,    setTotal]    = useState(0);
+  const [pages,    setPages]    = useState(1);
+  const [page,     setPage]     = useState(1);
+  const [search,   setSearch]   = useState("");
+  const [category, setCategory] = useState("all");
+  const [loading,  setLoading]  = useState(false);
+  const searchRef = useRef(null);
+
+  const load = useCallback(async () => {
+    if (!record?.id) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page, limit: 10, search, category });
+      const d = await api.get(`/records/${record.id}/activity?${params}`);
+      // Support both old (array) and new (paginated) response shapes
+      if (Array.isArray(d)) {
+        setItems(d); setTotal(d.length); setPages(1);
+      } else {
+        setItems(d.items || []); setTotal(d.total || 0); setPages(d.pages || 1);
+      }
+    } catch { setItems([]); }
+    setLoading(false);
+  }, [record?.id, page, search, category]);
+
+  useEffect(() => { load(); }, [load]);
+  // Reset to page 1 when filter/search changes
+  useEffect(() => { setPage(1); }, [search, category]);
+
+  const formatVal = v => {
+    if (v === null || v === undefined || v === "") return <em style={{color:C.text3}}>empty</em>;
+    if (Array.isArray(v)) return v.join(", ") || <em style={{color:C.text3}}>empty</em>;
+    return String(v).slice(0, 80);
+  };
+
+  const relTime = ts => {
+    const diff = Date.now() - new Date(ts);
+    if (diff < 60000)   return "just now";
+    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+    if (diff < 86400000)return `${Math.floor(diff/3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff/86400000)}d ago`;
+    return new Date(ts).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  };
+
+  const actionLabel = a => {
+    if (a.action==="created")        return "created this record";
+    if (a.action==="field_changed")  return `updated ${a.changes?.field_name||a.changes?.field_key||"a field"}`;
+    if (a.action==="note_added")     return "added a note";
+    if (a.action==="note_deleted")   return "deleted a note";
+    if (a.action==="email_sent")     return `sent an email${a.changes?.subject ? `: "${a.changes.subject}"` : ""}`;
+    if (a.action==="sms_sent")       return "sent an SMS";
+    if (a.action==="whatsapp_sent")  return "sent a WhatsApp";
+    if (a.action==="call_logged")    return "logged a call";
+    if (a.action==="file_uploaded")  return `uploaded a file${a.changes?.name ? `: ${a.changes.name}` : ""}`;
+    if (a.action==="file_deleted")   return "deleted a file";
+    if (a.action==="stage_changed")  return `moved to ${a.changes?.stage||"a new stage"}`;
+    if (a.action==="linked")         return "linked to a record";
+    if (a.action==="unlinked")       return "unlinked a record";
+    if (a.action==="status_changed") return `changed status to ${a.changes?.new_value||""}`;
+    return "updated this record";
+  };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:0}}>
+
+      {/* Search + filter header */}
+      <div style={{marginBottom:12}}>
+        {/* Search */}
+        <div style={{position:"relative",marginBottom:8}}>
+          <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+            <Ic n="search" s={13} c={C.text3}/>
+          </div>
+          <input ref={searchRef} value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search activity…"
+            style={{width:"100%",boxSizing:"border-box",padding:"7px 10px 7px 30px",
+              borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,
+              fontFamily:F,background:"#f8f9fc",color:C.text1,outline:"none"}}/>
+          {search && (
+            <button onClick={()=>setSearch("")}
+              style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
+                background:"none",border:"none",cursor:"pointer",padding:2,display:"flex"}}>
+              <Ic n="x" s={12} c={C.text3}/>
+            </button>
+          )}
+        </div>
+
+        {/* Category chips */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {ACTIVITY_CATEGORIES.map(cat => (
+            <button key={cat.id} onClick={()=>setCategory(cat.id)}
+              style={{padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:600,
+                cursor:"pointer",fontFamily:F,border:"1.5px solid",
+                borderColor: category===cat.id ? cat.color : C.border,
+                background: category===cat.id ? `${cat.color}15` : "transparent",
+                color: category===cat.id ? cat.color : C.text3,
+                transition:"all .1s"}}>
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Results summary */}
+      <div style={{fontSize:11,color:C.text3,marginBottom:8}}>
+        {loading ? "Loading…" : `${total} event${total!==1?"s":""}`}
+        {(search||category!=="all") ? " matching filters" : ""}
+      </div>
+
+      {/* Item list */}
+      {loading ? (
+        <div style={{textAlign:"center",padding:"20px 0",color:C.text3,fontSize:13}}>Loading…</div>
+      ) : items.length === 0 ? (
+        <div style={{textAlign:"center",padding:"28px 0",color:C.text3,fontSize:13}}>
+          {search||category!=="all" ? "No matching activity" : "No activity yet"}
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+          {items.map((event, idx) => {
+            const meta = ACT_META[event.action] || ACT_META.updated;
+            const ch   = event.changes || {};
+            return (
+              <div key={event.id}
+                style={{display:"flex",gap:10,padding:"11px 0",
+                  borderBottom: idx<items.length-1 ? `1px solid ${C.border}` : "none"}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:meta.bg,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  flexShrink:0,marginTop:1}}>
+                  <Ic n={meta.icon} s={12} c={meta.ic}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:C.text1}}>
+                      {event.actor || "System"}
+                    </span>
+                    <span style={{fontSize:12,color:C.text2}}>{actionLabel(event)}</span>
+                    <span style={{fontSize:11,color:C.text3,marginLeft:"auto",whiteSpace:"nowrap"}}>
+                      {relTime(event.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Field change diff */}
+                  {event.action==="field_changed" && (ch.old_value!==undefined||ch.new_value!==undefined) && (
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,
+                      padding:"5px 8px",background:"#f8f9fc",borderRadius:7,
+                      border:`1px solid ${C.border}`,fontSize:11,flexWrap:"wrap"}}>
+                      <span style={{padding:"2px 6px",borderRadius:5,background:"#fee2e2",
+                        color:"#b91c1c",fontWeight:500,maxWidth:160,overflow:"hidden",
+                        textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {formatVal(ch.old_value)}
+                      </span>
+                      <Ic n="chevR" s={10} c={C.text3}/>
+                      <span style={{padding:"2px 6px",borderRadius:5,background:"#dcfce7",
+                        color:"#15803d",fontWeight:500,maxWidth:160,overflow:"hidden",
+                        textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {formatVal(ch.new_value)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Note preview */}
+                  {event.action==="note_added" && ch.preview && (
+                    <div style={{marginTop:4,padding:"5px 8px",background:"#fffbeb",
+                      borderRadius:7,border:`1px solid #fde68a`,fontSize:11,
+                      color:"#92400e",lineHeight:1.4}}>
+                      "{ch.preview}{ch.preview?.length>=100?"…":""}"
+                    </div>
+                  )}
+
+                  {/* Comm subject */}
+                  {["email_sent","sms_sent","whatsapp_sent"].includes(event.action) && ch.subject && (
+                    <div style={{marginTop:4,fontSize:11,color:C.text3,fontStyle:"italic"}}>
+                      {ch.subject}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+          marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}
+            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",
+              borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",
+              fontSize:12,fontWeight:600,cursor:page<=1?"not-allowed":"pointer",
+              color:page<=1?C.text3:C.text2,fontFamily:F,opacity:page<=1?0.5:1}}>
+            <Ic n="chevL" s={12} c={page<=1?C.text3:C.text2}/> Prev
+          </button>
+          <span style={{fontSize:11,color:C.text3}}>
+            Page {page} of {pages} · {total} total
+          </span>
+          <button onClick={()=>setPage(p=>Math.min(pages,p+1))} disabled={page>=pages}
+            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",
+              borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",
+              fontSize:12,fontWeight:600,cursor:page>=pages?"not-allowed":"pointer",
+              color:page>=pages?C.text3:C.text2,fontFamily:F,opacity:page>=pages?0.5:1}}>
+            Next <Ic n="chevR" s={12} c={page>=pages?C.text3:C.text2}/>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}, (prev, next) => prev.record?.id === next.record?.id);
+
 // ── Notes Panel — defined OUTSIDE RecordDetail to prevent remount on every keystroke ──
 const NotesPanel = ({ record, notes, onNotesChange }) => {
   const [newNote, setNewNote] = useState("");
@@ -3530,14 +3769,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
 
   const load = useCallback(async () => {
-    const [n, att, act] = await Promise.all([
+    const [n, att] = await Promise.all([
       api.get(`/notes?record_id=${record.id}`),
       api.get(`/attachments?record_id=${record.id}`),
-      api.get(`/records/${record.id}/activity`),
     ]);
     setNotes(Array.isArray(n)?n:[]);
     setAttachments(Array.isArray(att)?att:[]);
-    setActivity(Array.isArray(act)?act:[]);
   }, [record.id]);
 
   useEffect(() => { load(); setEditing({}); setTab("fields"); }, [record.id, load]);
@@ -3996,61 +4233,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       </div>
     );
 
-    if (id==="activity") return (
-      <div>
-        {activity.length===0
-          ? <div style={{ textAlign:"center", padding:"28px 0", color:C.text3, fontSize:13 }}>No activity yet</div>
-          : activity.map(event=>{
-            const isFieldChange = event.action==="field_changed";
-            const isCreated = event.action==="created";
-            const ch = event.changes||{};
-            const iconName = isCreated?"plus":isFieldChange?"edit":"activity";
-            const iconColor = isCreated?"#16a34a":isFieldChange?C.accent:"#6366f1";
-            const iconBg = isCreated?"#f0fdf4":isFieldChange?C.accentLight:"#eef2ff";
-            const formatVal = v => {
-              if(v===null||v===undefined||v==="") return <em style={{color:C.text3}}>empty</em>;
-              if(Array.isArray(v)) return v.join(", ")||<em style={{color:C.text3}}>empty</em>;
-              return String(v);
-            };
-            return (
-              <div key={event.id} style={{ display:"flex", gap:10, marginBottom:16, paddingBottom:16, borderBottom:`1px solid ${C.border}` }}>
-                <div style={{ width:30, height:30, borderRadius:"50%", background:iconBg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2 }}>
-                  <Ic n={iconName} s={13} c={iconColor}/>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:2 }}>
-                    {event.actor
-                      ? <><Avatar name={event.actor} size={18} color={C.accent}/><span style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{event.actor}</span></>
-                      : <span style={{ fontSize:12, fontWeight:700, color:C.text1 }}>System</span>
-                    }
-                    <span style={{ fontSize:12, color:C.text3 }}>
-                      {isFieldChange ? `updated ${ch.field_name||ch.field_key}` : isCreated ? "created this record" : "updated this record"}
-                    </span>
-                    <span style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>
-                      {new Date(event.created_at).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
-                    </span>
-                  </div>
-                  {isFieldChange && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, padding:"7px 10px", background:"#f8f9fc", borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, flexWrap:"wrap" }}>
-                      <span style={{ padding:"2px 7px", borderRadius:6, background:"#fee2e2", color:"#b91c1c", fontWeight:500, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{formatVal(ch.old_value)}</span>
-                      <span style={{ color:C.text3 }}>→</span>
-                      <span style={{ padding:"2px 7px", borderRadius:6, background:"#dcfce7", color:"#15803d", fontWeight:500, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{formatVal(ch.new_value)}</span>
-                    </div>
-                  )}
-                  {!isFieldChange && !isCreated && ch && Object.keys(ch).length>0 && (
-                    <div style={{ marginTop:6, background:"#f8f9fc", borderRadius:8, padding:"6px 10px", fontSize:11, color:C.text2 }}>
-                      {Object.entries(ch).slice(0,3).map(([k,v])=>(
-                        <div key={k}><strong>{k}:</strong> {String(v)?.slice(0,60)}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        }
-      </div>
-    );
+    if (id==="activity") return <ActivityPanel record={record}/>;
 
     if (id==="workflows") return <RecordWorkflows record={record} objectId={record.object_id} environment={environment} objectName={objectName} onNavigate={onNavigate}/>;
     if (id==="tasks")     return <TasksEventsPanel record={record} environment={environment}/>;
@@ -4072,7 +4255,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, notes, attachments, activity, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels]);
+  }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels]);
 
 
   // ── Standalone panel card ──────────────────────────────────────────────────

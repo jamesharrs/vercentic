@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { query, insert, update, remove } = require('../db/init');
+const { query, insert, update, remove, findOne } = require('../db/init');
 const { sendSMS, sendWhatsApp, sendEmail, getProviderStatus } = require('../services/messaging');
 
 const router = express.Router();
@@ -98,6 +98,21 @@ router.post('/', async (req, res) => {
   };
 
   insert('communications', item);
+
+  // Log to activity
+  if (item.record_id) {
+    const rec = findOne('records', r => r.id === item.record_id);
+    if (rec) {
+      const actionMap = { email:'email_sent', sms:'sms_sent', whatsapp:'whatsapp_sent', call:'call_logged' };
+      const action = actionMap[item.type] || 'communication_logged';
+      insert('activity', { id: uuidv4(), record_id: item.record_id, object_id: rec.object_id,
+        environment_id: rec.environment_id, action,
+        actor: item.from_address || 'System',
+        changes: { subject: item.subject, type: item.type, direction: item.direction },
+        created_at: new Date().toISOString() });
+    }
+  }
+
   res.status(201).json(item);
 });
 

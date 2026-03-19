@@ -12,7 +12,11 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   const { record_id, content, author } = req.body;
   if (!record_id || !content) return res.status(400).json({ error: 'record_id and content required' });
-  res.status(201).json(insert('notes', { id: uuidv4(), record_id, content, author: author || 'Admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+  const note = insert('notes', { id: uuidv4(), record_id, content, author: author || 'Admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  // Log to activity
+  const rec = findOne('records', r => r.id === record_id);
+  if (rec) insert('activity', { id: uuidv4(), record_id, object_id: rec.object_id, environment_id: rec.environment_id, action: 'note_added', actor: author || 'Admin', changes: { preview: content.slice(0, 100) }, created_at: new Date().toISOString() });
+  res.status(201).json(note);
 });
 
 router.patch('/:id', (req, res) => {
