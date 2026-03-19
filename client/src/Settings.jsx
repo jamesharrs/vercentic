@@ -10,6 +10,8 @@ import AiMatchingSettings from "./settings/AiMatchingSettings.jsx";
 import { FormsList } from "./Forms.jsx";
 
 import SuperAdminSection from "./SuperAdmin.jsx";
+import DatasetsSection from "./settings/DatasetsSection.jsx";
+import EnterpriseSettings from "./EnterpriseSettings.jsx";
 import OrgChart from "./OrgChart.jsx";
 import WorkflowsPage from "./Workflows.jsx";
 import PortalsPage from "./Portals.jsx";
@@ -1620,6 +1622,8 @@ const NAV_GROUPS = [
       { id:"forms",      icon:"form",        label:"Forms" },
       { id:"questions",  icon:"help-circle", label:"Question library" },
       { id:"agents",     icon:"bot",         label:"Agents" },
+      { id:"datasets",   icon:"layers",      label:"Data Sets" },
+      { id:"enterprise", icon:"briefcase",   label:"Enterprise Settings" },
     ],
   },
   {
@@ -1750,8 +1754,10 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="portals"    && <PortalsPage environment={environment}/>}
         {activeSection==="questions"  && <QuestionBankSettings/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
-        {activeSection==="superadmin" && <SuperAdminSection/>}
-        {activeSection==="config"     && <ConfigSection environment={environment}/>}
+        {activeSection==="superadmin"  && <SuperAdminSection/>}
+        {activeSection==="config"      && <ConfigSection environment={environment}/>}
+        {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
+        {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
       </div>
     </div>
   );

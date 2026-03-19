@@ -79,6 +79,14 @@ app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/comms',            require('./routes/communications'));
 app.use('/api/email-templates',  require('./routes/email-templates'));
 app.use('/api/integrations',     require('./routes/integrations'));
+app.use('/api/enterprise',       require('./routes/enterprise_settings'));
+app.use('/api/skills-intel',     require('./routes/skills_intelligence'));
+app.use('/api/skills-import',    require('./routes/skills_import'));
+app.use('/api/datasets',         require('./routes/datasets'));
+// Run migrations for new modules
+require('./routes/enterprise_settings').migrate();
+require('./routes/skills_intelligence').migrate();
+require('./routes/datasets').migrate();
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.2.0', build: 'stage-actions-fix' }));
 
