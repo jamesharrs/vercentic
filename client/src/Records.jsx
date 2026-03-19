@@ -489,6 +489,7 @@ const FieldEditor = ({ field, value, onChange, autoFocus }) => {
       const opts = (field.options||[]);
       return <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{opts.map(opt=>{const col=STATUS_COLORS[String(opt).toLowerCase()]||C.accent;const isSel=value===opt;return <button key={opt} onClick={()=>onChange(opt)} style={{padding:"5px 12px",borderRadius:99,border:`2px solid ${isSel?col:"#e5e7eb"}`,background:isSel?`${col}18`:"white",color:isSel?col:C.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{opt}</button>;})}</div>;
     }
+    default:
       return <Inp value={value} onChange={onChange} placeholder={field.placeholder||`Enter ${field.name}`} autoFocus={autoFocus}/>;
   }
 };
