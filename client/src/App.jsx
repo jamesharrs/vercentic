@@ -51,18 +51,33 @@ function getTenantSlug() {
 }
 
 // TENANT_SLUG is re-evaluated per request so it picks up the session after login
+function getUserId() {
+  try {
+    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    return sess?.user?.id || null;
+  } catch { return null; }
+}
+
 function apiHeaders(extra = {}) {
-  const slug = getTenantSlug();
+  const slug   = getTenantSlug();
+  const userId = getUserId();
   const h = { 'Content-Type': 'application/json', ...extra };
-  if (slug) h['X-Tenant-Slug'] = slug;
+  if (slug)   h['X-Tenant-Slug'] = slug;
+  if (userId) h['X-User-Id']     = userId;
   return h;
 }
 
 const api = {
-  get: (path) => { const slug = getTenantSlug(); return fetch(`/api${path}`, { headers: slug ? { 'X-Tenant-Slug': slug } : {} }).then(r => r.json()); },
-  post: (path, body) => fetch(`/api${path}`, { method: "POST", headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
-  patch: (path, body) => fetch(`/api${path}`, { method: "PATCH", headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
-  delete: (path) => { const slug = getTenantSlug(); return fetch(`/api${path}`, { method: "DELETE", headers: slug ? { 'X-Tenant-Slug': slug } : {} }).then(r => r.json()); },
+  get: (path) => {
+    const slug = getTenantSlug(); const userId = getUserId();
+    const h = {};
+    if (slug)   h['X-Tenant-Slug'] = slug;
+    if (userId) h['X-User-Id']     = userId;
+    return fetch(`/api${path}`, { headers: h }).then(r => r.json());
+  },
+  post:   (path, body) => fetch(`/api${path}`, { method: "POST",   headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
+  patch:  (path, body) => fetch(`/api${path}`, { method: "PATCH",  headers: apiHeaders(), body: JSON.stringify(body) }).then(r => r.json()),
+  delete: (path)       => fetch(`/api${path}`, { method: "DELETE", headers: apiHeaders() }).then(r => r.json()),
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -501,8 +516,13 @@ const ObjectSchemaView = ({ object, allObjects, environmentId, onBack }) => {
   useEffect(() => { loadFields(); }, [loadFields]);
 
   const handleSaveField = async (payload, fieldId) => {
-    if (fieldId) await api.patch(`/fields/${fieldId}`, payload);
-    else await api.post("/fields", payload);
+    const result = fieldId
+      ? await api.patch(`/fields/${fieldId}`, payload)
+      : await api.post("/fields", payload);
+    if (result?.error) {
+      alert(`Could not save field: ${result.error}`);
+      return;
+    }
     await loadFields();
     setShowAddField(false);
     setEditingField(null);

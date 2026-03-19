@@ -18,12 +18,22 @@ import PortalsPage from "./Portals.jsx";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import { useI18n, LANGUAGES } from "./i18n/I18nContext.jsx";
 
+function getAuthHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  try {
+    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    if (sess?.user?.id) h['X-User-Id'] = sess.user.id;
+    if (sess?.tenant_slug && sess.tenant_slug !== 'master') h['X-Tenant-Slug'] = sess.tenant_slug;
+  } catch {}
+  return h;
+}
+
 const api = {
-  get:   p     => fetch(`/api${p}`).then(r=>r.json()),
-  post:  (p,b) => fetch(`/api${p}`,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  put:   (p,b) => fetch(`/api${p}`,{method:"PUT",   headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch: (p,b) => fetch(`/api${p}`,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  del:   p     => fetch(`/api${p}`,{method:"DELETE"}).then(r=>r.json()),
+  get:   p     => fetch(`/api${p}`, { headers: getAuthHeaders() }).then(r=>r.json()),
+  post:  (p,b) => fetch(`/api${p}`,{method:"POST",   headers:getAuthHeaders(), body:JSON.stringify(b)}).then(r=>r.json()),
+  put:   (p,b) => fetch(`/api${p}`,{method:"PUT",    headers:getAuthHeaders(), body:JSON.stringify(b)}).then(r=>r.json()),
+  patch: (p,b) => fetch(`/api${p}`,{method:"PATCH",  headers:getAuthHeaders(), body:JSON.stringify(b)}).then(r=>r.json()),
+  del:   p     => fetch(`/api${p}`,{method:"DELETE",  headers:getAuthHeaders()}).then(r=>r.json()),
 };
 
 const F = "'DM Sans', -apple-system, sans-serif";
