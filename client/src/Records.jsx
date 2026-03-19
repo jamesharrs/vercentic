@@ -4271,7 +4271,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     const cardRef = useRef(null);
 
-    if (compact) return <div style={{ padding:"16px" }}><PanelContent id={id}/></div>;
+    if (compact) return <div style={{ padding:"16px" }}>{PanelContent({id})}</div>;
 
     const borderColor = zone === "middle" ? C.accent : C.border;
     const shadow = zone === "middle"
@@ -4340,7 +4340,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             </span>
           </div>
         </div>
-        {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}><PanelContent id={id}/></div>}
+        {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}>{PanelContent({id})}</div>}
       </div>
     );
   };
@@ -4574,7 +4574,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {/* Active tab content */}
         {isGroupOpen && (
           <div style={{ padding:"16px" }}>
-            <PanelContent id={safeActive}/>
+            {PanelContent({id:safeActive})}
           </div>
         )}
       </div>
@@ -4640,7 +4640,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>
         <div style={{ flex:1, overflow:"auto", padding:"24px" }}>
           {tab==="fields"  && fieldsPanelJSX}
-          {tab!=="fields"  && <PanelContent id={tab}/>}
+          {tab!=="fields"  && PanelContent({id:tab})}
         </div>
       </div>
     </>
