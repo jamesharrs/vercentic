@@ -134,8 +134,45 @@ function seedDefaultPermissions(store) {
   console.log(`✅ Seeded ${store.permissions.length} default permissions across ${(store.roles||[]).length} roles`);
 }
 
+
+/**
+ * Strip fields the user's role cannot see from a record's data object.
+ * Call after fetching records, before sending to client.
+ */
+function applyFieldVisibility(user, record, objectId) {
+  if (!user || !record || !record.data) return record;
+  if (isSuperAdmin(user)) return record; // super admin sees everything
+  try {
+    const { query: q } = require('../db/init');
+    const store = require('../db/init').getStore();
+    if (!store.field_visibility || store.field_visibility.length === 0) return record;
+
+    const fieldIds = q('fields', f => f.object_id === objectId).map(f => f.id);
+    const hiddenFieldIds = new Set(
+      store.field_visibility
+        .filter(r => r.role_id === user.role_id && r.hidden && fieldIds.includes(r.field_id))
+        .map(r => r.field_id)
+    );
+    if (hiddenFieldIds.size === 0) return record;
+
+    // Map field_id → api_key so we can strip from data
+    const hiddenKeys = new Set(
+      q('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key)
+    );
+    const cleanData = { ...record.data };
+    for (const key of hiddenKeys) delete cleanData[key];
+    return { ...record, data: cleanData };
+  } catch { return record; }
+}
+
+function applyFieldVisibilityBulk(user, records, objectId) {
+  if (!user || isSuperAdmin(user)) return records;
+  return records.map(r => applyFieldVisibility(user, r, objectId));
+}
+
 module.exports = {
   attachUser, requireAuth, requirePermission, requireGlobalAction,
   hasPermission, hasGlobalAction, getUserPermissions, seedDefaultPermissions,
-  isSuperAdmin, ACTIONS, GLOBAL_ACTIONS
+  isSuperAdmin, ACTIONS, GLOBAL_ACTIONS,
+  applyFieldVisibility, applyFieldVisibilityBulk
 };

@@ -1,3 +1,13 @@
+const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
+function _checkGA(req, res, action) {
+  const user = req.currentUser;
+  if (!user) return null;
+  if (!_hasGA(user, action)) {
+    res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
+    return false;
+  }
+  return null;
+}
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -32,6 +42,7 @@ router.get('/:id', (req, res) => {
 
 // ── Create form ───────────────────────────────────────────────────────────────
 router.post('/', (req, res) => {
+  if (_checkGA(req, res, 'manage_forms') === false) return;
   ensure();
   const s = getStore();
   const now = new Date().toISOString();
@@ -64,6 +75,7 @@ router.post('/', (req, res) => {
 
 // ── Update form ───────────────────────────────────────────────────────────────
 router.patch('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_forms') === false) return;
   ensure();
   const s = getStore();
   const idx = (s.forms || []).findIndex(f => f.id === req.params.id);
@@ -75,6 +87,7 @@ router.patch('/:id', (req, res) => {
 
 // ── Delete form ───────────────────────────────────────────────────────────────
 router.delete('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_forms') === false) return;
   ensure();
   const s = getStore();
   const idx = (s.forms || []).findIndex(f => f.id === req.params.id);

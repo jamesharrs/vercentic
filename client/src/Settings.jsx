@@ -515,11 +515,12 @@ function RoleBulkThreshold({ role }) {
   );
 }
 
-const RolesSection = () => {
+const RolesSection = ({ environment }) => {
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
+  const [roleTab, setRoleTab] = useState("permissions"); // "permissions" | "field_visibility"
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -603,8 +604,17 @@ const RolesSection = () => {
                 </div>
                 <Btn onClick={savePermissions} disabled={saving} sz="sm">{saving?"Saving…":"Save Permissions"}</Btn>
               </div>
-
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
+              {/* Tab bar */}
+              <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:`1px solid ${C.border}`,paddingBottom:8}}>
+                {[{id:"permissions",label:"Permissions"},{id:"field_visibility",label:"Field Visibility"}].map(tab=>(
+                  <button key={tab.id} onClick={()=>setRoleTab(tab.id)}
+                    style={{padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:roleTab===tab.id?700:500,border:"none",
+                      background:roleTab===tab.id?C.accent:"transparent",color:roleTab===tab.id?"white":C.text3,cursor:"pointer",fontFamily:F}}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {roleTab==="field_visibility" ? <FieldVisibilityPanel role={selectedRole} environment={environment}/> : <table style={{width:"100%",borderCollapse:"collapse"}}>
                 <thead>
                   <tr style={{background:"#f8f9fc"}}>
                     <th style={{padding:"8px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",borderRadius:"8px 0 0 8px"}}>Object</th>
@@ -631,10 +641,11 @@ const RolesSection = () => {
                   ))}
                 </tbody>
               </table>
-              {selectedRole.is_system && <p style={{fontSize:11,color:C.text3,marginTop:12,fontStyle:"italic"}}>System role permissions cannot be modified.</p>}
+              {roleTab==="permissions" && selectedRole.is_system && <p style={{fontSize:11,color:C.text3,marginTop:12,fontStyle:"italic"}}>System role permissions cannot be modified.</p>}
 
               {/* Bulk action warning threshold for this role */}
               <RoleBulkThreshold role={selectedRole}/>
+              )}
             </div>
           )}
         </div>
@@ -646,6 +657,106 @@ const RolesSection = () => {
         </Modal>
       )}
     </Card>
+  );
+};
+
+
+// ── Field Visibility Panel ────────────────────────────────────────────────────
+// Shown inside RolesSection when a role is selected — lets admin hide fields per role
+const FieldVisibilityPanel = ({ role, environment }) => {
+  const [objects, setObjects] = useState([]);
+  const [selObj, setSelObj]   = useState(null);
+  const [fields, setFields]   = useState([]);
+  const [rules, setRules]     = useState({}); // field_id → hidden bool
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+
+  useEffect(() => {
+    if (!environment) return;
+    api.get(`/objects?environment_id=${environment.id}`).then(d => {
+      const objs = Array.isArray(d) ? d : [];
+      setObjects(objs);
+      if (objs.length) setSelObj(objs[0]);
+    });
+  }, [environment?.id]);
+
+  useEffect(() => {
+    if (!selObj || !role) return;
+    Promise.all([
+      api.get(`/fields?object_id=${selObj.id}`),
+      api.get(`/field-visibility?role_id=${role.id}&object_id=${selObj.id}`),
+    ]).then(([f, v]) => {
+      setFields(Array.isArray(f) ? f : []);
+      const r = {};
+      (Array.isArray(v) ? v : []).forEach(rule => { if (rule.hidden) r[rule.field_id] = true; });
+      setRules(r);
+    });
+  }, [selObj?.id, role?.id]);
+
+  const toggle = (fieldId) => setRules(r => ({ ...r, [fieldId]: !r[fieldId] }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    await api.put('/field-visibility', {
+      role_id: role.id,
+      object_id: selObj.id,
+      rules: fields.map(f => ({ field_id: f.id, hidden: !!rules[f.id] })),
+    });
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const hiddenCount = Object.values(rules).filter(Boolean).length;
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text1 }}>Field Visibility</div>
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>
+            Hidden fields are stripped from API responses for this role. {hiddenCount > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>{hiddenCount} hidden</span>}
+          </div>
+        </div>
+        <Btn onClick={handleSave} disabled={saving || !selObj} style={{ fontSize: 12 }}>
+          {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save'}
+        </Btn>
+      </div>
+      {/* Object tabs */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+        {objects.map(o => (
+          <button key={o.id} onClick={() => setSelObj(o)}
+            style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: selObj?.id === o.id ? 700 : 500,
+              border: `1.5px solid ${selObj?.id === o.id ? (o.color || C.accent) : C.border}`,
+              background: selObj?.id === o.id ? `${o.color || C.accent}15` : 'transparent',
+              color: selObj?.id === o.id ? (o.color || C.accent) : C.text3, cursor: 'pointer' }}>
+            {o.plural_name || o.name}
+          </button>
+        ))}
+      </div>
+      {/* Field list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {fields.map(f => (
+          <div key={f.id} onClick={() => toggle(f.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              borderRadius: 8, border: `1px solid ${rules[f.id] ? '#fecaca' : C.border}`,
+              background: rules[f.id] ? '#fff5f5' : 'white', cursor: 'pointer', transition: 'all .1s' }}>
+            <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${rules[f.id] ? '#ef4444' : C.border}`,
+              background: rules[f.id] ? '#ef4444' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {rules[f.id] && <svg width={10} height={10} viewBox='0 0 24 24' fill='none' stroke='white' strokeWidth={3}><path d='M18 6L6 18M6 6l12 12'/></svg>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: rules[f.id] ? '#ef4444' : C.text1 }}>{f.name}</span>
+              <span style={{ fontSize: 11, color: C.text3, marginLeft: 8 }}>{f.api_key}</span>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 600, color: rules[f.id] ? '#ef4444' : C.text3,
+              padding: '2px 7px', borderRadius: 10, background: rules[f.id] ? '#fee2e2' : C.bg }}>
+              {rules[f.id] ? 'HIDDEN' : 'visible'}
+            </span>
+          </div>
+        ))}
+        {fields.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: C.text3, fontSize: 13 }}>Select an object above to configure field visibility.</div>}
+      </div>
+    </div>
   );
 };
 
@@ -1619,7 +1730,7 @@ export default function SettingsPage({ currentUser, environment }) {
       <div style={{flex:1,minWidth:0}}>
         {activeSection==="datamodel"  && <DataModelSection/>}
         {activeSection==="users"      && <UsersSection/>}
-        {activeSection==="roles"      && <RolesSection/>}
+        {activeSection==="roles"      && <RolesSection environment={environment}/>}
         {activeSection==="org"        && <OrgChart environment={environment}/>}
         {activeSection==="security"   && <SecuritySection/>}
         {activeSection==="sessions"   && <SessionsSection/>}

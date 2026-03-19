@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove } = require('../db/init');
-const { hasPermission, hasGlobalAction } = require('../middleware/rbac');
+const { hasPermission, hasGlobalAction, applyFieldVisibility, applyFieldVisibilityBulk } = require('../middleware/rbac');
 
 // Lazy-load agent engine to avoid circular deps at startup
 let agentEngine = null;
@@ -83,15 +83,15 @@ router.get('/', (req, res) => {
   if (checkPerm(req, res, object_id, 'view') === false) return;
   let records = query('records', r=>r.object_id===object_id&&r.environment_id===environment_id&&!r.deleted_at);
 
-  // Org scoping: filter to user's visible subtree if user_id provided and user has an org unit
-  if (user_id) {
-    const user = findOne('users', u => u.id === user_id);
-    const role = user && findOne('roles', r => r.id === user.role_id);
-    const isSuperAdmin = role && (role.slug === 'super_admin' || role.slug === 'admin');
-    if (user && user.org_unit_id && !isSuperAdmin) {
+  // Org scoping: auto-scoped to currentUser's subtree (or explicit user_id override)
+  const scopeUser = req.currentUser || (user_id ? findOne('users', u => u.id === user_id) : null);
+  if (scopeUser && scopeUser.org_unit_id) {
+    const scopeRole = scopeUser.role || findOne('roles', r => r.id === scopeUser.role_id);
+    const isScopeAdmin = scopeRole && (scopeRole.slug === 'super_admin' || scopeRole.slug === 'admin');
+    if (!isScopeAdmin) {
       const { getSubtree } = require('./org_units');
       const allUnits = query('org_units');
-      const visibleIds = getSubtree(user.org_unit_id, allUnits);
+      const visibleIds = getSubtree(scopeUser.org_unit_id, allUnits);
       records = records.filter(r => !r.org_unit_id || visibleIds.includes(r.org_unit_id));
     }
   }
@@ -107,14 +107,15 @@ router.get('/', (req, res) => {
   records.sort((a,b)=>sort_dir==='asc'?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
   const total = records.length;
   const start = (parseInt(page)-1)*parseInt(limit);
-  res.json({records:records.slice(start,start+parseInt(limit)),pagination:{total,page:parseInt(page),limit:parseInt(limit),pages:Math.ceil(total/parseInt(limit))}});
+  const visibleRecords = applyFieldVisibilityBulk(req.currentUser, records.slice(start,start+parseInt(limit)), object_id);
+  res.json({records:visibleRecords,pagination:{total,page:parseInt(page),limit:parseInt(limit),pages:Math.ceil(total/parseInt(limit))}});
 });
 
 router.get('/:id', (req, res) => {
   const r = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!r) return res.status(404).json({error:'Not found'});
   if (checkPerm(req, res, r.object_id, 'view') === false) return;
-  res.json(r);
+  res.json(applyFieldVisibility(req.currentUser, r, r.object_id));
 });
 
 router.post('/', (req, res) => {

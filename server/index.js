@@ -37,6 +37,7 @@ app.use(tenantMiddleware);
 app.use(attachUser); // attach current user to every request (non-blocking)
 
 app.use('/api/auth',        require('./routes/auth'));
+app.use('/api/field-visibility', require('./routes/field_visibility'));
 app.use('/api/environments', require('./routes/environments'));
 app.use('/api/objects',      require('./routes/objects'));
 app.use('/api/fields',       require('./routes/fields'));

@@ -1,3 +1,13 @@
+const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
+function _checkGA(req, res, action) {
+  const user = req.currentUser;
+  if (!user) return null;
+  if (!_hasGA(user, action)) {
+    res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
+    return false;
+  }
+  return null;
+}
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -148,6 +158,7 @@ router.get('/', (req, res) => {
 
 // POST /api/workflows
 router.post('/', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { name, object_id, environment_id, description, workflow_type } = req.body;
   const wf = insert('workflows', { id: uuidv4(), name, object_id, environment_id, description: description||'', workflow_type: workflow_type||'automation', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
@@ -156,6 +167,7 @@ router.post('/', (req, res) => {
 
 // PATCH /api/workflows/:id
 router.patch('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const wf = update('workflows', w => w.id === req.params.id, req.body);
   if (!wf) return res.status(404).json({ error: 'Not found' });
@@ -165,6 +177,7 @@ router.patch('/:id', (req, res) => {
 
 // DELETE /api/workflows/:id
 router.delete('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   update('workflows', w => w.id === req.params.id, { deleted_at: new Date().toISOString() });
   res.json({ ok: true });
@@ -179,6 +192,7 @@ router.get('/:id/steps/debug', (req, res) => {
 
 // PUT /api/workflows/:id/steps  — replace all steps
 router.put('/:id/steps', async (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { steps } = req.body;
   const store = getStore();
@@ -253,6 +267,7 @@ function resolveRecipient(cfg, record, store) {
 
 // POST /api/workflows/:id/run  — run workflow against a record
 router.post('/:id/run', async (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { record_id } = req.body;
   const wf = findOne('workflows', w => w.id === req.params.id);
@@ -435,6 +450,7 @@ router.get('/assignments', (req, res) => {
 
 // PUT /api/workflows/assignments  — upsert: one per (record_id, type)
 router.put('/assignments', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { record_id, workflow_id, type } = req.body; // type: 'pipeline' | 'people_link'
   if (!record_id || !type) return res.status(400).json({ error: 'record_id and type required' });
@@ -490,6 +506,7 @@ router.get('/people-links', (req, res) => {
 
 // POST /api/workflows/people-links
 router.post('/people-links', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { person_record_id, target_record_id, target_object_id, stage_id, stage_name, environment_id } = req.body;
   if (!person_record_id || !target_record_id) return res.status(400).json({ error: 'person_record_id and target_record_id required' });
@@ -507,6 +524,7 @@ router.post('/people-links', (req, res) => {
 
 // PATCH /api/workflows/people-links/:id  — update stage + auto-run step actions
 router.patch('/people-links/:id', async (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   const { stage_id, stage_name } = req.body;
   const link = update('people_links', l => l.id === req.params.id, { stage_id, stage_name, updated_at: new Date().toISOString() });
@@ -629,6 +647,7 @@ router.patch('/people-links/:id', async (req, res) => {
 
 // DELETE /api/workflows/people-links/:id
 router.delete('/people-links/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
   remove('people_links', l => l.id === req.params.id);
   res.json({ ok: true });

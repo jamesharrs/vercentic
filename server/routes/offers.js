@@ -1,3 +1,13 @@
+const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
+function _checkGA(req, res, action) {
+  const user = req.currentUser;
+  if (!user) return null;
+  if (!_hasGA(user, action)) {
+    res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
+    return false;
+  }
+  return null;
+}
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -40,6 +50,7 @@ router.get('/:id', (req, res) => {
 
 // POST / — Create offer
 router.post('/', (req, res) => {
+  if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const {
     environment_id, candidate_id, candidate_name,
@@ -109,6 +120,7 @@ router.post('/', (req, res) => {
 
 // PATCH /:id — Update offer fields
 router.patch('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const allowed = [
     'candidate_name','job_id','job_name','job_department',
@@ -124,6 +136,7 @@ router.patch('/:id', (req, res) => {
 
 // PATCH /:id/status — Status transitions
 router.patch('/:id/status', (req, res) => {
+  if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const { status, reason, user } = req.body;
   const now = new Date().toISOString();
@@ -170,6 +183,7 @@ router.patch('/:id/status', (req, res) => {
 
 // PATCH /:id/approve — Approver decision
 router.patch('/:id/approve', (req, res) => {
+  if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const { decision, comment, approver_email, user } = req.body;
   if (!['approved', 'rejected'].includes(decision))
@@ -222,6 +236,7 @@ router.patch('/:id/approve', (req, res) => {
 
 // DELETE /:id — Soft delete
 router.delete('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   update('offers', o => o.id === req.params.id, { deleted_at: new Date().toISOString() });
   res.json({ deleted: true });

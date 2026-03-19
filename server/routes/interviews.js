@@ -1,3 +1,13 @@
+const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
+function _checkGA(req, res, action) {
+  const user = req.currentUser;
+  if (!user) return null;
+  if (!_hasGA(user, action)) {
+    res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
+    return false;
+  }
+  return null;
+}
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -23,6 +33,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
+  if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const { environment_id, interview_type_id, interview_type_name, candidate_id, candidate_name,
           job_id, job_name, date, time, duration, format, interviewers, notes, status } = req.body;
@@ -53,6 +64,7 @@ router.post('/', (req, res) => {
 });
 
 router.patch('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const fields = ['date','time','status','notes','interviewers','candidate_id','candidate_name','job_id','job_name'];
   const updates = { updated_at: new Date().toISOString() };
@@ -62,6 +74,7 @@ router.patch('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
+  if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   update('interviews', i => i.id === req.params.id, { deleted_at: new Date().toISOString() });
   res.json({ deleted: true });
