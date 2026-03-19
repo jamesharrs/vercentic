@@ -4793,6 +4793,10 @@ const CSVImportModal = ({ object, environment, onClose, onDone }) => {
 export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed }) {
   // Make environment available to PeoplePicker without prop drilling
   useEffect(() => { _currentEnvId = environment?.id; }, [environment?.id]);
+  // Debug log on mount
+  useEffect(() => {
+    console.log('[RecordsView] mounted', { object_id: object?.id, object_slug: object?.slug, env_id: environment?.id, env_name: environment?.name, session_user: session?.user?.email, session_env: session?.user?.environment_id });
+  }, [object?.id, environment?.id]);
   const [records, setRecords]   = useState([]);
   const [fields,  setFields]    = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -4858,6 +4862,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       api.get(`/fields?object_id=${object.id}`),
       api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
     ]);
+    console.log('[RecordsView] load', { object_id: object.id, env_id: environment.id, fields_count: Array.isArray(f)?f.length:'err', records_total: r?.pagination?.total, records_loaded: r?.records?.length, error: r?.error });
     const loadedFields = Array.isArray(f) ? f : [];
     setFields(loadedFields);
     // Restore saved column order/selection, or use defaults
