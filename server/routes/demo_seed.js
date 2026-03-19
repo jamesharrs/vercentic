@@ -325,15 +325,15 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
 // ── Routes ─────────────────────────────────────────────────────────────────────
 
 router.get('/environments', (req, res) => {
-  const { getStore: _getStore, tenantStorage, listTenants } = require('../db/init');
+  const { getStore: _getStore, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
 
   // Master store first
   const masterStore = _getStore();
   const allClients  = masterStore.clients || [];
   const allClientEnvs = masterStore.client_environments || [];
 
-  // Build result starting with master environments
-  const result = [];
+  // Map: env_id → result entry (deduplicate — tenant store wins over master for same env_id)
+  const envMap = new Map();
 
   const addEnvsFromStore = (store, tenantSlug) => {
     const envs = store.environments || [];
@@ -341,7 +341,7 @@ router.get('/environments', (req, res) => {
       const clientEnv = allClientEnvs.find(ce => ce.id === e.id);
       const clientId  = clientEnv?.client_id || e.client_id || null;
       const client    = clientId ? allClients.find(c => c.id === clientId) : null;
-      result.push({
+      const entry = {
         id:           e.id,
         name:         e.name,
         client_name:  client?.name || null,
@@ -349,23 +349,26 @@ router.get('/environments', (req, res) => {
         is_default:   e.is_default,
         record_count: (store.records || []).filter(r => r.environment_id === e.id).length,
         demo_count:   (store.records || []).filter(r => r.environment_id === e.id && r._demo).length,
-      });
+      };
+      // Tenant store entry always wins (it's the authoritative store for that client)
+      if (!envMap.has(e.id) || tenantSlug !== null) {
+        envMap.set(e.id, entry);
+      }
     }
   };
 
   addEnvsFromStore(masterStore, null);
 
-  // Also scan each provisioned tenant store
+  // Scan each provisioned tenant store
   const tenants = listTenants ? listTenants() : [];
   for (const slug of tenants) {
     try {
-      // Load/read tenant store directly
-      const tenantStore = tenantStorage.run(slug, () => _getStore());
-      if (tenantStore && tenantStore !== masterStore) {
-        addEnvsFromStore(tenantStore, slug);
-      }
+      const tenantStore = loadTenantStore(slug);
+      if (tenantStore) addEnvsFromStore(tenantStore, slug);
     } catch { /* skip broken tenant stores */ }
   }
+
+  const result = Array.from(envMap.values());
 
   // Sort: master Production first, then by client name + env name
   result.sort((a, b) => {
