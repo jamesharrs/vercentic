@@ -484,7 +484,11 @@ function PersonPanel({ person, relationships, allPeople, onClose, onOpenRecord }
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:40,height:40,borderRadius:12,background:`${color}20`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:15,fontWeight:800,color, flexShrink:0 }}>{initials||"?"}</div>
+              fontSize:15,fontWeight:800,color, flexShrink:0, overflow:"hidden" }}>
+              {d.profile_photo||d.photo_url
+                ? <img src={d.profile_photo||d.photo_url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:12}} onError={e=>e.target.style.display="none"}/>
+                : initials||"?"}
+            </div>
             <div>
               <div style={{ fontSize:15,fontWeight:800,color:C.text1 }}>{name}</div>
               {(d.job_title||d.current_title) && <div style={{ fontSize:12,color:C.text3 }}>{d.job_title||d.current_title}</div>}
@@ -787,7 +791,11 @@ function PersonPickerPortal({ anchorEl, allPeople, excludeIds=[], onPick, onClos
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <div style={{ width:26, height:26, borderRadius:7, background:C.accentLight,
                   display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:10, fontWeight:800, color:C.accent, flexShrink:0 }}>{initials||"?"}</div>
+                  fontSize:10, fontWeight:800, color:C.accent, flexShrink:0, overflow:"hidden" }}>
+                  {d.profile_photo||d.photo_url
+                    ? <img src={d.profile_photo||d.photo_url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:7}} onError={e=>e.target.style.display="none"}/>
+                    : initials||"?"}
+                </div>
                 <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:C.text1 }}>{name}</div>
                   {d.job_title && <div style={{ fontSize:10, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.job_title}</div>}
@@ -997,7 +1005,11 @@ function PeopleCanvas({ people, openJobs, relationships, activeFilters, selected
               onMouseLeave={e=>{ if(!isSelected) e.currentTarget.style.borderColor=C.border; }}>
               <div style={{ width:30,height:30,borderRadius:9,background:`${nodeColor}18`,
                 display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:12,fontWeight:800,color:nodeColor,flexShrink:0 }}>{initials||"?"}</div>
+                fontSize:12,fontWeight:800,color:nodeColor,flexShrink:0, overflow:"hidden" }}>
+                {d.profile_photo||d.photo_url
+                  ? <img src={d.profile_photo||d.photo_url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:9}} onError={e=>e.target.style.display="none"}/>
+                  : initials||"?"}
+              </div>
               <div style={{ minWidth:0, flex:1 }}>
                 <div style={{ fontWeight:700,fontSize:12,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{name}</div>
                 <div style={{ fontSize:10,color:C.text3,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>

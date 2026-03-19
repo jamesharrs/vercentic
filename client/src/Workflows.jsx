@@ -1682,8 +1682,13 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
         style={{ width:14, height:14, cursor:"pointer", accentColor:"#7c3aed", flexShrink:0 }}/>
       {/* Avatar */}
       <div style={{ width:30, height:30, borderRadius:"50%", background:"#7c3aed",
-        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-        <span style={{ color:"white", fontSize:11, fontWeight:700 }}>{initial}</span>
+        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden" }}>
+        {personData?.profile_photo || personData?.photo_url
+          ? <img src={personData.profile_photo || personData.photo_url} alt={label}
+              style={{ width:"100%", height:"100%", objectFit:"cover" }}
+              onError={e=>{ e.target.style.display="none"; }}/>
+          : <span style={{ color:"white", fontSize:11, fontWeight:700 }}>{initial}</span>
+        }
       </div>
 
       {/* Match score badge */}

@@ -838,11 +838,15 @@ const recordSubtitle = (record, fields) => {
 };
 
 /* ─── Avatar ───────────────────────────────────────────────────────────────── */
-const Avatar = ({ name, color=C.accent, size=32 }) => {
+const Avatar = ({ name, color=C.accent, size=32, photoUrl=null }) => {
   const initials = name?.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase() || "?";
+  const photo = photoUrl;
   return (
-    <div style={{ width:size, height:size, borderRadius:"50%", background:color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-      <span style={{ color:"white", fontSize:size*0.35, fontWeight:700 }}>{initials}</span>
+    <div style={{ width:size, height:size, borderRadius:"50%", background:color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden" }}>
+      {photo
+        ? <img src={photo} alt={name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
+        : <span style={{ color:"white", fontSize:size*0.35, fontWeight:700 }}>{initials}</span>
+      }
     </div>
   );
 };
@@ -1711,7 +1715,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                     style={{ width:15, height:15, cursor:"pointer", accentColor:C.accent }}/>
                 </td>
                 <td style={{ padding:"12px 8px", cursor:"pointer", width:36 }} onClick={() => onProfile(record)}>
-                  <Avatar name={title} color={objectColor} size={28}/>
+                  <Avatar name={title} color={objectColor} size={28} photoUrl={record.data?.profile_photo || record.data?.photo_url}/>
                 </td>
                 {orderedFields.map((f, fi) => {
                   const val = f.isSystem
@@ -4310,7 +4314,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // ── Shared header (slide-out only) ──
   const Header = () => (
     <div style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 24px", borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-      <Avatar name={title} color={objectColor} size={38}/>
+      <Avatar name={title} color={objectColor} size={38} photoUrl={record?.data?.profile_photo || record?.data?.photo_url}/>
       <div style={{ flex:1, minWidth:0 }}>
         <h2 style={{ margin:0, fontSize:17, fontWeight:800, color:C.text1 }}>{title}</h2>
         {subtitle && <div style={{ fontSize:12, color:C.text3, marginTop:1 }}>{subtitle}</div>}
@@ -4410,7 +4414,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Photo upload ──
   const photoInputRef = useRef(null);
-  const [photoUrl, setPhotoUrl] = useState(record?.data?.photo_url || null);
+  const [photoUrl, setPhotoUrl] = useState(record?.data?.photo_url || record?.data?.profile_photo || null);
   const handlePhotoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
