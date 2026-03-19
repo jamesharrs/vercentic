@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { usePermissions as usePermCtx } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
+import RichTextEditor from "./RichTextEditor.jsx";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
 import SharePicker from "./SharePicker.jsx";
@@ -243,8 +244,11 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
       return <span style={{fontSize:13}}><span style={{color:"#6b7280",fontSize:11,marginRight:2}}>{field.date_range_start_label||"Start"}</span>{s||"—"}<span style={{margin:"0 6px",color:"#d1d5db"}}>→</span><span style={{color:"#6b7280",fontSize:11,marginRight:2}}>{field.date_range_end_label||"End"}</span>{e||"—"}</span>;
     }
     case "rich_text": {
-      const html = String(value).replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\*(.*?)\*/g,"<em>$1</em>").replace(/\n/g,"<br/>");
-      return <div style={{fontSize:13,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:html}}/>;
+      const html = String(value);
+      return (
+        <div style={{ fontSize:13, lineHeight:1.65, color:"#111827" }}
+          dangerouslySetInnerHTML={{ __html: html }}/>
+      );
     }
     case "auto_number":
     case "unique_id": return <span style={{fontSize:11,fontWeight:700,fontFamily:"ui-monospace,monospace",padding:"2px 6px",borderRadius:4,background:"#f0f4ff",color:"#3b5bdb",letterSpacing:"0.05em"}}>{String(value)}</span>;
@@ -381,8 +385,9 @@ const AddressInput = ({ field, value, onChange }) => {
 const FieldEditor = ({ field, value, onChange, autoFocus }) => {
   switch(field.field_type) {
     case "textarea":
-    case "rich_text":
       return <Inp multiline value={value} onChange={onChange} placeholder={field.placeholder||field.name} autoFocus={autoFocus}/>;
+    case "rich_text":
+      return <RichTextEditor value={value||""} onChange={onChange} placeholder={field.placeholder||field.name} autoFocus={autoFocus} minHeight={140}/>;
     case "select":
       return <Sel value={value} onChange={onChange} options={(field.options||[]).map(o=>({value:o,label:o}))}/>;
     case "multi_select": {
