@@ -205,6 +205,58 @@ router.get('/templates', (req, res) => {
   }
 });
 
+// ── AGENT ACTIVITY FEED (must be before /:id wildcard) ──────────────────────
+router.get('/activity-feed', (req, res) => {
+  const { environment_id, limit = 20 } = req.query;
+  const s = getStore();
+  let runs = (s.agent_runs || []).filter(r => !environment_id || r.environment_id === environment_id);
+  runs = runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, parseInt(limit));
+  const agentMap  = Object.fromEntries((s.agents || []).map(a => [a.id, a]));
+  const recordMap = Object.fromEntries((s.records || []).map(r => [r.id, r]));
+  const objectMap = Object.fromEntries((s.object_definitions || []).map(o => [o.id, o]));
+  const items = runs.map(run => {
+    const agent  = agentMap[run.agent_id] || {};
+    const record = run.record_id ? recordMap[run.record_id] : null;
+    const object = record ? objectMap[record.object_id] : null;
+    let recordName = null;
+    if (record) {
+      const d = record.data || {};
+      recordName = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.job_title || d.name || d.pool_name || `#${(record.id||'').slice(0,6)}`;
+    }
+    const actions = agent.actions || [];
+    const hasAi   = actions.some(a => ['ai_analyse','ai_summarise','ai_score','ai_draft_email'].includes(a.type));
+    let summary = null;
+    if      (run.status === 'skipped')          summary = 'Conditions not met — skipped';
+    else if (run.status === 'failed')           summary = run.error ? `Error: ${run.error.slice(0,80)}` : 'Run failed';
+    else if (run.status === 'pending_approval') summary = 'Waiting for your review';
+    else if (hasAi && run.ai_output)            summary = run.ai_output.replace(/\n/g,' ').slice(0,100) + (run.ai_output.length>100?'…':'');
+    else if (actions.some(a=>['send_email','ai_draft_email'].includes(a.type))) summary = 'Drafted outreach email';
+    else if (actions.some(a=>a.type==='add_note'))    summary = 'Added AI note to record';
+    else if (actions.some(a=>a.type==='update_field')) summary = 'Updated record field';
+    else if (run.steps?.length > 0)             summary = run.steps[run.steps.length-1]?.step || null;
+    else                                        summary = 'Completed successfully';
+    return {
+      id: run.id, agent_id: run.agent_id,
+      agent_name: agent.name || run.agent_name || 'Unknown agent',
+      trigger: run.trigger || agent.trigger_type || 'manual',
+      status: run.status, is_ai: hasAi || actions.some(a=>a.type?.startsWith('ai_')),
+      summary, record_id: run.record_id||null, record_name: recordName,
+      object_name: object?.name||null, object_color: object?.color||null,
+      ai_output: run.ai_output||null, steps_count: (run.steps||[]).length,
+      has_pending: (run.pending_actions||[]).some(a=>a.approved===undefined),
+      created_at: run.created_at,
+    };
+  });
+  const allRuns = (s.agent_runs||[]).filter(r=>!environment_id||r.environment_id===environment_id);
+  const today = new Date(); today.setHours(0,0,0,0);
+  res.json({ items, stats: {
+    runs_today:       allRuns.filter(r=>new Date(r.created_at)>=today).length,
+    ai_actions_today: allRuns.filter(r=>new Date(r.created_at)>=today&&r.ai_output).length,
+    pending_reviews:  allRuns.filter(r=>r.status==='pending_approval').length,
+    active_agents:    (s.agents||[]).filter(a=>a.is_active&&!a.deleted_at&&(!environment_id||a.environment_id===environment_id)).length,
+  }});
+});
+
 router.get('/:id', (req, res) => {
   const agent = query('agents', a => a.id === req.params.id && !a.deleted_at)[0];
   if (!agent) return res.status(404).json({ error: 'Not found' });
