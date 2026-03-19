@@ -607,5 +607,16 @@ router.post('/:id/generate-token', (req, res) => {
   });
 });
 
+
+// GET /api/agents/templates — return the standard template library
+router.get('/templates', (req, res) => {
+  try {
+    const templates = require('../data/agent_templates');
+    res.json(templates);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
 
