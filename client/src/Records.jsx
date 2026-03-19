@@ -4963,21 +4963,21 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               if (validIds.length === 0) return null;
               if (validIds.length === 1) {
                 const id = validIds[0];
-                return <div key={id}><DropIndicator beforeRepId={id} afterRepId={prevRepId}/><PanelCard id={id}/></div>;
+                return <div key={id}>{DropIndicator({beforeRepId:id, afterRepId:prevRepId})}{PanelCard({id})}</div>;
               }
               const repId = validIds[0];
               return (
                 <div key={repId}>
-                  <DropIndicator beforeRepId={repId} afterRepId={prevRepId}/>
-                  <GroupCard ids={validIds}/>
+                  {DropIndicator({beforeRepId:repId, afterRepId:prevRepId})}
+                  {GroupCard({ids:validIds})}
                 </div>
               );
             }
             if (!PANEL_META[slot]) return null;
             return (
               <div key={slot}>
-                <DropIndicator beforeRepId={slot} afterRepId={prevRepId}/>
-                <PanelCard id={slot}/>
+                {DropIndicator({beforeRepId:slot, afterRepId:prevRepId})}
+                {PanelCard({id:slot})}
               </div>
             );
           })}
@@ -4985,7 +4985,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           {panelOrder.length > 0 && (() => {
             const last = panelOrder[panelOrder.length - 1];
             const lastRepId = repIdOf(last);
-            return <DropIndicator beforeRepId={null} afterRepId={lastRepId}/>;
+            return DropIndicator({beforeRepId:null, afterRepId:lastRepId});
           })()}
         </div>
       </div>
