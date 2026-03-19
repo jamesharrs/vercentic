@@ -127,7 +127,8 @@ router.post('/login', (req, res) => {
   // Update last login
   update('users', x => x.id === u.id, { last_login: new Date().toISOString(), login_count: (u.login_count||0)+1 });
   insert('audit_log', { id:require('uuid').v4(), action:'user.login', actor:u.id, target_id:u.id, target_type:'user', details:{ email }, created_at:new Date().toISOString() });
-  res.json({ ...u, password_hash: undefined, role, permissions });
+  const tenantSlug = require('../db/init').getCurrentTenant();
+  res.json({ ...u, password_hash: undefined, role, permissions, tenant_slug: (tenantSlug && tenantSlug !== 'master') ? tenantSlug : null });
 });
 
 // GET /api/users/me/:id — refresh user session data

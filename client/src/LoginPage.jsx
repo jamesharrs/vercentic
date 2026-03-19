@@ -21,7 +21,10 @@ export default function LoginPage({ onLogin }) {
     if (!email || !password) return;
     setLoading(true); setError("");
     try {
-      const data = await api.post("/api/users/login", { email, password });
+      // Include ?tenant= from URL so server searches the right store
+      const tenantParam = new URLSearchParams(window.location.search).get('tenant');
+      const loginUrl = tenantParam ? `/api/users/login?tenant=${encodeURIComponent(tenantParam)}` : "/api/users/login";
+      const data = await api.post(loginUrl, { email, password });
       const { role, permissions, tenant_slug, ...user } = data;
       // Store tenant_slug in session so every API call can send the right header
       setSession({ user, role, permissions, tenant_slug });
