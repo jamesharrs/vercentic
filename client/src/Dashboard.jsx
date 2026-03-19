@@ -47,92 +47,6 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
 };
 
 
-/* ── Agent Activity Feed ── */
-const STATUS_STYLES = {
-  completed:        { dot: "#0CAF77", bg: "#F0FDF4", label: "Completed" },
-  pending_approval: { dot: "#F79009", bg: "#FFFBEB", label: "Needs review" },
-  failed:           { dot: "#EF4444", bg: "#FEF2F2", label: "Failed" },
-  skipped:          { dot: "#9DA8C7", bg: "#F8FAFC", label: "Skipped" },
-  running:          { dot: "#4361EE", bg: "#EEF2FF", label: "Running" },
-};
-const TRIGGER_LABELS = {
-  record_created:"Record created", record_updated:"Record updated", stage_changed:"Stage changed",
-  form_submitted:"Form submitted", schedule_daily:"Scheduled", schedule_weekly:"Scheduled",
-  manual:"Manual run",
-};
-
-function AgentFeedItem({ item, onOpenRecord, onNavigate }) {
-  const [exp, setExp] = useState(false);
-  const st = STATUS_STYLES[item.status] || STATUS_STYLES.completed;
-  const when = (() => {
-    const d = Date.now() - new Date(item.created_at).getTime();
-    if (d < 60000) return "just now";
-    if (d < 3600000) return `${Math.floor(d/60000)}m ago`;
-    if (d < 86400000) return `${Math.floor(d/3600000)}h ago`;
-    return new Date(item.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
-  })();
-
-  return (
-    <div style={{borderBottom:`1px solid ${C.border}`,paddingBottom:0}}>
-      <div onClick={()=>setExp(!exp)}
-        style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 0",cursor:"pointer",borderRadius:6,transition:"background .1s"}}
-        onMouseEnter={e=>e.currentTarget.style.background="#f8f9fc"}
-        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-
-        {/* Status dot + AI badge */}
-        <div style={{position:"relative",flexShrink:0,marginTop:2}}>
-          <div style={{width:32,height:32,borderRadius:9,background:`${st.bg}`,border:`1.5px solid ${st.dot}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <Ic n={item.status==="pending_approval"?"eye":item.status==="failed"?"alert":item.is_ai?"sparkles":"play"} s={14} c={st.dot}/>
-          </div>
-          {item.is_ai && (
-            <div style={{position:"absolute",bottom:-3,right:-3,width:14,height:14,borderRadius:"50%",background:C.purple,border:"1.5px solid white",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width="7" height="7" viewBox="0 0 24 24" fill="white"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0L9.937 15.5z"/></svg>
-            </div>
-          )}
-        </div>
-
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
-            <span style={{fontSize:12,fontWeight:700,color:C.text1}}>{item.agent_name}</span>
-            {item.record_name && (
-              <span onClick={e=>{e.stopPropagation();onOpenRecord?.(item.record_id,item.object_name);}}
-                style={{fontSize:11,color:C.accent,background:`${C.accent}10`,padding:"1px 7px",borderRadius:5,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontWeight:600,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                {item.record_name}
-                <Ic n="arrowUpRight" s={9} c={C.accent}/>
-              </span>
-            )}
-          </div>
-          <div style={{fontSize:11,color:C.text3,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:exp?"normal":"nowrap"}}>
-            {item.summary}
-          </div>
-          {item.status==="pending_approval" && (
-            <button onClick={e=>{e.stopPropagation();onNavigate?.("agents");}}
-              style={{marginTop:5,padding:"3px 10px",borderRadius:6,border:"none",background:C.amber,color:"white",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:F}}>
-              Review →
-            </button>
-          )}
-        </div>
-
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
-          <span style={{fontSize:10,color:C.text3}}>{when}</span>
-          <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:5,background:st.bg}}>
-            <div style={{width:5,height:5,borderRadius:"50%",background:st.dot}}/>
-            <span style={{fontSize:9,fontWeight:700,color:st.dot}}>{st.label}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Expanded AI output */}
-      {exp && item.ai_output && (
-        <div style={{margin:"0 0 10px 42px",padding:"9px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}20`,fontSize:11,color:C.text2,lineHeight:1.6,whiteSpace:"pre-wrap",maxHeight:120,overflowY:"auto"}}>
-          <div style={{fontSize:9,fontWeight:800,color:C.purple,marginBottom:5,letterSpacing:".06em",textTransform:"uppercase"}}>AI Output</div>
-          {item.ai_output}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Stat Card ── */
 const StatCard = ({ label, value, sub, icon, color, trend, trendLabel, onClick, onReport }) => {
   const [hov, setHov] = useState(false);
@@ -237,7 +151,6 @@ const ActivityRow = ({ item, objects, onClick }) => {
 export default function Dashboard({ environment, session, onNavigate, onOpenRecord }) {
   const [stats,   setStats]   = useState(null);
   const [activity,setActivity]= useState([]);
-  const [agentFeed,setAgentFeed] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -246,7 +159,6 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
     if (_cache[environment.id]) {
       setStats(_cache[environment.id].stats);
       setActivity(_cache[environment.id].activity);
-      setAgentFeed(_cache[environment.id].agentFeed || null);
       setLoading(false);
     } else {
       setLoading(true);
@@ -319,18 +231,9 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           .filter(o => ["pending_approval","approved","sent"].includes(o.status)).length;
       } catch {}
 
-      _cache[environment.id] = { stats: statsData, activity: Array.isArray(feed) ? feed : [], agentFeed: null };
+      _cache[environment.id] = { stats: statsData, activity: Array.isArray(feed) ? feed : [] };
       setStats(statsData);
       setActivity(Array.isArray(feed) ? feed : []);
-
-      // Agent activity feed — non-blocking, loaded after main stats
-      try {
-        const af = await fetch(`/api/agents/activity-feed?environment_id=${environment.id}&limit=15`).then(r=>r.json());
-        if (af && Array.isArray(af.items)) {
-          _cache[environment.id].agentFeed = af;
-          setAgentFeed(af);
-        }
-      } catch {}
     } catch(e) { console.error(e); }
     setLoading(false);
   }, [environment?.id]);
@@ -431,37 +334,6 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           <Ic n="refresh" s={13}/>
         </button>
       </div>
-
-      {/* AI at work — live agent stats bar */}
-      {agentFeed?.stats && (agentFeed.stats.active_agents > 0 || agentFeed.stats.runs_today > 0) && (
-        <div onClick={()=>onNavigate?.("agents")} style={{display:"flex",alignItems:"center",gap:0,marginBottom:16,borderRadius:14,overflow:"hidden",border:`1.5px solid ${C.purple}25`,cursor:"pointer",background:"white",transition:"box-shadow .15s"}}
-          onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 20px ${C.purple}15`}
-          onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-          {/* Label strip */}
-          <div style={{padding:"11px 16px",background:`linear-gradient(135deg,${C.purple},#9333ea)`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0L9.937 15.5z"/></svg>
-            <span style={{fontSize:11,fontWeight:800,color:"white",letterSpacing:".05em",whiteSpace:"nowrap"}}>AI AGENTS</span>
-          </div>
-          {/* Stats row */}
-          {[
-            { value: agentFeed.stats.active_agents,   label: "active",          color: C.green },
-            { value: agentFeed.stats.runs_today,       label: "runs today",      color: C.accent },
-            { value: agentFeed.stats.ai_actions_today, label: "AI actions",      color: C.purple },
-            { value: agentFeed.stats.pending_reviews,  label: "need review",     color: agentFeed.stats.pending_reviews > 0 ? C.amber : C.text3 },
-          ].map((s,i) => (
-            <div key={i} style={{flex:1,padding:"11px 16px",borderLeft:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:18,fontWeight:800,color:s.value>0?s.color:C.text3,lineHeight:1}}>{s.value}</span>
-              <span style={{fontSize:11,color:C.text3}}>{s.label}</span>
-              {s.label==="need review" && s.value>0 && (
-                <span style={{marginLeft:"auto",fontSize:10,padding:"2px 8px",borderRadius:5,background:`${C.amber}18`,color:C.amber,fontWeight:700}}>Action needed</span>
-              )}
-            </div>
-          ))}
-          <div style={{padding:"0 14px",flexShrink:0}}>
-            <Ic n="arrowR" s={14} c={C.text3}/>
-          </div>
-        </div>
-      )}
 
       {/* Stat cards */}
       <div style={{display:"flex",gap:16,marginBottom:20,flexWrap:"wrap"}}>
@@ -598,45 +470,27 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           )}
         </div>
 
-        {/* Agent / AI Activity feed */}
-        <div style={{background:C.surface,borderRadius:18,border:`1px solid ${C.border}`,padding:"22px 24px",boxShadow:"0 1px 4px rgba(67,97,238,0.06)",display:"flex",flexDirection:"column"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        {/* Recent activity */}
+        <div style={{background:C.surface,borderRadius:18,border:`1px solid ${C.border}`,padding:"22px 24px",boxShadow:"0 1px 4px rgba(67,97,238,0.06)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div>
-              <div style={{display:"flex",alignItems:"center",gap:7}}>
-                <div style={{width:26,height:26,borderRadius:8,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <Ic n="sparkles" s={13} c={C.purple}/>
-                </div>
-                <div style={{fontSize:14,fontWeight:700,color:C.text1}}>Agent Activity</div>
-              </div>
-              <div style={{fontSize:11,color:C.text3,marginTop:2,marginLeft:33}}>What your AI agents have been doing</div>
+              <div style={{fontSize:15,fontWeight:700,color:C.text1}}>Recent Activity</div>
+              <div style={{fontSize:11,color:C.text3}}>Latest changes across all objects</div>
             </div>
-            <button onClick={()=>onNavigate?.("agents")}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:8,border:`1.5px solid ${C.purple}30`,background:`${C.purple}08`,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:700,color:C.purple}}>
-              All agents <Ic n="arrowR" s={11} c={C.purple}/>
-            </button>
           </div>
-
-          {!agentFeed || agentFeed.items.length === 0 ? (
-            <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 0",color:C.text3,gap:10}}>
-              <div style={{width:48,height:48,borderRadius:14,background:`${C.purple}10`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <Ic n="sparkles" s={22} c={C.purple}/>
+          {activity.length===0 ? (
+            <div style={{textAlign:"center",padding:"40px 0",color:C.text3,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+              <div style={{width:44,height:44,borderRadius:13,background:`${C.accent}10`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Ic n="clock" s={20} c={C.accent}/>
               </div>
-              <div style={{fontSize:13,fontWeight:600,color:C.text2,textAlign:"center"}}>No agent runs yet</div>
-              <div style={{fontSize:11,color:C.text3,textAlign:"center",maxWidth:180,lineHeight:1.5}}>Create and activate agents to see their activity here</div>
-              <button onClick={()=>onNavigate?.("agents")}
-                style={{padding:"7px 16px",borderRadius:9,border:"none",background:C.purple,color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,marginTop:4}}>
-                Go to Agents
-              </button>
+              <div style={{fontSize:13,fontWeight:600,color:C.text2}}>No activity yet</div>
+              <div style={{fontSize:12}}>Create records to see activity here</div>
             </div>
           ) : (
-            <div style={{maxHeight:320,overflowY:"auto",flex:1}}>
-              {agentFeed.items.map(item => (
-                <AgentFeedItem key={item.id} item={item}
-                  onOpenRecord={(id, objName) => {
-                    // Find the object for this record and dispatch openRecord
-                    window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:id,objectName:objName}}));
-                  }}
-                  onNavigate={onNavigate}/>
+            <div style={{maxHeight:320,overflowY:"auto"}}>
+              {activity.slice(0,15).map(item=>(
+                <ActivityRow key={item.id} item={item} objects={objs}
+                  onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:item.record_id,objectId:item.object_id}}))}/>
               ))}
             </div>
           )}
