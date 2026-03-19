@@ -126,12 +126,19 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
   const env = store.environments?.find(e => e.id === environmentId);
   if (!env) throw new Error(`Environment ${environmentId} not found`);
 
-  const objects   = (store.object_definitions || []).filter(o => o.environment_id === environmentId);
-  const peopleObj = objects.find(o => o.slug === 'people' || o.slug === 'persons');
-  const jobsObj   = objects.find(o => o.slug === 'jobs');
+  const allObjects = store.objects || store.object_definitions || [];
+  const objects    = allObjects.filter(o => o.environment_id === environmentId);
+  const peopleObj  = objects.find(o =>
+    ['people','persons','person','candidates'].includes(o.slug?.toLowerCase()) ||
+    o.name?.toLowerCase().includes('people') || o.name?.toLowerCase().includes('person')
+  );
+  const jobsObj = objects.find(o =>
+    ['jobs','job','positions','vacancies','roles'].includes(o.slug?.toLowerCase()) ||
+    o.name?.toLowerCase().includes('job') || o.name?.toLowerCase().includes('position')
+  );
 
-  if (!peopleObj) throw new Error('People object not found in this environment');
-  if (!jobsObj)   throw new Error('Jobs object not found in this environment');
+  if (!peopleObj) throw new Error(`People object not found — available: ${objects.map(o=>o.slug).join(', ')}`);
+  if (!jobsObj)   throw new Error(`Jobs object not found — available: ${objects.map(o=>o.slug).join(', ')}`);
 
   if (clearFirst) {
     progressCb({ step:'clear', message:'Clearing previous demo data…', pct:4 });
