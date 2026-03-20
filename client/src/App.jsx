@@ -31,7 +31,7 @@ import ClientHub from "./ClientHub.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
 import { useHistory } from "./useHistory";
-import { SidebarRecent, HistoryDropdown } from "./RecentHistory";
+import { HistoryDropdown } from "./RecentHistory";
 
 // ─── API Client ───────────────────────────────────────────────────────────────
 // Derive tenant slug — session takes priority, then URL param, then subdomain
@@ -1230,6 +1230,7 @@ function App() {
   const [allObjects, setAllObjects] = useState([]);
   const [activeNav, setActiveNav] = useState("dashboard");
   const { history: navHistory, pinned, push: pushHistory, clear: clearHistory, togglePin, isPinned } = useHistory();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [dashFlyout, setDashFlyout] = useState(false);
   const [navObjects, setNavObjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1545,15 +1546,6 @@ function App() {
           ))}
         </div>
 
-        {/* Recent history — sidebar */}
-        <SidebarRecent
-          history={navHistory}
-          pinned={pinned}
-          onNavigate={navigateToHistoryEntry}
-          onPin={togglePin}
-          isPinned={isPinned}
-        />
-
         {/* Footer */}
         <div style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ padding: "10px 12px", background: "var(--t-surface2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1592,7 +1584,7 @@ function App() {
       </div>
 
       {/* Main content */}
-      <div style={{ marginLeft: 220, flex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)" }}>
+      <div style={{ marginLeft: historyOpen ? 500 : 220, flex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
         {/* Top bar */}
         <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects} onNavigateToSearch={(q) => {
             setActiveNav("search");
@@ -1614,6 +1606,8 @@ function App() {
                  onPin={togglePin}
                  isPinned={isPinned}
                  onClear={clearHistory}
+                 isOpen={historyOpen}
+                 onToggle={() => setHistoryOpen(v => !v)}
                />
              } />
         {/* Page content */}

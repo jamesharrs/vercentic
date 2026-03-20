@@ -1,5 +1,5 @@
 // client/src/RecentHistory.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 
 function timeAgo(ts) {
   const d = Date.now() - ts;
@@ -9,7 +9,7 @@ function timeAgo(ts) {
   return `${Math.floor(d / 86400000)}d ago`;
 }
 
-function EntryRow({ entry, onNavigate, onPin, isPinned, showTime = false, compact = false }) {
+function EntryRow({ entry, onNavigate, onPin, isPinned, showTime = false }) {
   const [hovered, setHovered] = useState(false);
   const color = entry.objectColor || "var(--t-accent, #4361EE)";
   const initials = (entry.label || "?").replace(/^…$/, "?").slice(0, 1).toUpperCase();
@@ -20,35 +20,33 @@ function EntryRow({ entry, onNavigate, onPin, isPinned, showTime = false, compac
       onMouseLeave={() => setHovered(false)}
       onClick={() => onNavigate(entry)}
       style={{
-        display: "flex", alignItems: "center", gap: compact ? 7 : 9,
-        padding: compact ? "5px 8px" : "6px 10px",
-        borderRadius: 8, cursor: "pointer",
-        background: hovered ? `${color}12` : "transparent",
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "8px 12px", borderRadius: 9, cursor: "pointer",
+        background: hovered ? `${color}10` : "transparent",
         transition: "background 0.12s",
       }}
     >
       <div style={{
-        width: compact ? 22 : 26, height: compact ? 22 : 26, borderRadius: 6, flexShrink: 0,
-        background: `${color}22`, border: `1.5px solid ${color}44`,
+        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+        background: `${color}1e`, border: `1.5px solid ${color}44`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: compact ? 9 : 10, fontWeight: 800, color,
+        fontSize: 11, fontWeight: 800, color,
       }}>
         {initials}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: compact ? 11 : 12, fontWeight: 600, color: "var(--t-text1)",
+          fontSize: 13, fontWeight: 600, color: "var(--t-text1)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3,
         }}>{entry.label}</div>
-        {!compact && (
-          <div style={{
-            fontSize: 10, color: "var(--t-text3)", lineHeight: 1.2, marginTop: 1,
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {entry.objectName}{entry.subtitle ? ` · ${entry.subtitle}` : ""}
-            {showTime ? ` · ${timeAgo(entry.ts)}` : ""}
-          </div>
-        )}
+        <div style={{
+          fontSize: 11, color: "var(--t-text3)", lineHeight: 1.2, marginTop: 1,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>
+          {entry.objectName}
+          {entry.subtitle ? ` · ${entry.subtitle}` : ""}
+          {showTime ? ` · ${timeAgo(entry.ts)}` : ""}
+        </div>
       </div>
       {hovered && onPin && (
         <button
@@ -56,94 +54,35 @@ function EntryRow({ entry, onNavigate, onPin, isPinned, showTime = false, compac
           title={isPinned ? "Unpin" : "Pin"}
           style={{
             background: "none", border: "none", cursor: "pointer",
-            padding: "2px 3px", borderRadius: 4, lineHeight: 1,
-            color: isPinned ? color : "var(--t-text3)", fontSize: 12,
+            padding: "2px 4px", borderRadius: 4, lineHeight: 1, flexShrink: 0,
+            color: isPinned ? color : "var(--t-text3)", fontSize: 14,
           }}
-        >
-          {isPinned ? "★" : "☆"}
-        </button>
+        >{isPinned ? "★" : "☆"}</button>
       )}
     </div>
   );
 }
 
-// ── Sidebar recent section ──────────────────────────────────────────────────
-export function SidebarRecent({ history, pinned, onNavigate, onPin, isPinned }) {
-  const [expanded, setExpanded] = useState(true);
-  const recent = history.slice(0, 5);
-  const hasPinned = pinned.length > 0;
-  const hasRecent = recent.length > 0;
-
-  if (!hasRecent && !hasPinned) return null;
-
-  return (
-    <div style={{ padding: "0 8px", marginBottom: 8 }}>
-      {hasPinned && (
-        <div style={{ marginBottom: 4 }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, color: "var(--t-text3)", letterSpacing: "0.06em",
-            textTransform: "uppercase", paddingLeft: 10, marginBottom: 3,
-          }}>Pinned</div>
-          {pinned.map((e, i) => (
-            <EntryRow key={i} entry={e} onNavigate={onNavigate}
-              onPin={onPin} isPinned={isPinned(e)} compact />
-          ))}
-        </div>
-      )}
-      {hasRecent && (
-        <div>
-          <button
-            onClick={() => setExpanded(v => !v)}
-            style={{
-              display: "flex", alignItems: "center", width: "100%",
-              gap: 5, padding: "3px 10px", background: "none", border: "none",
-              cursor: "pointer", fontSize: 9, fontWeight: 700, color: "var(--t-text3)",
-              letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit",
-            }}
-          >
-            <span style={{ flex: 1, textAlign: "left" }}>Recent</span>
-            <span style={{ fontSize: 10 }}>{expanded ? "▾" : "▸"}</span>
-          </button>
-          {expanded && recent.map((e, i) => (
-            <EntryRow key={i} entry={e} onNavigate={onNavigate}
-              onPin={onPin} isPinned={isPinned(e)} compact />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Top bar history dropdown ────────────────────────────────────────────────
-export function HistoryDropdown({ history, pinned, onNavigate, onPin, isPinned, onClear }) {
-  const [open, setOpen] = useState(false);
+export function HistoryDropdown({ history, pinned, onNavigate, onPin, isPinned, onClear, isOpen, onToggle }) {
   const [tab, setTab] = useState("recent");
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
   const items = tab === "pinned" ? pinned : history;
 
   return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+    <>
+      {/* Clock button — lives inside GlobalSearch's sticky bar */}
       <button
-        onClick={() => setOpen(v => !v)}
-        title="History"
+        onClick={onToggle}
+        title={isOpen ? "Close history" : "History"}
         style={{
           display: "flex", alignItems: "center", gap: 5,
           padding: "6px 10px", borderRadius: 8, border: "none",
-          background: open ? "var(--t-accent-light, #eef1ff)" : "transparent",
-          color: open ? "var(--t-accent, #4361EE)" : "var(--t-text3)",
+          background: isOpen ? "var(--t-accent-light, #eef1ff)" : "transparent",
+          color: isOpen ? "var(--t-accent, #4361EE)" : "var(--t-text3)",
           cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 500,
-          transition: "all 0.12s",
+          transition: "all 0.12s", flexShrink: 0,
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
         </svg>
@@ -152,48 +91,93 @@ export function HistoryDropdown({ history, pinned, onNavigate, onPin, isPinned, 
         )}
       </button>
 
-      {open && (
+      {/* Slide-out drawer — fixed, slides out from right edge of sidebar */}
+      <div style={{
+        position: "fixed", top: 0,
+        left: isOpen ? 220 : -320,
+        width: 280, height: "100vh",
+        background: "var(--t-surface, white)",
+        borderRight: "1px solid var(--t-border)",
+        boxShadow: isOpen ? "4px 0 24px rgba(0,0,0,0.10)" : "none",
+        zIndex: 90,
+        display: "flex", flexDirection: "column",
+        transition: "left 0.25s cubic-bezier(0.4,0,0.2,1)",
+        overflow: "hidden",
+      }}>
+        {/* Header */}
         <div style={{
-          position: "absolute", top: "calc(100% + 6px)", right: 0,
-          width: 280, background: "var(--t-surface, white)", borderRadius: 14,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid var(--t-border)",
-          zIndex: 1000, overflow: "hidden",
+          padding: "16px 14px 10px",
+          borderBottom: "1px solid var(--t-border)",
+          display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
         }}>
-          <div style={{
-            display: "flex", alignItems: "center", padding: "10px 12px 6px",
-            borderBottom: "1px solid var(--t-border)",
-          }}>
-            <div style={{ display: "flex", gap: 4, flex: 1 }}>
-              {["recent", "pinned"].map(t => (
-                <button key={t} onClick={() => setTab(t)} style={{
-                  padding: "3px 10px", borderRadius: 20, border: "none",
-                  background: tab === t ? "var(--t-accent, #4361EE)" : "transparent",
-                  color: tab === t ? "white" : "var(--t-text3)",
-                  fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                  textTransform: "capitalize",
-                }}>{t}</button>
-              ))}
-            </div>
+          <div style={{ display: "flex", gap: 4, flex: 1 }}>
+            {["recent", "pinned"].map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                padding: "4px 12px", borderRadius: 20, border: "none",
+                background: tab === t ? "var(--t-accent, #4361EE)" : "var(--t-surface2)",
+                color: tab === t ? "white" : "var(--t-text3)",
+                fontSize: 11, fontWeight: 600, cursor: "pointer",
+                fontFamily: "inherit", textTransform: "capitalize",
+                transition: "all 0.12s",
+              }}>{t}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
             {tab === "recent" && history.length > 0 && (
               <button onClick={onClear} style={{
                 background: "none", border: "none", cursor: "pointer",
-                fontSize: 10, color: "var(--t-text3)", fontFamily: "inherit", padding: "2px 4px",
+                fontSize: 10, color: "var(--t-text3)", fontFamily: "inherit",
+                padding: "3px 6px", borderRadius: 5,
               }}>Clear</button>
             )}
-          </div>
-          <div style={{ maxHeight: 340, overflowY: "auto", padding: "6px 4px" }}>
-            {items.length === 0 ? (
-              <div style={{ padding: "20px 12px", textAlign: "center", fontSize: 12, color: "var(--t-text3)" }}>
-                {tab === "pinned" ? "Star items to pin them here" : "Nothing viewed yet"}
-              </div>
-            ) : items.map((e, i) => (
-              <EntryRow key={i} entry={e}
-                onNavigate={nav => { onNavigate(nav); setOpen(false); }}
-                onPin={onPin} isPinned={isPinned(e)} showTime={tab === "recent"} />
-            ))}
+            <button onClick={onToggle} title="Close" style={{
+              background: "none", border: "none", cursor: "pointer",
+              padding: "4px", borderRadius: 6, color: "var(--t-text3)",
+              display: "flex", alignItems: "center",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
           </div>
         </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+          {items.length === 0 ? (
+            <div style={{
+              padding: "32px 16px", textAlign: "center",
+              fontSize: 13, color: "var(--t-text3)", lineHeight: 1.6,
+            }}>
+              {tab === "pinned"
+                ? "Star ☆ items to pin them here"
+                : "Nothing viewed yet.\nVisit pages and records to build your history."}
+            </div>
+          ) : items.map((e, i) => (
+            <EntryRow key={i} entry={e}
+              onNavigate={onNavigate}
+              onPin={onPin} isPinned={isPinned(e)}
+              showTime={tab === "recent"} />
+          ))}
+        </div>
+
+        {/* Footer */}
+        {items.length > 0 && (
+          <div style={{
+            padding: "8px 14px", borderTop: "1px solid var(--t-border)",
+            fontSize: 11, color: "var(--t-text3)", flexShrink: 0,
+          }}>
+            {items.length} {tab === "pinned" ? "pinned" : "recent"} item{items.length !== 1 ? "s" : ""}
+          </div>
+        )}
+      </div>
+
+      {/* Invisible backdrop — click anywhere outside to close */}
+      {isOpen && (
+        <div onClick={onToggle} style={{ position: "fixed", inset: 0, zIndex: 89 }} />
       )}
-    </div>
+    </>
   );
 }
