@@ -18,6 +18,7 @@ const Interviews      = lazy(() => import("./Interviews.jsx"));
 const OffersModule    = lazy(() => import("./Offers.jsx"));
 const SuperAdminConsole = lazy(() => import("./SuperAdminConsole.jsx"));
 const AgentsModule      = lazy(() => import("./Agents.jsx"));
+const IntegrationsPage  = lazy(() => import("./Integrations.jsx"));
 const CompanySetupWizard = lazy(() => import("./CompanySetupWizard.jsx"));
 
 // Records loaded eagerly — used everywhere for record detail navigation
@@ -1312,6 +1313,7 @@ function App() {
         { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
         { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        { id: "integrations", icon: "link",         label: "Integrations" },
         { id: "client-hub",  icon: "building",     label: "Client Hub" },
         { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
         { id: "search",      icon: "search",       label: t("nav.search") },
