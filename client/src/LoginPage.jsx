@@ -44,7 +44,7 @@ export default function LoginPage({ onLogin }) {
       loadMyPermissions().catch(() => {});
       onLogin({ user, role, permissions, tenant_slug });
     } catch (e) {
-      setError(e.message || "Invalid credentials");
+      setError(e.message === "Failed to fetch" ? "Cannot reach the server. Please check your connection." : e.message || "Invalid credentials");
     } finally {
       setLoading(false);
     }
