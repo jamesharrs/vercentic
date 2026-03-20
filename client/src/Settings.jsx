@@ -120,6 +120,9 @@ const PATHS = {
   alertCircle:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01",
   users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   globe:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
+  map:"M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+  star:"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
+  building:"M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
   refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   chevD:"M6 9l6 6 6-6",
   chevR:"M9 18l6-6-6-6",
@@ -1932,67 +1935,312 @@ function LanguageSection() {
   );
 }
 
-function SetupWizardPanel({ environment }) {
+function CompanyProfilePanel({ environment }) {
+  const [profile, setProfile]   = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving,  setSaving]    = useState(false);
+  const [saved,   setSaved]     = useState(false);
+  const [editing, setEditing]   = useState(null); // which section is open
+  const [form,    setForm]      = useState({});
   const [launched, setLaunched] = useState(false);
 
-  const launch = () => {
-    if (environment?.id) {
-      localStorage.removeItem(`talentos_setup_complete_${environment.id}`);
-    }
-    // Fire a custom event that App.jsx listens for
+  const envId = environment?.id;
+
+  // Load profile on mount
+  useEffect(() => {
+    if (!envId) return;
+    fetch(`/api/company-research?environment_id=${envId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setProfile(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [envId]);
+
+  const launchWizard = () => {
+    if (envId) localStorage.removeItem(`talentos_setup_complete_${envId}`);
     window.dispatchEvent(new CustomEvent('talentos:launch-setup-wizard'));
     setLaunched(true);
     setTimeout(() => setLaunched(false), 3000);
   };
 
+  const startEdit = (section, initial) => {
+    setEditing(section);
+    setForm(initial);
+  };
+
+  const saveSection = async (patch) => {
+    setSaving(true);
+    try {
+      const merged = { ...(profile || {}), ...patch, environment_id: envId };
+      const r = await fetch('/api/company-research/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment_id: envId, profile: merged, apply_templates: false }),
+      });
+      if (r.ok) { const d = await r.json(); setProfile(d.profile || merged); }
+      setEditing(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
+  };
+
+
+  // ── Shared helpers ─────────────────────────────────────────────────────────
+  const FRow = ({ label, value, placeholder = "—" }) => (
+    <div style={{ display:"flex", gap:12, padding:"9px 0", borderBottom:`1px solid ${C.border}` }}>
+      <div style={{ width:160, flexShrink:0, fontSize:12, fontWeight:600, color:C.text3, paddingTop:1 }}>{label}</div>
+      <div style={{ flex:1, fontSize:13, color: value ? C.text1 : C.text3, fontStyle: value ? "normal" : "italic" }}>{value || placeholder}</div>
+    </div>
+  );
+
+  const SectionCard = ({ title, icon, onEdit, children }) => (
+    <div style={{ background:C.surface, borderRadius:14, border:`1.5px solid ${C.border}`, marginBottom:16, overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderBottom:`1px solid ${C.border}`, background:"#fafbff" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <Ic n={icon} s={15} c={C.accent}/>
+          <span style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{title}</span>
+        </div>
+        <button onClick={onEdit} style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"white", color:C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="edit" s={12} c={C.text3}/>Edit
+        </button>
+      </div>
+      <div style={{ padding:"4px 20px 12px" }}>{children}</div>
+    </div>
+  );
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:C.text3 }}>Loading profile…</div>;
+
+  const hasProfile = !!profile;
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text1, margin: "0 0 6px", fontFamily: F }}>Company Setup Wizard</h2>
-        <p style={{ fontSize: 14, color: C.text3, margin: 0 }}>
-          Run the AI-powered company research wizard to set up or refresh your company profile, email templates, and suggested fields.
-        </p>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24 }}>
+        <div>
+          <h2 style={{ fontSize:20, fontWeight:800, color:C.text1, margin:"0 0 4px", fontFamily:F }}>Company Profile</h2>
+          <p style={{ fontSize:14, color:C.text3, margin:0 }}>Your organisation's brand, locations, EVP and tone — used by the AI Copilot to write on-brand content.</p>
+        </div>
+        <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+          {saved && <span style={{ fontSize:12, color:C.green, display:"flex", alignItems:"center", gap:4 }}><Ic n="check" s={12} c={C.green}/>Saved</span>}
+          <button onClick={launchWizard} style={{ display:"flex", alignItems:"center", gap:7, padding:"8px 16px", borderRadius:10, border:"none", background: launched ? C.green : C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F, transition:"background 0.2s" }}>
+            <Ic n="sparkle" s={14} c="white"/>
+            {launched ? "Opening…" : hasProfile ? "Re-run AI Research" : "Run AI Research"}
+          </button>
+        </div>
       </div>
 
-      {/* Profile status */}
-      <div style={{ padding: "20px 24px", borderRadius: 16, background: C.surface, border: `1.5px solid ${C.border}`, marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text1, marginBottom: 12 }}>What the wizard sets up:</div>
-        {[
-          { icon: "🏢", label: "Company profile", desc: "Name, logo, industry, size, headquarters" },
-          { icon: "💬", label: "Employer Value Proposition", desc: "EVP statement, culture pillars, tone profile" },
-          { icon: "📍", label: "Office locations", desc: "HQ and regional offices around the world" },
-          { icon: "✉️", label: "Email templates", desc: "Outreach, interview, offer, rejection and onboarding emails in your brand voice" },
-          { icon: "📋", label: "Suggested fields", desc: "Industry-specific candidate fields for your People records" },
-        ].map((item, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
-            <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.text1 }}>{item.label}</div>
-              <div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>{item.desc}</div>
+      {/* Empty state */}
+      {!hasProfile && (
+        <div style={{ textAlign:"center", padding:"48px 32px", borderRadius:16, border:`2px dashed ${C.border}`, background:C.surface }}>
+          <div style={{ width:56, height:56, borderRadius:16, background:`${C.accent}12`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+            <Ic n="building" s={26} c={C.accent}/>
+          </div>
+          <div style={{ fontSize:16, fontWeight:700, color:C.text1, marginBottom:8 }}>No company profile yet</div>
+          <p style={{ fontSize:13, color:C.text3, margin:"0 0 20px", maxWidth:360, marginLeft:"auto", marginRight:"auto", lineHeight:1.6 }}>
+            Click "Run AI Research" to automatically populate your profile, or add your details manually using the sections below.
+          </p>
+          <button onClick={() => startEdit("identity", { name:"", industry:"", size:"", founded:"", website:"", logo_url:"", brand_color:"#4361EE", headquarters:"", description:"", tone:"professional" })}
+            style={{ padding:"9px 20px", borderRadius:10, border:`1.5px solid ${C.border}`, background:"white", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+            + Add manually
+          </button>
+        </div>
+      )}
+
+      {/* ── Identity section ──────────────────────────────────────────────── */}
+      {hasProfile && (
+        <SectionCard title="Identity" icon="building"
+          onEdit={() => startEdit("identity", { name: profile.name||"", industry: profile.industry||"", size: profile.size||"", founded: profile.founded||"", website: profile.website||"", logo_url: profile.logo_url||"", brand_color: profile.brand_color||"#4361EE", headquarters: profile.headquarters||"", description: profile.description||"", tone: profile.tone||"professional" })}>
+          <div style={{ display:"flex", gap:16, paddingTop:12, alignItems:"flex-start" }}>
+            {profile.logo_url && (
+              <div style={{ width:56, height:56, borderRadius:12, border:`1.5px solid ${C.border}`, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#f9fafb" }}>
+                <img src={profile.logo_url} alt="logo" style={{ width:"100%", height:"100%", objectFit:"contain", padding:6 }} onError={e=>e.target.style.display="none"}/>
+              </div>
+            )}
+            <div style={{ flex:1 }}>
+              <FRow label="Company name" value={profile.name}/>
+              <FRow label="Industry" value={profile.industry}/>
+              <FRow label="Size" value={profile.size}/>
+              <FRow label="Founded" value={profile.founded}/>
+              <FRow label="Headquarters" value={profile.headquarters}/>
+              <FRow label="Website" value={profile.website}/>
+              <FRow label="Communication tone" value={profile.tone}/>
+              <FRow label="Brand colour" value={profile.brand_color ? <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}><span style={{ width:14, height:14, borderRadius:3, background:profile.brand_color, display:"inline-block", border:"1px solid rgba(0,0,0,0.1)" }}/>{profile.brand_color}</span> : null}/>
             </div>
           </div>
-        ))}
-      </div>
-
-      <button
-        onClick={launch}
-        style={{
-          padding: "12px 28px", borderRadius: 12, border: "none",
-          background: launched ? C.green : C.accent,
-          color: "white", fontSize: 14, fontWeight: 700,
-          cursor: "pointer", fontFamily: F,
-          display: "flex", alignItems: "center", gap: 8,
-          transition: "background 0.2s"
-        }}
-      >
-        <Ic n="sparkle" s={16} c="white"/>
-        {launched ? "Wizard launched ✓" : "Launch Setup Wizard"}
-      </button>
-      {launched && (
-        <p style={{ fontSize: 12, color: C.text3, marginTop: 10 }}>
-          The wizard is opening — switch to the main app view to see it.
-        </p>
+          {profile.description && <div style={{ fontSize:13, color:C.text2, lineHeight:1.6, padding:"10px 0 4px", borderTop:`1px solid ${C.border}`, marginTop:4 }}>{profile.description}</div>}
+        </SectionCard>
       )}
+
+      {/* ── EVP section ───────────────────────────────────────────────────── */}
+      {hasProfile && (
+        <SectionCard title="Employer Value Proposition" icon="star"
+          onEdit={() => startEdit("evp", { headline: profile.evp?.headline||"", statement: profile.evp?.statement||"", pillars: (profile.evp?.pillars||[]).join("\n"), culture_points: (profile.evp?.culture_points||[]).join("\n") })}>
+          <FRow label="Headline" value={profile.evp?.headline}/>
+          <FRow label="Statement" value={profile.evp?.statement}/>
+          {profile.evp?.pillars?.length > 0 && (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", padding:"8px 0" }}>
+              {profile.evp.pillars.map((p,i) => <span key={i} style={{ padding:"3px 10px", borderRadius:99, background:`${C.accent}12`, color:C.accent, fontSize:12, fontWeight:600 }}>{p}</span>)}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── Locations section ─────────────────────────────────────────────── */}
+      {hasProfile && (
+        <SectionCard title="Locations" icon="map"
+          onEdit={() => startEdit("locations", { locations_text: (profile.locations||[]).map(l=>`${l.city}, ${l.country}${l.is_hq?" (HQ)":""}`).join("\n") })}>
+          {(profile.locations||[]).length === 0
+            ? <div style={{ fontSize:13, color:C.text3, padding:"10px 0", fontStyle:"italic" }}>No locations added</div>
+            : <div style={{ display:"flex", gap:6, flexWrap:"wrap", padding:"10px 0" }}>
+                {profile.locations.map((loc,i) => (
+                  <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:99, background: loc.is_hq ? `${C.accent}12` : "#F3F4F6", border:`1px solid ${loc.is_hq ? C.accent+"30" : C.border}`, color: loc.is_hq ? C.accent : C.text2, fontSize:12, fontWeight: loc.is_hq ? 700 : 400 }}>
+                    <Ic n="map" s={10} c={loc.is_hq ? C.accent : C.text3}/>{loc.city}, {loc.country}{loc.is_hq && " · HQ"}
+                  </span>
+                ))}
+              </div>
+          }
+        </SectionCard>
+      )}
+
+      {/* ── Typical roles & benefits ──────────────────────────────────────── */}
+      {hasProfile && (
+        <SectionCard title="Typical Roles & Benefits" icon="briefcase"
+          onEdit={() => startEdit("roles", { typical_roles: (profile.typical_roles||[]).join("\n"), key_benefits: (profile.key_benefits||[]).join("\n") })}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, paddingTop:8 }}>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>Typical roles hired</div>
+              {(profile.typical_roles||[]).map((r,i) => <div key={i} style={{ fontSize:13, color:C.text2, padding:"3px 0" }}>• {r}</div>)}
+            </div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>Key benefits</div>
+              {(profile.key_benefits||[]).map((b,i) => <div key={i} style={{ fontSize:13, color:C.text2, padding:"3px 0" }}>• {b}</div>)}
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Social / web ──────────────────────────────────────────────────── */}
+      {hasProfile && (
+        <SectionCard title="Web & Social" icon="globe"
+          onEdit={() => startEdit("social", { linkedin: profile.social?.linkedin||"", twitter: profile.social?.twitter||"" })}>
+          <FRow label="LinkedIn" value={profile.social?.linkedin}/>
+          <FRow label="Twitter / X" value={profile.social?.twitter}/>
+        </SectionCard>
+      )}
+
+      {/* ── Edit modals ───────────────────────────────────────────────────── */}
+      {editing === "identity" && (
+        <Modal title="Edit Identity" onClose={() => setEditing(null)} width={560}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Inp label="Company name" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} required/>
+              <Inp label="Website" value={form.website} onChange={v=>setForm(f=>({...f,website:v}))} placeholder="https://..."/>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Sel label="Industry" value={form.industry} onChange={v=>setForm(f=>({...f,industry:v}))} options={["","technology","finance","healthcare","legal","consulting","retail","manufacturing","media","energy","other"].map(v=>({value:v,label:v||"Select…"}))}/>
+              <Sel label="Size" value={form.size} onChange={v=>setForm(f=>({...f,size:v}))} options={["","startup","small","medium","large","enterprise"].map(v=>({value:v,label:v||"Select…"}))}/>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Inp label="Founded" value={form.founded} onChange={v=>setForm(f=>({...f,founded:v}))} placeholder="e.g. 2005"/>
+              <Inp label="Headquarters" value={form.headquarters} onChange={v=>setForm(f=>({...f,headquarters:v}))} placeholder="Dubai, UAE"/>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Inp label="Logo URL" value={form.logo_url} onChange={v=>setForm(f=>({...f,logo_url:v}))} placeholder="https://..."/>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Brand colour</label>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <input type="color" value={form.brand_color||"#4361EE"} onChange={e=>setForm(f=>({...f,brand_color:e.target.value}))} style={{ width:40, height:36, borderRadius:8, border:`1px solid ${C.border}`, padding:2, cursor:"pointer" }}/>
+                  <Inp value={form.brand_color} onChange={v=>setForm(f=>({...f,brand_color:v}))} placeholder="#4361EE"/>
+                </div>
+              </div>
+            </div>
+            <Sel label="Communication tone" value={form.tone} onChange={v=>setForm(f=>({...f,tone:v}))} options={["formal","professional","conversational","startup","creative"].map(v=>({value:v,label:v.charAt(0).toUpperCase()+v.slice(1)}))}/>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Description</label>
+              <textarea value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} rows={3} placeholder="2-3 sentences about what the company does…" style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end", paddingTop:4 }}>
+              <button onClick={()=>setEditing(null)} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+              <button onClick={()=>saveSection({ name:form.name, industry:form.industry, size:form.size, founded:form.founded, website:form.website, logo_url:form.logo_url, brand_color:form.brand_color, headquarters:form.headquarters, description:form.description, tone:form.tone })} disabled={saving} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>{saving?"Saving…":"Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editing === "evp" && (
+        <Modal title="Edit EVP" onClose={() => setEditing(null)} width={520}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Inp label="Headline" value={form.headline} onChange={v=>setForm(f=>({...f,headline:v}))} placeholder="Max 10 words — why people love working here"/>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Statement</label>
+              <textarea value={form.statement} onChange={e=>setForm(f=>({...f,statement:e.target.value}))} rows={3} placeholder="2-3 sentences about what makes you a great employer…" style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Culture pillars <span style={{ fontWeight:400, color:C.text3 }}>(one per line)</span></label>
+              <textarea value={form.pillars} onChange={e=>setForm(f=>({...f,pillars:e.target.value}))} rows={3} placeholder={"Innovation\nCollaboration\nImpact"} style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={()=>setEditing(null)} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+              <button onClick={()=>saveSection({ evp:{ headline:form.headline, statement:form.statement, pillars:form.pillars.split("\n").map(s=>s.trim()).filter(Boolean), culture_points:form.culture_points?.split("\n").map(s=>s.trim()).filter(Boolean)||[] }})} disabled={saving} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>{saving?"Saving…":"Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editing === "locations" && (
+        <Modal title="Edit Locations" onClose={() => setEditing(null)} width={480}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Locations <span style={{ fontWeight:400, color:C.text3 }}>(one per line — add "(HQ)" to mark headquarters)</span></label>
+              <textarea value={form.locations_text} onChange={e=>setForm(f=>({...f,locations_text:e.target.value}))} rows={6} placeholder={"Dubai, UAE (HQ)\nLondon, UK\nNew York, USA"} style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={()=>setEditing(null)} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+              <button onClick={()=>{
+                const locs = form.locations_text.split("\n").map(s=>s.trim()).filter(Boolean).map(s=>{
+                  const isHQ = /\(hq\)/i.test(s);
+                  const clean = s.replace(/\s*\(hq\)/i,"").trim();
+                  const parts = clean.split(",").map(p=>p.trim());
+                  return { city:parts[0]||"", country:parts[1]||"", is_hq:isHQ };
+                });
+                saveSection({ locations: locs });
+              }} disabled={saving} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>{saving?"Saving…":"Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editing === "roles" && (
+        <Modal title="Edit Roles & Benefits" onClose={() => setEditing(null)} width={520}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Typical roles hired <span style={{ fontWeight:400, color:C.text3 }}>(one per line)</span></label>
+              <textarea value={form.typical_roles} onChange={e=>setForm(f=>({...f,typical_roles:e.target.value}))} rows={4} placeholder={"Software Engineer\nProduct Manager\nData Analyst"} style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:4 }}>Key benefits <span style={{ fontWeight:400, color:C.text3 }}>(one per line)</span></label>
+              <textarea value={form.key_benefits} onChange={e=>setForm(f=>({...f,key_benefits:e.target.value}))} rows={4} placeholder={"Flexible working\nGenerous annual leave\nLearning & development budget"} style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", boxSizing:"border-box" }}/>
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={()=>setEditing(null)} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+              <button onClick={()=>saveSection({ typical_roles:form.typical_roles.split("\n").map(s=>s.trim()).filter(Boolean), key_benefits:form.key_benefits.split("\n").map(s=>s.trim()).filter(Boolean) })} disabled={saving} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>{saving?"Saving…":"Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editing === "social" && (
+        <Modal title="Edit Web & Social" onClose={() => setEditing(null)} width={480}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Inp label="LinkedIn URL" value={form.linkedin} onChange={v=>setForm(f=>({...f,linkedin:v}))} placeholder="https://linkedin.com/company/..."/>
+            <Inp label="Twitter / X URL" value={form.twitter} onChange={v=>setForm(f=>({...f,twitter:v}))} placeholder="https://twitter.com/..."/>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={()=>setEditing(null)} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+              <button onClick={()=>saveSection({ social:{ linkedin:form.linkedin, twitter:form.twitter }})} disabled={saving} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>{saving?"Saving…":"Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 }
@@ -2005,7 +2253,7 @@ const NAV_GROUPS = [
       { id:"appearance",  icon:"sun",       label:"Appearance" },
       { id:"language",    icon:"globe",     label:"Language" },
       { id:"rpo_clients", icon:"briefcase", label:"Client Companies" },
-      { id:"setup_wizard", icon:"sparkle",  label:"Company Setup" },
+      { id:"setup_wizard", icon:"building", label:"Company Profile" },
     ],
   },
   {
@@ -2174,7 +2422,7 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
         {activeSection==="rpo_clients" && <RpoClientCompanies environment={environment}/>}
         {activeSection==="setup_wizard" && (
-          <SetupWizardPanel environment={environment}/>
+          <CompanyProfilePanel environment={environment}/>
         )}
       </div>
     </div>
