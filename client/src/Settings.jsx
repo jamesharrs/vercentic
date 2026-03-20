@@ -1932,14 +1932,80 @@ function LanguageSection() {
   );
 }
 
+function SetupWizardPanel({ environment }) {
+  const [launched, setLaunched] = useState(false);
+
+  const launch = () => {
+    if (environment?.id) {
+      localStorage.removeItem(`talentos_setup_complete_${environment.id}`);
+    }
+    // Fire a custom event that App.jsx listens for
+    window.dispatchEvent(new CustomEvent('talentos:launch-setup-wizard'));
+    setLaunched(true);
+    setTimeout(() => setLaunched(false), 3000);
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text1, margin: "0 0 6px", fontFamily: F }}>Company Setup Wizard</h2>
+        <p style={{ fontSize: 14, color: C.text3, margin: 0 }}>
+          Run the AI-powered company research wizard to set up or refresh your company profile, email templates, and suggested fields.
+        </p>
+      </div>
+
+      {/* Profile status */}
+      <div style={{ padding: "20px 24px", borderRadius: 16, background: C.surface, border: `1.5px solid ${C.border}`, marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text1, marginBottom: 12 }}>What the wizard sets up:</div>
+        {[
+          { icon: "🏢", label: "Company profile", desc: "Name, logo, industry, size, headquarters" },
+          { icon: "💬", label: "Employer Value Proposition", desc: "EVP statement, culture pillars, tone profile" },
+          { icon: "📍", label: "Office locations", desc: "HQ and regional offices around the world" },
+          { icon: "✉️", label: "Email templates", desc: "Outreach, interview, offer, rejection and onboarding emails in your brand voice" },
+          { icon: "📋", label: "Suggested fields", desc: "Industry-specific candidate fields for your People records" },
+        ].map((item, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.text1 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>{item.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={launch}
+        style={{
+          padding: "12px 28px", borderRadius: 12, border: "none",
+          background: launched ? C.green : C.accent,
+          color: "white", fontSize: 14, fontWeight: 700,
+          cursor: "pointer", fontFamily: F,
+          display: "flex", alignItems: "center", gap: 8,
+          transition: "background 0.2s"
+        }}
+      >
+        <Ic n="sparkle" s={16} c="white"/>
+        {launched ? "Wizard launched ✓" : "Launch Setup Wizard"}
+      </button>
+      {launched && (
+        <p style={{ fontSize: 12, color: C.text3, marginTop: 10 }}>
+          The wizard is opening — switch to the main app view to see it.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const NAV_GROUPS = [
   {
     id: "preferences",
     label: "Your preferences",
     items: [
-      { id:"appearance",  icon:"sun",     label:"Appearance" },
-      { id:"language",    icon:"globe",   label:"Language" },
+      { id:"appearance",  icon:"sun",       label:"Appearance" },
+      { id:"language",    icon:"globe",     label:"Language" },
       { id:"rpo_clients", icon:"briefcase", label:"Client Companies" },
+      { id:"setup_wizard", icon:"sparkle",  label:"Company Setup" },
     ],
   },
   {
@@ -2107,6 +2173,9 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
         {activeSection==="rpo_clients" && <RpoClientCompanies environment={environment}/>}
+        {activeSection==="setup_wizard" && (
+          <SetupWizardPanel environment={environment}/>
+        )}
       </div>
     </div>
   );

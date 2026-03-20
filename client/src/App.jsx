@@ -1280,6 +1280,13 @@ function App() {
     }
   }, [selectedEnv?.id]);
 
+  // Manual launch from Settings
+  useEffect(() => {
+    const handler = () => setShowSetupWizard(true);
+    window.addEventListener('talentos:launch-setup-wizard', handler);
+    return () => window.removeEventListener('talentos:launch-setup-wizard', handler);
+  }, []);
+
   const inboxUnread = useInboxUnreadCount(selectedEnv?.id);
 
   const OBJECT_ICONS = { people: "users", jobs: "briefcase", "talent-pools": "layers" };
