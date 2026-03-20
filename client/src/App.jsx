@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
+import InboxModule, { useInboxUnreadCount } from "./Inbox";
 
 // Heavy modules — loaded on demand only when navigated to
 const SettingsPage    = lazy(() => import("./Settings.jsx"));
@@ -141,6 +142,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     compass: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z",
     workflow: "M22 12h-4l-3 9L9 3l-3 9H2",
     home: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
+    inbox: "M22 12h-6l-2 3H10l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z",
     building: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
     mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
     user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
@@ -1248,13 +1250,16 @@ function App() {
     api.get(`/objects?environment_id=${selectedEnv.id}`).then(d => setNavObjects(Array.isArray(d) ? d : []));
   }, [selectedEnv?.id]);
 
+  const inboxUnread = useInboxUnreadCount(selectedEnv?.id);
+
   const OBJECT_ICONS = { people: "users", jobs: "briefcase", "talent-pools": "layers" };
 
   const navSections = [
     {
       label: t("nav.overview"),
       items: [
-        { id: "dashboard", icon: "home", label: t("nav.dashboard") },
+        { id: "dashboard", icon: "home",  label: t("nav.dashboard") },
+        { id: "inbox",     icon: "inbox", label: "Inbox", badge: inboxUnread || null },
       ]
     },
     {
@@ -1444,7 +1449,9 @@ function App() {
                       }}>
                       <Icon name={item.icon} size={15} color={isActive ? "var(--t-nav-active-c)" : "var(--t-text3)"} />
                       <span style={{ flex: 1 }}>{item.label}</span>
-                      {isDashboard && (
+                      {item.badge ? (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 99, background: "var(--t-accent, #4361EE)", color: "white", minWidth: 16, textAlign: "center" }}>{item.badge}</span>
+                      ) : isDashboard && (
                         <span style={{ fontSize: 9, color: isActive ? "var(--t-nav-active-c)" : "var(--t-text3)", opacity: 0.6, transform: dashFlyout ? "rotate(180deg)" : "none", transition: "transform .2s", display: "inline-block" }}>▼</span>
                       )}
                     </button>
@@ -1538,7 +1545,9 @@ function App() {
           <div style={{ textAlign: "center", padding: 60, color: "#9ca3af" }}>No environments found.</div>
         ) : (
         <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-        { activeNav === "dashboard" ? (
+        { activeNav === "inbox" ? (
+          <InboxModule environment={selectedEnv} onNavigate={openRecord} />
+        ) : activeNav === "dashboard" ? (
           <Dashboard environment={selectedEnv} session={session} onOpenRecord={openRecord} onNavigate={(slug) => {
             if (slug === "matching") { setActiveNav("matching"); return; }
             if (slug === "search")   { setActiveNav("search");   return; }

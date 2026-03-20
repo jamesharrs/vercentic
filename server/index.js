@@ -78,6 +78,7 @@ app.use('/api/offers',             require('./routes/offers'));
 app.use('/api/question-bank',      require('./routes/question_bank'));
 app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/comms',            require('./routes/communications'));
+app.use('/api/inbox',            require('./routes/inbox'));
 app.use('/api/email-templates',  require('./routes/email-templates'));
 app.use('/api/integrations',     require('./routes/integrations'));
 app.use('/api/enterprise',       require('./routes/enterprise_settings'));
