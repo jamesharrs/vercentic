@@ -7,14 +7,25 @@ const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
 
 const app = express();
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173'];
+// CORS — allow localhost dev + Vercel deployments + custom domains
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  /\.vercel\.app$/,
+  /\.talentos\.io$/,    // wildcard tenant subdomains
+  /\.vercentic\.com$/,  // custom domain
+  'https://vercentic.com',
+  'https://www.vercentic.com',
+];
+if (process.env.ALLOWED_ORIGINS) {
+  process.env.ALLOWED_ORIGINS.split(',').forEach(o => allowedOrigins.push(o.trim()));
+}
 
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl / server-to-server
+    const ok = allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin));
+    cb(ok ? null : new Error('CORS'), ok);
   },
   credentials: true,
 }));
