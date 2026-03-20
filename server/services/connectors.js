@@ -76,6 +76,26 @@ async function httpPatch(url, body, headers = {}) {
 
 // ─── Token cache ─────────────────────────────────────────────────────────────
 const tokenCache = new Map();
+
+// ── In-memory event log (ring buffer, max 500 entries per environment) ─────────
+const _eventLog = new Map(); // envId → events[]
+const EVENT_LOG_MAX = 500;
+
+function logEvent(environmentId, { provider, action, ok, detail = '', durationMs = null }) {
+  if (!environmentId) return;
+  if (!_eventLog.has(environmentId)) _eventLog.set(environmentId, []);
+  const log = _eventLog.get(environmentId);
+  log.unshift({
+    id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+    timestamp: new Date().toISOString(),
+    provider, action, ok, detail, duration_ms: durationMs,
+  });
+  if (log.length > EVENT_LOG_MAX) log.length = EVENT_LOG_MAX;
+}
+
+function getEventLog(environmentId, limit = 100) {
+  return (_eventLog.get(environmentId) || []).slice(0, limit);
+}
 async function getCachedToken(key, fetchFn) {
   const cached = tokenCache.get(key);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
@@ -633,10 +653,14 @@ async function fireEvent(environmentId, eventType, payload) {
           if (connector.fire)        result = await connector.fire(eventType, payload);
           else if (connector.sendMessage) result = await connector.sendMessage({ text: `TalentOS: ${eventType}` });
       }
-      if (result) results.push({ provider: slug, ...result });
+      if (result) {
+        results.push({ provider: slug, ...result });
+        logEvent(environmentId, { provider: slug, action: eventType, ok: true, detail: JSON.stringify(payload).slice(0,120) });
+      }
     } catch (err) {
       console.warn(`[Connectors] ${slug} ${eventType} error:`, err.message);
       results.push({ provider: slug, ok: false, error: err.message });
+      logEvent(environmentId, { provider: slug, action: eventType, ok: false, detail: err.message });
     }
   }
   return results;
@@ -652,23 +676,23 @@ async function createInterviewMeeting(environmentId, { topic, startTime, endTime
 
   const zoom = getConnector(environmentId, 'zoom');
   if (zoom) {
-    try { return await zoom.createMeeting({ topic, startTime, durationMinutes, attendees, agenda }); }
-    catch (e) { console.warn('[Connectors] Zoom failed:', e.message); }
+    try { const r = await zoom.createMeeting({ topic, startTime, durationMinutes, attendees, agenda }); logEvent(environmentId, { provider:'zoom', action:'create_meeting', ok:true, detail:topic }); return r; }
+    catch (e) { console.warn('[Connectors] Zoom failed:', e.message); logEvent(environmentId, { provider:'zoom', action:'create_meeting', ok:false, detail:e.message }); }
   }
   const m365 = getConnector(environmentId, 'microsoft_365');
   if (m365) {
-    try { return await m365.createEvent({ subject: topic, startTime, endTime, attendees, isTeamsMeeting: true }); }
-    catch (e) { console.warn('[Connectors] M365 failed:', e.message); }
+    try { const r = await m365.createEvent({ subject: topic, startTime, endTime, attendees, isTeamsMeeting: true }); logEvent(environmentId, { provider:'microsoft_365', action:'create_meeting', ok:true, detail:topic }); return r; }
+    catch (e) { console.warn('[Connectors] M365 failed:', e.message); logEvent(environmentId, { provider:'microsoft_365', action:'create_meeting', ok:false, detail:e.message }); }
   }
   const gcal = getConnector(environmentId, 'google_calendar');
   if (gcal) {
-    try { return await gcal.createEvent({ summary: topic, startTime, endTime, attendees, meetLink: true }); }
-    catch (e) { console.warn('[Connectors] GCal failed:', e.message); }
+    try { const r = await gcal.createEvent({ summary: topic, startTime, endTime, attendees, meetLink: true }); logEvent(environmentId, { provider:'google_calendar', action:'create_meeting', ok:true, detail:topic }); return r; }
+    catch (e) { console.warn('[Connectors] GCal failed:', e.message); logEvent(environmentId, { provider:'google_calendar', action:'create_meeting', ok:false, detail:e.message }); }
   }
   return null;
 }
 
-module.exports = { getConnector, fireEvent, createInterviewMeeting, getLiveConfig,
+module.exports = { getConnector, fireEvent, createInterviewMeeting, getLiveConfig, logEvent, getEventLog,
   ZoomConnector, SlackConnector, TeamsConnector, DocuSignConnector,
   BambooHRConnector, WorkdayConnector, LinkedInJobsConnector, CheckrConnector,
   XrefConnector, SalesforceConnector, HubSpotConnector, Microsoft365Connector,

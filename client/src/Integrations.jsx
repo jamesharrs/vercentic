@@ -1,3 +1,4 @@
+import { IntegrationMonitor } from "./IntegrationMonitor.jsx";
 // client/src/Integrations.jsx
 import { useState, useEffect, useCallback } from "react";
 
@@ -268,6 +269,7 @@ export default function IntegrationsPage({environment}){
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('all');
   const [configuring,setConfiguring]=useState(null);
+  const [activeTab,setActiveTab]=useState("library");
   const envId=environment?.id;
 
   const load=useCallback(async()=>{
@@ -309,6 +311,13 @@ export default function IntegrationsPage({environment}){
     const u=await api.patch(`/api/integrations/${conn.id}`,{enabled:!conn.enabled});
     if(!u.error)setConnections(prev=>prev.map(c=>c.id===conn.id?u:c));
   };
+  const handleRetest=async(id)=>{
+    try {
+      const result = await fetch(`/api/integrations/${id}/test`,{method:'POST'}).then(r=>r.json());
+      await load();
+      return result;
+    } catch(e) { console.warn('retest failed',e); }
+  };
   const handleDelete=async(conn)=>{
     await api.delete(`/api/integrations/${conn.id}`);
     setConnections(prev=>prev.filter(c=>c.id!==conn.id));
@@ -329,10 +338,11 @@ export default function IntegrationsPage({environment}){
 
   return(
     <div style={{fontFamily:F,maxWidth:1100,padding:'4px 0 40px'}}>
-      <div style={{marginBottom:24}}>
-        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:20}}>
+      {/* Header */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:20,marginBottom:14}}>
           <div>
-            <h2 style={{margin:0,fontSize:20,fontWeight:800,color:C.text1}}>Integration Library</h2>
+            <h2 style={{margin:0,fontSize:20,fontWeight:800,color:C.text1}}>Integrations</h2>
             <p style={{margin:'4px 0 0',fontSize:13,color:C.text3}}>Connect TalentOS to your tools. Credentials are encrypted and environment-specific.</p>
           </div>
           <button onClick={load} style={{padding:'8px 14px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'transparent',
@@ -340,6 +350,25 @@ export default function IntegrationsPage({environment}){
             <Ic n="refresh" s={13} c={C.text3}/>Refresh
           </button>
         </div>
+        {/* Tab strip */}
+        <div style={{display:'flex',gap:0,borderBottom:`2px solid ${C.border}`}}>
+          {[{id:'library',label:'Library',icon:'grid'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null}].map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:'9px 20px',fontSize:13,
+              fontWeight:activeTab===tab.id?700:500,fontFamily:F,cursor:'pointer',background:'transparent',border:'none',
+              color:activeTab===tab.id?C.accent:C.text2,
+              borderBottom:activeTab===tab.id?`2px solid ${C.accent}`:'2px solid transparent',
+              marginBottom:-2,display:'flex',alignItems:'center',gap:6,transition:'color .15s'}}>
+              <Ic n={tab.icon} s={14} c={activeTab===tab.id?C.accent:C.text3}/>
+              {tab.label}
+              {tab.badge&&<span style={{padding:'1px 6px',borderRadius:99,fontSize:10,fontWeight:700,background:'#FEE2E2',color:'#991B1B'}}>{tab.badge}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Monitor tab */}
+      {activeTab==='monitor'&&<IntegrationMonitor environment={environment} connections={connections} onRetest={handleRetest}/>}
+      {/* Library tab */}
+      {activeTab==='library'&&<>
         <div style={{display:'flex',gap:10,marginTop:14}}>
           {[{label:'Available',value:allItems.length,color:C.accent},
             {label:'Connected',value:connectedCount,color:'#0CA678'},
@@ -394,6 +423,7 @@ export default function IntegrationsPage({environment}){
         <SetupModal provider={configuring.item} existing={configuring.connection}
           environmentId={envId} onClose={()=>setConfiguring(null)} onSaved={handleSaved}/>
       )}
+      </>}
     </div>
   );
 }

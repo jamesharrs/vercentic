@@ -2,7 +2,7 @@
 // On-demand connector triggers callable from the frontend UI
 const express = require('express');
 const router  = express.Router();
-const { getConnector, createInterviewMeeting, fireEvent } = require('../services/connectors');
+const { getConnector, createInterviewMeeting, fireEvent, logEvent } = require('../services/connectors');
 
 // GET /api/connector-actions/available/:environment_id
 // Returns which action categories are available based on connected integrations

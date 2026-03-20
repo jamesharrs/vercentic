@@ -5,6 +5,7 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore } = require('../db/init');
+const { logEvent, getEventLog } = require('../services/connectors');
 
 // ── Encryption ────────────────────────────────────────────────────────────────
 const ENC_KEY = process.env.INTEGRATION_SECRET
@@ -286,6 +287,64 @@ router.post('/:id/test', async (req, res) => {
   }
   saveStore();
   res.json(result);
+});
+
+// ── Monitor endpoints ───────────────────────────────────────────────────────
+
+// GET /api/integrations/monitor?environment_id=
+// Returns connected providers with health stats + recent events
+router.get('/monitor', (req, res) => {
+  const { environment_id, limit = 200 } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+
+  const list = Array.isArray(getStore().integrations)
+    ? getStore().integrations : Object.values(getStore().integrations || {});
+  const connected = list.filter(i => i.environment_id === environment_id);
+  const events = getEventLog(environment_id, Number(limit));
+
+  // Build per-provider stats from event log
+  const providerStats = {};
+  for (const ev of events) {
+    if (!providerStats[ev.provider]) providerStats[ev.provider] = { total: 0, success: 0, errors: 0, last_event: null };
+    providerStats[ev.provider].total++;
+    if (ev.ok) providerStats[ev.provider].success++;
+    else       providerStats[ev.provider].errors++;
+    if (!providerStats[ev.provider].last_event) providerStats[ev.provider].last_event = ev.timestamp;
+  }
+
+  // Enrich connected providers with stats
+  const providers = connected.map(i => {
+    const stats = providerStats[i.provider_slug] || { total: 0, success: 0, errors: 0, last_event: null };
+    const successRate = stats.total > 0 ? Math.round((stats.success / stats.total) * 100) : null;
+    return {
+      id: i.id, provider_slug: i.provider_slug, provider_name: i.provider_name,
+      provider_category: i.provider_category, status: i.status, enabled: i.enabled,
+      last_tested_at: i.last_tested_at, test_result: i.test_result,
+      events_total: stats.total, events_success: stats.success, events_errors: stats.errors,
+      success_rate: successRate, last_event_at: stats.last_event,
+    };
+  });
+
+  // Summary counts
+  const summary = {
+    total_connected: connected.length,
+    active: connected.filter(i => i.status === 'active' && i.enabled !== false).length,
+    errors: connected.filter(i => i.status === 'error').length,
+    pending_test: connected.filter(i => i.status === 'pending_test').length,
+    events_today: events.filter(e => new Date(e.timestamp) > new Date(Date.now() - 86400000)).length,
+    events_success_today: events.filter(e => e.ok && new Date(e.timestamp) > new Date(Date.now() - 86400000)).length,
+    events_errors_today: events.filter(e => !e.ok && new Date(e.timestamp) > new Date(Date.now() - 86400000)).length,
+  };
+
+  res.json({ summary, providers, events });
+});
+
+// POST /api/integrations/monitor/log — manual event logging (for connector_actions)
+router.post('/monitor/log', (req, res) => {
+  const { environment_id, provider, action, ok, detail, duration_ms } = req.body;
+  if (!environment_id || !provider || !action) return res.status(400).json({ error: 'environment_id, provider, action required' });
+  logEvent(environment_id, { provider, action, ok: !!ok, detail: detail || '', durationMs: duration_ms });
+  res.json({ ok: true });
 });
 
 // ── Backward-compat: keep old Twilio/SendGrid PUT endpoint ───────────────────
