@@ -7,13 +7,17 @@ const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
 
 const app = express();
 
-// CORS — allow localhost dev + Vercel deployments + tenant subdomains
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  /\.vercel\.app$/,
-  /\.talentos\.io$/,   // wildcard tenant subdomains
-];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:5173'];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 if (process.env.CLIENT_URL)  allowedOrigins.push(process.env.CLIENT_URL);
 if (process.env.PORTAL_URL)  allowedOrigins.push(process.env.PORTAL_URL);
 allowedOrigins.push('https://talentos-production-4045.up.railway.app');
