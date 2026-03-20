@@ -1584,7 +1584,7 @@ function App() {
       </div>
 
       {/* Main content */}
-      <div style={{ marginLeft: 220, flex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)" }}>
+      <div style={{ marginLeft: 220, flex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: historyOpen ? 300 : 0, transition: "padding-right 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
         {/* Top bar */}
         <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects} onNavigateToSearch={(q) => {
             setActiveNav("search");
