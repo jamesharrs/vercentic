@@ -18,6 +18,7 @@ const Interviews      = lazy(() => import("./Interviews.jsx"));
 const OffersModule    = lazy(() => import("./Offers.jsx"));
 const SuperAdminConsole = lazy(() => import("./SuperAdminConsole.jsx"));
 const AgentsModule      = lazy(() => import("./Agents.jsx"));
+const CompanySetupWizard = lazy(() => import("./CompanySetupWizard.jsx"));
 
 // Records loaded eagerly — used everywhere for record detail navigation
 import RecordsView, { RecordDetail } from "./Records.jsx";
@@ -1239,6 +1240,7 @@ function App() {
   const [filterPreset, setFilterPreset] = useState(null);
   const [reportPreset, setReportPreset] = useState(null);
   const [createTarget, setCreateTarget] = useState(null); // obj to auto-open new record modal
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
   useEffect(() => {
     fetch("/api/health")
@@ -1266,6 +1268,16 @@ function App() {
   useEffect(() => {
     if (!selectedEnv?.id) return;
     api.get(`/objects?environment_id=${selectedEnv.id}`).then(d => setNavObjects(Array.isArray(d) ? d : []));
+  }, [selectedEnv?.id]);
+
+  // First-run company setup wizard
+  useEffect(() => {
+    if (!selectedEnv?.id) return;
+    const key = `talentos_setup_complete_${selectedEnv.id}`;
+    if (!localStorage.getItem(key)) {
+      const t = setTimeout(() => setShowSetupWizard(true), 1200);
+      return () => clearTimeout(t);
+    }
   }, [selectedEnv?.id]);
 
   const inboxUnread = useInboxUnreadCount(selectedEnv?.id);
@@ -1691,6 +1703,22 @@ function App() {
         if (!obj) return;
         openRecord(record.id, obj.id);
       }} />
+
+      {/* Company Setup Wizard — first-run only */}
+      {showSetupWizard && (
+        <Suspense fallback={null}>
+          <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,0.65)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}>
+            <div style={{background:"white",borderRadius:24,width:"90%",maxWidth:880,maxHeight:"92vh",overflow:"auto",boxShadow:"0 32px 80px rgba(0,0,0,0.3)"}}>
+              <CompanySetupWizard
+                environmentId={selectedEnv?.id}
+                environmentName={selectedEnv?.name}
+                onComplete={() => { localStorage.setItem(`talentos_setup_complete_${selectedEnv?.id}`,"1"); setShowSetupWizard(false); }}
+                onSkip={() => { localStorage.setItem(`talentos_setup_complete_${selectedEnv?.id}`,"skipped"); setShowSetupWizard(false); }}
+              />
+            </div>
+          </div>
+        </Suspense>
+      )}
     </div>
     </PermissionProvider>
   );
