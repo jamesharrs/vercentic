@@ -18,7 +18,7 @@ const Interviews      = lazy(() => import("./Interviews.jsx"));
 const OffersModule    = lazy(() => import("./Offers.jsx"));
 const SuperAdminConsole = lazy(() => import("./SuperAdminConsole.jsx"));
 const AgentsModule      = lazy(() => import("./Agents.jsx"));
-const IntegrationsPage  = lazy(() => import("./Integrations.jsx"));
+const IntegrationsPage  = lazy(() => import("./IntegrationsSettings.jsx"));
 const CompanySetupWizard = lazy(() => import("./CompanySetupWizard.jsx"));
 
 // Records loaded eagerly — used everywhere for record detail navigation

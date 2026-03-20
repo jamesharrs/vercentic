@@ -1,3 +1,4 @@
+import { IntegrationMonitor } from "./IntegrationMonitor.jsx";
 // client/src/IntegrationsSettings.jsx
 // Unified integration library for Settings — merges old Twilio/SendGrid panel
 // with the full 32-provider catalog. Uses brand-accurate logos via SVG.
@@ -426,6 +427,7 @@ export default function IntegrationsSettings({environment}){
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('all');
   const [configuring,setConfiguring]=useState(null);
+  const [activeTab,setActiveTab]=useState("library");
   const envId=environment?.id;
 
   const load=useCallback(async()=>{
@@ -463,6 +465,10 @@ export default function IntegrationsSettings({environment}){
     });
     setConfiguring(null);
   };
+  const handleRetest=async(id)=>{
+    try { await fetch(`/api/integrations/${id}/test`,{method:'POST'}); await load(); }
+    catch(e){ console.warn('retest failed',e); }
+  };
   const handleToggle=async(conn)=>{const u=await api.patch(`/api/integrations/${conn.id}`,{enabled:!conn.enabled});if(!u.error)setConnections(prev=>prev.map(c=>c.id===conn.id?u:c));};
   const handleDelete=async(conn)=>{await api.delete(`/api/integrations/${conn.id}`);setConnections(prev=>prev.filter(c=>c.id!==conn.id));};
 
@@ -476,6 +482,24 @@ export default function IntegrationsSettings({environment}){
 
   return(
     <div style={{fontFamily:F}}>
+      {/* Tab strip */}
+      <div style={{display:'flex',gap:0,borderBottom:'2px solid #E5E7EB',marginBottom:20}}>
+        {[{id:'library',label:'Library',icon:'grid'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null}].map(tab=>(
+          <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:'9px 20px',fontSize:13,
+            fontWeight:activeTab===tab.id?700:500,fontFamily:F,cursor:'pointer',background:'transparent',border:'none',
+            color:activeTab===tab.id?'#4361EE':'#374151',
+            borderBottom:activeTab===tab.id?'2px solid #4361EE':'2px solid transparent',
+            marginBottom:-2,display:'flex',alignItems:'center',gap:6,transition:'color .15s'}}>
+            <Ic n={tab.icon} s={14} c={activeTab===tab.id?'#4361EE':'#9CA3AF'}/>
+            {tab.label}
+            {tab.badge&&<span style={{padding:'1px 6px',borderRadius:99,fontSize:10,fontWeight:700,background:'#FEE2E2',color:'#991B1B'}}>{tab.badge}</span>}
+          </button>
+        ))}
+      </div>
+      {/* Monitor tab */}
+      {activeTab==='monitor'&&<IntegrationMonitor environment={environment} connections={connections} onRetest={handleRetest}/>}
+      {/* Library tab */}
+      {activeTab==='library'&&<div>
       {/* Stats strip */}
       <div style={{display:'flex',gap:10,marginBottom:20}}>
         {[{l:'Available',v:allItems.length,c:'#4361EE'},{l:'Connected',v:connectedCount,c:'#0CA678'},{l:'Errors',v:errorCount,c:errorCount?'#EF4444':'#9CA3AF'},{l:'Pending',v:connections.filter(c=>c.status==='pending_test').length,c:'#F59F00'}].map(s=>(
@@ -517,6 +541,7 @@ export default function IntegrationsSettings({environment}){
       }
 
       {configuring&&<SetupModal provider={configuring.item} existing={configuring.connection} environmentId={envId} onClose={()=>setConfiguring(null)} onSaved={handleSaved}/>}
+      </div>}
     </div>
   );
 }
