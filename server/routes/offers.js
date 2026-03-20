@@ -12,6 +12,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
+const { getConnector, fireEvent } = require('../services/connectors');
 
 function ensure() {
   const s = getStore();
@@ -135,7 +136,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // PATCH /:id/status — Status transitions
-router.patch('/:id/status', (req, res) => {
+router.patch('/:id/status', async (req, res) => {
   if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const { status, reason, user } = req.body;
@@ -179,6 +180,49 @@ router.patch('/:id/status', (req, res) => {
 
   const rec = update('offers', o => o.id === req.params.id, updates);
   res.json(rec);
+
+  // ── CONNECTOR TRIGGERS (non-blocking) ──────────────────────────────────
+  const envId = offer.environment_id;
+  if (status === 'sent' && req.body.send_for_signature) {
+    setImmediate(async () => {
+      try {
+        const docusign = getConnector(envId, 'docusign');
+        if (docusign) {
+          const envelope = await docusign.sendOfferForSignature({
+            candidateName: offer.candidate_name,
+            candidateEmail: offer.candidate_email,
+            jobTitle: offer.job_title,
+            salary: offer.base_salary,
+            startDate: offer.start_date,
+          });
+          update('offers', o => o.id === req.params.id, { docusign_envelope_id: envelope.envelope_id, signature_status: 'sent' });
+          console.log('[Connectors] DocuSign envelope sent:', envelope.envelope_id);
+        }
+      } catch (e) { console.warn('[Connectors] DocuSign error:', e.message); }
+    });
+  }
+
+  if (status === 'accepted') {
+    setImmediate(async () => {
+      // Sync new hire to connected HRIS
+      const employee = { firstName: offer.candidate_name?.split(' ')[0] || '', lastName: offer.candidate_name?.split(' ').slice(1).join(' ') || '',
+        email: offer.candidate_email, jobTitle: offer.job_title, department: offer.department,
+        startDate: offer.start_date, salary: offer.base_salary, employmentType: offer.employment_type };
+      try {
+        const bamboo = getConnector(envId, 'bamboohr');
+        if (bamboo) { await bamboo.createEmployee(employee); console.log('[Connectors] BambooHR: new hire synced'); }
+      } catch (e) { console.warn('[Connectors] BambooHR error:', e.message); }
+      try {
+        const workday = getConnector(envId, 'workday');
+        if (workday) { await workday.createPreHire(employee); console.log('[Connectors] Workday: pre-hire created'); }
+      } catch (e) { console.warn('[Connectors] Workday error:', e.message); }
+      // Fire notification
+      try {
+        await fireEvent(envId, 'offer_accepted', {
+          candidateName: offer.candidate_name, jobTitle: offer.job_title, startDate: offer.start_date });
+      } catch (e) { console.warn('[Connectors] Notification error:', e.message); }
+    });
+  }
 });
 
 // PATCH /:id/approve — Approver decision

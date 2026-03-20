@@ -96,6 +96,7 @@ app.use('/api/comms',            require('./routes/communications'));
 app.use('/api/inbox',            require('./routes/inbox'));
 app.use('/api/email-templates',  require('./routes/email-templates'));
 app.use('/api/integrations',     require('./routes/integrations'));
+app.use('/api/connector-actions', require('./routes/connector_actions'));
 app.use('/api/enterprise',       require('./routes/enterprise_settings'));
 app.use('/api/skills-intel',     require('./routes/skills_intelligence'));
 app.use('/api/skills-import',    require('./routes/skills_import'));
