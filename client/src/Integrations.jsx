@@ -381,11 +381,10 @@ export default function IntegrationsPage({environment}){
             </div>
           ))}
         </div>
-      </div>
 
       <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
         <div style={{position:'relative',flex:1,minWidth:200,maxWidth:280}}>
-          <Ic n="search" s={14} c={C.text3} style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)'}}/>
+          <Ic n="search" s={14} c={C.text3}/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
             style={{width:'100%',padding:'8px 12px 8px 34px',borderRadius:10,border:`1.5px solid ${C.border}`,
               fontSize:13,fontFamily:F,outline:'none',color:C.text1,boxSizing:'border-box'}}/>
