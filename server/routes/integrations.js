@@ -102,6 +102,13 @@ const CATALOG = [
   // Reference Checks
   { slug:'xref',             name:'Xref',               category:'reference_check',category_label:'Reference Checking',   color:'#0050C8', icon:'Xref',  description:'Automated reference checking.',     tags:['references','compliance'],
     fields:[{key:'api_key',label:'API Key',type:'password',required:true,secret:true},{key:'team_id',label:'Team ID',type:'text',required:true,secret:false}]},
+  // Messaging
+  { slug:'twilio',           name:'Twilio',             category:'messaging',      category_label:'Messaging',             color:'#F22F46', icon:'Twilio',description:'Send/receive SMS and WhatsApp messages.',tags:['sms','whatsapp','messaging'],
+    fields:[{key:'TWILIO_ACCOUNT_SID',label:'Account SID',type:'text',required:true,secret:false,hint:'Starts with AC — found in Twilio Console'},{key:'TWILIO_AUTH_TOKEN',label:'Auth Token',type:'password',required:true,secret:true},{key:'TWILIO_SMS_NUMBER',label:'SMS Phone Number',type:'text',required:true,secret:false,placeholder:'+14155552671'},{key:'TWILIO_WA_NUMBER',label:'WhatsApp Number',type:'text',required:false,secret:false,placeholder:'whatsapp:+14155552671'}]},
+  { slug:'sendgrid',         name:'SendGrid',           category:'messaging',      category_label:'Messaging',             color:'#1A82E2', icon:'SG',    description:'Send transactional and bulk emails.',  tags:['email','transactional'],
+    fields:[{key:'SENDGRID_API_KEY',label:'API Key',type:'password',required:true,secret:true,hint:'SendGrid → Settings → API Keys'},{key:'SENDGRID_FROM_EMAIL',label:'From Email',type:'text',required:true,secret:false,placeholder:'noreply@company.com'},{key:'SENDGRID_FROM_NAME',label:'From Name',type:'text',required:false,secret:false,placeholder:'TalentOS'}]},
+  { slug:'inbound_webhooks', name:'Inbound Webhooks',   category:'messaging',      category_label:'Messaging',             color:'#6366F1', icon:'WHK',   description:'Base URL for Twilio inbound callbacks.', tags:['webhooks','inbound'],
+    fields:[{key:'WEBHOOK_BASE_URL',label:'Base URL',type:'text',required:true,secret:false,placeholder:'https://talentos-production-4045.up.railway.app',hint:'Twilio will POST inbound messages here'}]},
   // Analytics
   { slug:'power_bi',         name:'Microsoft Power BI', category:'analytics',      category_label:'Analytics & BI',        color:'#F2C811', icon:'PBI',   description:'Push data to Power BI dashboards.', tags:['analytics','microsoft'],
     fields:[{key:'tenant_id',label:'Tenant ID',type:'text',required:true,secret:false},{key:'client_id',label:'Client ID',type:'text',required:true,secret:false},{key:'client_secret',label:'Client Secret',type:'password',required:true,secret:true}]},

@@ -10,7 +10,7 @@ import AiMatchingSettings from "./settings/AiMatchingSettings.jsx";
 import { FormsList } from "./Forms.jsx";
 import RpoClientCompanies from "./settings/RpoClientCompanies.jsx";
 
-import SuperAdminSection from "./SuperAdmin.jsx";
+import IntegrationsSettings from "./IntegrationsSettings.jsx";
 import DatasetsSection from "./settings/DatasetsSection.jsx";
 import EnterpriseSettings from "./EnterpriseSettings.jsx";
 import OrgChart from "./OrgChart.jsx";
@@ -2416,7 +2416,7 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="portals"    && <PortalsPage environment={environment}/>}
         {activeSection==="questions"  && <QuestionBankSettings/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
-        {activeSection==="superadmin"  && <SuperAdminSection/>}
+        {activeSection==="superadmin"  && <IntegrationsSettings environment={environment}/>}
         {activeSection==="config"      && <ConfigSection environment={environment}/>}
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
