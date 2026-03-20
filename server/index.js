@@ -108,7 +108,7 @@ require('./routes/enterprise_settings').migrate();
 require('./routes/skills_intelligence').migrate();
 require('./routes/datasets').migrate();
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.4.0', build: 'connector-service-layer' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.4.1', build: 'integration-monitor' }));
 
 const PORT = process.env.PORT || 3001;
 
