@@ -566,6 +566,16 @@ WORKFLOW RULES:
 
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
+
+IMPORTANT MATCHING RULE — CRITICAL:
+When the user is viewing a PERSON RECORD and asks about job matches, best roles, suitable positions, or similar:
+- The context already contains "REAL JOB MATCH SCORES" — pre-calculated scores from the AI matching engine
+- USE THOSE SCORES DIRECTLY — do NOT use <SEARCH_QUERY> for this
+- Rank jobs by score (highest first), explain WHY each is a good or poor fit
+- Reference specific scores, reasons, and gaps from the injected data
+- If no scores are injected, say there are no jobs in the system yet
+
+When a user asks to SEARCH or FIND records (not matching), output a search block:
 <SEARCH_QUERY>{"q":"search term","slug":"people"}</SEARCH_QUERY>
 
 The "slug" field MUST be one of: "people", "jobs", "talent-pools".
@@ -806,6 +816,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [creating,     setCreating]        = useState(false);
   const [objects,      setObjects]      = useState([]);
   const [fields,       setFields]       = useState({});
+  const [allJobs,      setAllJobs]      = useState([]);
+  const [allPools,     setAllPools]     = useState([]);
   const [searchResults,setSearchResults]= useState({}); // keyed by message index
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
@@ -827,6 +839,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const fm={};
       await Promise.all(objs.map(async o=>{ const fs=await api.get(`/fields?object_id=${o.id}`); fm[o.id]=Array.isArray(fs)?fs:[]; }));
       setFields(fm);
+      // Pre-fetch jobs and pools so copilot can run real match scoring
+      const jobsObj  = objs.find(o=>o.slug==='jobs');
+      const poolsObj = objs.find(o=>o.slug==='talent-pools');
+      if(jobsObj)  api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllJobs(r.records||[])).catch(()=>{});
+      if(poolsObj) api.get(`/records?object_id=${poolsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPools(r.records||[])).catch(()=>{});
     });
   },[environment?.id]);
 
@@ -862,8 +879,39 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
     if(pageContext){parts.push('');parts.push('ADDITIONAL PAGE CONTEXT:');parts.push(pageContext);}
+
+    // Inject real AI match scores when on a person record so copilot uses same engine as AI Match widget
+    if(currentRecord && currentObject?.slug==='people' && allJobs.length>0){
+      const scored = allJobs
+        .map(j=>({ job:j, ...matchCandidateToJob(currentRecord, j) }))
+        .sort((a,b)=>b.score-a.score)
+        .slice(0,15);
+      parts.push('');
+      parts.push(`REAL JOB MATCH SCORES — ${allJobs.length} jobs scored by the AI matching engine. USE THESE DIRECTLY — do NOT use <SEARCH_QUERY> for job matching:`);
+      scored.forEach((m,i)=>{
+        const d=m.job.data||{};
+        const title=d.job_title||d.name||'Untitled';
+        const dept=d.department?` | Dept: ${d.department}`:'';
+        const loc=d.location?` | Location: ${d.location}`:'';
+        const status=d.status?` [${d.status}]`:'';
+        const why=m.reasons.slice(0,3).join(', ');
+        const gaps=m.gaps.slice(0,2).join(', ');
+        parts.push(`  #${i+1} ${title}${dept}${loc}${status} — Score: ${m.score}/100${why?' ✓ '+why:''}${gaps?' ✗ '+gaps:''}`);
+      });
+    }
+
+    // Inject pool matches when on a person record
+    if(currentRecord && currentObject?.slug==='people' && allPools.length>0){
+      parts.push('');
+      parts.push(`TALENT POOLS (${allPools.length} total):`);
+      allPools.slice(0,10).forEach(p=>{
+        const d=p.data||{};
+        parts.push(`  - ${d.pool_name||d.name||'Pool'} [${d.category||''}] ${d.status||''}`);
+      });
+    }
+
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools]);
 
   useEffect(()=>{
     if(!open) return;
