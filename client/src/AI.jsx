@@ -480,7 +480,7 @@ CRITICAL RULES — ACTIONS AND CONFIRMATION:
 6. After a user says "yes", "go ahead", "confirm", "do it", or similar — output the action block immediately.
 7. If unsure what the user wants, ASK before proposing any action.
 
-For actions not covered by specific blocks (pipeline moves, bulk updates, status changes), use:
+For actions not covered by specific blocks (notes, field updates, pipeline moves, bulk ops, logging calls), use:
 <PROPOSE_ACTION>
 {
   "title": "Short action title",
@@ -489,11 +489,24 @@ For actions not covered by specific blocks (pipeline moves, bulk updates, status
   "confirm_label": "Yes, Do This",
   "cancel_label": "Cancel",
   "severity": "normal",
-  "action_type": "status_change",
+  "action_type": "add_note",
   "payload": {}
 }
 </PROPOSE_ACTION>
-severity: "normal" (blue), "warning" (amber, for significant changes), "danger" (red, for deletes/irreversible)
+severity: "normal" (blue), "warning" (amber), "danger" (red, for deletes)
+
+SUPPORTED action_types and their required payload fields:
+- "add_note"      → { record_id, content, author? }  — adds a note to a record
+- "update_field"  → { record_id, field, value }  — updates any field on a record
+- "status_change" → { record_id, field, value }  — alias for update_field (use for status/stage changes)
+- "log_comm"      → { record_id, comm_type("call"|"email"|"sms"|"whatsapp"), direction("inbound"|"outbound"), subject?, body?, notes?, duration_seconds?, outcome? }
+- "pipeline_move" → { link_id, new_stage }  — moves a person to a new stage in a pipeline
+- "assign"        → { record_id, assigned_to }  — assigns a record to a user
+- "bulk_op"       → { record_ids[], data{} }  — updates multiple records
+- "delete"        → { record_id }  — deletes a record (use severity:"danger")
+
+IMPORTANT: Always use the record_id from CURRENT PAGE CONTEXT when acting on the current record.
+For "add_note", always use record_id from context and write the note content as the user described it.
 
 DOCUMENT ANALYSIS — CV & JOB DESCRIPTIONS:
 When the user pastes or attaches a CV/resume, extract fields and respond with:
@@ -1179,21 +1192,103 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     const { action_type, payload, title } = proposedAction;
     try {
       let resultMsg = `✅ Done — ${title}`;
-      if (action_type==='status_change' && payload?.record_id && payload?.field && payload?.value) {
-        const rec = await fetch(`/api/records/${payload.record_id}`).then(r=>r.json());
-        await fetch(`/api/records/${payload.record_id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:{...rec.data,[payload.field]:payload.value}})});
-        resultMsg = `✅ Updated to **${payload.value}**`;
-      } else if (action_type==='delete' && payload?.record_id) {
-        await fetch(`/api/records/${payload.record_id}`,{method:'DELETE'});
-        resultMsg = `✅ Record deleted`;
-      } else if (action_type==='bulk_op' && payload?.record_ids?.length) {
-        await Promise.all(payload.record_ids.map(id=>fetch(`/api/records/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:payload.data})})));
+
+      // ── Add / update a note on a record ────────────────────────────────────
+      if (action_type === 'add_note' && payload?.record_id && payload?.content) {
+        await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            record_id: payload.record_id,
+            content: payload.content,
+            author: payload.author || 'Copilot',
+          }),
+        });
+        resultMsg = `✅ Note added to record`;
+
+      // ── Update a single field on a record ───────────────────────────────────
+      } else if (action_type === 'update_field' && payload?.record_id && payload?.field) {
+        const rec = await fetch(`/api/records/${payload.record_id}`).then(r => r.json());
+        await fetch(`/api/records/${payload.record_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...rec.data, [payload.field]: payload.value } }),
+        });
+        resultMsg = `✅ **${payload.field}** updated to **${payload.value}**`;
+
+      // ── Legacy: status_change (alias for update_field) ──────────────────────
+      } else if (action_type === 'status_change' && payload?.record_id && payload?.field && payload?.value) {
+        const rec = await fetch(`/api/records/${payload.record_id}`).then(r => r.json());
+        await fetch(`/api/records/${payload.record_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...rec.data, [payload.field]: payload.value } }),
+        });
+        resultMsg = `✅ Status updated to **${payload.value}**`;
+
+      // ── Log a communication (call / email / sms) ────────────────────────────
+      } else if (action_type === 'log_comm' && payload?.record_id) {
+        await fetch('/api/comms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            record_id: payload.record_id,
+            type: payload.comm_type || 'call',
+            direction: payload.direction || 'outbound',
+            subject: payload.subject || '',
+            body: payload.body || payload.notes || '',
+            duration_seconds: payload.duration_seconds || null,
+            outcome: payload.outcome || null,
+            author: payload.author || 'Copilot',
+          }),
+        });
+        resultMsg = `✅ ${payload.comm_type || 'Call'} logged`;
+
+      // ── Move a person through a pipeline stage ──────────────────────────────
+      } else if (action_type === 'pipeline_move' && payload?.link_id && payload?.new_stage) {
+        await fetch(`/api/people-links/${payload.link_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_stage: payload.new_stage }),
+        });
+        resultMsg = `✅ Moved to **${payload.new_stage}**`;
+
+      // ── Assign a record to a user / recruiter ───────────────────────────────
+      } else if (action_type === 'assign' && payload?.record_id) {
+        const rec = await fetch(`/api/records/${payload.record_id}`).then(r => r.json());
+        await fetch(`/api/records/${payload.record_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...rec.data, assigned_to: payload.assigned_to, recruiter: payload.assigned_to } }),
+        });
+        resultMsg = `✅ Assigned to **${payload.assigned_to}**`;
+
+      // ── Bulk update multiple records ────────────────────────────────────────
+      } else if (action_type === 'bulk_op' && payload?.record_ids?.length) {
+        await Promise.all(payload.record_ids.map(id =>
+          fetch(`/api/records/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: payload.data }),
+          })
+        ));
         resultMsg = `✅ Updated ${payload.record_ids.length} records`;
+
+      // ── Delete a record ─────────────────────────────────────────────────────
+      } else if (action_type === 'delete' && payload?.record_id) {
+        await fetch(`/api/records/${payload.record_id}`, { method: 'DELETE' });
+        resultMsg = `✅ Record deleted`;
+
+      } else {
+        // Unknown action type — log it
+        console.warn('[Copilot] Unknown action_type:', action_type, payload);
+        resultMsg = `✅ Action recorded`;
       }
-      setMessages(m=>[...m,{role:'assistant',content:resultMsg,ts:new Date()}]);
+
+      setMessages(m => [...m, { role: 'assistant', content: resultMsg, ts: new Date() }]);
       setProposedAction(null);
-    } catch(err) {
-      setMessages(m=>[...m,{role:'assistant',content:`❌ Failed: ${err.message}`,ts:new Date(),error:true}]);
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `❌ Failed: ${err.message}`, ts: new Date(), error: true }]);
     }
     setCreating(false);
   };
