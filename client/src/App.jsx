@@ -1935,7 +1935,7 @@ class ErrorBoundary extends Component {
 
 // ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
 function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = useState(false);
   return (
     <div style={{ position: "relative" }}>
       {open && (
