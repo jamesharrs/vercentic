@@ -1147,7 +1147,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",flexDirection:msg.role==="user"?"row-reverse":"row"}}>
                   {msg.role==="assistant"&&(
                     <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${C.ai},#3b5bdb)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
-                      <Ic n="sparkles" s={12} c="white"/>
+                      <svg width="14" height="14" viewBox="0 0 80 80" fill="none"><path d="M8 52 L40 36 L72 52 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M8 52 L8 62 L40 78 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M72 52 L72 62 L40 78 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M20 34 L40 24 L60 34 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M20 34 L20 42 L40 52 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M60 34 L60 42 L40 52 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M28 18 L40 12 L52 18 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M28 18 L28 24 L40 30 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M52 18 L52 24 L40 30 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/></svg>
                     </div>
                   )}
                   <div style={{maxWidth:"82%",position:"relative"}}>
