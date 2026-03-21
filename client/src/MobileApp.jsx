@@ -165,7 +165,7 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
     setMessages(prev => [...prev, { role: "user", text: msg, time: new Date() }]);
     setLoading(true);
     try {
-      const system = `You are the Vercentic recruiting copilot on mobile. Be very concise (2-3 sentences max). User: ${session?.first_name} ${session?.last_name}. Env: ${environment?.name}. If user wants to navigate, end with [NAVIGATE:candidates], [NAVIGATE:interviews], or [NAVIGATE:jobs].`;
+      const system = `You are the Vercentic copilot on mobile. Be very concise (2-3 sentences max). User: ${session?.first_name} ${session?.last_name}. Env: ${environment?.name}. If user wants to navigate, end with [NAVIGATE:candidates], [NAVIGATE:interviews], or [NAVIGATE:jobs].`;
       const res = await fetch("/api/ai/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [...messages.map(m => ({ role: m.role, content: m.text })), { role: "user", content: msg }], system })
@@ -209,7 +209,7 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
             Good to see you, {session?.first_name || "there"}
           </div>
           <div style={{ fontSize: 15, color: V.muted, fontFamily: F, lineHeight: 1.55 }}>
-            Your recruiting copilot.<br />What do you need today?
+            What do you need today?
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 26 }}>
             {quickActions.map((qa, i) => (
