@@ -2,11 +2,25 @@
 const { findOne, query } = require('../db/init');
 
 const ACTIONS = { VIEW:'view', CREATE:'create', EDIT:'edit', DELETE:'delete', EXPORT:'export' };
+
 const GLOBAL_ACTIONS = [
+  // ── Admin / config ──────────────────────────────────────────────────────────
   'manage_users','manage_roles','manage_settings','manage_workflows',
-  'manage_portals','manage_forms','manage_interviews','run_reports',
-  'export_data','bulk_actions','view_audit_log','manage_integrations'
+  'manage_portals','manage_forms','manage_interviews','manage_org_structure',
+  'manage_integrations','view_audit_log',
+  // ── Data actions ────────────────────────────────────────────────────────────
+  'run_reports','export_data','bulk_actions',
+  // ── Feature access flags (gate entire nav sections) ─────────────────────────
+  'access_dashboard','access_org_chart','access_interviews','access_offers',
+  'access_reports','access_copilot','access_calendar','access_search',
+  // ── Record action flags (gate actions within a record) ───────────────────────
+  'record_send_email','record_send_sms','record_log_call','record_view_comms',
+  'record_add_note','record_delete_note','record_upload_file','record_delete_file',
+  'record_parse_cv','record_extract_doc',
+  'record_add_to_pipeline','record_move_stage','record_run_workflow',
+  'record_schedule_interview','record_create_offer',
 ];
+
 const SUPER_ADMIN_SLUG = 'super_admin';
 
 function resolveUser(req) {
@@ -27,18 +41,12 @@ function attachUser(req, res, next) {
 
 function requireAuth(req, res, next) {
   req.currentUser = resolveUser(req);
-  if (!req.currentUser)
-    return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
+  if (!req.currentUser) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   next();
 }
 
 function isSuperAdmin(user) {
-  if (!user) return false;
-  // Check slug (master store roles) OR name (provisioned tenant roles) OR explicit flag
-  return user.role?.slug === SUPER_ADMIN_SLUG
-    || user.role?.name === 'Super Admin'
-    || user.is_super_admin === true
-    || user.is_super_admin === 1;
+  return user?.role?.slug === SUPER_ADMIN_SLUG;
 }
 
 function hasPermission(user, objectSlug, action) {
@@ -111,18 +119,22 @@ function getUserPermissions(user) {
 
 function seedDefaultPermissions(store) {
   if (!store.permissions) store.permissions = [];
-  // Re-run if no __global__ entries exist (covers partial seeds from older versions)
-  const hasGlobal = store.permissions.some(p => p.object_slug === '__global__');
-  if (store.permissions.length > 0 && hasGlobal) return;
+  // Re-seed if record action flags are missing (incremental addition)
+  const hasRecordFlags = store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_send_email');
+  if (store.permissions.length > 0 && hasRecordFlags) return;
+  // Clear existing global perms and re-seed all
+  store.permissions = store.permissions.filter(p => p.object_slug !== '__global__');
   const { v4: uuidv4 } = require('uuid');
   const now = new Date().toISOString();
+  const ALL_RECORD = ['record_send_email','record_send_sms','record_log_call','record_view_comms','record_add_note','record_delete_note','record_upload_file','record_delete_file','record_parse_cv','record_extract_doc','record_add_to_pipeline','record_move_stage','record_run_workflow','record_schedule_interview','record_create_offer'];
   const roleDefaults = {
     super_admin:    { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], __global__: GLOBAL_ACTIONS },
-    admin:          { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], __global__:['manage_users','manage_roles','manage_settings','manage_workflows','manage_portals','manage_forms','manage_interviews','run_reports','export_data','bulk_actions','view_audit_log'] },
-    recruiter:      { people:['view','create','edit','export'], jobs:['view','create','edit','export'], talent_pools:['view','create','edit'], __global__:['run_reports','export_data','bulk_actions','manage_interviews'] },
-    hiring_manager: { people:['view'], jobs:['view','edit'], talent_pools:['view'], __global__:['manage_interviews'] },
-    read_only:      { people:['view'], jobs:['view'], talent_pools:['view'], __global__:[] },
+    admin:          { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], __global__:['manage_users','manage_roles','manage_settings','manage_workflows','manage_portals','manage_forms','manage_interviews','manage_org_structure','manage_integrations','view_audit_log','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search',...ALL_RECORD] },
+    recruiter:      { people:['view','create','edit','export'], jobs:['view','create','edit','export'], talent_pools:['view','create','edit'], __global__:['manage_interviews','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search',...ALL_RECORD] },
+    hiring_manager: { people:['view'], jobs:['view','edit'], talent_pools:['view'], __global__:['manage_interviews','access_dashboard','access_interviews','access_copilot','access_calendar','access_search','record_view_comms','record_add_note','record_schedule_interview','record_move_stage'] },
+    read_only:      { people:['view'], jobs:['view'], talent_pools:['view'], __global__:['access_dashboard','access_search','record_view_comms'] },
   };
+
   for (const role of (store.roles || [])) {
     const defaults = roleDefaults[role.slug];
     if (!defaults) continue;
@@ -136,34 +148,26 @@ function seedDefaultPermissions(store) {
       }
     }
   }
-  console.log(`✅ Seeded ${store.permissions.length} default permissions across ${(store.roles||[]).length} roles`);
+  console.log(`✅ Seeded ${store.permissions.length} permissions across ${(store.roles||[]).length} roles`);
 }
-
 
 /**
  * Strip fields the user's role cannot see from a record's data object.
- * Call after fetching records, before sending to client.
  */
 function applyFieldVisibility(user, record, objectId) {
   if (!user || !record || !record.data) return record;
-  if (isSuperAdmin(user)) return record; // super admin sees everything
+  if (isSuperAdmin(user)) return record;
   try {
-    const { query: q } = require('../db/init');
     const store = require('../db/init').getStore();
     if (!store.field_visibility || store.field_visibility.length === 0) return record;
-
-    const fieldIds = q('fields', f => f.object_id === objectId).map(f => f.id);
+    const fieldIds = query('fields', f => f.object_id === objectId).map(f => f.id);
     const hiddenFieldIds = new Set(
       store.field_visibility
         .filter(r => r.role_id === user.role_id && r.hidden && fieldIds.includes(r.field_id))
         .map(r => r.field_id)
     );
     if (hiddenFieldIds.size === 0) return record;
-
-    // Map field_id → api_key so we can strip from data
-    const hiddenKeys = new Set(
-      q('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key)
-    );
+    const hiddenKeys = new Set(query('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key));
     const cleanData = { ...record.data };
     for (const key of hiddenKeys) delete cleanData[key];
     return { ...record, data: cleanData };

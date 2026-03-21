@@ -1,3 +1,4 @@
+import { usePermissions as _usePermCtxAI } from "./PermissionContext.jsx";
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { buildHelpContext } from "./helpContent";
 
@@ -822,6 +823,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
   const [interviewTypes, setInterviewTypes] = useState([]);
+  const _pcAI = _usePermCtxAI();
+  const canRecord = (flag) => _pcAI ? _pcAI.canGlobal(flag) : true;
   const [pendingInterview, setPendingInterview] = useState(null);
   const [pendingForm,      setPendingForm]      = useState(null);
   const [pendingReport,    setPendingReport]    = useState(null);
@@ -1159,7 +1162,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(workflowData)  setPendingWorkflow(workflowData);
       if(userData)      setPendingUser(userData);
       if(roleData)      setPendingRole(roleData);
-      if(interviewData) setPendingInterview(interviewData);
+      if(interviewData && canRecord('record_schedule_interview')) setPendingInterview(interviewData);
       if(formData2)     setPendingForm(formData2);
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);

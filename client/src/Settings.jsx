@@ -2306,6 +2306,7 @@ const NAV_GROUPS = [
     id: "system",
     label: "System",
     items: [
+      { id:"feature_access", icon:"shield", label:"Feature Access" },
       { id:"superadmin", icon:"zap",     label:"Integrations" },
       { id:"config",     icon:"refresh", label:"Import / Export" },
     ],
@@ -2414,6 +2415,7 @@ export default function SettingsPage({ currentUser, environment }) {
         {activeSection==="portals"    && <PortalsPage environment={environment}/>}
         {activeSection==="questions"  && <QuestionBankSettings/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
+        {activeSection==="feature_access" && <FeatureAccessSection/>}
         {activeSection==="superadmin"  && <IntegrationsSettings environment={environment}/>}
         {activeSection==="config"      && <ConfigSection environment={environment}/>}
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
@@ -2425,4 +2427,159 @@ export default function SettingsPage({ currentUser, environment }) {
     </div>
   );
 }
+
+
+// ── Feature Access Section ────────────────────────────────────────────────────
+const FEATURE_FLAGS_LIST = [
+  { id:'access_dashboard',    label:'Dashboard',              group:'Navigation' },
+  { id:'access_org_chart',    label:'Org Chart',              group:'Navigation' },
+  { id:'access_interviews',   label:'Interviews',             group:'Navigation' },
+  { id:'access_offers',       label:'Offers',                 group:'Navigation' },
+  { id:'access_reports',      label:'Reports',                group:'Navigation' },
+  { id:'access_calendar',     label:'Calendar',               group:'Navigation' },
+  { id:'access_search',       label:'Global Search',          group:'Navigation' },
+  { id:'access_copilot',      label:'AI Copilot',             group:'AI' },
+  { id:'run_reports',         label:'Run Reports',            group:'Data' },
+  { id:'export_data',         label:'Export Data',            group:'Data' },
+  { id:'bulk_actions',        label:'Bulk Actions',           group:'Data' },
+  { id:'manage_users',        label:'Manage Users',           group:'Admin' },
+  { id:'manage_roles',        label:'Manage Roles',           group:'Admin' },
+  { id:'manage_settings',     label:'Data Model / Settings',  group:'Admin' },
+  { id:'manage_workflows',    label:'Workflows',              group:'Admin' },
+  { id:'manage_portals',      label:'Portals',                group:'Admin' },
+  { id:'manage_forms',        label:'Forms',                  group:'Admin' },
+  { id:'manage_interviews',   label:'Manage Interview Types', group:'Admin' },
+  { id:'manage_org_structure',label:'Org Structure',          group:'Admin' },
+  { id:'manage_integrations', label:'Integrations',           group:'Admin' },
+  { id:'view_audit_log',      label:'Audit Log',              group:'Admin' },
+  { id:'record_send_email',       label:'Send Email',             group:'Record Actions' },
+  { id:'record_send_sms',         label:'Send SMS / WhatsApp',    group:'Record Actions' },
+  { id:'record_log_call',         label:'Log Call',               group:'Record Actions' },
+  { id:'record_view_comms',       label:'View Communications',    group:'Record Actions' },
+  { id:'record_add_note',         label:'Add Note',               group:'Record Actions' },
+  { id:'record_delete_note',      label:'Delete Note',            group:'Record Actions' },
+  { id:'record_upload_file',      label:'Upload File',            group:'Record Actions' },
+  { id:'record_delete_file',      label:'Delete File',            group:'Record Actions' },
+  { id:'record_parse_cv',         label:'Parse CV (AI)',          group:'Record Actions' },
+  { id:'record_extract_doc',      label:'Extract Document (AI)',  group:'Record Actions' },
+  { id:'record_add_to_pipeline',  label:'Add to Pipeline',        group:'Record Actions' },
+  { id:'record_move_stage',       label:'Move Pipeline Stage',    group:'Record Actions' },
+  { id:'record_run_workflow',     label:'Run Workflow',           group:'Record Actions' },
+  { id:'record_schedule_interview',label:'Schedule Interview',    group:'Record Actions' },
+  { id:'record_create_offer',     label:'Create Offer',           group:'Record Actions' },
+];
+const FEATURE_GROUPS_LIST = [...new Set(FEATURE_FLAGS_LIST.map(f => f.group))];
+
+const FeatureAccessSection = () => {
+  const [roles, setRoles]       = useState([]);
+  const [perms, setPerms]       = useState({});
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+
+  useEffect(() => {
+    api.get('/roles').then(async rolesData => {
+      const r = Array.isArray(rolesData) ? rolesData : [];
+      setRoles(r);
+      const allPerms = {};
+      for (const role of r) {
+        const p = await api.get(`/roles/${role.id}/permissions`);
+        allPerms[role.id] = {};
+        (Array.isArray(p) ? p : []).forEach(x => {
+          if (x.object_slug === '__global__') allPerms[role.id][x.action] = Boolean(x.allowed);
+        });
+      }
+      setPerms(allPerms);
+      setLoading(false);
+    });
+  }, []);
+
+  const toggle = (roleId, flag) => {
+    if (roles.find(r => r.id === roleId)?.is_system) return;
+    setPerms(prev => ({ ...prev, [roleId]: { ...prev[roleId], [flag]: !prev[roleId]?.[flag] } }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const ALL_FLAGS = FEATURE_FLAGS_LIST.map(f => f.id);
+    for (const role of roles.filter(r => !r.is_system)) {
+      const existing = await api.get(`/roles/${role.id}/permissions`);
+      const objectPerms = (Array.isArray(existing) ? existing : [])
+        .filter(p => p.object_slug !== '__global__')
+        .map(p => ({ object_slug: p.object_slug, action: p.action, allowed: p.allowed }));
+      const nonFlagGlobals = (Array.isArray(existing) ? existing : [])
+        .filter(p => p.object_slug === '__global__' && !ALL_FLAGS.includes(p.action))
+        .map(p => ({ object_slug: '__global__', action: p.action, allowed: p.allowed }));
+      const flagPerms = ALL_FLAGS.map(flag => ({
+        object_slug: '__global__', action: flag, allowed: perms[role.id]?.[flag] ? 1 : 0
+      }));
+      await api.put(`/roles/${role.id}/permissions`, { permissions: [...objectPerms, ...nonFlagGlobals, ...flagPerms] });
+    }
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:C.text3 }}>Loading…</div>;
+  const displayRoles = [...roles.filter(r => r.is_system), ...roles.filter(r => !r.is_system)];
+
+  return (
+    <Card title="Feature Access Control" subtitle="Control which roles can access each platform feature and record action."
+      action={<Btn onClick={handleSave} disabled={saving}>{saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Changes'}</Btn>}>
+      <div style={{ overflowX:'auto', marginTop:16 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', minWidth:500 }}>
+          <thead>
+            <tr>
+              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', width:220 }}>Feature</th>
+              {displayRoles.map(role => (
+                <th key={role.id} style={{ padding:'8px 6px', textAlign:'center', fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase' }}>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                    <div style={{ width:9, height:9, borderRadius:'50%', background:role.color||C.accent }}/>
+                    <span style={{ whiteSpace:'nowrap' }}>{role.name.split(' ')[0]}</span>
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {FEATURE_GROUPS_LIST.map(group => (
+              <React.Fragment key={group}>
+                <tr>
+                  <td colSpan={displayRoles.length+1} style={{ padding:'10px 12px 3px', fontSize:10, fontWeight:700,
+                    color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em',
+                    borderTop:`1px solid ${C.border}`, background:C.bg }}>
+                    {group}
+                  </td>
+                </tr>
+                {FEATURE_FLAGS_LIST.filter(f => f.group === group).map(feature => (
+                  <tr key={feature.id} style={{ borderBottom:`1px solid #f5f5f5` }}>
+                    <td style={{ padding:'8px 12px', fontSize:12, color:C.text1, fontWeight:500 }}>{feature.label}</td>
+                    {displayRoles.map(role => {
+                      const allowed = perms[role.id]?.[feature.id];
+                      const isSystem = role.is_system;
+                      return (
+                        <td key={role.id} style={{ padding:'8px 6px', textAlign:'center' }}>
+                          <button onClick={() => !isSystem && toggle(role.id, feature.id)}
+                            title={isSystem ? 'System role — read only' : allowed ? 'Click to revoke' : 'Click to grant'}
+                            style={{ width:20, height:20, borderRadius:4,
+                              border:`2px solid ${allowed ? (role.color||C.accent) : '#e5e7eb'}`,
+                              background:allowed ? (role.color||C.accent) : 'transparent',
+                              cursor:isSystem ? 'not-allowed' : 'pointer', opacity:isSystem ? 0.5 : 1,
+                              display:'inline-flex', alignItems:'center', justifyContent:'center', transition:'all .1s' }}>
+                            {allowed && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize:11, color:C.text3, marginTop:10, fontStyle:'italic' }}>
+        System role defaults are shown read-only. Custom roles can be fully configured. Changes take effect on next login.
+      </p>
+    </Card>
+  );
+};
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { usePermissions as _usePermCtx } from "./PermissionContext.jsx";
 import { createPortal } from "react-dom";
 import { matchCandidateToJob } from "./AI.jsx";
 import SharePicker from "./SharePicker.jsx";
@@ -1218,6 +1219,8 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
 // expands an inline list of people in that stage. Workflow selector shown if
 // multiple Linked Person workflows are available for this object.
 export function PeoplePipelineWidget({ record, objectId, environment, onNavigate }) {
+  const _pc_ppw = _usePermCtx();
+  const canRecord = (flag) => _pc_ppw ? _pc_ppw.canGlobal(flag) : true;
   const [assignments, setAssignments]     = useState([]);
   const [allWorkflows, setAllWorkflows]   = useState([]);
   const [peopleLinks, setPeopleLinks]     = useState([]);
@@ -1438,8 +1441,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
           </div>
         )}
 
-        {/* Add Person — far right */}
-        <button onClick={openAddPerson} disabled={!hasStages}
+        {/* Add Person — gated on record_add_to_pipeline */}
+        {canRecord('record_add_to_pipeline') && <button onClick={openAddPerson} disabled={!hasStages}
           title={hasStages?"Add a person":"Assign a workflow with stages first"}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:99,
             border:`1.5px solid ${hasStages?"#7c3aed":C.border}`,
@@ -1447,7 +1450,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             fontSize:12, fontWeight:700, cursor:hasStages?"pointer":"not-allowed",
             fontFamily:F, whiteSpace:"nowrap", flexShrink:0, marginLeft:"auto" }}>
           + Add Person
-        </button>
+        </button>}
       </div>
 
       {/* No workflow assigned */}

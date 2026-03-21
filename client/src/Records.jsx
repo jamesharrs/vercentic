@@ -3572,7 +3572,7 @@ const ActivityPanel = memo(({ record }) => {
 }, (prev, next) => prev.record?.id === next.record?.id);
 
 // ── Notes Panel — defined OUTSIDE RecordDetail to prevent remount on every keystroke ──
-const NotesPanel = ({ record, notes, onNotesChange }) => {
+const NotesPanel = ({ record, notes, onNotesChange, canAdd=true, canDelete=true }) => {
   const [newNote, setNewNote] = useState("");
   const [saving, setSaving]   = useState(false);
 
@@ -3596,7 +3596,7 @@ const NotesPanel = ({ record, notes, onNotesChange }) => {
 
   return (
     <div>
-      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:14 }}>
+      {canAdd && <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:14 }}>
         <textarea
           value={newNote}
           onChange={e => setNewNote(e.target.value)}
@@ -3608,7 +3608,7 @@ const NotesPanel = ({ record, notes, onNotesChange }) => {
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <Btn onClick={handleAdd} disabled={!newNote.trim() || saving} sz="sm">{saving ? "Saving…" : "Add Note"}</Btn>
         </div>
-      </div>
+      </div>}
       {notes.length === 0
         ? <div style={{ textAlign:"center", padding:"20px 0", color:C.text3, fontSize:13 }}>No notes yet</div>
         : notes.map(note => (
@@ -3621,9 +3621,9 @@ const NotesPanel = ({ record, notes, onNotesChange }) => {
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                 <span style={{ fontSize:11, color:C.text3 }}>{new Date(note.created_at).toLocaleDateString()}</span>
-                <button onClick={() => handleDelete(note.id)} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:2, borderRadius:4 }}>
+                {canDelete && <button onClick={() => handleDelete(note.id)} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:2, borderRadius:4 }}>
                   <Ic n="trash" s={12} c={C.text3}/>
-                </button>
+                </button>}
               </div>
             </div>
             <div style={{ fontSize:13, color:C.text1, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{note.content}</div>
@@ -4459,20 +4459,20 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Panel content renderer ── (useCallback so identity is stable between renders)
   const PanelContent = useCallback(({ id }) => {
-    if (id==="comms") return (
+    if (id==="comms") return canRecord('record_view_comms') ? (
       <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)}/>
-    );
+    ) : <AccessDeniedPanel label="Communications"/>;
     if (id==="coordination") return (
       <CoordinationPanel record={record} environment={environment}/>
     );
-    if (id==="notes") return (
-      <NotesPanel record={record} notes={notes} onNotesChange={load}/>
-    );
+    if (id==="notes") return canRecord('record_add_note') || canRecord('record_view_comms') ? (
+      <NotesPanel record={record} notes={notes} onNotesChange={load} canAdd={canRecord('record_add_note')} canDelete={canRecord('record_delete_note')}/>
+    ) : <AccessDeniedPanel label="Notes"/>;
 
     if (id==="attachments") return (
       <div>
         {/* File type selector + drop zone */}
-        <div style={{ marginBottom:8 }}>
+        {canRecord('record_upload_file') && <div style={{ marginBottom:8 }}>
           <select value={selectedFileType} onChange={e=>setSelectedFileType(e.target.value)}
             style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text2, background:C.surface, marginBottom:8 }}>
             <option value="">Select file type…</option>
@@ -4491,7 +4491,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
           <input ref={fileInputRef} type="file" style={{display:'none'}}
             onChange={e=>{ const f=e.target.files?.[0]; if(f) handleFileUpload(f, selectedFileType); e.target.value=''; }}/>
-        </div>
+        </div>}
 
         {/* File list */}
         {attachments.length===0
@@ -4513,13 +4513,13 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                  {isCV && att.filename && (
+                  {isCV && att.filename && canRecord('record_parse_cv') && (
                     <button onClick={()=>handleCvParse(att)} disabled={cvParsing} title="Parse CV fields"
                       style={{background:'none',border:`1px solid ${C.accent}30`,borderRadius:6,cursor:'pointer',padding:'4px 7px',color:C.accent,fontSize:10,fontWeight:700,fontFamily:F}}>
                       {cvParsing&&cvParseAtt?.id===att.id?'…':'Parse CV'}
                     </button>
                   )}
-                  {att.file_type_id && fileTypes.find(t=>t.id===att.file_type_id)?.extract_enabled && att.filename && (
+                  {att.file_type_id && fileTypes.find(t=>t.id===att.file_type_id)?.extract_enabled && att.filename && canRecord('record_extract_doc') && (
                     <button onClick={()=>handleDocExtract(att)} disabled={docExtracting} title="Extract data from document"
                       style={{background:'none',border:`1px solid ${C.green}40`,borderRadius:6,cursor:'pointer',padding:'4px 7px',color:C.green,fontSize:10,fontWeight:700,fontFamily:F}}>
                       {docExtracting&&docExtractAtt?.id===att.id?'…':'Extract Data'}
@@ -4531,10 +4531,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                       <Ic n="link" s={13}/>
                     </a>
                   )}
-                  <button onClick={async()=>{await api.del(`/attachments/${att.id}`);load();}}
+                  {canRecord('record_delete_file') && <button onClick={async()=>{await api.del(`/attachments/${att.id}`);load();}}
                     style={{ background:'none', border:'none', cursor:'pointer', padding:4, color:C.text3, display:'flex' }}>
                     <Ic n="trash" s={13}/>
-                  </button>
+                  </button>}
                 </div>
               </div>
             );
@@ -4786,8 +4786,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
       {/* RIGHT: action buttons */}
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"0 16px", flex:1 }}>
-        {/* Communicate dropdown — only on Person records */}
-        {objectName === "Person" && (
+        {/* Communicate dropdown — only on Person records with comms access */}
+        {objectName === "Person" && canRecord('record_view_comms') && (
         <div style={{ position:"relative" }}>
           <button
             onClick={()=>setShowCommMenu(v=>!v)}
@@ -4802,7 +4802,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, background:C.surface,
               border:`1.5px solid ${C.border}`, borderRadius:12, boxShadow:"0 8px 32px rgba(0,0,0,.14)",
               minWidth:200, zIndex:200, overflow:"hidden", padding:"4px 0" }}>
-              {COMM_OPTIONS.map(opt=>(
+              {COMM_OPTIONS.filter(opt => {
+                if (opt.type==='email') return canRecord('record_send_email');
+                if (opt.type==='sms' || opt.type==='whatsapp') return canRecord('record_send_sms');
+                if (opt.type==='call') return canRecord('record_log_call');
+                return true;
+              }).map(opt=>(
                 <button key={opt.type}
                   onClick={()=>{ setComposeType(opt.type); setShowCommMenu(false); }}
                   style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 16px",
@@ -5129,6 +5134,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       p => p.object_slug === object.slug && p.action === action && p.allowed
     );
   };
+  const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
   const [selected, setSelected] = useState(null);   // slide-out panel only
   const [showForm, setShowForm] = useState(false);
 

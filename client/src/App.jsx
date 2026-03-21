@@ -37,6 +37,28 @@ import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.js
 import { useHistory } from "./useHistory";
 import { HistoryDropdown } from "./RecentHistory";
 
+// ─── AccessDenied fallback ───────────────────────────────────────────────────
+const AccessDenied = ({ feature = 'this feature' }) => (
+  <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
+    justifyContent:'center', height:'60vh', gap:16,
+    fontFamily:"var(--t-font,'DM Sans',sans-serif)" }}>
+    <svg width={48} height={48} viewBox='0 0 24 24' fill='none'
+      stroke='#d1d5db' strokeWidth={1.5} strokeLinecap='round'>
+      <circle cx='12' cy='12' r='10'/>
+      <line x1='4.93' y1='4.93' x2='19.07' y2='19.07'/>
+    </svg>
+    <div style={{ textAlign:'center' }}>
+      <div style={{ fontSize:18, fontWeight:700, color:'#374151', marginBottom:6 }}>
+        Access restricted
+      </div>
+      <div style={{ fontSize:13, color:'#9ca3af' }}>
+        You don't have permission to access {feature}.<br/>
+        Contact your administrator to request access.
+      </div>
+    </div>
+  </div>
+);
+
 // ─── API Client ───────────────────────────────────────────────────────────────
 // Derive tenant slug — session takes priority, then URL param, then subdomain
 function getTenantSlug() {
@@ -1477,8 +1499,15 @@ function App() {
   const filteredNavSections = navSections.map(section => ({
     ...section,
     items: section.items.filter(item => {
-      if (item.id === 'settings') return canGlobal('manage_settings');
-      if (item.id === 'reports')  return canGlobal('run_reports');
+      if (item.id === 'dashboard' || item.id === 'dashboard_interviews' || item.id === 'dashboard_offers')
+        return canGlobal('access_dashboard');
+      if (item.id === 'org_chart')  return canGlobal('access_org_chart');
+      if (item.id === 'interviews') return canGlobal('access_interviews');
+      if (item.id === 'offers')     return canGlobal('access_offers');
+      if (item.id === 'reports')    return canGlobal('access_reports');
+      if (item.id === 'search')     return canGlobal('access_search');
+      if (item.id === 'calendar')   return canGlobal('access_calendar');
+      if (item.id === 'settings')   return canGlobal('manage_settings');
       return true;
     })
   })).filter(section => section.items.length > 0);
@@ -1849,9 +1878,9 @@ function App() {
             <OrgChart environment={selectedEnv} />
           </div>
         ) : activeNav === "interviews" ? (
-          <div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}>
-            <Interviews environment={selectedEnv} />
-          </div>
+          canGlobal("access_interviews")
+            ? <div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}><Interviews environment={selectedEnv} /></div>
+            : <AccessDenied feature="Interviews"/>
         ) : activeNav === "calendar" ? (
           <CalendarModule environment={selectedEnv} />
         ) : activeNav === "offers" ? (
@@ -1881,7 +1910,8 @@ function App() {
         )}
         </div>
       </div>
-      <AICopilot
+      {canGlobal('access_copilot') && (
+        <AICopilot
           environment={selectedEnv}
           activeNav={activeNav}
           navObjects={navObjects}
@@ -1892,6 +1922,7 @@ function App() {
             if (!obj) return;
             openRecord(record.id, obj.id);
           }} />
+      )}
 
       {/* Company Setup Wizard — first-run only */}
       {showSetupWizard && (
