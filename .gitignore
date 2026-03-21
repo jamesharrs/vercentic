@@ -40,3 +40,4 @@ server/Search.jsx
 *.log
 npm-debug.log*
 .vercel
+client/.vercel
