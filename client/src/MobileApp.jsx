@@ -177,8 +177,8 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: C.bg }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", WebkitOverflowScrolling: "touch" }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 16 }}>
             {m.role === "assistant" && (
@@ -214,7 +214,7 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
         <div ref={endRef} />
       </div>
       {messages.length <= 1 && (
-        <div style={{ padding: "0 16px 12px", overflowX: "auto" }}>
+        <div style={{ padding: "0 16px 12px", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <div style={{ display: "flex", gap: 8, paddingBottom: 4 }}>
             {chips.map((c, i) => <Chip key={i} icon={c.icon} label={c.label} onClick={c.action} color={c.color} />)}
           </div>
@@ -337,7 +337,7 @@ const CandidatesScreen = ({ environment }) => {
   const filtered = records.filter(r => { const n = getName(r).toLowerCase(); const t = (r.data?.current_title || r.data?.job_title || "").toLowerCase(); const q = search.toLowerCase(); return !q || n.includes(q) || t.includes(q); });
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.bg }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: C.bg }}>
       <div style={{ padding: "12px 16px", background: C.card, borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.bg, borderRadius: 12, padding: "10px 14px", border: `1.5px solid ${C.border}` }}>
           <Ic n="search" s={16} c={C.text4} />
@@ -345,7 +345,7 @@ const CandidatesScreen = ({ environment }) => {
             style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: C.text1, outline: "none" }} />
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0", WebkitOverflowScrolling: "touch" }}>
         {loading ? <div style={{ padding: 40, textAlign: "center", color: C.text4, fontFamily: F }}>Loading...</div>
           : filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: C.text4, fontFamily: F }}>{search ? "No matches" : "No candidates yet"}</div>
           : filtered.map(r => {
@@ -393,7 +393,7 @@ const InterviewsScreen = ({ environment }) => {
   const tabs = [{ id: "today", label: "Today" }, { id: "tomorrow", label: "Tomorrow" }, { id: "upcoming", label: "Upcoming" }, { id: "all", label: "All" }];
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.bg }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: C.bg }}>
       <div style={{ background: C.card, borderBottom: `1px solid ${C.border}`, padding: "12px 16px", display: "flex", gap: 6 }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setFilter(t.id)} style={{ padding: "7px 14px", borderRadius: 99, border: "none", background: filter === t.id ? C.accent : C.bg, color: filter === t.id ? "white" : C.text3, fontSize: 13, fontWeight: 600, fontFamily: F, cursor: "pointer" }}>
@@ -473,7 +473,7 @@ const JobsScreen = ({ environment }) => {
   const filtered = jobs.filter(j => { const t = getTitle(j).toLowerCase(); const d = (j.data?.department || "").toLowerCase(); const q = search.toLowerCase(); return !q || t.includes(q) || d.includes(q); });
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: C.bg }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: C.bg }}>
       <div style={{ padding: "12px 16px", background: C.card, borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.bg, borderRadius: 12, padding: "10px 14px", border: `1.5px solid ${C.border}` }}>
           <Ic n="search" s={16} c={C.text4} />
@@ -530,9 +530,9 @@ export const MobileShell = ({ session, environment, objects }) => {
   const titles = { copilot: "Vercentic", candidates: "Candidates", interviews: "Interviews", jobs: "Jobs", more: "More" };
 
   return (
-    <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: C.bg, fontFamily: F, overscrollBehavior: "none", maxWidth: 600, margin: "0 auto" }}>
+    <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: C.bg, fontFamily: F, overscrollBehavior: "none", maxWidth: 600, margin: "0 auto", position: "relative" }}>
       {/* Header */}
-      <div style={{ background: C.card, borderBottom: `1px solid ${C.border}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 56, position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ background: C.card, borderBottom: `1px solid ${C.border}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 56, flexShrink: 0, zIndex: 10 }}>
         {screen !== "copilot" ? (
           <button onClick={() => setScreen("copilot")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
             <Ic n="chevL" s={20} c={C.accent} />
@@ -549,7 +549,7 @@ export const MobileShell = ({ session, environment, objects }) => {
       </div>
 
       {/* Screen Content */}
-      <div style={{ flex: 1, overflow: "hidden" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
         {screen === "copilot" && <CopilotScreen session={session} environment={environment} onNavigate={setScreen} />}
         {screen === "candidates" && <CandidatesScreen environment={environment} />}
         {screen === "interviews" && <InterviewsScreen environment={environment} />}
@@ -558,7 +558,7 @@ export const MobileShell = ({ session, environment, objects }) => {
       </div>
 
       {/* Bottom Nav */}
-      <div style={{ background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", position: "sticky", bottom: 0 }}>
+      <div style={{ background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", flexShrink: 0, zIndex: 10 }}>
         {nav.map(item => {
           const active = screen === item.id;
           return (
