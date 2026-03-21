@@ -1343,7 +1343,11 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
   // Super Admin route — completely separate from main app
-  const portalSlug = window.location.pathname.match(/^\/portal\/(.+)$/)?.[1];
+  // Portal routes: /portal/slug (legacy) OR /slug (clean URL e.g. /careers)
+  const _path = window.location.pathname;
+  const _reserved = /^\/(superadmin|availability|bot|interview|api)(\/|$)/;
+  const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1]
+    || (_path !== '/' && !_reserved.test(_path) ? _path.slice(1) : null);
   if (portalSlug) return <PortalApp slug={portalSlug}/>
 
   if (window.location.pathname === '/superadmin') {

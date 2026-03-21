@@ -1016,9 +1016,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
           </Btn>
           {portal.status==="published" && portal.slug && (
             <button onClick={()=>{
-              const base = window.location.hostname==='localhost'?`http://localhost:5173`:`https://portal-renderer.vercel.app`;
               const slug = (portal.slug||'').replace(/^\/+/,'');
-              window.open(`${base}?portal=${slug}`,'_blank');
+              window.open(`${window.location.origin}/${slug}`,'_blank');
             }} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.green}`,background:C.greenLight,color:C.green}}>
               <Ic n="eye" s={11} c={C.green}/>View Live
             </button>
@@ -1088,7 +1087,7 @@ const PortalCard = ({ portal, onEdit, onDelete, onDuplicate }) => {
                 ? window.location.origin.replace(':3000', ':5173')
                 : window.location.origin;
               const slug = (portal.slug||'').replace(/^\/+/,'');
-              const portalUrl = `${base}?portal=${slug}`;
+              const portalUrl = `${base}/${slug}`;
               navigator.clipboard.writeText(portalUrl).catch(()=>{});
               alert(`Copied: ${portalUrl}`);
             }} title="Copy portal link"

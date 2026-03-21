@@ -34,7 +34,9 @@ export default function PortalApp({ slug }) {
 
   useEffect(() => {
     if (!slug) { setError('No portal provided.'); setLoading(false); return; }
-    api.get(`/portals/slug/${slug}`)
+    // Strip any leading slashes so both /careers and careers work
+    const cleanSlug = slug.replace(/^\/+/, '');
+    api.get(`/portals/slug/${cleanSlug}`)
       .then(async p => {
         setPortal(p)
         document.title = p.branding?.company_name || p.name || 'Portal'
