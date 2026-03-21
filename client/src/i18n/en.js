@@ -1,7 +1,7 @@
 const en = {
   // ── Nav ─────────────────────────────────────────────────────────────────────
   nav: {
-    overview: "OVERVIEW", recruit: "RECRUIT", tools: "TOOLS", configure: "CONFIGURE",
+    overview: "OVERVIEW", recruit: "RECORDS", tools: "TOOLS", configure: "CONFIGURE",
     dashboard: "Dashboard", orgChart: "Org Chart", interviews: "Interviews",
     calendar: "Calendar", offers: "Offers", agents: "Agents",
     aiMatching: "AI Matching", reports: "Reports", search: "Search",

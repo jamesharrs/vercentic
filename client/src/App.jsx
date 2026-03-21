@@ -1475,13 +1475,12 @@ function App() {
     {
       label: t("nav.tools"),
       items: [
-        { id: "orgchart",    icon: "git-branch",  label: t("nav.orgChart") },
-        { id: "agents",      icon: "zap",          label: "Agents" },
         { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
         { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
-        { id: "integrations", icon: "link",         label: "Integrations" },
-        { id: "client-hub",  icon: "building",     label: "Client Hub" },
+        ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
+          ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
+          : []),
         { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
         { id: "search",      icon: "search",       label: t("nav.search") },
       ]
