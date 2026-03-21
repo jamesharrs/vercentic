@@ -2471,62 +2471,124 @@ const FEATURE_FLAGS_LIST = [
 const FEATURE_GROUPS_LIST = [...new Set(FEATURE_FLAGS_LIST.map(f => f.group))];
 
 const FeatureAccessSection = ({ selectedRole }) => {
-  const [perms, setPerms]     = useState([]);
+  const [perms,   setPerms]   = useState({}); // flag → allowed bool
+  const [orig,    setOrig]    = useState({}); // original state for dirty check
   const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
 
   useEffect(() => {
     if (!selectedRole) { setLoading(false); return; }
     setLoading(true);
     api.get(`/roles/${selectedRole.id}/permissions`).then(p => {
-      setPerms(Array.isArray(p) ? p : []);
+      const map = {};
+      (Array.isArray(p) ? p : []).forEach(x => {
+        if (x.object_slug === '__global__') map[x.action] = Boolean(x.allowed);
+      });
+      setPerms(map);
+      setOrig(map);
       setLoading(false);
     });
   }, [selectedRole?.id]);
 
+  const toggle = (flag) => {
+    if (selectedRole?.is_system) return;
+    setPerms(prev => ({ ...prev, [flag]: !prev[flag] }));
+  };
+
+  const isDirty = JSON.stringify(perms) !== JSON.stringify(orig);
+
+  const handleSave = async () => {
+    if (!selectedRole || selectedRole.is_system) return;
+    setSaving(true);
+    const ALL_FLAGS = FEATURE_FLAGS_LIST.map(f => f.id);
+    // Load existing perms to preserve object-level ones
+    const existing = await api.get(`/roles/${selectedRole.id}/permissions`);
+    const objectPerms = (Array.isArray(existing) ? existing : [])
+      .filter(p => p.object_slug !== '__global__')
+      .map(p => ({ object_slug: p.object_slug, action: p.action, allowed: p.allowed }));
+    const nonFlagGlobals = (Array.isArray(existing) ? existing : [])
+      .filter(p => p.object_slug === '__global__' && !ALL_FLAGS.includes(p.action))
+      .map(p => ({ object_slug: '__global__', action: p.action, allowed: p.allowed }));
+    const flagPerms = ALL_FLAGS.map(flag => ({
+      object_slug: '__global__', action: flag, allowed: perms[flag] ? 1 : 0
+    }));
+    await api.put(`/roles/${selectedRole.id}/permissions`, {
+      permissions: [...objectPerms, ...nonFlagGlobals, ...flagPerms]
+    });
+    setOrig({ ...perms });
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   if (!selectedRole) return (
     <div style={{ padding:'24px 0', textAlign:'center', color:C.text3, fontSize:13 }}>
-      Select a role to view its feature access.
+      Select a role to configure feature access.
     </div>
   );
 
   if (loading) return <div style={{ padding:20, color:C.text3, fontSize:13 }}>Loading…</div>;
 
-  const allowed = new Set(perms.filter(p => p.object_slug==='__global__' && p.allowed).map(p => p.action));
-
-  const Badge = ({ ok }) => ok
-    ? <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700,
-        color:'#0ca678', background:'#e6fcf5', borderRadius:20, padding:'2px 8px' }}>
-        <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#0ca678" strokeWidth={3} strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Yes
-      </span>
-    : <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700,
-        color:'#adb5bd', background:'#f8f9fa', borderRadius:20, padding:'2px 8px' }}>
-        <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#adb5bd" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        No
-      </span>;
+  const isSystem = selectedRole.is_system;
+  const roleColor = selectedRole.color || C.accent;
 
   return (
-    <div style={{ marginTop:4 }}>
-      <div style={{ fontSize:12, color:C.text3, marginBottom:16 }}>
-        Access permissions for <strong style={{ color:selectedRole.color||C.accent }}>{selectedRole.name}</strong>.
-        {selectedRole.is_system && <em> System role — edit via Roles & Permissions.</em>}
+    <div>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+        <div>
+          <span style={{ fontSize:13, color:C.text2 }}>
+            {isSystem
+              ? <><strong style={{ color:roleColor }}>{selectedRole.name}</strong> is a system role — permissions shown read-only.</>
+              : <>Toggle features for <strong style={{ color:roleColor }}>{selectedRole.name}</strong>.</>
+            }
+          </span>
+        </div>
+        {!isSystem && (
+          <Btn onClick={handleSave} disabled={saving || !isDirty} sz="sm"
+            style={{ opacity: isDirty ? 1 : 0.4 }}>
+            {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Changes'}
+          </Btn>
+        )}
       </div>
+
+      {/* Feature groups */}
       {FEATURE_GROUPS_LIST.map(group => (
-        <div key={group} style={{ marginBottom:16 }}>
+        <div key={group} style={{ marginBottom:18 }}>
           <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase',
-            letterSpacing:'0.08em', marginBottom:6, paddingBottom:4, borderBottom:`1px solid ${C.border}` }}>
+            letterSpacing:'0.08em', marginBottom:6, paddingBottom:4,
+            borderBottom:`1px solid ${C.border}` }}>
             {group}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 16px' }}>
-            {FEATURE_FLAGS_LIST.filter(f => f.group === group).map(feature => (
-              <div key={feature.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                padding:'5px 8px', borderRadius:6, background:allowed.has(feature.id)?'#f0fdf4':'transparent' }}>
-                <span style={{ fontSize:12, color:allowed.has(feature.id)?C.text1:C.text3, fontWeight:allowed.has(feature.id)?500:400 }}>
-                  {feature.label}
-                </span>
-                <Badge ok={allowed.has(feature.id)}/>
-              </div>
-            ))}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 12px' }}>
+            {FEATURE_FLAGS_LIST.filter(f => f.group === group).map(feature => {
+              const on = Boolean(perms[feature.id]);
+              return (
+                <div key={feature.id}
+                  onClick={() => toggle(feature.id)}
+                  title={isSystem ? 'System role — read only' : on ? 'Click to revoke' : 'Click to grant'}
+                  style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                    padding:'6px 10px', borderRadius:8, cursor: isSystem ? 'default' : 'pointer',
+                    border:`1.5px solid ${on ? roleColor+'40' : C.border}`,
+                    background: on ? roleColor+'08' : 'transparent',
+                    transition:'all .12s', userSelect:'none' }}
+                  onMouseEnter={e => { if (!isSystem) e.currentTarget.style.background = on ? roleColor+'15' : '#f9fafb'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = on ? roleColor+'08' : 'transparent'; }}>
+                  <span style={{ fontSize:12, fontWeight: on ? 600 : 400,
+                    color: on ? C.text1 : C.text3 }}>
+                    {feature.label}
+                  </span>
+                  {/* Toggle pill */}
+                  <div style={{ flexShrink:0, width:32, height:18, borderRadius:99,
+                    background: on ? roleColor : '#e5e7eb', position:'relative',
+                    transition:'background .15s', opacity: isSystem ? 0.5 : 1 }}>
+                    <div style={{ position:'absolute', top:2, left: on ? 16 : 2,
+                      width:14, height:14, borderRadius:'50%', background:'white',
+                      boxShadow:'0 1px 3px rgba(0,0,0,.2)', transition:'left .15s' }}/>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}
