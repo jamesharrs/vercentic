@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react'
-import CareerSite from './portals/CareerSite.jsx'
-import HMPortal from './portals/HMPortal.jsx'
-import AgencyPortal from './portals/AgencyPortal.jsx'
-import OnboardingPortal from './portals/OnboardingPortal.jsx'
+import PortalPageRenderer from './portals/PortalPageRenderer.jsx'
 
 const api = {
   get: p => fetch(`/api${p}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
@@ -57,11 +54,6 @@ export default function PortalApp({ slug }) {
   if (error || !portal) return <ErrorScreen message={error}/>
 
   const props = { portal, objects, api }
-  switch (portal.type) {
-    case 'career_site':   return <CareerSite   {...props}/>
-    case 'hm_portal':     return <HMPortal     {...props}/>
-    case 'agency_portal': return <AgencyPortal {...props}/>
-    case 'onboarding':    return <OnboardingPortal {...props}/>
-    default:              return <ErrorScreen message={`Unknown portal type: ${portal.type}`}/>
-  }
+  // Always use the page renderer — it renders the actual pages/widgets from the builder
+  return <PortalPageRenderer portal={portal} api={api}/>
 }

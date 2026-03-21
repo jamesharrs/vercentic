@@ -342,7 +342,11 @@ const ThemeDrawer = ({ theme, onChange, onClose }) => {
           <Ic n="palette" s={16} c={C.accent}/>
           <span style={{fontSize:15,fontWeight:800,color:C.text1}}>Design Tokens</span>
         </div>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}><Ic n="x" s={16}/></button>
+        <button onClick={onClose} style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,
+          cursor:"pointer",color:C.text2,padding:"5px 10px",display:"flex",alignItems:"center",gap:4,
+          fontSize:12,fontWeight:600,fontFamily:F}}>
+          <Ic n="x" s={12}/> Close
+        </button>
       </div>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
         {[["colours","Colours"],["type","Typography"],["shape","Shape"]].map(([id,lbl])=>(
@@ -1038,7 +1042,10 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
       </div>
 
-      {showTheme&&<ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>}
+      {showTheme&&<>
+        <div onClick={()=>setShowTheme(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
+        <ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>
+      </>}
     </div>
   );
 };
