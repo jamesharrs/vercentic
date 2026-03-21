@@ -1485,13 +1485,7 @@ function App() {
         { id: "search",      icon: "search",       label: t("nav.search") },
       ]
     },
-    {
-      label: t("nav.configure"),
-      items: [
-        { id: "help",     icon: "help-circle", label: "Help" },
-        { id: "settings", icon: "settings", label: t("nav.settings") },
-      ]
-    }
+    // configure section removed — Help + Settings are in the user footer menu
   ];
 
   // Filter nav items the user cannot access
@@ -1759,41 +1753,20 @@ function App() {
           ))}
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ padding: "10px 12px", background: "var(--t-surface2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", flexShrink: 0 }} />
-            <span style={{ fontSize: 11, color: "var(--t-text2)" }}>API Connected</span>
-          </div>
-
-          {/* Logged-in user + logout */}
+        {/* Footer — user card with Settings/Help popover */}
+        <div style={{ padding: "0 12px 4px", position: "relative" }}>
           {session?.user && (
-            <div style={{ padding:"8px 10px", borderRadius:10, background:"var(--t-surface2)", display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:session.role?.color||"#4f46e5",
-                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <span style={{ color:"white", fontSize:11, fontWeight:700 }}>
-                  {(session.user.first_name?.[0]||"")+(session.user.last_name?.[0]||"")}
-                </span>
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:"var(--t-text1)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", lineHeight:"1.4", paddingBottom:1 }}>
-                  {session.user.first_name} {session.user.last_name}
-                </div>
-                <div style={{ fontSize:10, color:"var(--t-text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", lineHeight:"1.4" }}>
-                  {session.role?.name || ""}
-                </div>
-              </div>
-              <button onClick={() => { clearSession(); setSession(null); }}
-                title="Sign out"
-                style={{ background:"none", border:"none", cursor:"pointer", padding:4, borderRadius:6,
-                  color:"var(--t-text3)", display:"flex", alignItems:"center" }}
-                onMouseEnter={e=>e.currentTarget.style.color="#e03131"}
-                onMouseLeave={e=>e.currentTarget.style.color="var(--t-text3)"}>
-                <Icon name="log-out" size={13} color="currentColor"/>
-              </button>
-            </div>
+            <UserFooterMenu
+              session={session}
+              activeNav={activeNav}
+              setActiveNav={setActiveNav}
+              clearSession={clearSession}
+              setSession={setSession}
+              t={t}
+            />
           )}
         </div>
+
       </div>
 
       {/* Main content */}
@@ -1958,6 +1931,83 @@ class ErrorBoundary extends Component {
     );
     return this.props.children;
   }
+}
+
+// ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
+function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
+          <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0,
+            background: "var(--t-surface)", border: "1px solid var(--t-border)",
+            borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+            zIndex: 201, overflow: "hidden", padding: "4px 0" }}>
+            {[
+              { id: "settings", icon: "settings", label: t ? t("nav.settings") : "Settings" },
+              { id: "help",     icon: "help-circle", label: "Help" },
+            ].map(item => (
+              <button key={item.id}
+                onClick={() => { setActiveNav(item.id); setOpen(false); }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
+                  padding: "9px 14px", border: "none", background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 13,
+                  fontWeight: activeNav === item.id ? 700 : 500,
+                  color: activeNav === item.id ? "var(--t-accent)" : "var(--t-text2)",
+                  textAlign: "left" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <Icon name={item.icon} size={14} color={activeNav === item.id ? "var(--t-accent)" : "var(--t-text3)"} />
+                {item.label}
+              </button>
+            ))}
+            <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
+            <button onClick={() => { clearSession(); setSession(null); setOpen(false); }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
+                padding: "9px 14px", border: "none", background: "transparent",
+                cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
+                color: "#e03131", textAlign: "left" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <Icon name="log-out" size={14} color="#e03131" />
+              Sign out
+            </button>
+          </div>
+        </>
+      )}
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width: "100%", padding: "8px 10px", borderRadius: 10,
+          background: open ? "var(--t-accentLight)" : "var(--t-surface2)",
+          border: `1px solid ${open ? "var(--t-accent)" : "transparent"}`,
+          display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+          textAlign: "left", transition: "all .15s" }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--t-border)"; }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = "transparent"; }}>
+        <div style={{ width: 28, height: 28, borderRadius: "50%",
+          background: session.role?.color || "#4f46e5",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ color: "white", fontSize: 11, fontWeight: 700 }}>
+            {(session.user.first_name?.[0] || "") + (session.user.last_name?.[0] || "")}
+          </span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--t-text1)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            lineHeight: "1.4", paddingBottom: 1 }}>
+            {session.user.first_name} {session.user.last_name}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--t-text3)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "1.4" }}>
+            {session.role?.name || ""}
+          </div>
+        </div>
+        <Icon name="chevron-up" size={12} color="var(--t-text3)"
+          style={{ transform: open ? "rotate(0deg)" : "rotate(180deg)", transition: "transform .2s", flexShrink: 0 }} />
+      </button>
+    </div>
+  );
 }
 
 // ─── Root export wrapped in ThemeProvider ─────────────────────────────────────
