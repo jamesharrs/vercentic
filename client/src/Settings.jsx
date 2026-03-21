@@ -631,7 +631,7 @@ const RolesSection = ({ environment }) => {
                 ))}
               </div>
               {roleTab==="feature_access"
-                ? <FeatureAccessSection/>
+                ? <FeatureAccessSection selectedRole={selectedRole}/>
                 : roleTab==="field_visibility"
                 ? <FieldVisibilityPanel role={selectedRole} environment={environment}/>
                 : <>
@@ -2470,116 +2470,66 @@ const FEATURE_FLAGS_LIST = [
 ];
 const FEATURE_GROUPS_LIST = [...new Set(FEATURE_FLAGS_LIST.map(f => f.group))];
 
-const FeatureAccessSection = () => {
-  const [roles, setRoles]       = useState([]);
-  const [perms, setPerms]       = useState({});
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
+const FeatureAccessSection = ({ selectedRole }) => {
+  const [perms, setPerms]     = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/roles').then(async rolesData => {
-      const r = Array.isArray(rolesData) ? rolesData : [];
-      setRoles(r);
-      const allPerms = {};
-      for (const role of r) {
-        const p = await api.get(`/roles/${role.id}/permissions`);
-        allPerms[role.id] = {};
-        (Array.isArray(p) ? p : []).forEach(x => {
-          if (x.object_slug === '__global__') allPerms[role.id][x.action] = Boolean(x.allowed);
-        });
-      }
-      setPerms(allPerms);
+    if (!selectedRole) { setLoading(false); return; }
+    setLoading(true);
+    api.get(`/roles/${selectedRole.id}/permissions`).then(p => {
+      setPerms(Array.isArray(p) ? p : []);
       setLoading(false);
     });
-  }, []);
+  }, [selectedRole?.id]);
 
-  const toggle = (roleId, flag) => {
-    if (roles.find(r => r.id === roleId)?.is_system) return;
-    setPerms(prev => ({ ...prev, [roleId]: { ...prev[roleId], [flag]: !prev[roleId]?.[flag] } }));
-  };
+  if (!selectedRole) return (
+    <div style={{ padding:'24px 0', textAlign:'center', color:C.text3, fontSize:13 }}>
+      Select a role to view its feature access.
+    </div>
+  );
 
-  const handleSave = async () => {
-    setSaving(true);
-    const ALL_FLAGS = FEATURE_FLAGS_LIST.map(f => f.id);
-    for (const role of roles.filter(r => !r.is_system)) {
-      const existing = await api.get(`/roles/${role.id}/permissions`);
-      const objectPerms = (Array.isArray(existing) ? existing : [])
-        .filter(p => p.object_slug !== '__global__')
-        .map(p => ({ object_slug: p.object_slug, action: p.action, allowed: p.allowed }));
-      const nonFlagGlobals = (Array.isArray(existing) ? existing : [])
-        .filter(p => p.object_slug === '__global__' && !ALL_FLAGS.includes(p.action))
-        .map(p => ({ object_slug: '__global__', action: p.action, allowed: p.allowed }));
-      const flagPerms = ALL_FLAGS.map(flag => ({
-        object_slug: '__global__', action: flag, allowed: perms[role.id]?.[flag] ? 1 : 0
-      }));
-      await api.put(`/roles/${role.id}/permissions`, { permissions: [...objectPerms, ...nonFlagGlobals, ...flagPerms] });
-    }
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
-  };
+  if (loading) return <div style={{ padding:20, color:C.text3, fontSize:13 }}>Loading…</div>;
 
-  if (loading) return <div style={{ padding:40, textAlign:'center', color:C.text3 }}>Loading…</div>;
-  const displayRoles = [...roles.filter(r => r.is_system), ...roles.filter(r => !r.is_system)];
+  const allowed = new Set(perms.filter(p => p.object_slug==='__global__' && p.allowed).map(p => p.action));
+
+  const Badge = ({ ok }) => ok
+    ? <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700,
+        color:'#0ca678', background:'#e6fcf5', borderRadius:20, padding:'2px 8px' }}>
+        <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#0ca678" strokeWidth={3} strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Yes
+      </span>
+    : <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700,
+        color:'#adb5bd', background:'#f8f9fa', borderRadius:20, padding:'2px 8px' }}>
+        <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#adb5bd" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        No
+      </span>;
 
   return (
-    <Card title="Feature Access Control" subtitle="Control which roles can access each platform feature and record action."
-      action={<Btn onClick={handleSave} disabled={saving}>{saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Changes'}</Btn>}>
-      <div style={{ overflowX:'auto', marginTop:16 }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', minWidth:500 }}>
-          <thead>
-            <tr>
-              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', width:220 }}>Feature</th>
-              {displayRoles.map(role => (
-                <th key={role.id} style={{ padding:'8px 6px', textAlign:'center', fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase' }}>
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-                    <div style={{ width:9, height:9, borderRadius:'50%', background:role.color||C.accent }}/>
-                    <span style={{ whiteSpace:'nowrap' }}>{role.name.split(' ')[0]}</span>
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {FEATURE_GROUPS_LIST.map(group => (
-              <React.Fragment key={group}>
-                <tr>
-                  <td colSpan={displayRoles.length+1} style={{ padding:'10px 12px 3px', fontSize:10, fontWeight:700,
-                    color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em',
-                    borderTop:`1px solid ${C.border}`, background:C.bg }}>
-                    {group}
-                  </td>
-                </tr>
-                {FEATURE_FLAGS_LIST.filter(f => f.group === group).map(feature => (
-                  <tr key={feature.id} style={{ borderBottom:`1px solid #f5f5f5` }}>
-                    <td style={{ padding:'8px 12px', fontSize:12, color:C.text1, fontWeight:500 }}>{feature.label}</td>
-                    {displayRoles.map(role => {
-                      const allowed = perms[role.id]?.[feature.id];
-                      const isSystem = role.is_system;
-                      return (
-                        <td key={role.id} style={{ padding:'8px 6px', textAlign:'center' }}>
-                          <button onClick={() => !isSystem && toggle(role.id, feature.id)}
-                            title={isSystem ? 'System role — read only' : allowed ? 'Click to revoke' : 'Click to grant'}
-                            style={{ width:20, height:20, borderRadius:4,
-                              border:`2px solid ${allowed ? (role.color||C.accent) : '#e5e7eb'}`,
-                              background:allowed ? (role.color||C.accent) : 'transparent',
-                              cursor:isSystem ? 'not-allowed' : 'pointer', opacity:isSystem ? 0.5 : 1,
-                              display:'inline-flex', alignItems:'center', justifyContent:'center', transition:'all .1s' }}>
-                            {allowed && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+    <div style={{ marginTop:4 }}>
+      <div style={{ fontSize:12, color:C.text3, marginBottom:16 }}>
+        Access permissions for <strong style={{ color:selectedRole.color||C.accent }}>{selectedRole.name}</strong>.
+        {selectedRole.is_system && <em> System role — edit via Roles & Permissions.</em>}
       </div>
-      <p style={{ fontSize:11, color:C.text3, marginTop:10, fontStyle:'italic' }}>
-        System role defaults are shown read-only. Custom roles can be fully configured. Changes take effect on next login.
-      </p>
-    </Card>
+      {FEATURE_GROUPS_LIST.map(group => (
+        <div key={group} style={{ marginBottom:16 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase',
+            letterSpacing:'0.08em', marginBottom:6, paddingBottom:4, borderBottom:`1px solid ${C.border}` }}>
+            {group}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 16px' }}>
+            {FEATURE_FLAGS_LIST.filter(f => f.group === group).map(feature => (
+              <div key={feature.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                padding:'5px 8px', borderRadius:6, background:allowed.has(feature.id)?'#f0fdf4':'transparent' }}>
+                <span style={{ fontSize:12, color:allowed.has(feature.id)?C.text1:C.text3, fontWeight:allowed.has(feature.id)?500:400 }}>
+                  {feature.label}
+                </span>
+                <Badge ok={allowed.has(feature.id)}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 };
-
