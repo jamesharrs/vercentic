@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import InboxModule, { useInboxUnreadCount } from "./Inbox";
+import { MobileShell, useIsMobile } from "./MobileApp.jsx";
 
 // Heavy modules — loaded on demand only when navigated to
 const SettingsPage    = lazy(() => import("./Settings.jsx"));
@@ -1211,6 +1212,7 @@ function App() {
   const { prefs, update } = useTheme();
   const { t, isRTL } = useI18n();
   const [session, setSession]   = useState(() => getSession()); // { user, role, permissions }
+  const isMobile = useIsMobile();
   const userId = session?.user?.id || null;
   // Permission helpers using session (App renders PermissionProvider so cannot consume it directly)
   const _sessionRole = session?.role?.slug;
@@ -1478,6 +1480,17 @@ function App() {
   // Show login page if no session
   if (!session) {
     return <LoginPage onLogin={(s) => setSession(s)} />;
+  }
+
+  // Auto-detect mobile and serve the mobile recruiter shell
+  if (isMobile && session) {
+    return (
+      <MobileShell
+        session={session.user}
+        environment={selectedEnv}
+        objects={[]}
+      />
+    );
   }
 
   if (apiOnline === false) {
