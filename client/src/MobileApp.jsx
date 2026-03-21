@@ -69,8 +69,26 @@ const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
   </svg>
 );
 
-const VLogo = ({ height = 28 }) => (
-  <img src="/vercentic-logo.svg" alt="Vercentic" height={height} style={{ display: "block" }} />
+// ─── Vercentic Logo — icon + wordmark, no external font dependency ────────────
+const VIcon = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="#0D0D0F" opacity="0.18"/>
+    <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="#0D0D0F" opacity="0.42"/>
+    <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="#0D0D0F"/>
+  </svg>
+);
+
+const VLogo = ({ height = 24 }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: Math.round(height * 0.35) }}>
+    <VIcon size={height} />
+    <span style={{
+      fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      fontSize: height * 0.72, fontWeight: 800, color: "#0D0D0F",
+      letterSpacing: "-0.04em", lineHeight: 1, whiteSpace: "nowrap",
+    }}>
+      Vercentic
+    </span>
+  </div>
 );
 
 const Avatar = ({ name = "", size = 40, color = V.lavender }) => {
@@ -173,8 +191,12 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
   ];
 
   const AiAvatar = () => (
-    <div style={{ width: 24, height: 24, borderRadius: 8, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-      <img src="/vercentic-logo.svg" alt="" style={{ width: 20, height: 20, filter: "invert(1)", objectFit: "contain" }} />
+    <div style={{ width: 26, height: 26, borderRadius: 8, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="white" opacity="0.35"/>
+        <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="white" opacity="0.65"/>
+        <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="white"/>
+      </svg>
     </div>
   );
 
@@ -485,8 +507,12 @@ export const MobileShell = ({ session, environment, objects }) => {
 
   const NavIcon = ({ id, active }) => {
     if (id === "copilot" && active) return (
-      <div style={{ width: 32, height: 32, borderRadius: 10, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-        <img src="/vercentic-logo.svg" alt="" style={{ width: 26, height: 26, filter: "invert(1)", objectFit: "contain" }} />
+      <div style={{ width: 32, height: 32, borderRadius: 10, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="white" opacity="0.35"/>
+          <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="white" opacity="0.65"/>
+          <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="white"/>
+        </svg>
       </div>
     );
     return <Ic n={id === "copilot" ? "spark" : nav.find(n => n.id === id)?.icon} s={21} c={active ? V.inkMid : V.muted} />;
