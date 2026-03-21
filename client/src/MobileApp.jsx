@@ -70,11 +70,17 @@ const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
 );
 
 // ─── Vercentic Logo — icon + wordmark, no external font dependency ────────────
-const VIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="#0D0D0F" opacity="0.18"/>
-    <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="#0D0D0F" opacity="0.42"/>
-    <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="#0D0D0F"/>
+const VIcon = ({ size = 24, color = "#0D0D0F" }) => (
+  <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
+    <path d="M8 52 L40 36 L72 52 L40 68 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M8 52 L8 62 L40 78 L40 68 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M72 52 L72 62 L40 78 L40 68 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.3"/>
+    <path d="M20 34 L40 24 L60 34 L40 44 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M20 34 L20 42 L40 52 L40 44 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M60 34 L60 42 L40 52 L40 44 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.3"/>
+    <path d="M28 18 L40 12 L52 18 L40 24 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M28 18 L28 24 L40 30 L40 24 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
+    <path d="M52 18 L52 24 L40 30 L40 24 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.3"/>
   </svg>
 );
 
@@ -192,11 +198,7 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
 
   const AiAvatar = () => (
     <div style={{ width: 26, height: 26, borderRadius: 8, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-        <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="white" opacity="0.35"/>
-        <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="white" opacity="0.65"/>
-        <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="white"/>
-      </svg>
+      <VIcon size={18} color="white" />
     </div>
   );
 
@@ -506,24 +508,12 @@ export const MobileShell = ({ session, environment, objects }) => {
 
   const NavIcon = ({ id, active }) => {
     if (id === "copilot") {
-      // Active: white icon in dark pill
       if (active) return (
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill="white" opacity="0.35"/>
-            <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill="white" opacity="0.65"/>
-            <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill="white"/>
-          </svg>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <VIcon size={22} color="white" />
         </div>
       );
-      // Inactive: same mark in muted ink
-      return (
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
-          <rect x="1"  y="17" width="16" height="3.5" rx="1.2" fill={V.muted} opacity="0.35"/>
-          <rect x="0"  y="11" width="18" height="4"   rx="1.2" fill={V.muted} opacity="0.65"/>
-          <rect x="1"  y="4"  width="16" height="5.5" rx="1.8" fill={V.muted}/>
-        </svg>
-      );
+      return <VIcon size={22} color={V.muted} />;
     }
     return <Ic n={nav.find(n => n.id === id)?.icon} s={21} c={active ? V.inkMid : V.muted} />;
   };
