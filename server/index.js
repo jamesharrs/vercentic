@@ -90,6 +90,7 @@ app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/notifications',   require('./routes/notifications'));
 app.use('/api/offers',             require('./routes/offers'));
+app.use('/api/release-notes',      require('./routes/release_notes'));
 app.use('/api/error-logs',         require('./routes/error_logs'));
 app.use('/api/company-research',   require('./routes/company_research'));
 app.use('/api/rpo-clients',        require('./routes/rpo_clients'));

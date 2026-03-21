@@ -36,6 +36,7 @@ import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
 import { useHistory } from "./useHistory";
 import { HistoryDropdown } from "./RecentHistory";
+import { WhatsNewButton } from "./ReleaseNotes.jsx";
 
 // ─── API Client ───────────────────────────────────────────────────────────────
 // Derive tenant slug — session takes priority, then URL param, then subdomain
@@ -949,7 +950,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         )}
       </div>
 
-      {/* ── Right group: Calendar + Bell ── */}
+      {/* ── Right group: Calendar + What's New + Bell ── */}
       <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:"auto", flexShrink:0, borderLeft:"1px solid var(--t-border)", paddingLeft:10 }}>
 
         {/* Calendar */}
@@ -960,7 +961,8 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--t-accent)" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </button>
 
-        {/* Bell */}
+        {/* What's New */}
+        <WhatsNewButton />
         <div ref={bellRef} style={{ position:"relative" }}>
           <button onClick={() => setBellOpen(o => !o)} title="Notifications"
             style={{ width:34, height:34, borderRadius:9, border:"1px solid var(--t-border)", background: bellOpen ? "var(--t-accent-light,#eef2ff)" : "var(--t-surface2)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", position:"relative", transition:"background .12s" }}

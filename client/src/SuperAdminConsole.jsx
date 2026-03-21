@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ClientList, ClientDetail, ProvisionWizard, Performance } from './superadmin/ClientManager.jsx';
 import DemoDataManager from './superadmin/DemoDataManager';
 import ErrorLogViewer from './superadmin/ErrorLogViewer.jsx';
+import { ReleaseNotesAdmin } from './ReleaseNotes.jsx';
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
@@ -265,6 +266,7 @@ const NAV_ICONS = {
   provision:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",
   perf:     "M18 20V10M12 20V4M6 20v-6",
   errors:   "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
+  bell:     "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0",
 };
 
 const NavIcon = ({ id, size=14, color="currentColor" }) => {
@@ -279,6 +281,7 @@ const NAV_ITEMS = [
   { id:'perf',     label:'Performance',  icon:'perf',    desc:'Platform-wide stats & usage' },
   { id:'demo',     label:'Demo Data',    icon:'provision', desc:'Generate realistic demo data' },
   { id:'errors',   label:'Error Logs',   icon:'errors',    desc:'App errors across all environments' },
+  { id:'release_notes', label:'Release Notes', icon:'bell', desc:'Manage platform release notes' },
 ];
 
 export default function SuperAdminConsole() {
@@ -355,6 +358,7 @@ export default function SuperAdminConsole() {
         {section === 'perf' && <Performance/>}
         {section === 'demo' && <DemoDataManager/>}
         {section === 'errors' && <ErrorLogViewer/>}
+        {section === 'release_notes' && <ReleaseNotesAdmin />}
       </div>
     </div>
   );
