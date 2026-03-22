@@ -2365,8 +2365,8 @@ export default function SettingsPage({ currentUser, environment }) {
             onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=C.text3;}}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               {sideExpanded
-                ? <><path d="M15 18l-6-6 6-6"/><line x1="19" y1="6" x2="19" y2="18"/></>
-                : <><path d="M9 18l6-6-6-6"/><line x1="5" y1="6" x2="5" y2="18"/></>
+                ? <><path d="M9 18l6-6-6-6"/><line x1="5" y1="6" x2="5" y2="18"/></>
+                : <><path d="M15 18l-6-6 6-6"/><line x1="19" y1="6" x2="19" y2="18"/></>
               }
             </svg>
           </button>

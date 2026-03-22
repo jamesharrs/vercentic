@@ -1751,8 +1751,10 @@ function App() {
               onMouseEnter={e => { e.currentTarget.style.background = "var(--t-surface2)"; e.currentTarget.style.borderColor = "var(--t-border)"; e.currentTarget.style.color = "var(--t-text1)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.color = "var(--t-text3)"; }}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6"/>
-                <line x1="19" y1="6" x2="19" y2="18"/>
+                {navCollapsed
+                  ? <><path d="M15 18l-6-6 6-6"/><line x1="19" y1="6" x2="19" y2="18"/></>
+                  : <><path d="M9 18l6-6-6-6"/><line x1="5" y1="6" x2="5" y2="18"/></>
+                }
               </svg>
             </button>
           )}
