@@ -2347,8 +2347,13 @@ const NAV_GROUPS = [
   },
 ];
 
-export default function SettingsPage({ currentUser, environment }) {
-  const [activeSection, setActiveSection] = useState(null);
+export default function SettingsPage({ currentUser, environment, initialSection, onSectionChange }) {
+  const [activeSection, setActiveSectionState] = useState(initialSection || null);
+
+  const setActiveSection = (id) => {
+    setActiveSectionState(id);
+    if (onSectionChange) onSectionChange(id);
+  };
   const [search, setSearch]               = useState("");
   const [collapsed, setCollapsed]         = useState({});
   const [sideCollapsed, setSideCollapsed] = useState(

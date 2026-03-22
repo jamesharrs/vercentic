@@ -1362,7 +1362,6 @@ function App() {
   // Super Admin route — completely separate from main app
   // Portal routes: /portal/slug (legacy) OR /slug (clean URL e.g. /careers)
   const _path = window.location.pathname;
-  // App routes that must not be treated as portal slugs
   const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|settings|workflows|portals|record)(\/|$)/;
   // Only treat as portal if it matches /portal/slug explicitly
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
@@ -1427,7 +1426,7 @@ function App() {
     // /:objectSlug  (list view)
     const obj = objects.find(o => o.slug === seg0);
     if (obj) return `obj_${obj.id}`;
-    // Named pages
+    // Named pages (settings sub-pages use seg0 only — section handled inside Settings)
     const named = ['dashboard','search','interviews','offers','reports','calendar','org-chart','settings','workflows','portals'];
     if (named.includes(seg0)) return seg0;
     return 'dashboard';
@@ -2007,7 +2006,14 @@ function App() {
             window.dispatchEvent(new CustomEvent("talentos:openCopilot", { detail: { message: msg } }));
           }} />
         ) : activeNav === "settings" ? (
-          <SettingsPage environment={selectedEnv} />
+          <SettingsPage
+            environment={selectedEnv}
+            initialSection={window.location.pathname.startsWith('/settings/') ? window.location.pathname.split('/settings/')[1] : null}
+            onSectionChange={(sectionId) => {
+              const url = sectionId ? `/settings/${sectionId}` : '/settings';
+              if (window.location.pathname !== url) window.history.pushState({ nav: 'settings', section: sectionId }, '', url);
+            }}
+          />
         ) : activeNav === "orgchart" ? (
           <div style={{ padding:"28px 32px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column" }}>
             <OrgChart environment={selectedEnv} />
