@@ -1362,9 +1362,10 @@ function App() {
   // Super Admin route — completely separate from main app
   // Portal routes: /portal/slug (legacy) OR /slug (clean URL e.g. /careers)
   const _path = window.location.pathname;
-  const _reserved = /^\/(superadmin|availability|bot|interview|api)(\/|$)/;
-  const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1]
-    || (_path !== '/' && !_reserved.test(_path) ? _path.slice(1) : null);
+  // App routes that must not be treated as portal slugs
+  const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|settings|workflows|portals|record)(\/|$)/;
+  // Only treat as portal if it matches /portal/slug explicitly
+  const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
   if (portalSlug) return <PortalApp slug={portalSlug}/>
 
   if (window.location.pathname === '/superadmin') {
