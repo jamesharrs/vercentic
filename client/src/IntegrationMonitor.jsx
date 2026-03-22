@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import api from "./apiClient.js";
 
 const C = {
   bg:"var(--t-bg,#EEF2FF)",card:"var(--t-card,#ffffff)",accent:"var(--t-accent,#4361EE)",
@@ -6,7 +7,6 @@ const C = {
   text2:"var(--t-text2,#374151)",text3:"var(--t-text3,#9CA3AF)",border:"var(--t-border,#E5E7EB)",
 };
 const F = "'DM Sans',-apple-system,sans-serif";
-const api = { get:(u)=>fetch(u).then(r=>r.json()) };
 
 function Ic({n,s=16,c="currentColor"}){
   const paths={

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import api from "./apiClient.js";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -23,8 +24,6 @@ const V = {
 };
 
 const ACCENT = [V.purple, V.rose, V.teal, V.amber, V.purpleL];
-
-const api = { get: (p) => fetch(p).then(r => r.json()).catch(() => null) };
 
 let _cache = null, _cacheEnv = null;
 

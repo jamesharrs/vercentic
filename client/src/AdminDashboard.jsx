@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import api from "./apiClient.js";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const C = { bg:"var(--t-bg,#f0f2ff)", card:"#fff", accent:"var(--t-accent,#4361ee)", text1:"#111827", text2:"#374151", text3:"#9ca3af", border:"#f0f0f0", green:"#0ca678", amber:"#f59f00", red:"#e03131", purple:"#7c3aed" };
 const F = "'DM Sans',-apple-system,sans-serif";
 
-const api = { get: async url => { const r = await fetch(url); if (!r.ok) throw new Error(await r.text()); return r.json(); } };
 
 const PATHS = {
   cpu:"M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18",

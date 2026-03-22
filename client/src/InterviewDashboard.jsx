@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import api from "./apiClient.js";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const F = "'Geist', -apple-system, sans-serif";
@@ -8,7 +9,6 @@ const C = {
   accent:"#4361EE", accentLight:"#EEF2FF",
   green:"#0CAF77", amber:"#F79009", purple:"#7C3AED", red:"#EF4444",
 };
-const api = { get: p => fetch(`/api${p}`).then(r => r.json()) };
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const Ic = ({ n, s=16, c="currentColor" }) => {

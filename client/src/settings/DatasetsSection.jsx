@@ -1,9 +1,9 @@
 // client/src/settings/DatasetsSection.jsx
+import api from "../apiClient.js";
 import { useState, useEffect, useCallback } from 'react';
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = { accent:'#4361EE', accentLight:'#EEF2FF', bg:'#F7F8FA', text1:'#111827', text2:'#374151', text3:'#6B7280', text4:'#9CA3AF', border:'#E5E7EB', green:'#0CAF77', amber:'#F59F00', red:'#EF4444', purple:'#7C3AED' };
-const api = { get: u => fetch(u).then(r=>r.json()), post:(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()), patch:(u,b)=>fetch(u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()), put:(u,b)=>fetch(u,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()), delete:u=>fetch(u,{method:'DELETE'}).then(r=>r.json()) };
 
 const PATHS = { plus:'M12 5v14M5 12h14', trash:'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6', edit:'M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z', x:'M18 6L6 18M6 6l12 12', check:'M20 6L9 17l-5-5', search:'M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z', grip:'M9 3h1v1H9V3zM14 3h1v1h-1V3zM9 8h1v1H9V8zM14 8h1v1h-1V8zM9 13h1v1H9v-1zM14 13h1v1h-1v-1z', copy:'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2v-2M8 4h8a2 2 0 012 2v2M8 4a2 2 0 012-2h4a2 2 0 012 2', layers:'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' };
 function Ic({ n, s=16, c=C.text3, style={} }) { return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><path d={PATHS[n]||''}/></svg>; }

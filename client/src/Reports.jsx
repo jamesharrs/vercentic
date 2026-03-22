@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import api from "./apiClient.js";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const B = { purple:"#7F77DD", purpleLight:"#AFA9EC", rose:"#D4537E", teal:"#1D9E75", amber:"#EF9F27", gray:"#888780", gray2:"#374151", bg:"#F8F7FF", card:"white" };
 const PALETTE = [B.purple, B.rose, B.teal, B.amber, B.purpleLight, "#E87FAA", "#5DCAA5"];
-const api = { get:(p)=>fetch(p).then(r=>r.json()).catch(()=>null), post:(p,b)=>fetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()).catch(()=>null), delete:(p)=>fetch(p,{method:"DELETE"}).then(r=>r.json()).catch(()=>null) };
 
 function evalFormula(expr,row){
   try{
