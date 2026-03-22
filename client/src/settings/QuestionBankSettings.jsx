@@ -41,6 +41,28 @@ const Ic = ({ n, s = 16, c = 'currentColor' }) => {
 
 
 
+const TYPE_LABELS = {
+  multiple_choice: "Multiple Choice",
+  single_choice:   "Single Choice",
+  text:            "Text / Open",
+  rating:          "Rating Scale",
+  boolean:         "Yes / No",
+  number:          "Number",
+  date:            "Date",
+  file_upload:     "File Upload",
+};
+
+const TYPE_COLORS = {
+  multiple_choice: "#4361EE",
+  single_choice:   "#7C3AED",
+  text:            "#0CAF77",
+  rating:          "#F79009",
+  boolean:         "#06B6D4",
+  number:          "#EC4899",
+  date:            "#6366F1",
+  file_upload:     "#14B8A6",
+};
+
 const Btn = ({children,onClick,v="primary",sz="md",icon,disabled,style={}})=>{
   const base={display:"inline-flex",alignItems:"center",gap:6,fontFamily:F,fontWeight:700,cursor:disabled?"not-allowed":"pointer",borderRadius:9,transition:"all .12s",border:"none",opacity:disabled?0.5:1,...(sz==="sm"?{padding:"5px 10px",fontSize:11}:{padding:"8px 16px",fontSize:13})};
   const vs={primary:{background:C.accent,color:"#fff"},secondary:{background:"#f1f5f9",color:C.text2},ghost:{background:"transparent",color:C.text2,border:`1px solid ${C.border}`},danger:{background:"#fef2f2",color:C.red,border:`1px solid #fecaca`},green:{background:C.green,color:"#fff"}};
