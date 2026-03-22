@@ -255,8 +255,8 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.client_environments.push(environment);
-  if (!s.environments) s.environments = [];
-  s.environments.push({ ...environment });
+  // NOTE: Do NOT push into s.environments — client environments live in their
+  // own tenant store only. Adding them here would expose client data to master users.
 
   if (!s.objects) s.objects = [];
   if (!s.fields)  s.fields  = [];

@@ -240,8 +240,13 @@ router.patch('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  const delRec = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
+  const { environment_id } = req.query;
+  const delRec = findOne('records', r => r.id === req.params.id && !r.deleted_at);
   if (!delRec) return res.status(404).json({error:'Not found'});
+  // Verify the record belongs to the requested environment — prevents cross-environment deletes
+  if (environment_id && delRec.environment_id !== environment_id) {
+    return res.status(403).json({error:'Record does not belong to this environment'});
+  }
   if (checkPerm(req, res, delRec.object_id, 'delete') === false) return;
   update('records', r=>r.id===req.params.id, {deleted_at:new Date().toISOString()});
   res.json({deleted:true});

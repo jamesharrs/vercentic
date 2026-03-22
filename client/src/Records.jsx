@@ -5555,7 +5555,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const handleDelete = async (id) => {
     if (!confirm("Delete this record?")) return;
-    await api.del(`/records/${id}`);
+    await api.del(`/records/${id}?environment_id=${environment.id}`);
     if (selected?.id===id) setSelected(null);
     load();
   };
@@ -5612,7 +5612,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   const handleBulkDelete = async () => {
-    await Promise.all([...selectedIds].map(id => api.del(`/records/${id}`)));
+    await Promise.all([...selectedIds].map(id => api.del(`/records/${id}?environment_id=${environment.id}`)));
     setSelectedIds(new Set());
     load();
   };

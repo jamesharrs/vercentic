@@ -3,7 +3,14 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update } = require('../db/init');
 
-router.get('/', (req, res) => res.json(query('environments').sort((a,b) => b.is_default - a.is_default)));
+router.get('/', (req, res) => {
+  // Only return environments that are NOT owned by a provisioned client.
+  // Client environments live in their own tenant store and should never
+  // bleed through to the master environment list.
+  const envs = query('environments', e => !e.client_id)
+    .sort((a, b) => b.is_default - a.is_default);
+  res.json(envs);
+});
 router.get('/:id', (req, res) => { const e = findOne('environments', x=>x.id===req.params.id); e ? res.json(e) : res.status(404).json({error:'Not found'}); });
 router.post('/', (req, res) => {
   const { name, slug, description, color } = req.body;
