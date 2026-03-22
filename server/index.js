@@ -79,6 +79,7 @@ app.use('/api/interview-coordinator', require('./routes/interview_coordinator'))
 app.use('/api/interviews',       require('./routes/interviews'));
 app.use('/api/calendar',         require('./routes/calendar'));
 app.use('/api/translate',          require('./routes/translate'));
+app.use('/api/admin',              require('./routes/admin_dashboard').router);
 app.use('/api/superadmin',         require('./routes/superadmin'));
 app.use('/api/superadmin/clients', require('./routes/superadmin_clients'));
 app.use('/api/superadmin/demo',    require('./routes/demo_seed'));

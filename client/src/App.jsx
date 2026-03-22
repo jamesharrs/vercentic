@@ -7,6 +7,7 @@ const SettingsPage    = lazy(() => import("./Settings.jsx"));
 const OrgChart        = lazy(() => import("./OrgChart.jsx"));
 const SearchPage      = lazy(() => import("./Search.jsx"));
 const Dashboard          = lazy(() => import("./Dashboard.jsx"));
+const AdminDashboard     = lazy(() => import("./AdminDashboard.jsx"));
 const InterviewDashboard = lazy(() => import("./InterviewDashboard.jsx"));
 const OfferDashboard     = lazy(() => import("./OfferDashboard.jsx"));
 const ObjectApp       = lazy(() => import("./ObjectApp.jsx"));
@@ -177,6 +178,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
     user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
     "bar-chart-2": "M18 20V10M12 20V4M6 20v-6",
+    "shield": "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
     "git-branch": "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
     "log-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
     "help-circle": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
@@ -1488,6 +1490,7 @@ function App() {
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
         { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
+        { id: "admin_stats", icon: "shield",       label: "Admin Stats" },
         { id: "search",      icon: "search",       label: t("nav.search") },
       ]
     },
@@ -1862,6 +1865,8 @@ function App() {
           }}/>
         ) : activeNav === "reports" ? (
           <ReportsPage environment={selectedEnv} initialReport={reportPreset} />
+        ) : activeNav === "admin_stats" ? (
+          <Suspense fallback={<div style={{padding:32,color:"#9ca3af"}}>Loading…</div>}><AdminDashboard environment={selectedEnv} session={session}/></Suspense>
         ) : activeNav === "help" ? (
           <HelpPage onOpenCopilot={(msg) => {
             window.dispatchEvent(new CustomEvent("talentos:openCopilot", { detail: { message: msg } }));
