@@ -53,11 +53,12 @@ app.use(attachUser); // attach current user to every request (non-blocking)
 
 // ── Global auth guard ─────────────────────────────────────────────────────────
 // All /api/* routes require authentication EXCEPT auth endpoints.
-const AUTH_EXEMPT = ['/api/auth/login', '/api/auth/me', '/api/health',
-  '/api/portals/public', '/api/superadmin'];
+// Note: req.path inside app.use('/api', ...) is stripped of the /api prefix
+const AUTH_EXEMPT_PATHS = ['/auth/login', '/auth/me', '/health',
+  '/portals/public', '/superadmin'];
 app.use('/api', (req, res, next) => {
   // Skip for exempt prefixes
-  if (AUTH_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+  if (AUTH_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
   // Skip for OPTIONS (CORS preflight)
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) {
