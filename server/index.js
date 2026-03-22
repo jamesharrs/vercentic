@@ -62,6 +62,7 @@ const AUTH_EXEMPT_PATHS = [
   '/portals/public',                   // public portal renderer
   '/superadmin',                       // super admin console
   '/bot',                              // bot/interview routes (public)
+  '/tenant-reset',                     // tenant data reset (password protected)
 ];
 app.use('/api', (req, res, next) => {
   // Skip for exempt prefixes
