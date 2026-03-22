@@ -96,4 +96,49 @@ router.post("/restore", (req, res) => {
   res.json({ ok: true, counts });
 });
 
+// POST /api/superadmin/fix-permissions
+// Rebuilds super_admin permissions in ALL stores (master + every tenant).
+// Safe to call multiple times — always produces the correct full permission set.
+router.post('/fix-permissions', (req, res) => {
+  const { getStore, saveStore, listTenants, loadTenantStore } = require('../db/init');
+  const { seedDefaultPermissions } = require('../middleware/rbac');
+  const results = [];
+
+  // Helper: rebuild one store in context
+  const fixStore = (label, store) => {
+    const before = (store.permissions || []).filter(p => {
+      const saRole = (store.roles || []).find(r => r.slug === 'super_admin');
+      return saRole && p.role_id === saRole.id;
+    }).length;
+    seedDefaultPermissions(store);
+    saveStore();
+    const saRole = (store.roles || []).find(r => r.slug === 'super_admin');
+    const after = saRole
+      ? (store.permissions || []).filter(p => p.role_id === saRole.id).length
+      : 0;
+    results.push({ store: label, before, after, roles: (store.roles || []).length });
+  };
+
+  // 1. Master store
+  try {
+    const masterStore = getStore();
+    fixStore('master', masterStore);
+  } catch (e) {
+    results.push({ store: 'master', error: e.message });
+  }
+
+  // 2. All tenant stores
+  const tenants = listTenants();
+  for (const slug of tenants) {
+    try {
+      const tenantStore = loadTenantStore(slug);
+      fixStore(`tenant:${slug}`, tenantStore);
+    } catch (e) {
+      results.push({ store: `tenant:${slug}`, error: e.message });
+    }
+  }
+
+  res.json({ ok: true, stores_fixed: results.length, results });
+});
+
 module.exports = router;
