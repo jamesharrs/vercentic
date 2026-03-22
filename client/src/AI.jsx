@@ -472,6 +472,20 @@ You are always given the current page and record via "CURRENT PAGE CONTEXT:" in 
 - On a list page: the context includes "LIST:" data — total count, status/dept breakdown,
     first 25 record names. Use this directly to answer "how many people are in this list?",
     "what statuses are shown?", "who is Active?". NEVER say you cannot see the list — the data is always injected.
+- On the Reports page: if the user wants to change the CURRENT report (add/remove a filter,
+    change grouping, chart type, sort order) emit a <MODIFY_REPORT> block instead of giving
+    manual instructions. The user should never have to touch the UI for simple report changes.
+    Format:
+    <MODIFY_REPORT>
+    {
+      "addFilter":    { "field": "source", "op": "is not", "value": "Unknown" },
+      "removeFilter": { "field": "source" },
+      "setGroupBy":   "department",
+      "setChartType": "bar",
+      "setSortBy":    "count"
+    }
+    </MODIFY_REPORT>
+    Only include the keys that apply. After the block, confirm what changed in one sentence.
 - On the dashboard: offer to explain the pipeline, find records, or take actions
 - NEVER claim you cannot see what page the user is on — you are always told via context
 
@@ -992,6 +1006,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(match[1].trim()); } catch { return null; }
   };
 
+  const parseModifyReport = (text) => {
+    const m = text.match(/<MODIFY_REPORT>([sS]*?)</MODIFY_REPORT>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
   const parseCreateReport = (text) => {
     const match = text.match(/<CREATE_REPORT>([\s\S]*?)<\/CREATE_REPORT>/);
     if (!match) return null;
@@ -1251,6 +1271,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const roleData      = parseCreateRole(reply);
       const interviewData = parseScheduleInterview(reply);
       const formData2     = parseCreateForm(reply);
+      const modifyReport  = parseModifyReport(reply);
       const reportData    = parseCreateReport(reply);
       const cvData        = parseParsedCV(reply);
       const jdData        = parseParsedJD(reply);
@@ -1276,6 +1297,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(roleData)      setPendingRole(roleData);
       if(interviewData && canRecord('record_schedule_interview')) setPendingInterview(interviewData);
       if(formData2)     setPendingForm(formData2);
+      if(modifyReport)  window.dispatchEvent(new CustomEvent("talentos:modify-report", { detail: modifyReport }));
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);
       if(jdData)        setParsedJob(jdData);

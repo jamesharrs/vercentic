@@ -56,8 +56,8 @@ export default function Reports({environment,initialReport}){
   const[sortBy,setSortBy]=useState("");const[sortDir,setSortDir]=useState("desc");const[formulas,setFormulas]=useState([]);
   const[chartType,setChartType]=useState("bar");const[chartX,setChartX]=useState("");const[chartY,setChartY]=useState("");
   const[results,setResults]=useState(null);const[running,setRunning]=useState(false);const[panel,setPanel]=useState("build");
-  const[savedList,setSavedList]=useState([]);const[listName,setListName]=useState("");const[listShared,setListShared]=useState(false);
-  const[savingList,setSavingList]=useState(false);const[showSaveForm,setShowSaveForm]=useState(false);
+  const[savedList,setSavedList]=useState([]);const[reportName,setReportName]=useState("");const[reportShared,setReportShared]=useState(false);
+  const[savingReport,setSavingReport]=useState(false);const[showSaveDialog,setShowSaveDialog]=useState(false);
   const[activeChartFilter,setActiveChartFilter]=useState(null);
   const skipReset=useRef(false);
 
@@ -93,7 +93,7 @@ export default function Reports({environment,initialReport}){
     }catch(e){console.error(e);}finally{setRunning(false);}
   },[selObject,environment?.id,filters,groupBy,sortBy,sortDir,formulas,chartX,chartY]);
 
-  const saveReport=async()=>{if(!listName||!selObject)return;setSavingList(true);const cfg={name:listName,object_id:selObject,environment_id:environment?.id,is_shared:listShared,filters,group_by:groupBy,sort_by:sortBy,sort_dir:sortDir,formulas,chart_type:chartType,chart_x:chartX,chart_y:chartY,columns:selCols};const d=await api.post("/api/saved-views",cfg);if(d?.id){setSavedList(p=>[...p,d]);setListName("");setShowSaveForm(false);}setSavingList(false);};
+  const saveReport=async()=>{if(!reportName||!selObject)return;setSavingReport(true);const cfg={name:reportName,object_id:selObject,environment_id:environment?.id,is_shared:reportShared,filters,group_by:groupBy,sort_by:sortBy,sort_dir:sortDir,formulas,chart_type:chartType,chart_x:chartX,chart_y:chartY,columns:selCols};const d=await api.post("/api/saved-views",cfg);if(d?.id){setSavedList(p=>[...p,d]);setReportName("");setShowSaveDialog(false);}setSavingReport(false);};
   const loadReport=(sv)=>{skipReset.current=true;setSelObject(sv.object_id||selObject);if(sv.filters)setFilters(sv.filters);if(sv.group_by)setGroupBy(sv.group_by);if(sv.sort_by)setSortBy(sv.sort_by);if(sv.sort_dir)setSortDir(sv.sort_dir);if(sv.formulas)setFormulas(sv.formulas);if(sv.chart_type)setChartType(sv.chart_type);if(sv.chart_x)setChartX(sv.chart_x);if(sv.chart_y)setChartY(sv.chart_y);if(sv.columns)setSelCols(sv.columns);};
   const deleteReport=async(id)=>{await api.delete(`/api/saved-views/${id}`);setSavedList(p=>p.filter(s=>s.id!==id));};
   const addFilter=()=>setFilters(p=>[...p,{id:Date.now(),field:fields[0]?.api_key||"",op:"contains",value:""}]);
@@ -111,7 +111,7 @@ export default function Reports({environment,initialReport}){
       <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:24}}>
         <div><div style={{fontSize:24,fontWeight:800,color:"#0F0F19",letterSpacing:"-0.03em"}}>Reports</div><div style={{fontSize:13,color:B.gray,marginTop:4}}>Build, save and share reports from any data</div></div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{setShowSaveForm(true);setPanel("saved");}} style={{fontSize:11,padding:"6px 14px",borderRadius:20,border:"none",background:B.card,color:B.gray,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>Save report</button>
+          <button onClick={()=>{setShowSaveDialog(true);setPanel("saved");}} style={{fontSize:11,padding:"6px 14px",borderRadius:20,border:"none",background:B.card,color:B.gray,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>Save report</button>
           <button onClick={()=>runReport()} style={{fontSize:11,padding:"6px 14px",borderRadius:20,border:"none",background:B.purple,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>{running?"Running…":"▶ Run report"}</button>
         </div>
       </div>
@@ -143,8 +143,8 @@ export default function Reports({environment,initialReport}){
           {panel==="saved"&&(
             <div style={{background:B.card,borderRadius:14,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
               <div style={{fontSize:12,fontWeight:700,color:"#111827",marginBottom:12}}>Saved reports</div>
-              {showSaveForm&&<div style={{background:B.bg,borderRadius:10,padding:12,marginBottom:12}}><Inp val={listName} onChange={setListName} placeholder="Report name…" style={{marginBottom:8}}/><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:B.gray,cursor:"pointer",marginBottom:10}}><input type="checkbox" checked={listShared} onChange={e=>setListShared(e.target.checked)} style={{accentColor:B.purple}}/>Share with all users</label><div style={{display:"flex",gap:6}}><button onClick={()=>{setShowSaveForm(false);setListName("");}} style={{flex:1,fontSize:11,padding:"6px",borderRadius:8,border:"none",background:B.bg,color:B.gray,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button><button onClick={saveReport} disabled={!listName||savingList} style={{flex:1,fontSize:11,padding:"6px",borderRadius:8,border:"none",background:B.purple,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>{savingList?"Saving…":"Save"}</button></div></div>}
-              {savedList.length===0&&!showSaveForm&&<div style={{fontSize:12,color:B.gray,textAlign:"center",padding:"16px 0"}}>No saved reports yet</div>}
+              {showSaveDialog&&<div style={{background:B.bg,borderRadius:10,padding:12,marginBottom:12}}><Inp val={reportName} onChange={setReportName} placeholder="Report name…" style={{marginBottom:8}}/><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:B.gray,cursor:"pointer",marginBottom:10}}><input type="checkbox" checked={reportShared} onChange={e=>setReportShared(e.target.checked)} style={{accentColor:B.purple}}/>Share with all users</label><div style={{display:"flex",gap:6}}><button onClick={()=>{setShowSaveDialog(false);setReportName("");}} style={{flex:1,fontSize:11,padding:"6px",borderRadius:8,border:"none",background:B.bg,color:B.gray,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button><button onClick={saveReport} disabled={!reportName||savingReport} style={{flex:1,fontSize:11,padding:"6px",borderRadius:8,border:"none",background:B.purple,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>{savingReport?"Saving…":"Save"}</button></div></div>}
+              {savedList.length===0&&!showSaveDialog&&<div style={{fontSize:12,color:B.gray,textAlign:"center",padding:"16px 0"}}>No saved reports yet</div>}
               {savedList.map(sv=><div key={sv.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"0.5px solid rgba(0,0,0,0.05)"}}><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#111827"}}>{sv.name}</div>{sv.is_shared&&<span style={{fontSize:10,color:B.purple,fontWeight:700}}>shared</span>}</div><button onClick={()=>{loadReport(sv);setPanel("build");runReport(sv.object_id);}} style={{fontSize:11,color:B.purple,background:"none",border:"none",cursor:"pointer",fontWeight:700,fontFamily:"inherit"}}>Load</button><button onClick={()=>deleteReport(sv.id)} style={{fontSize:11,color:B.rose,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Delete</button></div>)}
             </div>
           )}
