@@ -136,24 +136,50 @@ export default function Reports({ environment, initialReport }) {
   useEffect(() => {
     if (!initialReport || !objects.length) return;
     const needle = (initialReport.objectSlug || initialReport.object || "").toLowerCase();
-    // match by slug, plural name, or common aliases (candidates → people)
-    const ALIASES = { candidates: "people", candidate: "people", vacancies: "jobs", vacancy: "jobs" };
+    const ALIASES = { candidates: "people", candidate: "people", vacancies: "jobs", vacancy: "jobs", roles: "jobs", role: "jobs" };
     const resolvedNeedle = ALIASES[needle] || needle;
     const obj = objects.find(o =>
       o.slug === resolvedNeedle ||
       (o.plural_name || o.name || "").toLowerCase().includes(resolvedNeedle) ||
       (o.plural_name || o.name || "").toLowerCase() === resolvedNeedle
     );
-    if (obj) {
-      skipReset.current = true;
-      setSelObject(obj.id);
-      if (initialReport.groupBy)   setGroupBy(initialReport.groupBy);
-      if (initialReport.chartType) setChartType(initialReport.chartType);
-      if (initialReport.formulas)  setFormulas(initialReport.formulas);
-      setPanel("build");
-      setTimeout(() => runReport(obj.id, initialReport.groupBy), 500);
-    }
-  }, [initialReport, objects]);
+    if (!obj) { console.warn("[Reports] no object matched for needle:", resolvedNeedle, "objects:", objects.map(o=>o.slug)); return; }
+
+    console.log("[Reports] applying initialReport:", initialReport, "→ object:", obj.name);
+    skipReset.current = true;
+
+    // Set all state
+    setSelObject(obj.id);
+    const grpBy = initialReport.groupBy || initialReport.group_by || "";
+    const chartT = initialReport.chartType || initialReport.chart_type || "bar";
+    if (grpBy)   setGroupBy(grpBy);
+    if (chartT)  setChartType(chartT);
+    if (initialReport.formulas?.length) setFormulas(initialReport.formulas);
+    if (initialReport.filters?.length)  setFilters(initialReport.filters);
+    setPanel("build");
+
+    // Run the report directly — don't rely on state being flushed first
+    const oid = obj.id;
+    const envId = environment?.id;
+    if (!envId) return;
+    setRunning(true);
+    api.get(`/api/records?object_id=${oid}&environment_id=${envId}&limit=500`).then(res => {
+      const raw = Array.isArray(res?.records) ? res.records : [];
+      let rows = raw.map(r => ({ _id: r.id, _createdAt: r.created_at, ...r.data }));
+      let grouped = rows;
+      if (grpBy) {
+        const groups = {};
+        rows.forEach(r => { const key = String(r[grpBy] || "Unknown"); if (!groups[key]) groups[key] = []; groups[key].push(r); });
+        grouped = Object.entries(groups)
+          .map(([key, members]) => ({ _group: key, _count: members.length }))
+          .sort((a, b) => b._count - a._count);
+        setChartX("_group");
+        setChartY("_count");
+      }
+      setResults(grouped);
+      setRunning(false);
+    }).catch(() => setRunning(false));
+  }, [initialReport, objects, environment?.id]);
 
   const runReport = useCallback(async (objectId, grpBy) => {
     const oid = objectId || selObject;
