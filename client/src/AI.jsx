@@ -1329,7 +1329,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         id: `step_${i}`, name: s.name, automation_type: s.automation_type || null, config: s.config || {},
       }));
       await api.put(`/workflows/${wf.id}/steps`, { steps });
-      setMessages(m => [...m, { role:"assistant", content:`✅ Workflow **${wf.name}** created with ${steps.length} stage${steps.length!==1?"s":""}! You can find it in the Workflows section.`, ts:new Date() }]);
+      setMessages(m => [...m, { role:"assistant", content:`✅ **${wf.name}** created`, ts:new Date(),
+        createdNav:{ label:`${wf.name} workflow`, nav:"workflows", icon:"workflow", color:"#7c3aed", sub:`${steps.length} stage${steps.length!==1?"s":""}` }
+      }]);
       setPendingWorkflow(null);
     } catch (err) {
       setMessages(m => [...m, { role:"assistant", content:`Failed to create workflow: ${err.message}`, ts:new Date(), error:true }]);
@@ -1370,7 +1372,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         color:       pendingRole.color || "#3b5bdb",
         clone_from_role_id: pendingRole.clone_from_role_id || null,
       });
-      setMessages(m=>[...m,{role:"assistant",content:`✅ Role **${result.name}** created! You can now assign users to it in Settings → Security.`,ts:new Date()}]);
+      setMessages(m=>[...m,{role:"assistant",content:`✅ **${result.name}** role created`,ts:new Date(),
+        createdNav:{ label:`${result.name} role`, nav:"settings", icon:"users", color:result.color||"#e03131", sub:"Assign users in Settings → Users" }
+      }]);
       setPendingRole(null);
       api.get("/roles").then(r=>{ if(Array.isArray(r)) setAdminRoles(r); }).catch(()=>{});
     } catch(err) {
@@ -1394,7 +1398,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           skills:parsedPerson.skills||[],linkedin:parsedPerson.linkedin||'',
           years_experience:parsedPerson.years_experience||0,status:'Active',
         },created_by:'Copilot'})}).then(r=>r.json());
-      setMessages(m=>[...m,{role:'assistant',content:`✅ Person created: **${parsedPerson.first_name} ${parsedPerson.last_name}**`,ts:new Date()}]);
+      const name = `${parsedPerson.first_name||''} ${parsedPerson.last_name||''}`.trim();
+      setMessages(m=>[...m,{role:'assistant',content:`✅ **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
       setParsedPerson(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -1409,7 +1414,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const objs = await fetch(`/api/objects?environment_id=${environment.id}`).then(r=>r.json());
       const jobObj = (Array.isArray(objs)?objs:[]).find(o=>o.slug==='jobs'||o.name?.toLowerCase().includes('job'));
       if (!jobObj) throw new Error('Jobs object not found');
-      await fetch('/api/records',{method:'POST',headers:{'Content-Type':'application/json'},
+      const rec2 = await fetch('/api/records',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({object_id:jobObj.id,environment_id:environment.id,data:{
           job_title:parsedJob.job_title||'',department:parsedJob.department||'',
           location:parsedJob.location||'',work_type:parsedJob.work_type||'',
@@ -1417,7 +1422,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           salary_max:parsedJob.salary_max||0,description:parsedJob.description||'',
           requirements:parsedJob.requirements||'',skills:parsedJob.skills||[],status:'Open',
         },created_by:'Copilot'})}).then(r=>r.json());
-      setMessages(m=>[...m,{role:'assistant',content:`✅ Job created: **${parsedJob.job_title}**`,ts:new Date()}]);
+      setMessages(m=>[...m,{role:'assistant',content:`✅ **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
       setParsedJob(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -1605,7 +1610,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         fields,
         created_by:     'Copilot',
       });
-      setMessages(m=>[...m,{role:"assistant",content:`✅ Form **${form.name}** created with ${fields.length} field${fields.length!==1?'s':''}! Find it in Settings → Forms to edit or attach it to records.`,ts:new Date()}]);
+      setMessages(m=>[...m,{role:"assistant",content:`✅ **${form.name}** created`,ts:new Date(),
+        createdNav:{ label:`${form.name}`, nav:"settings", icon:"form", color:"#0caf77", sub:`${fields.length} field${fields.length!==1?'s':''}` }
+      }]);
       setPendingForm(null);
     } catch(err) {
       setMessages(m=>[...m,{role:"assistant",content:`Failed to create form: ${err.message}`,ts:new Date(),error:true}]);
@@ -1786,6 +1793,25 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                         <div style={{fontSize:11,color:C.text3}}>{msg.createdRecord.objectName}{msg.createdRecord.sub?` · ${msg.createdRecord.sub}`:""}</div>
                       </div>
                       <span style={{fontSize:11,fontWeight:600,color:msg.createdRecord.objectColor||C.ai,display:"flex",alignItems:"center",gap:3}}>View <Ic n="arrowR" s={11} c={msg.createdRecord.objectColor||C.ai}/></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Created nav link (for workflows, forms, roles) */}
+                {msg.role==="assistant"&&msg.createdNav&&(
+                  <div style={{marginTop:8,marginLeft:34}}>
+                    <div onClick={()=>window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:msg.createdNav.nav}))}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"white",borderRadius:10,border:`1.5px solid ${msg.createdNav.color||C.ai}40`,cursor:"pointer",transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=`${msg.createdNav.color||C.ai}08`;e.currentTarget.style.borderColor=`${msg.createdNav.color||C.ai}70`;}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.borderColor=`${msg.createdNav.color||C.ai}40`;}}>
+                      <div style={{width:32,height:32,borderRadius:"50%",background:msg.createdNav.color||C.ai,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Ic n={msg.createdNav.icon||"check"} s={14} c="white"/>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{msg.createdNav.label}</div>
+                        {msg.createdNav.sub&&<div style={{fontSize:11,color:C.text3}}>{msg.createdNav.sub}</div>}
+                      </div>
+                      <span style={{fontSize:11,fontWeight:600,color:msg.createdNav.color||C.ai,display:"flex",alignItems:"center",gap:3}}>Go <Ic n="arrowR" s={11} c={msg.createdNav.color||C.ai}/></span>
                     </div>
                   </div>
                 )}
