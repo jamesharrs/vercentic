@@ -884,6 +884,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     return () => window.removeEventListener("talentos:openCopilot", handler);
   }, []);
   const [loading,      setLoading]      = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("");
+  const [nudges,       setNudges]       = useState([]);   // proactive suggestions
   const [context,      setContext]      = useState(null);
   const [copied,       setCopied]       = useState(null);
   const [pendingRecord,setPendingRecord]   = useState(null);
@@ -1029,6 +1031,65 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     api.get("/users").then(u=>{ if(Array.isArray(u)) setAdminUsers(u); }).catch(()=>{});
     if(environment?.id) api.get(`/interview-types?environment_id=${environment.id}`).then(t=>{ if(Array.isArray(t)) setInterviewTypes(t); }).catch(()=>{});
   },[open]);
+
+  // Generate proactive nudges when the copilot opens on a list page
+  useEffect(()=>{
+    if(!open || !environment?.id || currentRecord) return; // only on list pages, not record detail
+    setNudges([]);
+    const objSlug = navObjects?.find(o => 'obj_'+o.id === activeNav)?.slug;
+    if(!objSlug) return;
+
+    const analyzeData = async () => {
+      try {
+        const obj = objects.find(o => o.slug === objSlug);
+        if(!obj) return;
+        const r = await api.get(`/records?object_id=${obj.id}&environment_id=${environment.id}&limit=200`);
+        const recs = r.records || [];
+        if(!recs.length) return;
+        const found = [];
+        const now = Date.now();
+        const SEVEN_DAYS = 7*24*60*60*1000;
+
+        if(objSlug === 'people') {
+          // Nudge: candidates not contacted in 7 days
+          const uncontacted = recs.filter(r => {
+            if(r.data?.status === 'Archived' || r.data?.status === 'Placed') return false;
+            const lastContact = r.updated_at ? new Date(r.updated_at).getTime() : new Date(r.created_at).getTime();
+            return (now - lastContact) > SEVEN_DAYS;
+          });
+          if(uncontacted.length > 0)
+            found.push({ icon:"mail", color:"#f59f00", text:`${uncontacted.length} candidate${uncontacted.length>1?"s haven't":" hasn't"} been updated in 7+ days`, action:"Show me candidates not updated in 7 days" });
+
+          // Nudge: active candidates with no status
+          const noStatus = recs.filter(r => !r.data?.status || r.data.status === '');
+          if(noStatus.length > 0)
+            found.push({ icon:"alert-triangle", color:"#e03131", text:`${noStatus.length} candidate${noStatus.length>1?"s have":" has"} no status set`, action:`Show me candidates with no status` });
+
+          // Nudge: high rated candidates with passive/not looking status
+          const dormantStars = recs.filter(r => Number(r.data?.rating||0) >= 4 && (r.data?.status === 'Passive' || r.data?.status === 'Not Looking'));
+          if(dormantStars.length > 0)
+            found.push({ icon:"star", color:"#7c3aed", text:`${dormantStars.length} highly-rated candidate${dormantStars.length>1?"s are":" is"} passive or not looking`, action:"Show me high-rated passive candidates" });
+
+        } else if(objSlug === 'jobs') {
+          // Nudge: open jobs older than 30 days
+          const stale = recs.filter(r => r.data?.status === 'Open' && (now - new Date(r.created_at).getTime()) > 30*24*60*60*1000);
+          if(stale.length > 0)
+            found.push({ icon:"alert-triangle", color:"#e03131", text:`${stale.length} open job${stale.length>1?"s have":" has"} been open for 30+ days`, action:"Show me jobs open for more than 30 days" });
+
+          // Nudge: jobs with no department set
+          const noDept = recs.filter(r => r.data?.status === 'Open' && !r.data?.department);
+          if(noDept.length > 0)
+            found.push({ icon:"edit", color:"#f59f00", text:`${noDept.length} open job${noDept.length>1?"s have":" has"} no department set`, action:"Show me open jobs with no department" });
+        }
+
+        setNudges(found.slice(0,3)); // max 3 nudges
+      } catch(e) {}
+    };
+
+    // Small delay so it doesn't fire instantly on every keystroke nav
+    const t = setTimeout(analyzeData, 1200);
+    return () => clearTimeout(t);
+  },[open, activeNav, environment?.id, objects]);
 
   const parseCreateRecord = (text) => {
     const match = text.match(/<CREATE_RECORD>([\s\S]*?)<\/CREATE_RECORD>/);
@@ -1231,6 +1292,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
     setFileProcessing(false);
     setLoading(false);
+    setLoadingLabel("");
   };
 
   const handleDropEvent = (e) => {
@@ -1259,6 +1321,19 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
     setInput("");
     setLoading(true);
+
+    // Smart loading label based on what the user is asking
+    const msgLower = userMsg.toLowerCase();
+    const label = msgLower.match(/search|find|look|show me|who|which/)       ? "Searching records…"
+      : msgLower.match(/match|best.*cand|best.*job|score|rank/)               ? "Matching candidates…"
+      : msgLower.match(/summar|profile|background|about/)                     ? "Reading profile…"
+      : msgLower.match(/draft|write|email|message|outreach/)                  ? "Drafting message…"
+      : msgLower.match(/report|chart|breakdown|analys|data/)                  ? "Building report…"
+      : msgLower.match(/schedul|interview|book|calendar/)                     ? "Checking availability…"
+      : msgLower.match(/creat|add|new|invite/)                                ? "Preparing record…"
+      : msgLower.match(/workflow|pipeline|stage|process/)                     ? "Designing workflow…"
+      : "Thinking…";
+    setLoadingLabel(label);
     setPendingRecord(null);
     setPendingWorkflow(null);
     setPendingUser(null);
@@ -1305,6 +1380,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const searchQ = parseSearchQuery(reply);
       let searchHits = [];
       if (searchQ) {
+        setLoadingLabel("Searching records…");
         searchHits = await runSearch(searchQ);
         const resultsText = searchHits.length
           ? searchHits.map(r => {
@@ -1367,6 +1443,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       setMessages(m=>[...m,{role:"assistant",content:"I encountered an error. Please check your API key is set on the server.",ts:new Date(),error:true}]);
     }
     setLoading(false);
+    setLoadingLabel("");
     setTimeout(()=>inputRef.current?.focus(),100);
   };
 
@@ -1811,18 +1888,39 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                   );
                 })()
               ) : (
-                // Not on a record — show the create actions grid
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-                  {CREATE_ACTIONS.map(a=>(
-                    <button key={a.id} onClick={()=>sendMessage(a.prompt)} className="copilot-action-btn"
-                      style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:10,border:"1px solid rgba(124,58,237,.18)",background:"rgba(124,58,237,.04)",color:"#5b21b6",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s",textAlign:"left"}}>
-                      <div style={{width:22,height:22,borderRadius:6,background:"rgba(124,58,237,.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <Ic n={a.icon} s={11} c="#7c3aed"/>
-                      </div>
-                      <span style={{lineHeight:1.2}}>{a.label}</span>
-                    </button>
-                  ))}
-                </div>
+                // Not on a record — show nudges (if any) then the create actions grid
+                <>
+                  {nudges.length > 0 && (
+                    <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:8}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2,paddingLeft:2}}>Suggested actions</div>
+                      {nudges.map((n,i) => (
+                        <button key={i} onClick={() => sendMessage(n.action)}
+                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:10,
+                            border:`1.5px solid ${n.color}28`,background:`${n.color}08`,
+                            cursor:"pointer",fontFamily:F,textAlign:"left",width:"100%",transition:"all .12s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=`${n.color}14`;}}
+                          onMouseLeave={e=>{e.currentTarget.style.background=`${n.color}08`;}}>
+                          <div style={{width:24,height:24,borderRadius:7,background:`${n.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <Ic n={n.icon} s={12} c={n.color}/>
+                          </div>
+                          <span style={{fontSize:11,fontWeight:600,color:n.color,flex:1,lineHeight:1.3}}>{n.text}</span>
+                          <span style={{fontSize:11,color:n.color,opacity:0.6,flexShrink:0}}>→</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                    {CREATE_ACTIONS.map(a=>(
+                      <button key={a.id} onClick={()=>sendMessage(a.prompt)} className="copilot-action-btn"
+                        style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:10,border:"1px solid rgba(124,58,237,.18)",background:"rgba(124,58,237,.04)",color:"#5b21b6",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s",textAlign:"left"}}>
+                        <div style={{width:22,height:22,borderRadius:6,background:"rgba(124,58,237,.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <Ic n={a.icon} s={11} c="#7c3aed"/>
+                        </div>
+                        <span style={{lineHeight:1.2}}>{a.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -2232,8 +2330,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             {loading&&(
               <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${C.ai},#3b5bdb)`,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 80 80" fill="none"><path d="M8 52 L40 36 L72 52 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M8 52 L8 62 L40 78 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M72 52 L72 62 L40 78 L40 68 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M20 34 L40 24 L60 34 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M20 34 L20 42 L40 52 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M60 34 L60 42 L40 52 L40 44 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M28 18 L40 12 L52 18 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M28 18 L28 24 L40 30 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none"/><path d="M52 18 L52 24 L40 30 L40 24 Z" stroke="white" strokeWidth="3" strokeLinejoin="round" fill="none" opacity="0.6"/></svg></div>
-                <div style={{padding:"12px 14px",borderRadius:"14px 14px 14px 4px",background:"#f8f9fc"}}>
+                <div style={{padding:"10px 14px",borderRadius:"14px 14px 14px 4px",background:"#f8f9fc",display:"flex",alignItems:"center",gap:8}}>
                   <div style={{display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.ai,animation:`bounce 1.2s ${i*0.2}s ease infinite`}}/>)}</div>
+                  {loadingLabel&&<span style={{fontSize:11,color:C.text3,fontStyle:"italic",animation:"fadeIn .3s ease"}}>{loadingLabel}</span>}
                 </div>
               </div>
             )}
