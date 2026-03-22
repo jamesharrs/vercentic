@@ -5180,8 +5180,7 @@ function buildListContext(object, records, total) {
   if (names.length)
     lines.push("Records (first " + names.length + "): " + names.join(", ") +
       (total > 25 ? " ... and " + (total - 25) + " more" : ""));
-  return lines.join("
-");
+  return lines.join("\n");
 }
 
 export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed }) {
