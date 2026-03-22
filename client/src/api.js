@@ -52,7 +52,10 @@ export async function loadMyPermissions() {
   if (!uid2) { _permCache = { objects: {}, global: {} }; return _permCache; }
   try {
     const data = await api.get('/auth/me');
-    _permCache = data.permissions || { objects: {}, global: {} };
+    const perms = data.permissions || { objects: {}, global: {} };
+    // Embed role slug so client-side super_admin bypass works without trusting the permissions map
+    if (data.user?.role?.slug) perms._roleSlug = data.user.role.slug;
+    _permCache = perms;
     return _permCache;
   } catch { _permCache = { objects: {}, global: {} }; return _permCache; }
 }

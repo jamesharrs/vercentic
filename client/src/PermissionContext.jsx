@@ -27,12 +27,18 @@ export function PermissionProvider({ userId, children }) {
   // Sync helpers that read from cached state
   const check = useCallback((objectSlug, action) => {
     if (!permissions) return true; // optimistic before first load
+    // Super admin and admin bypass all restrictions
+    const slug = permissions._roleSlug;
+    if (slug === 'super_admin' || slug === 'admin') return true;
     if (permissions.objects['*']?.[action]) return true;
     return Boolean(permissions.objects[objectSlug]?.[action]);
   }, [permissions]);
 
   const checkGlobal = useCallback((action) => {
     if (!permissions) return true;
+    // Super admin and admin bypass all restrictions
+    const slug = permissions._roleSlug;
+    if (slug === 'super_admin' || slug === 'admin') return true;
     return Boolean(permissions.global?.[action]);
   }, [permissions]);
 
