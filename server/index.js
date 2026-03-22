@@ -52,10 +52,17 @@ app.use(tenantMiddleware);
 app.use(attachUser); // attach current user to every request (non-blocking)
 
 // ── Global auth guard ─────────────────────────────────────────────────────────
-// All /api/* routes require authentication EXCEPT auth endpoints.
+// All /api/* routes require authentication EXCEPT public endpoints.
 // Note: req.path inside app.use('/api', ...) is stripped of the /api prefix
-const AUTH_EXEMPT_PATHS = ['/auth/login', '/auth/me', '/health',
-  '/portals/public', '/superadmin'];
+const AUTH_EXEMPT_PATHS = [
+  '/auth/login', '/auth/me',          // auth routes in auth.js
+  '/users/login', '/users/auth/login', // login in users.js
+  '/health',                           // health check
+  '/environments',                     // needed before login to resolve tenant
+  '/portals/public',                   // public portal renderer
+  '/superadmin',                       // super admin console
+  '/bot',                              // bot/interview routes (public)
+];
 app.use('/api', (req, res, next) => {
   // Skip for exempt prefixes
   if (AUTH_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
