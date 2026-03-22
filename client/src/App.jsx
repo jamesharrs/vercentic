@@ -1861,7 +1861,7 @@ function App() {
             openRecord(record.id, record.object_id);
           }}/>
         ) : activeNav === "reports" ? (
-          <ReportsPage envId={selectedEnv?.id} initialReport={reportPreset} />
+          <ReportsPage environment={selectedEnv} initialReport={reportPreset} />
         ) : activeNav === "help" ? (
           <HelpPage onOpenCopilot={(msg) => {
             window.dispatchEvent(new CustomEvent("talentos:openCopilot", { detail: { message: msg } }));

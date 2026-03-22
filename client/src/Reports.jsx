@@ -135,7 +135,15 @@ export default function Reports({ environment, initialReport }) {
 
   useEffect(() => {
     if (!initialReport || !objects.length) return;
-    const obj = objects.find(o => o.slug === initialReport.object || o.name?.toLowerCase().includes(initialReport.object));
+    const needle = (initialReport.objectSlug || initialReport.object || "").toLowerCase();
+    // match by slug, plural name, or common aliases (candidates → people)
+    const ALIASES = { candidates: "people", candidate: "people", vacancies: "jobs", vacancy: "jobs" };
+    const resolvedNeedle = ALIASES[needle] || needle;
+    const obj = objects.find(o =>
+      o.slug === resolvedNeedle ||
+      (o.plural_name || o.name || "").toLowerCase().includes(resolvedNeedle) ||
+      (o.plural_name || o.name || "").toLowerCase() === resolvedNeedle
+    );
     if (obj) {
       skipReset.current = true;
       setSelObject(obj.id);
@@ -143,7 +151,7 @@ export default function Reports({ environment, initialReport }) {
       if (initialReport.chartType) setChartType(initialReport.chartType);
       if (initialReport.formulas)  setFormulas(initialReport.formulas);
       setPanel("build");
-      setTimeout(() => runReport(obj.id, initialReport.groupBy), 400);
+      setTimeout(() => runReport(obj.id, initialReport.groupBy), 500);
     }
   }, [initialReport, objects]);
 
