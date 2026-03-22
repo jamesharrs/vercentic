@@ -1,4 +1,5 @@
 import { IntegrationMonitor } from "./IntegrationMonitor.jsx";
+import FlowBuilder from "./FlowBuilder.jsx";
 // client/src/IntegrationsSettings.jsx
 // Unified integration library for Settings — merges old Twilio/SendGrid panel
 // with the full 32-provider catalog. Uses brand-accurate logos via SVG.
@@ -484,7 +485,7 @@ export default function IntegrationsSettings({environment}){
     <div style={{fontFamily:F}}>
       {/* Tab strip */}
       <div style={{display:'flex',gap:0,borderBottom:'2px solid #E5E7EB',marginBottom:20}}>
-        {[{id:'library',label:'Library',icon:'grid'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null}].map(tab=>(
+        {[{id:'library',label:'Library',icon:'grid'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null},{id:'flows',label:'Flows',icon:'activity'}].map(tab=>(
           <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:'9px 20px',fontSize:13,
             fontWeight:activeTab===tab.id?700:500,fontFamily:F,cursor:'pointer',background:'transparent',border:'none',
             color:activeTab===tab.id?'#4361EE':'#374151',
@@ -498,6 +499,8 @@ export default function IntegrationsSettings({environment}){
       </div>
       {/* Monitor tab */}
       {activeTab==='monitor'&&<IntegrationMonitor environment={environment} connections={connections} onRetest={handleRetest}/>}
+      {/* Flows tab */}
+      {activeTab==='flows'&&<FlowBuilder environment={environment}/>}
       {/* Library tab */}
       {activeTab==='library'&&<div>
       {/* Stats strip */}

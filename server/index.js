@@ -91,6 +91,8 @@ app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/ai-interview',       require('./routes/ai_interview'));
 app.use('/api/notifications',   require('./routes/notifications'));
 app.use('/api/offers',             require('./routes/offers'));
+const { router: flowsRouter, initScheduler } = require('./routes/flows');
+app.use('/api/flows', flowsRouter);
 app.use('/api/cases',              require('./routes/cases'));
 app.use('/api/release-notes',      require('./routes/release_notes'));
 app.use('/api/error-logs',         require('./routes/error_logs'));
@@ -210,5 +212,7 @@ initDB().then(() => {
     // Start agent scheduler
     const { startScheduler } = require('./agent-engine');
     startScheduler();
+    // Start flow scheduler
+    initScheduler();
   });
 }).catch(err => { console.error(err); process.exit(1); });
