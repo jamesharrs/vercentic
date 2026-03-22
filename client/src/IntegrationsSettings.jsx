@@ -303,20 +303,20 @@ function SetupModal({provider,existing,environmentId,onClose,onSaved}){
     const messagingSlugs=['twilio','sendgrid','inbound_webhooks'];
     if(messagingSlugs.includes(provider.slug)){
       const providerKey=provider.slug==='inbound_webhooks'?'webhook':provider.slug;
-      const res=await api.post(`/api/integrations`,{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
+      const res=await api.post(`/integrations`,{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
       // Also apply to env via old endpoint
-      await tFetch(`/api/integrations/${providerKey}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)}).catch(()=>{});
+      await tFetch(`/integrations/${providerKey}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)}).catch(()=>{});
       if(res.error){setErr(res.error);setSaving(false);return;}
       onSaved(res);return;
     }
-    const res=await api.post('/api/integrations',{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
+    const res=await api.post('/integrations',{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
     if(res.error){setErr(res.error);setSaving(false);return;}
     onSaved(res);
   };
   const handleTest=async()=>{
     if(!existing?.id){setErr('Save first before testing');return;}
     setTesting(true);setTestResult(null);
-    const r=await tFetch(`/api/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json()).catch(e=>({ok:false,message:e.message}));
+    const r=await tFetch(`/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json()).catch(e=>({ok:false,message:e.message}));
     setTestResult(r);setTesting(false);
   };
 
@@ -436,8 +436,8 @@ export default function IntegrationsSettings({environment}){
     if(!envId)return;
     setLoading(true);
     const [cat,conn]=await Promise.all([
-      api.get(`/api/integrations/catalog?environment_id=${envId}`),
-      api.get(`/api/integrations?environment_id=${envId}`),
+      api.get(`/integrations/catalog?environment_id=${envId}`),
+      api.get(`/integrations?environment_id=${envId}`),
     ]);
     setCatalog(Array.isArray(cat)?cat:[]);
     setConnections(Array.isArray(conn)?conn:[]);
@@ -468,11 +468,11 @@ export default function IntegrationsSettings({environment}){
     setConfiguring(null);
   };
   const handleRetest=async(id)=>{
-    try { await tFetch(`/api/integrations/${id}/test`,{method:'POST'}); await load(); }
+    try { await tFetch(`/integrations/${id}/test`,{method:'POST'}); await load(); }
     catch(e){ console.warn('retest failed',e); }
   };
-  const handleToggle=async(conn)=>{const u=await api.patch(`/api/integrations/${conn.id}`,{enabled:!conn.enabled});if(!u.error)setConnections(prev=>prev.map(c=>c.id===conn.id?u:c));};
-  const handleDelete=async(conn)=>{await api.delete(`/api/integrations/${conn.id}`);setConnections(prev=>prev.filter(c=>c.id!==conn.id));};
+  const handleToggle=async(conn)=>{const u=await api.patch(`/integrations/${conn.id}`,{enabled:!conn.enabled});if(!u.error)setConnections(prev=>prev.map(c=>c.id===conn.id?u:c));};
+  const handleDelete=async(conn)=>{await api.delete(`/integrations/${conn.id}`);setConnections(prev=>prev.filter(c=>c.id!==conn.id));};
 
   const pill=(label,active,onClick,count)=>(
     <button onClick={onClick} style={{padding:'5px 12px',borderRadius:99,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F,whiteSpace:'nowrap',border:active?'none':'1.5px solid #E5E7EB',background:active?'#111827':'white',color:active?'white':'#374151'}}>

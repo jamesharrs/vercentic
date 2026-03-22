@@ -61,11 +61,11 @@ export default function Reports({environment,initialReport}){
   const[activeChartFilter,setActiveChartFilter]=useState(null);
   const skipReset=useRef(false);
 
-  useEffect(()=>{if(!environment?.id)return;api.get(`/api/objects?environment_id=${environment.id}`).then(d=>setObjects(Array.isArray(d)?d:[]));api.get(`/api/saved-views?environment_id=${environment.id}`).then(d=>setSavedList(Array.isArray(d)?d:[]));}, [environment?.id]);
+  useEffect(()=>{if(!environment?.id)return;api.get(`/objects?environment_id=${environment.id}`).then(d=>setObjects(Array.isArray(d)?d:[]));api.get(`/saved-views?environment_id=${environment.id}`).then(d=>setSavedList(Array.isArray(d)?d:[]));}, [environment?.id]);
 
   useEffect(()=>{
     if(!selObject)return;
-    api.get(`/api/fields?object_id=${selObject}`).then(d=>{
+    api.get(`/fields?object_id=${selObject}`).then(d=>{
       const f=Array.isArray(d)?d:[];setFields(f);
       if(!skipReset.current){setSelCols(f.filter(x=>x.show_in_list).map(x=>x.id));setGroupBy("");setSortBy("");setFilters([]);setFormulas([]);setChartX("");setChartY("");setResults(null);setActiveChartFilter(null);}
       skipReset.current=false;
@@ -81,7 +81,7 @@ export default function Reports({environment,initialReport}){
   const runReport=useCallback(async(objectId,grpBy)=>{
     const oid=objectId||selObject;if(!oid||!environment?.id)return;setRunning(true);
     try{
-      const res=await api.get(`/api/records?object_id=${oid}&environment_id=${environment.id}&limit=500`);
+      const res=await api.get(`/records?object_id=${oid}&environment_id=${environment.id}&limit=500`);
       const raw=Array.isArray(res?.records)?res.records:[];let rows=raw.map(r=>({_id:r.id,_createdAt:r.created_at,...r.data}));
       const af=filters.filter(f=>f.field&&f.op);
       if(af.length)rows=rows.filter(row=>af.every(f=>{const v=String(row[f.field]||"").toLowerCase(),fv=String(f.value||"").toLowerCase();switch(f.op){case"contains":return v.includes(fv);case"is":return v===fv;case"is not":return v!==fv;case"is empty":return!row[f.field];case"is not empty":return!!row[f.field];case">":return parseFloat(row[f.field])>parseFloat(f.value);case"<":return parseFloat(row[f.field])<parseFloat(f.value);case"≥":return parseFloat(row[f.field])>=parseFloat(f.value);case"≤":return parseFloat(row[f.field])<=parseFloat(f.value);case"=":return parseFloat(row[f.field])===parseFloat(f.value);case"includes":return(Array.isArray(row[f.field])?row[f.field]:[row[f.field]]).some(x=>String(x).toLowerCase()===fv);default:return true;}}));
@@ -95,7 +95,7 @@ export default function Reports({environment,initialReport}){
 
   const saveReport=async()=>{if(!reportName||!selObject)return;setSavingReport(true);const cfg={name:reportName,object_id:selObject,environment_id:environment?.id,is_shared:reportShared,filters,group_by:groupBy,sort_by:sortBy,sort_dir:sortDir,formulas,chart_type:chartType,chart_x:chartX,chart_y:chartY,columns:selCols};const d=await api.post("/api/saved-views",cfg);if(d?.id){setSavedList(p=>[...p,d]);setReportName("");setShowSaveDialog(false);}setSavingReport(false);};
   const loadReport=(sv)=>{skipReset.current=true;setSelObject(sv.object_id||selObject);if(sv.filters)setFilters(sv.filters);if(sv.group_by)setGroupBy(sv.group_by);if(sv.sort_by)setSortBy(sv.sort_by);if(sv.sort_dir)setSortDir(sv.sort_dir);if(sv.formulas)setFormulas(sv.formulas);if(sv.chart_type)setChartType(sv.chart_type);if(sv.chart_x)setChartX(sv.chart_x);if(sv.chart_y)setChartY(sv.chart_y);if(sv.columns)setSelCols(sv.columns);};
-  const deleteReport=async(id)=>{await api.delete(`/api/saved-views/${id}`);setSavedList(p=>p.filter(s=>s.id!==id));};
+  const deleteReport=async(id)=>{await api.delete(`/saved-views/${id}`);setSavedList(p=>p.filter(s=>s.id!==id));};
   const addFilter=()=>setFilters(p=>[...p,{id:Date.now(),field:fields[0]?.api_key||"",op:"contains",value:""}]);
   const addFormula=()=>setFormulas(p=>[...p,{id:Date.now(),name:"",expression:""}]);
   const handleChartClick=(data)=>{if(!data?.activePayload?.[0])return;const v=data.activePayload[0].payload?.[chartX]??data.activePayload[0].payload?._group;if(!v)return;setActiveChartFilter(prev=>prev===String(v)?null:String(v));};

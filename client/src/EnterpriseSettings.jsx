@@ -72,7 +72,7 @@ function SkillsSection({environment}) {
   const envId=environment?.id;
 
   const load=useCallback(async()=>{ if(!envId) return; setLoading(true);
-    const [s,c]=await Promise.all([api.get(`/api/enterprise/skills?environment_id=${envId}`),api.get(`/api/enterprise/skills/categories?environment_id=${envId}`)]);
+    const [s,c]=await Promise.all([api.get(`/enterprise/skills?environment_id=${envId}`),api.get(`/enterprise/skills/categories?environment_id=${envId}`)]);
     setSkills(Array.isArray(s)?s:[]); setCats(Array.isArray(c)?c:[]); setLoading(false); },[envId]);
   useEffect(()=>{load();},[load]);
 
@@ -81,11 +81,11 @@ function SkillsSection({environment}) {
   const grouped={}; filtered.forEach(s=>{ const k=`${s.category}|||${s.subcategory||'Other'}`; if(!grouped[k]) grouped[k]={category:s.category,subcategory:s.subcategory||'Other',skills:[]}; grouped[k].skills.push(s); });
   const embCount=skills.filter(s=>s.embedding).length;
 
-  async function handleSeed(){setSeeding(true); const r=await api.post('/api/enterprise/skills/seed',{environment_id:envId}); setSeeding(false); if(r.error)window.__toast?.alert(r.error); else load();}
-  async function handleSeedRels(){setSeedingRels(true); const r=await api.post('/api/skills-intel/seed-relationships',{environment_id:envId}); setSeedingRels(false); if(r.error)window.__toast?.alert(r.error); else window.__toast?.alert(`Seeded ${r.inserted} relationships`);}
-  async function handleGenEmb(){setGeneratingEmb(true); setEmbMsg('Generating embeddings via Claude…'); const r=await api.post('/api/skills-intel/generate-embeddings',{environment_id:envId}); setGeneratingEmb(false); setEmbMsg(r.error?`Error: ${r.error}`:`Done — ${r.done} embeddings generated`); load();}
-  async function handleSave(form){setSaving(true); if(modal.mode==='edit') await api.patch(`/api/enterprise/skills/${modal.skill.id}`,{...form,environment_id:envId}); else await api.post('/api/enterprise/skills',{...form,environment_id:envId}); setSaving(false); setModal(null); load();}
-  async function handleDelete(id){if(!confirm('Delete this skill?'))return; await api.delete(`/api/enterprise/skills/${id}`); load();}
+  async function handleSeed(){setSeeding(true); const r=await api.post('/enterprise/skills/seed',{environment_id:envId}); setSeeding(false); if(r.error)window.__toast?.alert(r.error); else load();}
+  async function handleSeedRels(){setSeedingRels(true); const r=await api.post('/skills-intel/seed-relationships',{environment_id:envId}); setSeedingRels(false); if(r.error)window.__toast?.alert(r.error); else window.__toast?.alert(`Seeded ${r.inserted} relationships`);}
+  async function handleGenEmb(){setGeneratingEmb(true); setEmbMsg('Generating embeddings via Claude…'); const r=await api.post('/skills-intel/generate-embeddings',{environment_id:envId}); setGeneratingEmb(false); setEmbMsg(r.error?`Error: ${r.error}`:`Done — ${r.done} embeddings generated`); load();}
+  async function handleSave(form){setSaving(true); if(modal.mode==='edit') await api.patch(`/enterprise/skills/${modal.skill.id}`,{...form,environment_id:envId}); else await api.post('/enterprise/skills',{...form,environment_id:envId}); setSaving(false); setModal(null); load();}
+  async function handleDelete(id){if(!confirm('Delete this skill?'))return; await api.delete(`/enterprise/skills/${id}`); load();}
 
   return <div>
     <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
@@ -222,8 +222,8 @@ function ExpandTaxonomyModal({open,onClose,environment,onExpanded}) {
 function AiDiscoveryPanel({environment,onApplied}) {
   const [running,setRunning]=useState(false); const [source,setSource]=useState('all'); const [result,setResult]=useState(null); const [selected,setSelected]=useState(new Set()); const [applying,setApplying]=useState(false); const [applied,setApplied]=useState(0);
   const envId=environment?.id;
-  async function handleDiscover(){setRunning(true);setResult(null);setSelected(new Set());setApplied(0);const r=await api.post('/api/skills-import/discover',{environment_id:envId,source});setRunning(false);if(r.error){window.__toast?.alert(r.error);return;}setResult(r);setSelected(new Set((r.suggestions||[]).map((s,i)=>s.confidence==='high'?i:-1).filter(i=>i>=0)));}
-  async function handleApply(){if(!selected.size)return;setApplying(true);const toAdd=[...selected].map(i=>result.suggestions[i]);const r=await api.post('/api/skills-import/discover/apply',{skills:toAdd,environment_id:envId});setApplying(false);if(r.error){window.__toast?.alert(r.error);return;}setApplied(r.added);setResult(prev=>({...prev,suggestions:prev.suggestions.filter((_,i)=>!selected.has(i))}));setSelected(new Set());if(onApplied)onApplied();}
+  async function handleDiscover(){setRunning(true);setResult(null);setSelected(new Set());setApplied(0);const r=await api.post('/skills-import/discover',{environment_id:envId,source});setRunning(false);if(r.error){window.__toast?.alert(r.error);return;}setResult(r);setSelected(new Set((r.suggestions||[]).map((s,i)=>s.confidence==='high'?i:-1).filter(i=>i>=0)));}
+  async function handleApply(){if(!selected.size)return;setApplying(true);const toAdd=[...selected].map(i=>result.suggestions[i]);const r=await api.post('/skills-import/discover/apply',{skills:toAdd,environment_id:envId});setApplying(false);if(r.error){window.__toast?.alert(r.error);return;}setApplied(r.added);setResult(prev=>({...prev,suggestions:prev.suggestions.filter((_,i)=>!selected.has(i))}));setSelected(new Set());if(onApplied)onApplied();}
   const CONF_COLOR={high:C.green,medium:C.amber,low:C.text4};
   return <div>
     <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-start'}}>
@@ -263,8 +263,8 @@ function AiDiscoveryPanel({environment,onApplied}) {
 function EscoImportPanel({environment,onImported}) {
   const [q,setQ]=useState(''); const [results,setResults]=useState([]); const [searching,setSearching]=useState(false); const [selected,setSelected]=useState(new Set()); const [catOverride,setCatOverride]=useState(''); const [importing,setImporting]=useState(false); const [importResult,setImportResult]=useState(null); const [escoError,setEscoError]=useState(null);
   const envId=environment?.id; const CATS=['Technology','Business','Design','Soft Skills','Languages','Certifications','Other'];
-  async function handleSearch(){if(!q.trim())return;setSearching(true);setResults([]);setEscoError(null);setSelected(new Set());const r=await api.get(`/api/skills-import/esco/search?q=${encodeURIComponent(q)}&limit=30`);setSearching(false);if(r.error&&r.fallback){setEscoError('ESCO API unavailable. Try CSV import.');return;}if(r.error){setEscoError(r.error);return;}setResults(r.hits||[]);}
-  async function handleImport(){if(!selected.size)return;setImporting(true);const skills=[...selected].map(i=>({...results[i],category:catOverride||undefined}));const r=await api.post('/api/skills-import/esco/import',{skills,environment_id:envId,category_override:catOverride||null});setImporting(false);setImportResult(r);setSelected(new Set());if(onImported)onImported();}
+  async function handleSearch(){if(!q.trim())return;setSearching(true);setResults([]);setEscoError(null);setSelected(new Set());const r=await api.get(`/skills-import/esco/search?q=${encodeURIComponent(q)}&limit=30`);setSearching(false);if(r.error&&r.fallback){setEscoError('ESCO API unavailable. Try CSV import.');return;}if(r.error){setEscoError(r.error);return;}setResults(r.hits||[]);}
+  async function handleImport(){if(!selected.size)return;setImporting(true);const skills=[...selected].map(i=>({...results[i],category:catOverride||undefined}));const r=await api.post('/skills-import/esco/import',{skills,environment_id:envId,category_override:catOverride||null});setImporting(false);setImportResult(r);setSelected(new Set());if(onImported)onImported();}
   return <div>
     <div style={{marginBottom:14}}><div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:F,marginBottom:4}}>ESCO Taxonomy Import</div><div style={{fontSize:13,color:C.text3,fontFamily:F,lineHeight:1.5}}>Search the EU's official Skills framework (13,890+ skills). Free, no API key required.</div></div>
     {escoError&&<div style={{padding:'10px 14px',background:'#FEF2F2',borderRadius:10,border:'1px solid #FECACA',fontSize:13,color:C.red,fontFamily:F,marginBottom:12}}>{escoError}</div>}
@@ -299,7 +299,7 @@ function CsvImportPanel({environment,onImported}) {
   const TMPL=`name,category,subcategory,aliases,description\nDatabricks,Technology,Data & AI,"Spark platform",Unified analytics\nRevenue Operations,Business,Sales,"RevOps",Aligning GTM teams`;
   function parseRows(raw){const lines=raw.trim().split('\n');if(lines.length<2)return[];const hdr=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/"/g,''));return lines.slice(1).map(line=>{const cols=line.match(/(".*?"|[^,]+)/g)||[];const obj={};hdr.forEach((h,i)=>{obj[h]=(cols[i]||'').replace(/^"|"$/g,'').trim();});return obj;}).filter(r=>r.name);}
   function handleText(val){setText(val);setPreview(parseRows(val).slice(0,5));setResult(null);}
-  async function handleImport(){const rows=parseRows(text);if(!rows.length)return;setImporting(true);const r=await api.post('/api/skills-import/bulk-csv',{rows,environment_id:envId});setImporting(false);setResult(r);if(r.imported>0&&onImported)onImported();}
+  async function handleImport(){const rows=parseRows(text);if(!rows.length)return;setImporting(true);const r=await api.post('/skills-import/bulk-csv',{rows,environment_id:envId});setImporting(false);setResult(r);if(r.imported>0&&onImported)onImported();}
   return <div>
     <div style={{marginBottom:12}}><div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:F,marginBottom:4}}>CSV Import</div><div style={{fontSize:13,color:C.text3,fontFamily:F}}>Paste CSV rows. Required: <code style={{background:C.bg,padding:'1px 4px',borderRadius:4}}>name</code>. Optional: category, subcategory, aliases, description.</div></div>
     <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><Btn size="sm" onClick={()=>handleText(TMPL)}>Load example</Btn></div>
@@ -317,9 +317,9 @@ function CsvImportPanel({environment,onImported}) {
 function CompetenciesSection({environment}) {
   const [comps,setComps]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [saving,setSaving]=useState(false);
   const envId=environment?.id;
-  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const c=await api.get(`/api/enterprise/competencies?environment_id=${envId}`);setComps(Array.isArray(c)?c:[]);setLoading(false);},[envId]);
+  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const c=await api.get(`/enterprise/competencies?environment_id=${envId}`);setComps(Array.isArray(c)?c:[]);setLoading(false);},[envId]);
   useEffect(()=>{load();},[load]);
-  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/api/enterprise/competencies/${modal.comp.id}`,{...form,environment_id:envId});else await api.post('/api/enterprise/competencies',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
+  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/enterprise/competencies/${modal.comp.id}`,{...form,environment_id:envId});else await api.post('/enterprise/competencies',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
   return <div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
       <div><div style={{fontSize:18,fontWeight:800,color:C.text1,fontFamily:F}}>Competency Frameworks</div><div style={{fontSize:13,color:C.text3,fontFamily:F,marginTop:2}}>{comps.length} competencies</div></div>
@@ -330,7 +330,7 @@ function CompetenciesSection({environment}) {
       {comps.map(c=><div key={c.id} style={{background:'white',borderRadius:12,border:`1.5px solid ${C.border}`,padding:16}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
           <div><div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:F}}>{c.name}</div><div style={{fontSize:11,color:C.text3,fontFamily:F}}>{c.category}</div></div>
-          <div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',comp:c})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={13} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/api/enterprise/competencies/${c.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={13} c={C.red}/></button></div>
+          <div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',comp:c})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={13} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/enterprise/competencies/${c.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={13} c={C.red}/></button></div>
         </div>
         {c.description&&<div style={{fontSize:12,color:C.text3,fontFamily:F,marginBottom:8}}>{c.description}</div>}
         <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{(c.levels||[]).map(l=><span key={l.level} style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:C.accentLight,color:C.accent,fontWeight:700,fontFamily:F}}>{l.label}</span>)}</div>
@@ -358,10 +358,10 @@ function CompModal({open,onClose,comp,onSave,saving}) {
 function JobLevelsSection({environment}) {
   const [levels,setLevels]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [saving,setSaving]=useState(false); const [seeding,setSeeding]=useState(false);
   const envId=environment?.id;
-  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const l=await api.get(`/api/enterprise/job-levels?environment_id=${envId}`);setLevels(Array.isArray(l)?l:[]);setLoading(false);},[envId]);
+  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const l=await api.get(`/enterprise/job-levels?environment_id=${envId}`);setLevels(Array.isArray(l)?l:[]);setLoading(false);},[envId]);
   useEffect(()=>{load();},[load]);
-  async function handleSeed(){setSeeding(true);await api.post('/api/enterprise/job-levels/seed',{environment_id:envId});setSeeding(false);load();}
-  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/api/enterprise/job-levels/${modal.level.id}`,{...form,environment_id:envId});else await api.post('/api/enterprise/job-levels',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
+  async function handleSeed(){setSeeding(true);await api.post('/enterprise/job-levels/seed',{environment_id:envId});setSeeding(false);load();}
+  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/enterprise/job-levels/${modal.level.id}`,{...form,environment_id:envId});else await api.post('/enterprise/job-levels',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
   const groups=[{label:'Individual Contributors',prefix:'IC'},{label:'Management',prefix:'M'},{label:'Executive',prefix:'E'}];
   return <div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -375,7 +375,7 @@ function JobLevelsSection({environment}) {
         <div style={{width:36,height:36,borderRadius:8,background:C.accentLight,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{fontSize:11,fontWeight:800,color:C.accent,fontFamily:F}}>{l.code}</span></div>
         <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text1,fontFamily:F}}>{l.name}</div>{l.description&&<div style={{fontSize:11,color:C.text3,fontFamily:F}}>{l.description}</div>}</div>
         <button onClick={()=>setModal({mode:'edit',level:l})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={13} c={C.text4}/></button>
-        <button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/api/enterprise/job-levels/${l.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={13} c={C.red}/></button>
+        <button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/enterprise/job-levels/${l.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={13} c={C.red}/></button>
       </div>)}</div>
     </div>;})}
     {modal&&<JobLevelModal open level={modal.level} onSave={handleSave} saving={saving} onClose={()=>setModal(null)}/>}
@@ -400,9 +400,9 @@ const TIMEZONES=['UTC','America/New_York','America/Los_Angeles','America/Toronto
 function LocationsSection({environment}) {
   const [locs,setLocs]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [saving,setSaving]=useState(false);
   const envId=environment?.id;
-  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const l=await api.get(`/api/enterprise/locations?environment_id=${envId}`);setLocs(Array.isArray(l)?l:[]);setLoading(false);},[envId]);
+  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const l=await api.get(`/enterprise/locations?environment_id=${envId}`);setLocs(Array.isArray(l)?l:[]);setLoading(false);},[envId]);
   useEffect(()=>{load();},[load]);
-  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/api/enterprise/locations/${modal.loc.id}`,{...form,environment_id:envId});else await api.post('/api/enterprise/locations',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
+  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/enterprise/locations/${modal.loc.id}`,{...form,environment_id:envId});else await api.post('/enterprise/locations',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
   return <div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
       <div><div style={{fontSize:18,fontWeight:800,color:C.text1,fontFamily:F}}>Locations & Offices</div><div style={{fontSize:13,color:C.text3,fontFamily:F,marginTop:2}}>{locs.length} locations</div></div>
@@ -415,7 +415,7 @@ function LocationsSection({environment}) {
         <tbody>{locs.map(l=><tr key={l.id} style={{borderBottom:`1px solid ${C.border}`}}>
           <td style={{padding:'10px 14px',fontWeight:700,color:C.text1}}>{l.name}</td><td style={{padding:'10px 14px',color:C.text2}}>{l.city||'—'}</td><td style={{padding:'10px 14px',color:C.text2}}>{l.country||'—'}</td><td style={{padding:'10px 14px',color:C.text3}}>{l.region||'—'}</td><td style={{padding:'10px 14px',color:C.text3,fontSize:12}}>{l.timezone}</td>
           <td style={{padding:'10px 14px'}}><Badge color={l.is_remote?C.purple:C.green} light>{l.is_remote?'Remote':'Office'}</Badge></td>
-          <td style={{padding:'10px 14px'}}><div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',loc:l})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={14} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/api/enterprise/locations/${l.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={14} c={C.red}/></button></div></td>
+          <td style={{padding:'10px 14px'}}><div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',loc:l})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={14} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/enterprise/locations/${l.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={14} c={C.red}/></button></div></td>
         </tr>)}</tbody>
       </table>
     </div>}
@@ -440,9 +440,9 @@ function LocModal({open,onClose,loc,onSave,saving}) {
 function CompBandsSection({environment}) {
   const [bands,setBands]=useState([]); const [levels,setLevels]=useState([]); const [locs,setLocs]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [saving,setSaving]=useState(false);
   const envId=environment?.id;
-  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const [b,l,o]=await Promise.all([api.get(`/api/enterprise/comp-bands?environment_id=${envId}`),api.get(`/api/enterprise/job-levels?environment_id=${envId}`),api.get(`/api/enterprise/locations?environment_id=${envId}`)]);setBands(Array.isArray(b)?b:[]);setLevels(Array.isArray(l)?l:[]);setLocs(Array.isArray(o)?o:[]);setLoading(false);},[envId]);
+  const load=useCallback(async()=>{if(!envId)return;setLoading(true);const [b,l,o]=await Promise.all([api.get(`/enterprise/comp-bands?environment_id=${envId}`),api.get(`/enterprise/job-levels?environment_id=${envId}`),api.get(`/enterprise/locations?environment_id=${envId}`)]);setBands(Array.isArray(b)?b:[]);setLevels(Array.isArray(l)?l:[]);setLocs(Array.isArray(o)?o:[]);setLoading(false);},[envId]);
   useEffect(()=>{load();},[load]);
-  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/api/enterprise/comp-bands/${modal.band.id}`,{...form,environment_id:envId});else await api.post('/api/enterprise/comp-bands',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
+  async function handleSave(form){setSaving(true);if(modal.mode==='edit')await api.patch(`/enterprise/comp-bands/${modal.band.id}`,{...form,environment_id:envId});else await api.post('/enterprise/comp-bands',{...form,environment_id:envId});setSaving(false);setModal(null);load();}
   const getLevelName=id=>levels.find(l=>l.id===id)?.name||'—'; const getLevelCode=id=>levels.find(l=>l.id===id)?.code||'—'; const getLocName=id=>id?locs.find(l=>l.id===id)?.name||'—':'Global';
   return <div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -459,7 +459,7 @@ function CompBandsSection({environment}) {
           <td style={{padding:'10px 14px',color:C.text2}}>{getLocName(b.location_id)}</td><td style={{padding:'10px 14px',color:C.text3}}>{b.currency}</td>
           <td style={{padding:'10px 14px',color:C.green,fontWeight:600}}>{Number(b.min_salary).toLocaleString()}</td><td style={{padding:'10px 14px',fontWeight:600,color:C.text1}}>{Number(b.mid_salary).toLocaleString()}</td><td style={{padding:'10px 14px',color:C.red,fontWeight:600}}>{Number(b.max_salary).toLocaleString()}</td>
           <td style={{padding:'10px 14px',color:C.text3}}>{b.bonus_target_pct}%</td>
-          <td style={{padding:'10px 14px'}}><div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',band:b})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={14} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/api/enterprise/comp-bands/${b.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={14} c={C.red}/></button></div></td>
+          <td style={{padding:'10px 14px'}}><div style={{display:'flex',gap:4}}><button onClick={()=>setModal({mode:'edit',band:b})} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="edit" s={14} c={C.text4}/></button><button onClick={async()=>{if(confirm('Delete?')){await api.delete(`/enterprise/comp-bands/${b.id}`);load();}}} style={{background:'none',border:'none',cursor:'pointer'}}><Ic n="trash" s={14} c={C.red}/></button></div></td>
         </tr>)}</tbody>
       </table>
     </div>}

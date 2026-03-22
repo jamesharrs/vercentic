@@ -18,7 +18,7 @@ function NewCaseForm({session,onSubmit,onCancel}){
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const handleSubmit=async()=>{
     if(!form.subject||!form.description)return;setSaving(true);
-    try{const res=await api.post('/api/cases',{...form,reporter_name:`${session?.user?.first_name||''} ${session?.user?.last_name||''}`.trim()||'Client User',reporter_email:session?.user?.email||''});onSubmit(res);}
+    try{const res=await api.post('/cases',{...form,reporter_name:`${session?.user?.first_name||''} ${session?.user?.last_name||''}`.trim()||'Client User',reporter_email:session?.user?.email||''});onSubmit(res);}
     finally{setSaving(false);}
   };
   const inp={width:'100%',border:'1.5px solid #e5e7eb',borderRadius:10,padding:'10px 12px',fontSize:14,fontFamily:F,outline:'none',boxSizing:'border-box',background:'white'};
@@ -50,7 +50,7 @@ function CaseThreadView({caseData,session,onBack,onUpdate}){
   const visibleThreads=(caseData.threads||[]).filter(t=>t.visibility==='client'||t.type==='status_change');
   const sendReply=async()=>{
     if(!reply.trim())return;setSending(true);
-    try{const thread=await api.post(`/api/cases/${caseData.id}/thread`,{body:reply,visibility:'client',author_name:`${session?.user?.first_name||''} ${session?.user?.last_name||''}`.trim()||'Client',author_email:session?.user?.email,type:'comment'});onUpdate({...caseData,threads:[...(caseData.threads||[]),thread]});setReply('');}
+    try{const thread=await api.post(`/cases/${caseData.id}/thread`,{body:reply,visibility:'client',author_name:`${session?.user?.first_name||''} ${session?.user?.last_name||''}`.trim()||'Client',author_email:session?.user?.email,type:'comment'});onUpdate({...caseData,threads:[...(caseData.threads||[]),thread]});setReply('');}
     finally{setSending(false);}
   };
   return(
@@ -117,17 +117,17 @@ export default function ClientCasePortal({session}){
     setLoading(true);
     try{
       const email=session?.user?.email;
-      const res=await api.get('/api/cases?limit=100');
+      const res=await api.get('/cases?limit=100');
       const all=Array.isArray(res.cases)?res.cases:[];
       const filtered=email?all.filter(c=>c.reporter_email===email||['super_admin','admin'].includes(session?.user?.role?.slug)):all;
-      const withThreads=await Promise.all(filtered.map(async c=>{try{const full=await api.get(`/api/cases/${c.id}`);return full&&!full.error?full:c;}catch{return c;}}));
+      const withThreads=await Promise.all(filtered.map(async c=>{try{const full=await api.get(`/cases/${c.id}`);return full&&!full.error?full:c;}catch{return c;}}));
       setCases(withThreads);
     }finally{setLoading(false);}
   },[session?.user?.email]);
 
   useEffect(()=>{load();},[load]);
 
-  const handleNewCase=async(c)=>{await load();try{const full=await api.get(`/api/cases/${c.id}`);if(full&&!full.error){setSelected(full);setView('thread');}}catch{setView('list');}};
+  const handleNewCase=async(c)=>{await load();try{const full=await api.get(`/cases/${c.id}`);if(full&&!full.error){setSelected(full);setView('thread');}}catch{setView('list');}};
   const handleSelectCase=(c)=>{setSelected(c);setView('thread');};
   const openCount=cases.filter(c=>!['closed','resolved'].includes(c.status)).length;
   const resolvedCount=cases.filter(c=>['closed','resolved'].includes(c.status)).length;

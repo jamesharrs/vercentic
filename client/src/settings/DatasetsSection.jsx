@@ -69,14 +69,14 @@ function DatasetEditor({ open, onClose, dataset, environment, onSaved }) {
     if (!name.trim()) return;
     setSaving(true);
     if (dataset) {
-      await api.patch(`/api/datasets/${dataset.id}`, { name, description: desc });
-      await api.put(`/api/datasets/${dataset.id}/options`, opts);
+      await api.patch(`/datasets/${dataset.id}`, { name, description: desc });
+      await api.put(`/datasets/${dataset.id}/options`, opts);
     } else {
-      const created = await api.post('/api/datasets', { name, description: desc, options: opts.map(o=>o.label), environment_id: environment?.id });
+      const created = await api.post('/datasets', { name, description: desc, options: opts.map(o=>o.label), environment_id: environment?.id });
       if (created.id && opts.some(o=>o.color)) {
         // Patch colors on newly created options
-        const fresh = await api.get(`/api/datasets/${created.id}`);
-        (fresh.options||[]).forEach((o,i) => { if (opts[i]?.color) api.patch(`/api/datasets/${created.id}/options/${o.id}`, { color: opts[i].color }); });
+        const fresh = await api.get(`/datasets/${created.id}`);
+        (fresh.options||[]).forEach((o,i) => { if (opts[i]?.color) api.patch(`/datasets/${created.id}/options/${o.id}`, { color: opts[i].color }); });
       }
     }
     setSaving(false); onSaved();
@@ -154,7 +154,7 @@ export default function DatasetsSection({ environment }) {
   const load = useCallback(async () => {
     if (!envId) return;
     setLoading(true);
-    const r = await api.get(`/api/datasets?environment_id=${envId}`);
+    const r = await api.get(`/datasets?environment_id=${envId}`);
     setDatasets(Array.isArray(r) ? r : []);
     setLoading(false);
   }, [envId]);
@@ -164,7 +164,7 @@ export default function DatasetsSection({ environment }) {
   async function handleDelete(ds) {
     if (ds.is_system) return;
     if (!confirm(`Delete "${ds.name}"? This cannot be undone.`)) return;
-    await api.delete(`/api/datasets/${ds.id}`);
+    await api.delete(`/datasets/${ds.id}`);
     load();
   }
 

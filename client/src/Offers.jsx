@@ -225,11 +225,11 @@ function NewOfferModal({ environment, onClose, onCreated, prefillCandidate, pref
   useEffect(() => {
     if (!candSearch.trim() || !environment?.id) { setCandidates([]); return; }
     const t = setTimeout(() => {
-      fetch(`/api/objects?environment_id=${environment.id}`)
+      fetch(`/objects?environment_id=${environment.id}`)
         .then(r=>r.json()).then(objs=>{
           const ppl = (objs||[]).find(o=>o.slug==="people");
           if (!ppl) return;
-          fetch(`/api/records?object_id=${ppl.id}&environment_id=${environment.id}&search=${encodeURIComponent(candSearch)}&limit=8`)
+          fetch(`/records?object_id=${ppl.id}&environment_id=${environment.id}&search=${encodeURIComponent(candSearch)}&limit=8`)
             .then(r=>r.json()).then(d=>setCandidates(d.records||[]));
         }).catch(()=>{});
     }, 300);
@@ -239,11 +239,11 @@ function NewOfferModal({ environment, onClose, onCreated, prefillCandidate, pref
   useEffect(() => {
     if (!jobSearch.trim() || !environment?.id) { setJobs([]); return; }
     const t = setTimeout(() => {
-      fetch(`/api/objects?environment_id=${environment.id}`)
+      fetch(`/objects?environment_id=${environment.id}`)
         .then(r=>r.json()).then(objs=>{
           const jobObj = (objs||[]).find(o=>o.slug==="jobs");
           if (!jobObj) return;
-          fetch(`/api/records?object_id=${jobObj.id}&environment_id=${environment.id}&search=${encodeURIComponent(jobSearch)}&limit=8`)
+          fetch(`/records?object_id=${jobObj.id}&environment_id=${environment.id}&search=${encodeURIComponent(jobSearch)}&limit=8`)
             .then(r=>r.json()).then(d=>setJobs(d.records||[]));
         });
     }, 300);
@@ -500,14 +500,14 @@ function OfferDetail({ offer: initialOffer, onClose, onUpdated, onDeleted }) {
 
   const doStatus = async (status, reason) => {
     setWorking(true);
-    const updated = await api.patch(`/api/offers/${offer.id}/status`, { status, reason, user:"Admin" });
+    const updated = await api.patch(`/offers/${offer.id}/status`, { status, reason, user:"Admin" });
     setOffer(updated); onUpdated(updated);
     setWorking(false);
   };
 
   const doApprove = async (decision) => {
     setWorking(true);
-    const updated = await api.patch(`/api/offers/${offer.id}/approve`, { decision, comment, user:"Admin" });
+    const updated = await api.patch(`/offers/${offer.id}/approve`, { decision, comment, user:"Admin" });
     setOffer(updated); onUpdated(updated);
     setApproveModal(null); setComment("");
     setWorking(false);
@@ -515,7 +515,7 @@ function OfferDetail({ offer: initialOffer, onClose, onUpdated, onDeleted }) {
 
   const doDelete = async () => {
     if (!confirm("Delete this offer? This cannot be undone.")) return;
-    await api.del(`/api/offers/${offer.id}`);
+    await api.del(`/offers/${offer.id}`);
     onDeleted(offer.id);
   };
 
@@ -738,7 +738,7 @@ export default function OffersModule({ environment }) {
   const load = async () => {
     if (!environment?.id) return;
     setLoading(true);
-    const data = await api.get(`/api/offers?environment_id=${environment.id}`);
+    const data = await api.get(`/offers?environment_id=${environment.id}`);
     setOffers(Array.isArray(data) ? data : []);
     setLoading(false);
   };

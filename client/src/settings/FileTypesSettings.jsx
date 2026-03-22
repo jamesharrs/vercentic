@@ -83,7 +83,7 @@ const FileTypeFormModal = ({fileType,allObjects,environment,onSave,onClose}) => 
 
   useEffect(()=>{
     if(form.extract_object_id&&environment?.id){
-      api.get(`/api/fields?object_id=${form.extract_object_id}&environment_id=${environment.id}`)
+      api.get(`/fields?object_id=${form.extract_object_id}&environment_id=${environment.id}`)
         .then(d=>setObjectFields(Array.isArray(d)?d.filter(f=>!f.deleted_at):[]))
         .catch(()=>{});
     }
@@ -209,7 +209,7 @@ export default function FileTypesSettings({environment,objects:objectsProp}) {
 
   useEffect(()=>{
     if(environment?.id && (!objectsProp||objectsProp.length===0)){
-      api.get(`/api/objects?environment_id=${environment.id}`)
+      api.get(`/objects?environment_id=${environment.id}`)
         .then(d=>setObjects(Array.isArray(d)?d.filter(o=>!o.deleted_at):[]))
         .catch(()=>{});
     }
@@ -217,16 +217,16 @@ export default function FileTypesSettings({environment,objects:objectsProp}) {
 
   const load = () => {
     setLoading(true);
-    api.get('/api/file-types').then(d=>{setFileTypes(Array.isArray(d)?d:[]);setLoading(false);}).catch(()=>setLoading(false));
+    api.get('/file-types').then(d=>{setFileTypes(Array.isArray(d)?d:[]);setLoading(false);}).catch(()=>setLoading(false));
   };
   useEffect(()=>{load();},[]);
 
   const handleSave = async(data) => {
-    if(editType?.id) await api.patch(`/api/file-types/${editType.id}`,data);
-    else             await api.post('/api/file-types',data);
+    if(editType?.id) await api.patch(`/file-types/${editType.id}`,data);
+    else             await api.post('/file-types',data);
     setShowForm(false); setEditType(null); load();
   };
-  const handleDelete = async(id) => { if(!confirm('Delete this file type?'))return; await api.del(`/api/file-types/${id}`); load(); };
+  const handleDelete = async(id) => { if(!confirm('Delete this file type?'))return; await api.del(`/file-types/${id}`); load(); };
 
   return (
     <div style={{fontFamily:F}}>

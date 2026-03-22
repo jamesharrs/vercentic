@@ -74,7 +74,7 @@ function SetupModal({provider,existing,environmentId,onClose,onSaved}){
   const handleSave=async()=>{
     setSaving(true); setError('');
     try{
-      const result=await api.post('/api/integrations',{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
+      const result=await api.post('/integrations',{environment_id:environmentId,provider_slug:provider.slug,config:form,enabled:true});
       if(result.error){setError(result.error);setSaving(false);return;}
       onSaved(result);
     }catch(e){setError(e.message);setSaving(false);}
@@ -84,7 +84,7 @@ function SetupModal({provider,existing,environmentId,onClose,onSaved}){
     if(!existing?.id){setError('Save first before testing');return;}
     setTesting(true);setTestResult(null);
     try{
-      const r=await tFetch(`/api/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json());
+      const r=await tFetch(`/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json());
       setTestResult(r); setTesting(false);
     }catch(e){setTestResult({ok:false,message:e.message});setTesting(false);}
   };
@@ -277,8 +277,8 @@ export default function IntegrationsPage({environment}){
     if(!envId)return;
     setLoading(true);
     const [cat,conn]=await Promise.all([
-      api.get(`/api/integrations/catalog?environment_id=${envId}`),
-      api.get(`/api/integrations?environment_id=${envId}`),
+      api.get(`/integrations/catalog?environment_id=${envId}`),
+      api.get(`/integrations?environment_id=${envId}`),
     ]);
     setCatalog(Array.isArray(cat)?cat:[]);
     setConnections(Array.isArray(conn)?conn:[]);
@@ -309,18 +309,18 @@ export default function IntegrationsPage({environment}){
     setConfiguring(null);
   };
   const handleToggle=async(conn)=>{
-    const u=await api.patch(`/api/integrations/${conn.id}`,{enabled:!conn.enabled});
+    const u=await api.patch(`/integrations/${conn.id}`,{enabled:!conn.enabled});
     if(!u.error)setConnections(prev=>prev.map(c=>c.id===conn.id?u:c));
   };
   const handleRetest=async(id)=>{
     try {
-      const result = await tFetch(`/api/integrations/${id}/test`,{method:'POST'}).then(r=>r.json());
+      const result = await tFetch(`/integrations/${id}/test`,{method:'POST'}).then(r=>r.json());
       await load();
       return result;
     } catch(e) { console.warn('retest failed',e); }
   };
   const handleDelete=async(conn)=>{
-    await api.delete(`/api/integrations/${conn.id}`);
+    await api.delete(`/integrations/${conn.id}`);
     setConnections(prev=>prev.filter(c=>c.id!==conn.id));
   };
 

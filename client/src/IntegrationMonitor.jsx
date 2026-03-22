@@ -36,7 +36,7 @@ function IntegrationMonitor({ environment, connections, onRetest }) {
   const load = useCallback(async () => {
     if (!envId) return;
     try {
-      const d = await api.get(`/api/integrations/monitor?environment_id=${envId}&limit=300`);
+      const d = await api.get(`/integrations/monitor?environment_id=${envId}&limit=300`);
       if (!d.error) setData(d);
     } catch {}
     setLoading(false);

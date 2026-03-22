@@ -150,7 +150,7 @@ function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
           ) : (
             <div style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"#F3F4F6",color:C.text3,fontWeight:700,flexShrink:0}}>MANUAL</div>
           )}
-          <div onClick={async e=>{e.stopPropagation();await api.patch(`/api/agents/${agent.id}`,{is_active:agent.is_active?0:1});onEdit(agent);}}
+          <div onClick={async e=>{e.stopPropagation();await api.patch(`/agents/${agent.id}`,{is_active:agent.is_active?0:1});onEdit(agent);}}
             style={{width:34,height:20,borderRadius:10,background:agent.is_active?C.green:"#D1D5DB",cursor:"pointer",position:"relative",flexShrink:0,transition:"background .2s"}}>
             <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:agent.is_active?16:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
           </div>
@@ -200,9 +200,9 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
     sharing: agent?.sharing || { visibility: 'private', user_ids: [], group_ids: [] },
   });
 
-  useEffect(()=>{ api.get('/api/agents/meta').then(setMeta).catch(()=>{}); },[]);
-  useEffect(()=>{ api.get('/api/question-bank').then(d=>setQuestions(Array.isArray(d)?d:[])).catch(()=>{}); },[]);
-  useEffect(()=>{ if(form.target_object_id) api.get(`/api/fields?object_id=${form.target_object_id}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{}); },[form.target_object_id]);
+  useEffect(()=>{ api.get('/agents/meta').then(setMeta).catch(()=>{}); },[]);
+  useEffect(()=>{ api.get('/question-bank').then(d=>setQuestions(Array.isArray(d)?d:[])).catch(()=>{}); },[]);
+  useEffect(()=>{ if(form.target_object_id) api.get(`/fields?object_id=${form.target_object_id}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{}); },[form.target_object_id]);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const addCondition = () => set('conditions',[...form.conditions,{field:'',operator:'equals',value:''}]);
@@ -219,8 +219,8 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
     setSaving(true);
     try {
       const payload={...form,environment_id:environment?.id};
-      if(isEdit) await api.patch(`/api/agents/${agent.id}`,payload);
-      else await api.post('/api/agents',payload);
+      if(isEdit) await api.patch(`/agents/${agent.id}`,payload);
+      else await api.post('/agents',payload);
       onSave();
     } finally { setSaving(false); }
   };
@@ -543,7 +543,7 @@ function ApprovalInbox({ environmentId, onRefresh }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await api.get(`/api/agents/approvals/pending?environment_id=${environmentId}`);
+    const data = await api.get(`/agents/approvals/pending?environment_id=${environmentId}`);
     setApprovals(Array.isArray(data) ? data : []);
     setLoading(false);
   }, [environmentId]);
@@ -552,7 +552,7 @@ function ApprovalInbox({ environmentId, onRefresh }) {
 
   const handle = async (runId, actionIndex, approved) => {
     setProcessing(p=>({...p,[`${runId}-${actionIndex}`]:true}));
-    await api.post(`/api/agents/runs/${runId}/approve`,{action_index:actionIndex,approved,modifier_note:notes[`${runId}-${actionIndex}`]||''});
+    await api.post(`/agents/runs/${runId}/approve`,{action_index:actionIndex,approved,modifier_note:notes[`${runId}-${actionIndex}`]||''});
     load(); onRefresh();
     setProcessing(p=>({...p,[`${runId}-${actionIndex}`]:false}));
   };
@@ -616,7 +616,7 @@ function AgentDetail({ agent, onEdit, onClose }) {
 
   useEffect(()=>{
     if(!agent) return;
-    api.get(`/api/agents/${agent.id}/runs`).then(d=>{setRuns(Array.isArray(d)?d:[]);setLoading(false);});
+    api.get(`/agents/${agent.id}/runs`).then(d=>{setRuns(Array.isArray(d)?d:[]);setLoading(false);});
   },[agent?.id]);
 
   if(!agent) return null;
@@ -698,10 +698,10 @@ export default function AgentsModule({ environment }) {
     if(!environment?.id) return;
     setLoading(true);
     const [agentsData, objectsData, dashData, feedData] = await Promise.all([
-      api.get(`/api/agents?environment_id=${environment.id}`),
-      api.get(`/api/objects?environment_id=${environment.id}`),
-      api.get(`/api/agents/dashboard?environment_id=${environment.id}`),
-      api.get(`/api/agents/activity-feed?environment_id=${environment.id}&limit=20`),
+      api.get(`/agents?environment_id=${environment.id}`),
+      api.get(`/objects?environment_id=${environment.id}`),
+      api.get(`/agents/dashboard?environment_id=${environment.id}`),
+      api.get(`/agents/activity-feed?environment_id=${environment.id}&limit=20`),
     ]);
     const aList = Array.isArray(agentsData) ? agentsData : [];
     setAgents(aList);
@@ -733,11 +733,11 @@ export default function AgentsModule({ environment }) {
 
   const handleDelete = async (id) => {
     if(!window.confirm('Delete this agent?')) return;
-    await api.del(`/api/agents/${id}`);
+    await api.del(`/agents/${id}`);
     load();
   };
   const handleRun = async (id) => {
-    await api.post(`/api/agents/${id}/run`,{environment_id:environment?.id});
+    await api.post(`/agents/${id}/run`,{environment_id:environment?.id});
     setTimeout(load, 1500);
   };
   const handleEdit = (agent) => { setEditAgent(agent); setShowBuilder(true); };

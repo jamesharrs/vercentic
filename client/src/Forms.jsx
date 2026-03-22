@@ -371,7 +371,7 @@ export function FormsList({ environment }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const d = await api.get(`/api/forms?environment_id=${environment?.id||''}`);
+    const d = await api.get(`/forms?environment_id=${environment?.id||''}`);
     setForms(Array.isArray(d)?d:[]);
     setLoading(false);
   }, [environment?.id]);
@@ -379,14 +379,14 @@ export function FormsList({ environment }) {
   useEffect(()=>{ load(); },[load]);
 
   const handleSave = async (data) => {
-    if (editing?.id) await api.patch(`/api/forms/${editing.id}`, data);
-    else             await api.post('/api/forms', data);
+    if (editing?.id) await api.patch(`/forms/${editing.id}`, data);
+    else             await api.post('/forms', data);
     setEditing(null); load();
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this form? All responses will be lost.')) return;
-    await api.del(`/api/forms/${id}`); load();
+    await api.del(`/forms/${id}`); load();
   };
 
   const filtered = forms.filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.category?.includes(search.toLowerCase()));
@@ -566,7 +566,7 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
   useEffect(()=>{
     if (!environment?.id) return;
     Promise.all([
-      api.get(`/api/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`),
+      api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`),
     ]).then(([formsData])=>{
       const f = Array.isArray(formsData)?formsData.filter(f=>f.show_in_record):[];
       setForms(f);
@@ -576,7 +576,7 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
 
   useEffect(()=>{
     if (!activeForm||!record?.id) return;
-    api.get(`/api/forms/${activeForm.id}/responses?record_id=${record.id}`)
+    api.get(`/forms/${activeForm.id}/responses?record_id=${record.id}`)
       .then(d=>setResponses(prev=>({...prev,[activeForm.id]:Array.isArray(d)?d:[]})));
   },[activeForm?.id, record?.id]);
 
@@ -600,14 +600,14 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
     });
     setSubmitted(true); setSubmitting(false);
     // Refresh responses
-    const d = await api.get(`/api/forms/${activeForm.id}/responses?record_id=${record.id}`);
+    const d = await api.get(`/forms/${activeForm.id}/responses?record_id=${record.id}`);
     setResponses(prev=>({...prev,[activeForm.id]:Array.isArray(d)?d:[]}));
   };
 
   const handleDeleteResponse = async (formId, responseId) => {
     if (!confirm('Delete this response?')) return;
-    await api.del(`/api/forms/${formId}/responses/${responseId}`);
-    const d = await api.get(`/api/forms/${formId}/responses?record_id=${record.id}`);
+    await api.del(`/forms/${formId}/responses/${responseId}`);
+    const d = await api.get(`/forms/${formId}/responses?record_id=${record.id}`);
     setResponses(prev=>({...prev,[formId]:Array.isArray(d)?d:[]}));
   };
 

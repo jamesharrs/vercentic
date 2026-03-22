@@ -91,7 +91,7 @@ function RecordSearchModal({ environmentId, onSelect, onClose }) {
     if (q.length < 2) { setResults([]); return; }
     const t = setTimeout(()=>{
       setSearching(true);
-      api.get(`/api/records/search?q=${encodeURIComponent(q)}&environment_id=${environmentId||''}&limit=10`)
+      api.get(`/records/search?q=${encodeURIComponent(q)}&environment_id=${environmentId||''}&limit=10`)
         .then(d=>{ setResults(Array.isArray(d)?d:(d.results||[])); setSearching(false); })
         .catch(()=>setSearching(false));
     }, 250);
@@ -147,8 +147,8 @@ function AiAuditLog({ environmentId }) {
   const loadRuns = useCallback(()=>{
     setLoading(true);
     const url = focusRecord
-      ? `/api/agents/runs/by-record/${focusRecord.id}`
-      : `/api/agents/runs/all?environment_id=${environmentId||''}`;
+      ? `/agents/runs/by-record/${focusRecord.id}`
+      : `/agents/runs/all?environment_id=${environmentId||''}`;
     api.get(url).then(d=>{ setRuns(Array.isArray(d)?d:[]); setLoading(false); }).catch(()=>setLoading(false));
   },[environmentId, focusRecord]);
 
@@ -181,7 +181,7 @@ function AiAuditLog({ environmentId }) {
   const handleGdprErase = async () => {
     if (!gdprAction?.record) return;
     setGdprLoading(true);
-    const result = await api.del(`/api/agents/runs/by-record/${gdprAction.record.id}`);
+    const result = await api.del(`/agents/runs/by-record/${gdprAction.record.id}`);
     setGdprResult(result);
     setGdprLoading(false);
     loadRuns();
@@ -190,7 +190,7 @@ function AiAuditLog({ environmentId }) {
   const handleGdprExplain = async () => {
     if (!gdprAction?.record) return;
     setGdprLoading(true);
-    const report = await api.get(`/api/agents/runs/explanation/${gdprAction.record.id}`);
+    const report = await api.get(`/agents/runs/explanation/${gdprAction.record.id}`);
     setGdprLoading(false);
     // Export as JSON
     const a=document.createElement('a');
@@ -414,7 +414,7 @@ export default function AiGovernance({ environment }) {
   const savePolicy = async () => {
     setSaving(true);
     // Store in server settings (uses security settings store as a catch-all for now)
-    await api.patch('/api/security/settings', { ai_governance_policy: policy }).catch(()=>{});
+    await api.patch('/security/settings', { ai_governance_policy: policy }).catch(()=>{});
     setSaving(false); setSaved(true); setTimeout(()=>setSaved(false), 2000);
   };
 

@@ -173,13 +173,13 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
     setLoading(true);
     try {
       const [objRes, actRes] = await Promise.all([
-        api.get(`/api/objects?environment_id=${environment.id}`),
-        api.get(`/api/records/activity/feed?environment_id=${environment.id}&limit=8`),
+        api.get(`/objects?environment_id=${environment.id}`),
+        api.get(`/records/activity/feed?environment_id=${environment.id}&limit=8`),
       ]);
       const objects  = Array.isArray(objRes) ? objRes : [];
       const activity = Array.isArray(actRes) ? actRes : [];
 
-      const recordFetches  = objects.map(o => api.get(`/api/records?object_id=${o.id}&environment_id=${environment.id}&page=1&limit=50`));
+      const recordFetches  = objects.map(o => api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&page=1&limit=50`));
       const recordResults  = await Promise.all(recordFetches);
       const objectData     = objects.map((o, i) => {
         const res = recordResults[i];

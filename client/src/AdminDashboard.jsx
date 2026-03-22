@@ -73,7 +73,7 @@ export default function AdminDashboard({ environment, session }) {
   const load = useCallback(async (showRefreshing=false) => {
     if (showRefreshing) setRefreshing(true); else setLoading(true);
     setError(null);
-    try { const d = await api.get(`/api/admin/dashboard${environment?.id?`?environment_id=${environment.id}`:""}`); setData(d); }
+    try { const d = await api.get(`/admin/dashboard${environment?.id?`?environment_id=${environment.id}`:""}`); setData(d); }
     catch (e) { setError(e.message); }
     finally { setLoading(false); setRefreshing(false); }
   }, [environment?.id]);

@@ -210,7 +210,7 @@ function FlowEditor({flow,environment,onSave,onClose}) {
     if(!name.trim()){setError("Flow name is required");return;}
     setSaving(true); setError(null);
     const payload={name,description:desc,trigger,steps,enabled,environment_id:environment?.id};
-    const r = isNew ? await api.post("/api/flows",payload) : await api.patch(`/api/flows/${flow.id}`,payload);
+    const r = isNew ? await api.post("/api/flows",payload) : await api.patch(`/flows/${flow.id}`,payload);
     setSaving(false);
     if(r.error){setError(r.errors?r.errors.join(", "):r.error);return;}
     onSave(r);
@@ -297,7 +297,7 @@ function RunLog({flowId,onClose}) {
   const [runs,setRuns]   = useState([]);
   const [sel,setSel]     = useState(null);
   const [loading,setLoading] = useState(true);
-  const load = useCallback(async()=>{setLoading(true);const d=await api.get(`/api/flows/${flowId}/runs?limit=30`);setRuns(d.runs||[]);setLoading(false);},[flowId]);
+  const load = useCallback(async()=>{setLoading(true);const d=await api.get(`/flows/${flowId}/runs?limit=30`);setRuns(d.runs||[]);setLoading(false);},[flowId]);
   useEffect(()=>{load();},[load]);
   const rel = dt=>{const d=Date.now()-new Date(dt).getTime();return d<60000?`${Math.round(d/1000)}s ago`:d<3600000?`${Math.round(d/60000)}m ago`:new Date(dt).toLocaleTimeString();};
   return (
@@ -355,14 +355,14 @@ export default function FlowBuilder({environment}) {
 
   const load = useCallback(async()=>{
     if(!envId)return; setLoading(true);
-    const [fd,sd]=await Promise.all([api.get(`/api/flows?environment_id=${envId}`),api.get(`/api/flows/stats/overview?environment_id=${envId}`)]);
+    const [fd,sd]=await Promise.all([api.get(`/flows?environment_id=${envId}`),api.get(`/flows/stats/overview?environment_id=${envId}`)]);
     setFlows(Array.isArray(fd)?fd:[]); setStats(sd); setLoading(false);
   },[envId]);
   useEffect(()=>{load();},[load]);
 
-  const toggle = async f=>{await api.post(`/api/flows/${f.id}/enable`,{enabled:!f.enabled});setFlows(fs=>fs.map(x=>x.id===f.id?{...x,enabled:!f.enabled}:x));};
-  const del    = async f=>{if(!window.confirm(`Delete "${f.name}"?`))return;await api.delete(`/api/flows/${f.id}`);setFlows(fs=>fs.filter(x=>x.id!==f.id));};
-  const run    = async f=>{setRunning(r=>({...r,[f.id]:true}));await api.post(`/api/flows/${f.id}/run`,{payload:{_test:true}});setRunning(r=>({...r,[f.id]:false}));load();};
+  const toggle = async f=>{await api.post(`/flows/${f.id}/enable`,{enabled:!f.enabled});setFlows(fs=>fs.map(x=>x.id===f.id?{...x,enabled:!f.enabled}:x));};
+  const del    = async f=>{if(!window.confirm(`Delete "${f.name}"?`))return;await api.delete(`/flows/${f.id}`);setFlows(fs=>fs.filter(x=>x.id!==f.id));};
+  const run    = async f=>{setRunning(r=>({...r,[f.id]:true}));await api.post(`/flows/${f.id}/run`,{payload:{_test:true}});setRunning(r=>({...r,[f.id]:false}));load();};
   const copy   = f=>{const u=`${window.location.origin}/api/flows/webhook/${f.id}`;navigator.clipboard?.writeText(u);};
 
   const rel = dt=>{if(!dt)return"Never";const d=Date.now()-new Date(dt).getTime();return d<60000?`${Math.round(d/1000)}s ago`:d<3600000?`${Math.round(d/60000)}m ago`:d<86400000?`${Math.round(d/3600000)}h ago`:new Date(dt).toLocaleDateString();};

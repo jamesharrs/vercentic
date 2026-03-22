@@ -407,7 +407,7 @@ export default function CalendarModule({ environment }) {
     try {
       const start = fmt(new Date(viewDate.getFullYear(), viewDate.getMonth()-1, 1));
       const end   = fmt(new Date(viewDate.getFullYear(), viewDate.getMonth()+2, 0));
-      const feed = await api.get(`/api/calendar/feed?environment_id=${envId}&start=${start}&end=${end}`);
+      const feed = await api.get(`/calendar/feed?environment_id=${envId}&start=${start}&end=${end}`);
       setTasks(feed.tasks||[]); setEvents(feed.events||[]); setInterviews(feed.interviews||[]);
     } finally { setLoading(false); }
   }, [envId, viewDate.getFullYear(), viewDate.getMonth()]);
@@ -433,19 +433,19 @@ export default function CalendarModule({ environment }) {
   };
 
   const handleSaveTask = async form => {
-    if(taskModal?.task) await api.patch(`/api/calendar/tasks/${taskModal.task.id}`, {...form, environment_id:envId});
+    if(taskModal?.task) await api.patch(`/calendar/tasks/${taskModal.task.id}`, {...form, environment_id:envId});
     else await api.post("/api/calendar/tasks", {...form, environment_id:envId});
     setTaskModal(null); setSelectedItem(null); load();
   };
-  const handleDeleteTask = async id => { await api.del(`/api/calendar/tasks/${id}`); setTaskModal(null); setSelectedItem(null); load(); };
+  const handleDeleteTask = async id => { await api.del(`/calendar/tasks/${id}`); setTaskModal(null); setSelectedItem(null); load(); };
   const handleSaveEvent = async form => {
-    if(eventModal?.event) await api.patch(`/api/calendar/events/${eventModal.event.id}`, {...form, environment_id:envId});
+    if(eventModal?.event) await api.patch(`/calendar/events/${eventModal.event.id}`, {...form, environment_id:envId});
     else await api.post("/api/calendar/events", {...form, environment_id:envId});
     setEventModal(null); load();
   };
-  const handleDeleteEvent = async id => { await api.del(`/api/calendar/events/${id}`); setEventModal(null); setSelectedItem(null); load(); };
+  const handleDeleteEvent = async id => { await api.del(`/calendar/events/${id}`); setEventModal(null); setSelectedItem(null); load(); };
   const handleToggleTask = async task => {
-    await api.patch(`/api/calendar/tasks/${task.id}`, { status: task.status==="done"?"todo":"done" });
+    await api.patch(`/calendar/tasks/${task.id}`, { status: task.status==="done"?"todo":"done" });
     setSelectedItem(null); load();
   };
 

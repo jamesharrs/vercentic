@@ -128,7 +128,7 @@ const LinkPersonModal = ({ environmentId, onLink, onClose }) => {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const data = await api.get(`/api/records/search?q=${encodeURIComponent(search)}&environment_id=${environmentId}&limit=10`);
+        const data = await api.get(`/records/search?q=${encodeURIComponent(search)}&environment_id=${environmentId}&limit=10`);
         const recs = Array.isArray(data) ? data : (data.results || []);
         setResults(recs.filter(r => (r.object_slug || '').includes('people') || (r.object_name || '').toLowerCase().includes('person')));
       } catch { setResults([]); }
@@ -183,10 +183,10 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/api/inbox/${msgId}`);
+      const data = await api.get(`/inbox/${msgId}`);
       setMsg(data);
       if (!data.read) {
-        await api.patch(`/api/inbox/${msgId}/read`, { read: true });
+        await api.patch(`/inbox/${msgId}/read`, { read: true });
         onUpdate?.();
       }
     } catch { setMsg(null); }
@@ -195,26 +195,26 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
 
   useEffect(() => { if (msgId) load(); }, [msgId, load]);
   useEffect(() => { threadEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msg?.thread]);
-  useEffect(() => { api.get('/api/users').then(d => setUsers(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/users').then(d => setUsers(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
 
   const handleReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
     try {
-      await api.post(`/api/inbox/${msgId}/reply`, { body: reply, subject: `Re: ${msg.subject}` });
+      await api.post(`/inbox/${msgId}/reply`, { body: reply, subject: `Re: ${msg.subject}` });
       setReply(''); setSent(true); setTimeout(() => setSent(false), 2000); load();
     } catch {}
     setSending(false);
   };
 
   const handleLink = async (recordId) => {
-    await api.patch(`/api/inbox/${msgId}/link`, { record_id: recordId });
+    await api.patch(`/inbox/${msgId}/link`, { record_id: recordId });
     setShowLink(false); load(); onUpdate?.();
   };
 
   const handleDelete = async () => {
     if (!confirm('Delete this message?')) return;
-    await api.delete(`/api/inbox/${msgId}`);
+    await api.delete(`/inbox/${msgId}`);
     onUpdate?.({ deleted: true });
   };
 
@@ -246,7 +246,7 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
                   <Ic n="link" s={11} c={C.text3} />Link to record
                 </button>
             }
-            <select value={msg.assigned_to || ''} onChange={e => api.patch(`/api/inbox/${msgId}/assign`, { user_id: e.target.value }).then(load)}
+            <select value={msg.assigned_to || ''} onChange={e => api.patch(`/inbox/${msgId}/assign`, { user_id: e.target.value }).then(load)}
               style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'white', color: C.text2, fontSize: 11, fontFamily: F, cursor: 'pointer' }}>
               <option value="">Unassigned</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
@@ -310,7 +310,7 @@ export default function InboxModule({ environment, onNavigate }) {
   const load = useCallback(async () => {
     if (!environment?.id) return;
     try {
-      const data = await api.get(`/api/inbox?environment_id=${environment.id}&filter=${filter}&search=${encodeURIComponent(searchRef.current)}`);
+      const data = await api.get(`/inbox?environment_id=${environment.id}&filter=${filter}&search=${encodeURIComponent(searchRef.current)}`);
       setMessages(data.messages || []);
       setTotal(data.total || 0);
     } catch { setMessages([]); }
@@ -324,7 +324,7 @@ export default function InboxModule({ environment, onNavigate }) {
   const handleSeedTest = async () => {
     setSeeding(true);
     try {
-      await api.post('/api/inbox/seed-test', { environment_id: environment.id, ...seedForm });
+      await api.post('/inbox/seed-test', { environment_id: environment.id, ...seedForm });
       setShowSeed(false); setSeedForm({ from_name: '', from_email: '', subject: '', body: '' }); load();
     } catch {}
     setSeeding(false);
@@ -443,7 +443,7 @@ export function useInboxUnreadCount(environmentId) {
   useEffect(() => {
     if (!environmentId) return;
     const poll = async () => {
-      try { const d = await tFetch(`/api/inbox/unread-count?environment_id=${environmentId}`).then(r => r.json()); setCount(d.count || 0); } catch {}
+      try { const d = await tFetch(`/inbox/unread-count?environment_id=${environmentId}`).then(r => r.json()); setCount(d.count || 0); } catch {}
     };
     poll();
     const i = setInterval(poll, 30000);

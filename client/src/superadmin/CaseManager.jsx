@@ -41,7 +41,7 @@ function NewCaseModal({clients,onSave,onClose}){
   const[saving,setSaving]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const client=clients.find(c=>c.id===form.client_id);
-  const handleSave=async()=>{if(!form.subject)return;setSaving(true);try{const res=await api.post('/api/cases',{...form,client_name:client?.name,plan_tier:client?.plan_tier});onSave(res);}finally{setSaving(false);}};
+  const handleSave=async()=>{if(!form.subject)return;setSaving(true);try{const res=await api.post('/cases',{...form,client_name:client?.name,plan_tier:client?.plan_tier});onSave(res);}finally{setSaving(false);}};
   const inp={width:'100%',background:BG,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT1,padding:'8px 10px',fontSize:13,boxSizing:'border-box',fontFamily:F};
   const lbl={fontSize:11,color:TEXT2,fontWeight:700};
   return(
@@ -91,8 +91,8 @@ function CaseDetail({caseData,onUpdate,onClose}){
   const type=TYPES.find(t=>t.id===caseData.type)||TYPES[5];
   const priority=PRIORITIES.find(p=>p.id===caseData.priority)||PRIORITIES[2];
   const status=STATUSES.find(s=>s.id===caseData.status)||STATUSES[0];
-  const sendReply=async()=>{if(!reply.trim())return;setSending(true);try{const thread=await api.post(`/api/cases/${caseData.id}/thread`,{body:reply,visibility,author_name:'Vercentic Support',type:'comment'});onUpdate({...caseData,threads:[...(caseData.threads||[]),thread]});setReply('');}finally{setSending(false);}};
-  const changeStatus=async()=>{const updated=await api.patch(`/api/cases/${caseData.id}/status`,{status:newStatus,reason});onUpdate({...updated,threads:caseData.threads});setStatusModal(false);setReason('');};
+  const sendReply=async()=>{if(!reply.trim())return;setSending(true);try{const thread=await api.post(`/cases/${caseData.id}/thread`,{body:reply,visibility,author_name:'Vercentic Support',type:'comment'});onUpdate({...caseData,threads:[...(caseData.threads||[]),thread]});setReply('');}finally{setSending(false);}};
+  const changeStatus=async()=>{const updated=await api.patch(`/cases/${caseData.id}/status`,{status:newStatus,reason});onUpdate({...updated,threads:caseData.threads});setStatusModal(false);setReason('');};
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',fontFamily:F}}>
       <div style={{padding:'14px 18px',borderBottom:`1px solid ${BORDER}`,display:'flex',alignItems:'flex-start',gap:10}}>
@@ -203,9 +203,9 @@ export default function CaseManager(){
   const[search,setSearch]=useState('');
   const[filters,setFilters]=useState({status:'',type:'',priority:''});
   const[total,setTotal]=useState(0);
-  const load=useCallback(async()=>{setLoading(true);try{const params=new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([,v])=>v)));if(search)params.set('search',search);const[cRes,sRes,clRes]=await Promise.all([api.get(`/api/cases?${params}`),api.get('/api/cases/stats'),api.get('/api/superadmin/clients')]);setCases(Array.isArray(cRes.cases)?cRes.cases:[]);setTotal(cRes.total||0);setStats(sRes||{});setClients(Array.isArray(clRes)?clRes:[]);}finally{setLoading(false);}},[filters,search]);
+  const load=useCallback(async()=>{setLoading(true);try{const params=new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([,v])=>v)));if(search)params.set('search',search);const[cRes,sRes,clRes]=await Promise.all([api.get(`/cases?${params}`),api.get('/cases/stats'),api.get('/superadmin/clients')]);setCases(Array.isArray(cRes.cases)?cRes.cases:[]);setTotal(cRes.total||0);setStats(sRes||{});setClients(Array.isArray(clRes)?clRes:[]);}finally{setLoading(false);}},[filters,search]);
   useEffect(()=>{load();},[load]);
-  const openCase=async(c)=>{try{const full=await api.get(`/api/cases/${c.id}`);if(full&&!full.error)setSelected(full);}catch(e){console.error(e);}};
+  const openCase=async(c)=>{try{const full=await api.get(`/cases/${c.id}`);if(full&&!full.error)setSelected(full);}catch(e){console.error(e);}};
   const handleUpdate=updated=>{setCases(cs=>cs.map(c=>c.id===updated.id?{...c,...updated}:c));setSelected(updated);};
   const handleNewCase=async(c)=>{setShowNew(false);await load();if(c?.id)openCase(c);};
   return(<div style={{display:'flex',height:'100%',fontFamily:F,color:TEXT1,overflow:'hidden'}}>
