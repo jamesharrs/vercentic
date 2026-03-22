@@ -2951,6 +2951,16 @@ const STATUS_COORD = {
   no_overlap:  { label:"No overlap — action needed", color:"#ef4444", bg:"#fee2e2" },
   cancelled:   { label:"Cancelled", color:"#6b7280", bg:"#f3f4f6" },
 };
+const AccessDeniedPanel = ({ label = "this section" }) => (
+  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 20px", color:C.text3, textAlign:"center", gap:8 }}>
+    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+    <span style={{ fontSize:13, fontWeight:600, color:C.text2 }}>Access restricted</span>
+    <span style={{ fontSize:12 }}>You don't have permission to view {label}.</span>
+  </div>
+);
+
 const CoordinationPanel = ({ record, environment }) => {
   const [runs,     setRuns]     = useState([]);
   const [loading,  setLoading]  = useState(true);
