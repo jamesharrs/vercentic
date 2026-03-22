@@ -784,7 +784,15 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
           <div>{lbl("Image URL")}<input value={cfg.url||""} onChange={e=>set("url",e.target.value)} placeholder="https://…" style={inp}/></div>
           <div>{lbl("Alt text")}<input value={cfg.alt||""} onChange={e=>set("alt",e.target.value)} placeholder="Describe the image" style={inp}/></div>
-          {cfg.url&&<img src={cfg.url} alt="" style={{ borderRadius:8, maxHeight:120, objectFit:"cover", width:"100%" }}/>}
+          <div>{lbl("Link (wraps image in a link)")}<input value={cfg.linkHref||""} onChange={e=>set("linkHref",e.target.value)} placeholder="https://… (optional)" style={inp}/></div>
+          <div>{lbl("Object fit")}
+            <select value={cfg.objectFit||"cover"} onChange={e=>set("objectFit",e.target.value)} style={inp}>
+              <option value="cover">Cover (fill + crop)</option><option value="contain">Contain (letterbox)</option><option value="fill">Stretch</option>
+            </select>
+          </div>
+          <div>{lbl("Max height (px, blank = auto)")}<input type="number" value={cfg.maxHeight||""} onChange={e=>set("maxHeight",e.target.value)} placeholder="400" style={inp}/></div>
+          <div>{lbl("Border radius (px)")}<input type="number" value={cfg.borderRadius||""} onChange={e=>set("borderRadius",e.target.value)} placeholder="0" style={inp}/></div>
+          {cfg.url&&<img src={cfg.url} alt="" style={{ borderRadius:8, maxHeight:100, objectFit:"cover", width:"100%" }}/>}
         </div>
       );
       case "stats": return (
@@ -804,34 +812,97 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
         </div>
       );
       case "video": return (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          {lbl("YouTube or Vimeo URL")}
-          <input value={cfg.url||""} onChange={e=>set("url",e.target.value)} placeholder="https://youtube.com/watch?v=…" style={inp}/>
-          <p style={{ fontSize:12, color:C.text3, margin:0 }}>YouTube and Vimeo URLs are automatically embedded.</p>
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>{lbl("Video URL (YouTube, Vimeo or .mp4)")}<input value={cfg.url||""} onChange={e=>set("url",e.target.value)} placeholder="https://youtube.com/watch?v=…" style={inp}/></div>
+          <div>{lbl("Aspect ratio")}
+            <select value={cfg.ratio||"16/9"} onChange={e=>set("ratio",e.target.value)} style={inp}>
+              <option value="16/9">16:9 — Widescreen</option><option value="4/3">4:3</option><option value="1/1">1:1 — Square</option>
+            </select>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.autoplay} onChange={e=>set("autoplay",e.target.checked)} style={{width:14,height:14}}/>Autoplay (muted)</label>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.controls!==false} onChange={e=>set("controls",e.target.checked)} style={{width:14,height:14}}/>Show controls</label>
+          <div>{lbl("Border radius (px)")}<input type="number" value={cfg.borderRadius||""} onChange={e=>set("borderRadius",e.target.value)} placeholder="8" style={inp}/></div>
         </div>
       );
       case "spacer": return (
-        <div>{lbl("Height")}
-          <select value={cfg.height||"48px"} onChange={e=>set("height",e.target.value)} style={inp}>
-            {["24px","48px","80px","120px","160px","240px"].map(h=><option key={h}>{h}</option>)}
-          </select>
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>{lbl("Height")}
+            <select value={cfg.height||"md"} onChange={e=>set("height",e.target.value)} style={inp}>
+              <option value="xs">Extra small — 16px</option>
+              <option value="sm">Small — 32px</option>
+              <option value="md">Medium — 64px</option>
+              <option value="lg">Large — 96px</option>
+              <option value="xl">Extra large — 128px</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          {cfg.height==="custom"&&<div>{lbl("Custom height (px)")}<input type="number" value={cfg.customHeight||64} onChange={e=>set("customHeight",parseInt(e.target.value)||64)} placeholder="64" style={inp}/></div>}
+        </div>
+      );
+      case "divider": return (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>{lbl("Style")}
+            <select value={cfg.dividerStyle||"solid"} onChange={e=>set("dividerStyle",e.target.value)} style={inp}>
+              <option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option>
+            </select>
+          </div>
+          <div>{lbl("Thickness (px)")}<input type="number" value={cfg.thickness||1} onChange={e=>set("thickness",parseInt(e.target.value)||1)} style={inp}/></div>
+          <div>{lbl("Colour")}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginTop:4}}>
+              <input type="color" value={cfg.color||"#E8ECF8"} onChange={e=>set("color",e.target.value)} style={{width:36,height:32,borderRadius:6,border:`1px solid ${C.border}`,cursor:"pointer",padding:2}}/>
+              <span style={{fontSize:11,fontFamily:"monospace",color:C.text1}}>{cfg.color||"#E8ECF8"}</span>
+            </div>
+          </div>
+          <div>{lbl("Max width (px or %, blank = full)")}<input value={cfg.maxWidth||""} onChange={e=>set("maxWidth",e.target.value)} placeholder="e.g. 800px" style={inp}/></div>
         </div>
       );
       case "jobs": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div>{lbl("Section heading (optional)")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Open Positions" style={inp}/></div>
-          <div style={{ padding:"10px 12px", borderRadius:8, background:C.accentLight, fontSize:12, color:C.accent }}>Jobs are loaded live from your Vercentic data automatically.</div>
+          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Open Positions" style={inp}/></div>
+          <div>{lbl("Filter by Saved List name (blank = all open jobs)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Engineering Roles" style={inp}/></div>
+          <div>{lbl("Max jobs to show (blank = unlimited)")}<input type="number" value={cfg.limit||""} onChange={e=>set("limit",e.target.value)} placeholder="All" style={inp}/></div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showSearch!==false} onChange={e=>set("showSearch",e.target.checked)} style={{width:14,height:14}}/>Show search bar</label>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showFilters!==false} onChange={e=>set("showFilters",e.target.checked)} style={{width:14,height:14}}/>Show department filter</label>
+          <div>{lbl("Empty state message")}<input value={cfg.emptyText||""} onChange={e=>set("emptyText",e.target.value)} placeholder="No open roles right now." style={inp}/></div>
+        </div>
+      );
+      case "job_list": return (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Featured Roles" style={inp}/></div>
+          <div>{lbl("Filter by Saved List name (blank = all open jobs)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Featured" style={inp}/></div>
+          <div>{lbl("Max jobs to show")}<input type="number" value={cfg.limit||5} onChange={e=>set("limit",parseInt(e.target.value)||5)} placeholder="5" style={inp}/></div>
+          <div>{lbl("'View all' link URL (optional)")}<input value={cfg.viewAllHref||""} onChange={e=>set("viewAllHref",e.target.value)} placeholder="#jobs" style={inp}/></div>
         </div>
       );
       case "team": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div>{lbl("Section heading (optional)")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Meet the Team" style={inp}/></div>
-          <div style={{ padding:"10px 12px", borderRadius:8, background:C.accentLight, fontSize:12, color:C.accent }}>Shows Employee-type People records from your data.</div>
+          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Meet the Team" style={inp}/></div>
+          <div>{lbl("Filter by Saved List name (blank = all employees)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Leadership" style={inp}/></div>
+          <div>{lbl("Columns")}
+            <select value={cfg.columns||3} onChange={e=>set("columns",parseInt(e.target.value))} style={inp}>
+              <option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+            </select>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showBio} onChange={e=>set("showBio",e.target.checked)} style={{width:14,height:14}}/>Show bio/description</label>
+        </div>
+      );
+      case "hm_profile": return (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Meet Your Hiring Team" style={inp}/></div>
+          <div>{lbl("Filter by Saved List name (blank = all employees)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Hiring Managers" style={inp}/></div>
+          <div>{lbl("CTA button text")}<input value={cfg.ctaText||""} onChange={e=>set("ctaText",e.target.value)} placeholder="Schedule a call" style={inp}/></div>
+          <div>{lbl("CTA button link")}<input value={cfg.ctaHref||""} onChange={e=>set("ctaHref",e.target.value)} placeholder="https://calendly.com/…" style={inp}/></div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showBio} onChange={e=>set("showBio",e.target.checked)} style={{width:14,height:14}}/>Show bio</label>
         </div>
       );
       case "form": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
           <div>{lbl("Form title")}<input value={cfg.title||""} onChange={e=>set("title",e.target.value)} placeholder="Apply Now" style={inp}/></div>
+          <div>{lbl("Submit button text")}<input value={cfg.submitText||""} onChange={e=>set("submitText",e.target.value)} placeholder="Submit Application" style={inp}/></div>
+          <div>{lbl("Success message")}<input value={cfg.successText||""} onChange={e=>set("successText",e.target.value)} placeholder="Thank you! We'll be in touch." style={inp}/></div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showPhone!==false} onChange={e=>set("showPhone",e.target.checked)} style={{width:14,height:14}}/>Include phone field</label>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showCV!==false} onChange={e=>set("showCV",e.target.checked)} style={{width:14,height:14}}/>Include CV upload</label>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showCoverLetter} onChange={e=>set("showCoverLetter",e.target.checked)} style={{width:14,height:14}}/>Include cover note</label>
         </div>
       );
       case "multistep_form": return <MultistepFormConfig cfg={cfg} set={set} inp={inp} lbl={lbl}/>;
@@ -1347,7 +1418,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showNav,     setShowNav]    = useState(false);
   const [showFooter,  setShowFooter] = useState(false);
-  const [activeTab,   setActiveTab]  = useState('canvas');
   const [isEditing, setIsEditing] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -1391,11 +1461,12 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
           <button onClick={addPage} style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer"}}><Ic n="plus" s={11}/></button>
         </div>
         <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
-        <div style={{display:"flex",gap:2,background:C.surface2,borderRadius:7,padding:2,border:`1px solid ${C.border}`}}>
-          {[["canvas","Canvas"],["nav","Nav"],["footer","Footer"]].map(([id,l])=>(
-            <button key={id} onClick={()=>setActiveTab(id)} style={{padding:"4px 10px",borderRadius:5,border:"none",fontFamily:F,fontSize:11,fontWeight:600,cursor:"pointer",background:activeTab===id?C.surface:"transparent",color:activeTab===id?C.text1:C.text3,boxShadow:activeTab===id?"0 1px 3px rgba(0,0,0,.06)":"none"}}>{l}</button>
-          ))}
-        </div>
+        <button onClick={()=>{setShowNav(n=>!n);setShowFooter(false);setShowTheme(false);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:showNav?C.accentLight:"transparent",color:showNav?C.accent:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+          <Ic n="menu" s={13} c={showNav?C.accent:C.text2}/> Nav
+        </button>
+        <button onClick={()=>{setShowFooter(f=>!f);setShowNav(false);setShowTheme(false);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:showFooter?C.accentLight:"transparent",color:showFooter?C.accent:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+          <Ic n="footer2" s={13} c={showFooter?C.accent:C.text2}/> Footer
+        </button>
         <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
         {/* Actions */}
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1404,7 +1475,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
               border:`1px solid ${C.border}`,background:isEditing?C.accentLight:"transparent",color:isEditing?C.accent:C.text2}}>
             <Ic n="eye" s={12} c={isEditing?C.accent:C.text2}/>{isEditing?"Editing":"Preview"}
           </button>
-          <button onClick={()=>setShowTheme(s=>!s)}
+          <button onClick={()=>{setShowTheme(s=>!s);setShowNav(false);setShowFooter(false);}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
               border:`1px solid ${C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2}}>
             <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
@@ -1448,6 +1519,14 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
       </div>
 
       {showLibrary&&<SectionLibrary onInsert={row=>{const rows=[...page.rows];rows.push(row);updatePage({...page,rows});}} onClose={()=>setShowLibrary(false)}/>}
+      {showNav&&<>
+        <div onClick={()=>setShowNav(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
+        <NavEditor nav={portal.nav||defaultNav()} onChange={nav=>setPortal(p=>({...p,nav}))} theme={portal.theme} onClose={()=>setShowNav(false)}/>
+      </>}
+      {showFooter&&<>
+        <div onClick={()=>setShowFooter(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
+        <FooterEditor footer={portal.footer||defaultFooter()} onChange={footer=>setPortal(p=>({...p,footer}))} onClose={()=>setShowFooter(false)}/>
+      </>}
       {showTheme&&<>
         <div onClick={()=>setShowTheme(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
         <ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>

@@ -71,9 +71,22 @@ const TextWidget = ({ cfg, theme }) => (
   </div>
 )
 
-const ImageWidget = ({ cfg }) => cfg.url ? (
-  <div style={{ borderRadius:12, overflow:'hidden' }}><img src={cfg.url} alt={cfg.alt||''} style={{ width:'100%', display:'block', borderRadius:12 }}/></div>
-) : null
+const ImageWidget = ({ cfg }) => {
+  if (!cfg.url) return null
+  const br = cfg.borderRadius != null ? cfg.borderRadius + 'px' : '12px'
+  const img = (
+    <div style={{ borderRadius: br, overflow:'hidden' }}>
+      <img src={cfg.url} alt={cfg.alt||''} style={{
+        width:'100%', display:'block',
+        objectFit: cfg.objectFit || 'cover',
+        maxHeight: cfg.maxHeight ? cfg.maxHeight + 'px' : undefined,
+      }}/>
+    </div>
+  )
+  return cfg.linkHref
+    ? <a href={cfg.linkHref} target="_blank" rel="noreferrer" style={{ display:'block' }}>{img}</a>
+    : img
+}
 
 const StatsWidget = ({ cfg, theme }) => {
   const stats = cfg.stats || [{ value:'500+', label:'Employees' }, { value:'12', label:'Offices' }, { value:'20+', label:'Countries' }]
@@ -91,20 +104,43 @@ const StatsWidget = ({ cfg, theme }) => {
 
 const VideoWidget = ({ cfg }) => {
   if (!cfg.url) return null
-  let embedUrl = cfg.url
+  const ratio = cfg.ratio || '16/9'
+  const [w, h] = ratio.split('/').map(Number)
+  const pct = ((h / w) * 100).toFixed(4) + '%'
+  const br = cfg.borderRadius != null ? cfg.borderRadius + 'px' : '12px'
   const yt = cfg.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
-  if (yt) embedUrl = `https://www.youtube.com/embed/${yt[1]}`
   const vm = cfg.url.match(/vimeo\.com\/(\d+)/)
-  if (vm) embedUrl = `https://player.vimeo.com/video/${vm[1]}`
+  const isEmbed = yt || vm
+  let embedUrl = cfg.url
+  if (yt) embedUrl = `https://www.youtube.com/embed/${yt[1]}${cfg.autoplay ? '?autoplay=1&mute=1' : ''}`
+  if (vm) embedUrl = `https://player.vimeo.com/video/${vm[1]}${cfg.autoplay ? '?autoplay=1&muted=1' : ''}`
   return (
-    <div style={{ position:'relative', paddingBottom:'56.25%', height:0, overflow:'hidden', borderRadius:12 }}>
-      <iframe src={embedUrl} style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none', borderRadius:12 }} allowFullScreen/>
+    <div style={{ position:'relative', paddingBottom:pct, height:0, overflow:'hidden', borderRadius:br }}>
+      {isEmbed ? (
+        <iframe src={embedUrl} style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }} allow="autoplay; fullscreen" allowFullScreen/>
+      ) : (
+        <video src={cfg.url} style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover' }}
+          autoPlay={!!cfg.autoplay} muted={!!cfg.autoplay} controls={cfg.controls !== false} playsInline loop={!!cfg.loop}/>
+      )}
     </div>
   )
 }
 
-const DividerWidget = ({ theme }) => <div style={{ borderTop:`1px solid ${theme.primaryColor}30`, margin:'8px 0' }}/>
-const SpacerWidget = ({ cfg }) => <div style={{ height:cfg.height||'48px' }}/>
+const DividerWidget = ({ cfg, theme }) => (
+  <div style={{ display:'flex', justifyContent:'center', padding:'4px 0' }}>
+    <div style={{
+      flex: 1, maxWidth: cfg.maxWidth || '100%',
+      borderTop: `${cfg.thickness || 1}px ${cfg.dividerStyle || 'solid'} ${cfg.color || theme.primaryColor + '30'}`
+    }}/>
+  </div>
+)
+
+const SpacerWidget = ({ cfg }) => {
+  const MAP = { xs:16, sm:32, md:64, lg:96, xl:128 }
+  const px = cfg.height === 'custom' ? (cfg.customHeight || 64)
+    : MAP[cfg.height] ?? (parseInt(cfg.height) || 64)
+  return <div style={{ height: px }}/>
+}
 
 const JobsWidget = ({ cfg, theme, portal, api }) => {
   const [jobs, setJobs] = useState([])
@@ -119,11 +155,24 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
       .then(objs => {
         const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
         if (!obj) return null
-        return api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}&limit=200`)
+        const limitParam = cfg.limit ? `&limit=${cfg.limit}` : '&limit=200'
+        return api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}${limitParam}`)
       })
-      .then(data => { if (data) setJobs((data?.records||data||[]).filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled')) })
+      .then(data => {
+        if (!data) return
+        let all = (data?.records||data||[]).filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled')
+        // Filter by savedList name if configured
+        if (cfg.savedList) {
+          const listName = cfg.savedList.toLowerCase()
+          all = all.filter(r => {
+            const lists = Array.isArray(r.saved_lists) ? r.saved_lists : []
+            return lists.some(l => (l.name||l||'').toLowerCase() === listName)
+          })
+        }
+        setJobs(all)
+      })
       .catch(() => {})
-  }, [portal?.environment_id])
+  }, [portal?.environment_id, cfg.savedList, cfg.limit])
 
   const depts = ['all', ...new Set(jobs.map(j => j.data?.department).filter(Boolean))]
   const filtered = jobs.filter(j => {
@@ -357,11 +406,14 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'image':   return <ImageWidget   cfg={cfg}/>
     case 'stats':   return <StatsWidget   cfg={cfg} theme={theme}/>
     case 'video':   return <VideoWidget   cfg={cfg}/>
-    case 'divider': return <DividerWidget theme={theme}/>
+    case 'divider': return <DividerWidget cfg={cfg} theme={theme}/>
     case 'spacer':  return <SpacerWidget  cfg={cfg}/>
-    case 'jobs':    return <JobsWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'jobs':    return <JobsWidget    cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
     case 'team':    return <TeamWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
     case 'form':    return <FormWidget    cfg={cfg} theme={theme}/>
+    case 'job_list':       return <JobsWidget    cfg={{...cfg, compact:true}} theme={theme} portal={portal} api={api} track={track}/>
+    case 'hm_profile':     return <TeamWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'multistep_form': return <MultistepFormWidget cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
     default:        return null
   }
 }
@@ -412,20 +464,46 @@ const PortalFooter = ({ portal, theme }) => {
   </footer>);
 };
 
-const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => (
-  <nav style={{ position:'sticky', top:0, zIndex:100, background:theme.bgColor||'#fff', borderBottom:`1px solid ${theme.primaryColor}18`, boxShadow:'0 1px 8px rgba(0,0,0,.06)' }}>
-    <div style={{ maxWidth:theme.maxWidth||'1200px', margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:64 }}>
-      <div style={{ fontSize:18, fontWeight:800, color:theme.primaryColor, fontFamily:theme.headingFont||theme.fontFamily }}>{portal.branding?.company_name||portal.name}</div>
-      {pages.length>1&&(
-        <div style={{ display:'flex', gap:4 }}>
-          {pages.map(pg=>(
-            <button key={pg.id} onClick={()=>onNav(pg)} style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 14px', borderRadius:8, fontSize:14, fontWeight:currentPage?.id===pg.id?700:500, color:currentPage?.id===pg.id?theme.primaryColor:(theme.textColor||'#374151'), fontFamily:theme.fontFamily }}>{pg.name}</button>
-          ))}
+const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
+  const nav = portal.nav || {}
+  const bg  = nav.bgColor   || theme.bgColor   || '#fff'
+  const fg  = nav.textColor || theme.textColor || '#0F1729'
+  const navLinks = nav.links || []
+  return (
+    <nav style={{ position: nav.sticky !== false ? 'sticky' : 'relative', top:0, zIndex:100,
+      background:bg, borderBottom:`1px solid ${theme.primaryColor}18`, boxShadow:'0 1px 8px rgba(0,0,0,.06)' }}>
+      <div style={{ maxWidth:theme.maxWidth||'1200px', margin:'0 auto', padding:'0 24px',
+        display:'flex', alignItems:'center', justifyContent:'space-between', height:64 }}>
+        {nav.logoUrl
+          ? <img src={nav.logoUrl} alt={nav.logoText||portal.name} style={{ height:36, objectFit:'contain' }}/>
+          : <div style={{ fontSize:18, fontWeight:800, color:theme.primaryColor, fontFamily:theme.headingFont||theme.fontFamily }}>
+              {nav.logoText || portal.branding?.company_name || portal.name}
+            </div>
+        }
+        <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+          {navLinks.length > 0
+            ? navLinks.map(lnk => (
+                <a key={lnk.id} href={lnk.href||'#'}
+                  style={{ padding:'6px 12px', borderRadius:8, fontSize:14, fontWeight:500,
+                    color:fg, textDecoration:'none', fontFamily:theme.fontFamily }}>
+                  {lnk.label}
+                </a>
+              ))
+            : pages.length > 1 && pages.map(pg => (
+                <button key={pg.id} onClick={()=>onNav(pg)}
+                  style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 14px', borderRadius:8,
+                    fontSize:14, fontWeight:currentPage?.id===pg.id?700:500,
+                    color:currentPage?.id===pg.id?theme.primaryColor:fg,
+                    fontFamily:theme.fontFamily }}>
+                  {pg.name}
+                </button>
+              ))
+          }
         </div>
-      )}
-    </div>
-  </nav>
-)
+      </div>
+    </nav>
+  )
+}
 
 export default function PortalPageRenderer({ portal, api }) {
   const theme = portal.theme || portal.branding || {}
