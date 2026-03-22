@@ -6,7 +6,7 @@
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore } = require('../db/init');
+const { getStore, saveStore, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
 
 const JOB_TEMPLATES = [
   { title:'Senior Software Engineer',        dept:'Engineering', salary_min:120000, salary_max:160000, location:'San Francisco, USA',  work_type:'Hybrid',  employment_type:'Full-time' },
@@ -117,6 +117,20 @@ const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const isoNow  = () => new Date().toISOString();
 const isoAgo  = days => new Date(Date.now() - days * 86400000).toISOString();
 const fmt     = (str, vars) => str.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
+
+// Find which tenant store contains a given environment_id
+// Returns null for the master store, or the tenant slug string
+function findTenantForEnv(environmentId) {
+  // Check master store first
+  const master = getStore();
+  if ((master.environments || []).find(e => e.id === environmentId)) return null;
+  // Check all tenant stores
+  for (const slug of listTenants()) {
+    const ts = loadTenantStore(slug);
+    if ((ts.environments || []).find(e => e.id === environmentId)) return slug;
+  }
+  return null;
+}
 
 async function runSeed({ environmentId, clearFirst, progressCb }) {
   const store = getStore();
@@ -410,8 +424,15 @@ router.post('/seed', async (req, res) => {
   const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
   try {
-    const results = await runSeed({ environmentId:environment_id, clearFirst:clear_first, progressCb:send });
-    send({ step:'complete', results });
+    // Find which tenant store this environment lives in
+    const tenantSlug = findTenantForEnv(environment_id);
+    const contextKey = tenantSlug || 'master';
+
+    // Run the seed inside the correct tenant's AsyncLocalStorage context
+    await tenantStorage.run(contextKey, async () => {
+      const results = await runSeed({ environmentId:environment_id, clearFirst:clear_first, progressCb:send });
+      send({ step:'complete', results });
+    });
   } catch (err) {
     send({ step:'error', message:err.message });
   }
@@ -421,18 +442,21 @@ router.post('/seed', async (req, res) => {
 router.delete('/clear', (req, res) => {
   const { environment_id } = req.body;
   if (!environment_id) return res.status(400).json({ error:'environment_id required' });
-  const store = getStore();
-  let removed = 0;
-  ['records','workflows','workflow_steps','record_workflow_assignments',
-   'people_links','notes','communications'].forEach(table => {
-    if (store[table]) {
-      const before = store[table].length;
-      store[table] = store[table].filter(r => !(r._demo && r.environment_id === environment_id));
-      removed += before - store[table].length;
-    }
+  const tenantSlug = findTenantForEnv(environment_id);
+  tenantStorage.run(tenantSlug || 'master', () => {
+    const store = getStore();
+    let removed = 0;
+    ['records','workflows','workflow_steps','record_workflow_assignments',
+     'people_links','notes','communications'].forEach(table => {
+      if (store[table]) {
+        const before = store[table].length;
+        store[table] = store[table].filter(r => !(r._demo && r.environment_id === environment_id));
+        removed += before - store[table].length;
+      }
+    });
+    saveStore();
+    res.json({ removed });
   });
-  saveStore();
-  res.json({ removed });
 });
 
 module.exports = router;
