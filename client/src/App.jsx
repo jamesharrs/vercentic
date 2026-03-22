@@ -1409,7 +1409,47 @@ function App() {
   const [selectedEnv, setSelectedEnv] = useState(null);
   const [selectedObject, setSelectedObject] = useState(null);
   const [allObjects, setAllObjects] = useState([]);
-  const [activeNav, setActiveNav] = useState("dashboard");
+  // ── URL-based routing helpers ──────────────────────────────────────────────
+  // Convert a URL path to an activeNav value (called on mount + popstate)
+  const navFromPath = (path, objects = []) => {
+    if (!path || path === '/') return 'dashboard';
+    const parts = path.replace(/^\//, '').split('/');
+    const seg0 = parts[0];
+    const seg1 = parts[1];
+    // /record/:objectSlug/:recordId  (deep link to a specific record)
+    if (seg0 === 'record' && seg1 && parts[2]) return `record_${parts[2]}_${seg1}`;
+    // /:objectSlug/:recordId  (short form — look up object id from slug)
+    if (seg1 && seg1.length > 8) {
+      const obj = objects.find(o => o.slug === seg0);
+      if (obj) return `record_${seg1}_${obj.id}`;
+    }
+    // /:objectSlug  (list view)
+    const obj = objects.find(o => o.slug === seg0);
+    if (obj) return `obj_${obj.id}`;
+    // Named pages
+    const named = ['dashboard','search','interviews','offers','reports','calendar','org-chart','settings','workflows','portals'];
+    if (named.includes(seg0)) return seg0;
+    return 'dashboard';
+  };
+
+  // Convert an activeNav value to a URL path
+  const pathFromNav = (nav, objects = []) => {
+    if (!nav || nav === 'dashboard') return '/dashboard';
+    if (nav.startsWith('record_')) {
+      const [, recordId, objectId] = nav.split('_');
+      const obj = objects.find(o => o.id === objectId);
+      const slug = obj?.slug || objectId;
+      return `/${slug}/${recordId}`;
+    }
+    if (nav.startsWith('obj_')) {
+      const objectId = nav.replace('obj_', '');
+      const obj = objects.find(o => o.id === objectId);
+      return obj ? `/${obj.slug}` : '/';
+    }
+    return `/${nav}`;
+  };
+
+  const [activeNav, setActiveNav] = useState(() => navFromPath(window.location.pathname));
   // ── Collapsible sidebar ──
   const [navCollapsed, setNavCollapsed] = useState(
     () => localStorage.getItem('vrc_nav_collapsed') === 'true'
@@ -1465,7 +1505,16 @@ function App() {
 
   useEffect(() => {
     if (!selectedEnv?.id) return;
-    api.get(`/objects?environment_id=${selectedEnv.id}`).then(d => setNavObjects(Array.isArray(d) ? d : []));
+    api.get(`/objects?environment_id=${selectedEnv.id}`).then(d => {
+      const objs = Array.isArray(d) ? d : [];
+      setNavObjects(objs);
+      // Re-resolve activeNav now that we have objects — handles direct URL loads
+      // e.g. someone navigates directly to /people/abc123
+      const resolved = navFromPath(window.location.pathname, objs);
+      if (resolved !== activeNav && activeNav === navFromPath(window.location.pathname, [])) {
+        setActiveNav(resolved);
+      }
+    });
   }, [selectedEnv?.id]);
 
   // Persist session context for error reporter
@@ -1553,10 +1602,8 @@ function App() {
     if (id !== "reports") setReportPreset(null);
     if (!id.startsWith("dashboard")) setDashFlyout(false);
     if (id.startsWith("dashboard")) setDashFlyout(true);
-    // Clear active record context when leaving a record page
     if (!id.startsWith("record_")) { setActiveRecord(null); setActiveRecordObj(null); }
     if (!id.startsWith("obj_") && !id.startsWith("record_")) { setListContext(null); }
-    // Log nav-level pages to history
     const NAV_META = {
       dashboard:            { label: "Dashboard",   objectName: "Overview",   objectColor: "#4361EE" },
       dashboard_interviews: { label: "Interviews",  objectName: "Dashboard",  objectColor: "#0891b2" },
@@ -1575,6 +1622,9 @@ function App() {
       if (obj) pushHistory({ id: `nav_${id}`, nav: id, type: "nav",
         label: obj.plural_name || obj.name, objectName: "List", objectColor: obj.color || "#4361EE" });
     }
+    // Push URL
+    const url = pathFromNav(id, navObjects || []);
+    if (window.location.pathname !== url) window.history.pushState({ nav: id }, '', url);
     if (id.startsWith("obj_") && (activeNav === id || activeNav.startsWith("record_"))) {
       setActiveNav("__reset__");
       setTimeout(() => { setActiveNav(id); setSelectedObject(null); }, 0);
@@ -1599,13 +1649,18 @@ function App() {
   const [listContext,     setListContext]     = useState(null); // current list summary for copilot
 
   const openRecord = (recordId, objectId) => {
-    setActiveNav(`record_${recordId}_${objectId}`);
-    // Push placeholder to history — label updated by RecordPage once loaded
+    const nav = `record_${recordId}_${objectId}`;
+    setActiveNav(nav);
+    // Push URL: /people/abc123
     const obj = navObjects?.find(o => o.id === objectId);
+    const slug = obj?.slug || objectId;
+    const url = `/${slug}/${recordId}`;
+    if (window.location.pathname !== url) window.history.pushState({ nav }, '', url);
+    // Push placeholder to history — label updated by RecordPage once loaded
     if (recordId && obj) {
       pushHistory({
         id: recordId,
-        nav: `record_${recordId}_${objectId}`,
+        nav,
         type: "record",
         objectName: obj.plural_name || obj.name,
         objectColor: obj.color || "#4361EE",
@@ -1614,6 +1669,17 @@ function App() {
       });
     }
   };
+
+  // Handle browser back / forward buttons
+  useEffect(() => {
+    const handler = (e) => {
+      const nav = e.state?.nav || navFromPath(window.location.pathname, navObjects || []);
+      setActiveNav(nav);
+      setSelectedObject(null);
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [navObjects]);
 
   // Global event listener — anything can fire talentos:openRecord to navigate to a record page
   useEffect(() => {
