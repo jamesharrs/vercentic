@@ -3712,12 +3712,13 @@ const NotesPanel = ({ record, notes, onNotesChange, canAdd=true, canDelete=true 
 
 // Stable wrapper so MatchingEngine never remounts due to PanelContent's wide dep array.
 // Only re-renders when the actual record id or object type changes.
-const StableMatchPanel = memo(({ recordId, objectName, environment, record }) => (
+const StableMatchPanel = memo(({ recordId, objectName, environment, record, onNavigate }) => (
   <div style={{ margin:"-16px" }}>
     <MatchingEngine
       environment={environment}
       initialRecord={record}
       initialObject={{ name:objectName, slug: objectName==="Person" ? "people" : "jobs" }}
+      onNavigate={onNavigate}
     />
   </div>
 ), (prev, next) =>
@@ -4824,6 +4825,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         objectName={objectName}
         environment={environment}
         record={record}
+        onNavigate={onNavigate}
       />
     );
 

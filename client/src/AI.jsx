@@ -137,7 +137,7 @@ const itemIcon  = (type) => type==="person" ? "user" : type==="job" ? "briefcase
 const itemColor = (type) => type==="person" ? "#3b5bdb" : type==="job" ? "#0ca678" : "#7c3aed";
 
 // ── Compact match results list with 5-item limit + expand ─────────────────────
-const MatchResultsList = ({ matches }) => {
+const MatchResultsList = ({ matches, onNavigate }) => {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? matches : matches.slice(0, 5);
 
@@ -157,20 +157,17 @@ const MatchResultsList = ({ matches }) => {
           const allTags = [...(m.reasons||[]).map(r=>({text:r,ok:true})), ...(m.gaps||[]).map(g=>({text:g,ok:false}))];
 
           return (
-            <div key={m.item.id} style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",overflow:"hidden",height:48,transition:"box-shadow .12s"}}
-              onMouseEnter={e=>e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)"}
-              onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+            <div key={m.item.id}
+              onClick={() => onNavigate ? onNavigate(m.item) : window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:m.item.id,objectId:m.item.object_id}}))}
+              style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",overflow:"hidden",height:48,transition:"box-shadow .12s",cursor:"pointer"}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)";e.currentTarget.style.borderColor=C.accent+"44";}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
 
               {/* Score bar */}
               <div style={{width:3,alignSelf:"stretch",background:scoreCol,flexShrink:0}}/>
 
-              {/* Rank */}
-              <div style={{width:24,textAlign:"center",flexShrink:0}}>
-                <span style={{fontSize:9,fontWeight:800,color:C.text3}}>#{i+1}</span>
-              </div>
-
               {/* Icon chip */}
-              <div style={{width:24,height:24,borderRadius:6,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginRight:8}}>
+              <div style={{width:24,height:24,borderRadius:6,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,margin:"0 8px 0 10px"}}>
                 <Ic n={itemIcon(m.type)} s={11} c="white"/>
               </div>
 
@@ -217,7 +214,7 @@ const MatchResultsList = ({ matches }) => {
   );
 };
 
-export const MatchingEngine = memo(({ environment, initialObject, initialRecord }) => {
+export const MatchingEngine = memo(({ environment, initialObject, initialRecord, onNavigate }) => {
   const mode = initialObject?.slug === "jobs" ? "job" : "person"; // "job" = rank candidates, "person" = rank jobs
   const [objects,setObjects]   = useState([]);
   const [fields,setFields]     = useState({});
@@ -375,14 +372,15 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord 
           </div>
         : filtered.length===0
           ? <div style={{textAlign:"center",padding:"32px 0",color:C.text3,fontSize:13}}>No matches above {minScore}</div>
-          : <MatchResultsList matches={filtered} />
+          : <MatchResultsList matches={filtered} onNavigate={onNavigate} />
       }
     </div>
   );
 }, (prev, next) =>
   prev.environment?.id === next.environment?.id &&
   prev.initialRecord?.id === next.initialRecord?.id &&
-  prev.initialObject?.slug === next.initialObject?.slug
+  prev.initialObject?.slug === next.initialObject?.slug &&
+  prev.onNavigate === next.onNavigate
 );
 
 /* ─── Search Result Cards ────────────────────────────────────────────────── */
