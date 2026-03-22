@@ -1680,9 +1680,9 @@ function StagePill({ linkInfo, onStageChange }) {
 
 // ── InlineStatusPicker ─────────────────────────────────────────────────────────
 const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
-  const [open, setOpen] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const ref = React.useRef(null);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef(null);
   const status = record.data?.status || "";
   const colorMap = {
     Active:"#0ca678", Open:"#0ca678", Passive:"#f59f00", Draft:"#6b7280",
@@ -1690,7 +1690,7 @@ const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
     Cancelled:"#e03131", Placed:"#7c3aed", Archived:"#9ca3af",
   };
   const color = colorMap[status] || "#6b7280";
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", h);
@@ -1742,7 +1742,7 @@ const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
 
 // ── Enhanced TableView ─────────────────────────────────────────────────────────
 const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, onStageChange, onStatusUpdate }) => {
-  const [hoveredRow, setHoveredRow] = React.useState(null);
+  const [hoveredRow, setHoveredRow] = useState(null);
   const statusField = fields.find(f => f.api_key === "status");
   const statusOptions = statusField?.options || [];
   const listFields = visibleFieldIds
