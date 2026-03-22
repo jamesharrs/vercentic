@@ -15,6 +15,7 @@ export const HELP_SECTIONS = [
   { id: 'forms',           label: 'Forms',              icon: 'clipboard',    color: '#3B5BDB' },
   { id: 'org-chart',       label: 'Org Chart',          icon: 'git-branch',   color: '#7950F2' },
   { id: 'settings',        label: 'Settings',           icon: 'settings',     color: '#475569' },
+  { id: 'portals',         label: 'Portal Builder',     icon: 'monitor',      color: '#0CA678' },
 ];
 
 export const HELP_ARTICLES = [
@@ -307,6 +308,81 @@ export const HELP_ARTICLES = [
     content: [
       { type:'p', text:'Go to Settings > Language and click your preferred language. Available: English, Arabic (RTL), French, German, Spanish, Portuguese.' },
       { type:'note', text:'Selecting Arabic automatically switches the page layout to right-to-left. Your data (field values) is not translated — only the UI text changes.' },
+    ],
+  },
+  // ── PORTAL BUILDER ───────────────────────────────────────────────────────
+  {
+    id: 'pb-overview', section: 'portals',
+    title: 'Portal Builder overview',
+    summary: 'What portals are, the different types, and how to publish one.',
+    keywords: ['portal','career site','external','publish','portal builder','hiring manager portal','agency portal','onboarding'],
+    content: [
+      { type:'p', text:'Portals are branded external web pages served from your Vercentic instance — career sites, hiring manager review pages, agency submission portals, and onboarding experiences.' },
+      { type:'list', items:['Career Site — public job board, application form, company branding.','Hiring Manager Portal — simplified view for HMs to review candidates and submit feedback.','Agency Portal — let third-party agencies submit candidates against open roles.','Onboarding Portal — post-offer experience for new starters.'] },
+      { type:'steps', items:['Go to Settings > Portals.','Click "New Portal" and choose a type.','Add pages and sections in the builder.','Configure Nav and Footer.','Click Publish to make it live.'] },
+      { type:'tip', text:'Your portal is served at your Vercentic URL with its slug — e.g. www.vercentic.com/careers' },
+    ],
+  },
+  {
+    id: 'pb-multistep', section: 'portals',
+    title: 'Multi-step form widget',
+    summary: 'Build multi-step application forms with validation, progress indicator, and any field type.',
+    keywords: ['multi step form','form widget','portal form','steps','application form','validation','progress'],
+    content: [
+      { type:'p', text:'The Multi-step Form widget lets you create guided forms split across named steps — ideal for long application forms.' },
+      { type:'steps', items:['In the portal builder, add or click a row and insert a Multi-step Form widget.','In the config panel, set the Form Title, Submit button text, and Success message.','Add steps with the "+ Step" button. Name each step.','Inside each step, click "+ Add field" to add fields: Short Text, Email, Phone, Long Text, Dropdown, Radio, Checkboxes, Date, or File upload.','Mark fields as Required. Add placeholder text.','For dropdowns, radio, and checkboxes — enter comma-separated options in the Options field.'] },
+      { type:'p', text:'In the published portal the form shows a step progress bar, validates each step before advancing, and creates a candidate record on submit.' },
+      { type:'tip', text:'Use the Section Library (Sections button) to insert a pre-configured 3-step application form in one click.' },
+    ],
+  },
+  {
+    id: 'pb-nav-footer', section: 'portals',
+    title: 'Configuring the nav bar and footer',
+    summary: 'How to set your logo, navigation links, colours, and footer columns.',
+    keywords: ['nav','navigation','footer','logo','links','nav bar','portal nav','footer columns','sticky'],
+    content: [
+      { type:'p', text:'At the top of the portal builder are three tabs: Canvas, Nav, and Footer.' },
+      { type:'p', text:'Nav editor options:' },
+      { type:'list', items:['Logo — enter text or paste an image URL. The image overrides the text.','Links — add/remove/reorder nav links with label and URL.','Colours — set a custom background and text colour, or leave blank to follow the theme.','Sticky — keeps the nav bar at the top of the screen as visitors scroll.'] },
+      { type:'p', text:'Footer editor options:' },
+      { type:'list', items:['Background and text colour.','Copyright text shown at the bottom.','Columns — add link groups with a heading and a list of label/URL pairs.'] },
+      { type:'tip', text:'The nav shows a live mini-preview in the editor so you can see exactly how it will look.' },
+    ],
+  },
+  {
+    id: 'pb-section-library', section: 'portals',
+    title: 'Section library',
+    summary: 'Insert pre-built sections to quickly build pages from professional templates.',
+    keywords: ['section library','section','template','pre-built','hero','job board','cta','insert section','library'],
+    content: [
+      { type:'p', text:'The Section Library contains 15+ professionally designed row configurations across 7 categories.' },
+      { type:'list', items:['Hero — Centred Hero, Dark Hero, Split Hero + Image.','Jobs — Full Job Board, Featured Roles.','Stats — 3 Stats or 4 Stats with labels.','Content — Text + Image, Image + Text, Two Columns, Full Width Text.','Team — Team Grid, Hiring Manager Cards.','CTA — Dark CTA Banner, Accent CTA Banner.','Forms — Simple Application Form, 3-step Multi-step Application.'] },
+      { type:'steps', items:['Click the "Sections" button in the portal builder top bar.','Browse by category in the left panel.','Hover over any section to preview its layout.','Click to insert it immediately at the bottom of the current page.'] },
+      { type:'tip', text:'The "Multi-step Application" section comes fully pre-configured with About You, Experience, and Documents steps — edit the field labels to match your requirements.' },
+    ],
+  },
+  {
+    id: 'pb-analytics', section: 'portals',
+    title: 'Portal analytics',
+    summary: 'View page views, job clicks, applications, and conversion rate for each published portal.',
+    keywords: ['analytics','stats','views','job clicks','applications','conversion','portal analytics','tracking'],
+    content: [
+      { type:'p', text:'Analytics are tracked automatically for every published portal. No setup required.' },
+      { type:'list', items:['Page views — every time someone visits any page.','Job clicks — every time a visitor clicks on a job listing.','Applications — every completed application form submission.','Form events — form_start and form_complete tracked separately.'] },
+      { type:'p', text:'On the Portals overview page, each portal card shows a stats strip — Views, Clicks, Apps, and Conversion % for the last 30 days.' },
+      { type:'tip', text:'Conversion rate = applications ÷ page views. A healthy career site typically converts 2–8% of visitors.' },
+    ],
+  },
+  {
+    id: 'pb-conditional', section: 'portals',
+    title: 'Conditional row visibility',
+    summary: 'Show or hide any row based on a URL parameter — for audience segmentation or A/B testing.',
+    keywords: ['conditional','visibility','url parameter','show hide','segment','a/b','personalise','campaign'],
+    content: [
+      { type:'p', text:'Each row in the portal builder has a Conditional Visibility setting. When configured, the row only renders if the URL contains a matching parameter.' },
+      { type:'steps', items:['Hover over a row to show the gear icon. Click it.','Scroll to "Conditional Visibility" in the settings drawer.','Enter a URL parameter name (e.g. dept) and the value to match (e.g. engineering).','Save. The row shows a condition indicator in the editor.'] },
+      { type:'p', text:'Example: share the URL /careers?dept=engineering with your engineering team — they see engineering-specific content (hero, team section, roles) while generic visitors see the standard page.' },
+      { type:'note', text:'Matching is case-insensitive. Rows without a condition always show.' },
     ],
   },
 ];
