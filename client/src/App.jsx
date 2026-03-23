@@ -779,7 +779,16 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
   const [notifs,      setNotifs]      = useState([]);
   const [unread,      setUnread]      = useState(0);
   const [bellOpen,    setBellOpen]    = useState(false);
-  const [bellTab,     setBellTab]     = useState("notifications"); // "notifications" | "whats_new"
+  const [bellTab,     setBellTab]     = useState("notifications"); // "notifications" | "whats_new" | "preferences"
+  // Notification preferences — persisted in localStorage
+  const [notifPrefs, setNotifPrefs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('vrc_notif_prefs')) || {}; } catch { return {}; }
+  });
+  const saveNotifPref = (type, enabled) => {
+    const next = { ...notifPrefs, [type]: enabled };
+    setNotifPrefs(next);
+    localStorage.setItem('vrc_notif_prefs', JSON.stringify(next));
+  };
   const [releases,    setReleases]    = useState([]);
   const [relLastSeen, setRelLastSeen] = useState(() => localStorage.getItem('vrc_news_seen') || '2000-01-01');
   const [selRelease,  setSelRelease]  = useState(null);
@@ -1032,6 +1041,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                     {[
                       { id:"notifications", label:"Notifications", badge: unread },
                       { id:"whats_new",     label:"What's New",    badge: newReleases },
+                      { id:"preferences",   label:"Preferences",   badge: 0 },
                     ].map(tab => (
                       <button key={tab.id} onClick={() => {
                         setBellTab(tab.id);
@@ -1181,6 +1191,44 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                       );
                     })
                   )}
+                </div>
+              )}
+
+              {/* Preferences tab */}
+              {bellTab === "preferences" && (
+                <div style={{ overflowY:"auto", flex:1, padding:"14px" }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--t-text3)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:12 }}>
+                    Choose which notifications you receive
+                  </div>
+                  {[
+                    { type:"message_reply",    label:"Message replies",        desc:"When someone replies to your message" },
+                    { type:"task_reminder",    label:"Task reminders",         desc:"Upcoming and overdue task alerts" },
+                    { type:"agent_review",     label:"Agent review needed",    desc:"When an agent needs your approval" },
+                    { type:"interview_today",  label:"Interview today",        desc:"Interviews scheduled for today" },
+                    { type:"offer_action",     label:"Offer actions",          desc:"Offers requiring attention" },
+                    { type:"application_new",  label:"New applications",       desc:"New candidates from portals" },
+                    { type:"workflow_blocked", label:"Workflow blocked",       desc:"Automated workflows that need help" },
+                    { type:"mention",          label:"Mentions",               desc:"When someone @mentions you" },
+                  ].map(({ type, label, desc }) => {
+                    const enabled = notifPrefs[type] !== false;
+                    return (
+                      <div key={type} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--t-border)" }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:13, fontWeight:600, color:"var(--t-text1)" }}>{label}</div>
+                          <div style={{ fontSize:11, color:"var(--t-text3)", marginTop:2 }}>{desc}</div>
+                        </div>
+                        <button onClick={() => saveNotifPref(type, !enabled)}
+                          style={{ width:38, height:22, borderRadius:99, flexShrink:0, border:"none", cursor:"pointer",
+                            background: enabled ? "var(--t-accent,#4361EE)" : "#e5e7eb", position:"relative", transition:"background .2s" }}>
+                          <div style={{ width:16, height:16, borderRadius:"50%", background:"white", position:"absolute",
+                            top:3, left: enabled ? 19 : 3, transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop:14, fontSize:11, color:"var(--t-text3)", textAlign:"center" }}>
+                    Preferences saved automatically
+                  </div>
                 </div>
               )}
 

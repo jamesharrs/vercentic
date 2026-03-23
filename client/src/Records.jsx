@@ -17,6 +17,7 @@ import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 
 import api from './apiClient.js';
 import { authHeaders } from './apiClient.js';
+import TalentCardModal from './TalentCard.jsx';
 
 // Bare fetch wrapper that always includes X-Tenant-Slug + X-User-Id headers.
 // Use this instead of raw fetch() anywhere in this file.
@@ -1513,7 +1514,7 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   );
 }
 
-const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit }) => {
+const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit, onCompare }) => {
   const [showEditPicker, setShowEditPicker] = useState(false);
   const [editFieldId,    setEditFieldId]    = useState("");
   const [editValue,      setEditValue]      = useState("");
@@ -1586,6 +1587,13 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           </div>
         )}
       </div>
+      {/* Compare — only show when 2–5 selected */}
+      {onCompare && count >= 2 && count <= 5 && (
+        <button onClick={onCompare}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.25)", background:"rgba(255,255,255,0.15)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="layers" s={12} c="white"/> Compare {count}
+        </button>
+      )}
       {/* Bulk delete */}
       {!confirming ? (
         <button onClick={() => setConfirming(true)}
@@ -1601,6 +1609,133 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
             style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
         </div>
       )}
+    </div>
+  );
+};
+
+/* ─── Candidate Comparison Modal ─────────────────────────────────────────── */
+const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
+  const [pinned, setPinned] = useState(null); // record id pinned as "favourite"
+  const accent = objectColor || C.accent;
+
+  // Fields to show in compare — skip system/auto fields, show top 20
+  const compareFields = fields.filter(f =>
+    !["formula","auto_number","unique_id","lookup","rollup"].includes(f.field_type)
+  ).slice(0, 20);
+
+  const score = (rec) => {
+    let s = 0;
+    if (rec.data?.rating)          s += Number(rec.data.rating) * 10;
+    if (rec.data?.skills?.length)  s += Math.min(rec.data.skills.length * 5, 30);
+    if (rec.data?.years_experience) s += Math.min(Number(rec.data.years_experience) * 2, 20);
+    if (rec.data?.email)           s += 5;
+    if (rec.data?.phone)           s += 5;
+    return Math.min(s, 100);
+  };
+
+  const name = (r) => `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.job_title || r.data?.name || "Record";
+
+  // Highlight cells that differ across records
+  const isDiff = (fieldKey) => {
+    const vals = records.map(r => JSON.stringify(r.data?.[fieldKey] ?? ""));
+    return new Set(vals).size > 1;
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.55)", zIndex:1200, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"20px 16px", overflowY:"auto" }}>
+      <div style={{ background:C.bg, borderRadius:18, width:"100%", maxWidth:1100, boxShadow:"0 32px 80px rgba(0,0,0,.25)", overflow:"hidden" }}>
+
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 24px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>Compare {records.length} records</div>
+            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>Differences are highlighted. Click any record to open it.</div>
+          </div>
+          <button onClick={onClose} style={{ padding:"7px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Close</button>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:F }}>
+            <thead>
+              <tr style={{ background:C.surface, borderBottom:`2px solid ${C.border}` }}>
+                <th style={{ width:160, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>Field</th>
+                {records.map(r => {
+                  const isPinned = pinned === r.id;
+                  const sc = score(r);
+                  return (
+                    <th key={r.id} style={{ minWidth:200, padding:"10px 14px", textAlign:"left", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}08` : C.surface }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                        <div style={{ width:32, height:32, borderRadius:"50%", background:`${accent}18`, color:accent, fontSize:12, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          {name(r).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <button onClick={()=>onOpen(r.id)} style={{ background:"none", border:"none", padding:0, cursor:"pointer", fontSize:13, fontWeight:700, color:accent, textAlign:"left", fontFamily:F, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:130, display:"block" }}>
+                            {name(r)}
+                          </button>
+                          <div style={{ fontSize:10, color:C.text3 }}>{r.data?.current_title || r.data?.department || ""}</div>
+                        </div>
+                        <button onClick={()=>setPinned(isPinned ? null : r.id)} title={isPinned?"Unpin":"Pin as preferred"} style={{ background:"none", border:"none", cursor:"pointer", padding:2, color: isPinned ? "#f59f00" : C.text3, fontSize:16, lineHeight:1 }}>
+                          {isPinned ? "★" : "☆"}
+                        </button>
+                      </div>
+                      {/* Score bar */}
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ flex:1, height:4, borderRadius:99, background:C.border, overflow:"hidden" }}>
+                          <div style={{ width:`${sc}%`, height:"100%", borderRadius:99, background: sc>=70?C.green:sc>=40?C.amber:C.red, transition:"width .3s" }}/>
+                        </div>
+                        <span style={{ fontSize:10, fontWeight:700, color:C.text3, minWidth:28 }}>{sc}%</span>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {compareFields.map((field, fi) => {
+                const diff = isDiff(field.api_key);
+                return (
+                  <tr key={field.id} style={{ background: fi%2===0 ? C.surface : C.bg, borderBottom:`1px solid ${C.border}` }}>
+                    <td style={{ padding:"9px 16px", fontSize:12, fontWeight:600, color:C.text2, position:"sticky", left:0, background: fi%2===0 ? C.surface : C.bg, zIndex:1, whiteSpace:"nowrap" }}>
+                      {diff && <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:accent, marginRight:6, verticalAlign:"middle" }}/>}
+                      {field.name}
+                    </td>
+                    {records.map(r => {
+                      const val = r.data?.[field.api_key];
+                      const isPinned = pinned === r.id;
+                      const empty = val === null || val === undefined || val === "" || (Array.isArray(val) && !val.length);
+                      return (
+                        <td key={r.id} style={{ padding:"9px 14px", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}06` : diff ? `${accent}04` : "transparent", minWidth:200 }}>
+                          {empty ? (
+                            <span style={{ color:C.border, fontSize:12 }}>—</span>
+                          ) : field.field_type === "rating" ? (
+                            <span style={{ color:"#f59f00", fontSize:13 }}>{"★".repeat(Number(val))}{"☆".repeat(5-Number(val))}</span>
+                          ) : field.field_type === "boolean" ? (
+                            <span style={{ fontSize:12, fontWeight:600, color: val ? C.green : C.red }}>{val ? "Yes" : "No"}</span>
+                          ) : Array.isArray(val) ? (
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:3 }}>
+                              {val.map((v,i) => <span key={i} style={{ fontSize:11, padding:"2px 7px", borderRadius:99, background:`${accent}14`, color:accent, fontWeight:600 }}>{String(v?.name||v)}</span>)}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize:12, color:C.text1 }}>{String(val)}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"12px 24px", background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:8, height:8, borderRadius:"50%", background:accent, flexShrink:0 }}/>
+          <span style={{ fontSize:12, color:C.text3 }}>Highlighted dots indicate fields where values differ between candidates</span>
+          {pinned && <span style={{ marginLeft:"auto", fontSize:12, color:"#f59f00", fontWeight:600 }}>★ {name(records.find(r=>r.id===pinned)||{})} pinned as preferred</span>}
+        </div>
+      </div>
     </div>
   );
 };
@@ -4415,6 +4550,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   });
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
   const [showCommMenu, setShowCommMenu] = useState(false);
+  const [showTalentCard, setShowTalentCard] = useState(false);
   // Track which custom sections are collapsed (by separatorId)
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`talentos_collapsed_${objectName}`)) || {}; } catch { return {}; }
@@ -5281,6 +5417,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {/* Spacer */}
         <div style={{ flex:1 }}/>
 
+        {/* Talent Card — only on Person records */}
+        {objectName === "Person" && (
+          <ActionBtn icon="fileText" label="Talent Card" onClick={() => setShowTalentCard(true)}/>
+        )}
+
         {/* Last activity indicator */}
         {lastCommDate && (
           <div style={{ fontSize:12, color:C.text3, display:"flex", alignItems:"center", gap:5 }}>
@@ -5492,6 +5633,16 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           })()}
         </div>
       </div>
+
+      {/* Talent Card modal */}
+      {showTalentCard && (
+        <TalentCardModal
+          record={record}
+          fields={fields}
+          environment={environment}
+          onClose={() => setShowTalentCard(false)}
+        />
+      )}
     </div>
   );
 };
@@ -5758,6 +5909,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // ── Bulk warning confirmation ────────────────────────────────────────────────
   const [bulkConfirm, setBulkConfirm] = useState(null); // { action:'delete'|'edit', fieldId, value }
+  const [showCompare, setShowCompare] = useState(false);
 
   const getBulkThreshold = () => {
     // Try role-specific threshold first (set in Settings → Roles)
@@ -6096,6 +6248,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           onClearAll={() => setSelectedIds(new Set())}
           onDelete={() => guardedBulkAction("delete")}
           onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
+          onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
         />
       )}
 
@@ -6163,6 +6316,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       {/* CSV Import */}
       {showImport && (
         <CSVImportModal object={object} environment={environment} onClose={()=>setShowImport(false)} onDone={()=>{ setShowImport(false); load(); }}/>
+      )}
+
+      {/* Compare modal */}
+      {showCompare && selectedIds.size >= 2 && (
+        <CompareModal
+          records={displayedRecords.filter(r => selectedIds.has(r.id))}
+          fields={fields}
+          objectColor={object.color || C.accent}
+          onClose={() => setShowCompare(false)}
+          onOpen={(id) => { setShowCompare(false); onOpenRecord?.(id, object.id); }}
+        />
       )}
     </div>
   );
