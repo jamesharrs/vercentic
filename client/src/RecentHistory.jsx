@@ -84,13 +84,15 @@ export function HistoryDropdown({
         onClick={onToggle}
         title={isOpen ? "Close history" : "View history"}
         style={{
-          display: "flex", alignItems: "center", gap: 5,
-          padding: "6px 10px", borderRadius: 8, border: "none",
+          position: "relative",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 34, height: 34, borderRadius: 8, border: "none",
           background: isOpen ? "var(--t-accent-light, #eef1ff)" : "transparent",
           color: isOpen ? "var(--t-accent, #4361EE)" : "var(--t-text3)",
-          cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 500,
-          transition: "all 0.12s", flexShrink: 0,
+          cursor: "pointer", transition: "all 0.12s", flexShrink: 0,
         }}
+        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = "var(--t-surface2, #f1f5f9)"; e.currentTarget.style.color = "var(--t-text1)"; } }}
+        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--t-text3)"; } }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -98,7 +100,13 @@ export function HistoryDropdown({
           <polyline points="12 6 12 12 16 14"/>
         </svg>
         {history.length > 0 && (
-          <span style={{ fontSize: 10, fontWeight: 700 }}>{history.length}</span>
+          <span style={{
+            position: "absolute", top: 4, right: 4,
+            minWidth: 14, height: 14, borderRadius: 99,
+            background: "var(--t-accent, #4361EE)", color: "#fff",
+            fontSize: 8, fontWeight: 800, lineHeight: "14px",
+            textAlign: "center", padding: "0 3px", pointerEvents: "none",
+          }}>{history.length > 9 ? "9+" : history.length}</span>
         )}
       </button>
 
