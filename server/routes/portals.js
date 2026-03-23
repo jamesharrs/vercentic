@@ -85,7 +85,7 @@ router.patch('/:id', (req, res) => {
   const store = getStore();
   const idx = (store.portals || []).findIndex(p => p.id === req.params.id && !p.deleted_at);
   if (idx === -1) return res.status(404).json({ error: 'Portal not found' });
-  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages'];
+  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages', 'nav', 'footer', 'branding', 'gdpr', 'custom_domain', 'type'];
   const updates = { updated_at: new Date().toISOString() };
   allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
   store.portals[idx] = { ...store.portals[idx], ...updates };
