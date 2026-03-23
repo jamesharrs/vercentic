@@ -1577,6 +1577,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
       const d = await api.post("/brand-kits/analyse",{url:url.trim(),environment_id:environmentId});
       if(d.error) throw new Error(d.error);
       setResult(d);
+      if (d.blocked) setError('__blocked__');
     } catch(e){ setError(e.message||"Failed to analyse site"); }
     setLoading(false);
   };
@@ -1628,7 +1629,10 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
               <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
               <div style={{fontSize:13,color:C.text3,textAlign:"center"}}>Fetching site · extracting brand signals<br/><span style={{fontSize:11}}>Claude is generating your theme…</span></div>
             </div>}
-            {error&&<div style={{padding:"10px 14px",borderRadius:8,background:C.redLight,border:`1px solid ${C.red}40`,fontSize:13,color:C.red,marginBottom:12}}>{error}</div>}
+            {error && error!=="__blocked__" && <div style={{padding:"10px 14px",borderRadius:8,background:C.redLight,border:`1px solid ${C.red}40`,fontSize:13,color:C.red,marginBottom:12}}>{error}</div>}
+            {error==="__blocked__"&&result&&<div style={{padding:"10px 14px",borderRadius:8,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E",marginBottom:12}}>
+              <strong>⚠ Site blocked automated scraping</strong> — Claude generated a theme from the brand name instead. Apply it or tweak colours below.
+            </div>}
             {result&&!loading&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
               <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
                 {result.logo?<img src={result.logo} alt="logo" style={{height:36,maxWidth:120,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>

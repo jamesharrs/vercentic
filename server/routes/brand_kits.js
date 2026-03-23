@@ -114,26 +114,67 @@ Rules: primaryColor = dominant brand colour (not black/white). bgColor usually w
 }
 
 router.post('/analyse', async (req, res) => {
-  const { url, environment_id } = req.body;
+  const { url, environment_id, manual_colors, manual_fonts, manual_logo } = req.body;
   if (!url) return res.status(400).json({ error:'url required' });
   let target = url.trim();
   if (!target.startsWith('http')) target = 'https://' + target;
+
+  // If the client already sent manually-extracted data (fallback mode), skip scraping
+  if (manual_colors || manual_fonts) {
+    const colors = manual_colors || [];
+    const fonts  = manual_fonts  || [];
+    const logo   = manual_logo   || null;
+    const theme  = await synthesiseTheme({ url:target, colors, fonts, logo, title: new URL(target).hostname });
+    return res.json({ source_url:target, title: new URL(target).hostname, logo, colors, fonts,
+      theme: theme || buildFallbackTheme(colors, fonts), blocked: false });
+  }
+
   try {
-    const html  = await fetchUrl(target);
-    const base  = new URL(target).origin;
-    const title = (html.match(/<title[^>]*>([^<]+)</) || [])[1]?.trim() || '';
+    const html = await fetchUrl(target);
+
+    // Detect bot-blocking pages (very short HTML or contains bot-challenge markers)
+    const isBlocked = html.length < 2000 ||
+      /challenge|captcha|cloudflare|access denied|403 forbidden|just a moment/i.test(html.slice(0, 3000));
+
+    if (isBlocked) {
+      // Return a partial result indicating the site blocked scraping
+      // Claude will still try to build a theme from the domain name alone
+      const domainTheme = await synthesiseTheme({
+        url: target, colors: [], fonts: [], logo: null,
+        title: new URL(target).hostname.replace(/^www\./,'')
+      });
+      return res.json({
+        source_url: target,
+        title: new URL(target).hostname.replace(/^www\./,''),
+        logo: null, colors: [], fonts: [],
+        theme: domainTheme || buildFallbackTheme([], []),
+        blocked: true,
+        blocked_message: 'This site blocks automated access. Claude generated a theme based on the brand name instead. You can also paste colours manually.'
+      });
+    }
+
+    const base   = new URL(target).origin;
+    const title  = (html.match(/<title[^>]*>([^<]+)</) || [])[1]?.trim() || '';
     const colors = extractHexColors(html);
     const fonts  = extractFonts(html);
     const logo   = extractLogo(html, base);
     const theme  = await synthesiseTheme({ url:target, colors, fonts, logo, title });
     res.json({ source_url:target, title, logo, colors, fonts,
-      theme: theme || { primaryColor:colors[0]||'#3B5BDB', secondaryColor:colors[1]||'#4DABF7',
-        bgColor:'#FFFFFF', textColor:'#0F1729', accentColor:colors[2]||'#7950F2',
-        fontFamily:fonts[0]||'Inter', headingFont:fonts[0]||'Inter', headingWeight:700,
-        fontSize:'16px', borderRadius:'8px', buttonStyle:'filled', buttonRadius:'8px', maxWidth:'1200px' }
-    });
-  } catch(e) { res.status(500).json({ error:e.message||'Failed to analyse URL' }); }
+      theme: theme || buildFallbackTheme(colors, fonts), blocked: false });
+  } catch(e) {
+    res.status(500).json({ error: e.message || 'Failed to analyse URL' });
+  }
 });
+
+function buildFallbackTheme(colors, fonts) {
+  return {
+    primaryColor: colors[0] || '#3B5BDB', secondaryColor: colors[1] || '#4DABF7',
+    bgColor: '#FFFFFF', textColor: '#0F1729', accentColor: colors[2] || '#7950F2',
+    fontFamily: fonts[0] || 'Inter', headingFont: fonts[0] || 'Inter', headingWeight: 700,
+    fontSize: '16px', borderRadius: '8px', buttonStyle: 'filled',
+    buttonRadius: '8px', maxWidth: '1200px'
+  };
+}
 
 router.get('/', (req,res) => {
   ensure();
