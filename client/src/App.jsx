@@ -1668,7 +1668,6 @@ function App() {
       items: [
         { id: "dashboard",   icon: "home",    label: t("nav.dashboard") },
         { id: "inbox",       icon: "inbox",   label: "Inbox", badge: inboxUnread || null },
-        { id: "admin_stats", icon: "shield",  label: "Admin Stats" },
       ]
     },
     {
