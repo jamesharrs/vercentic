@@ -1735,9 +1735,11 @@ function App() {
     return () => window.removeEventListener('popstate', handler);
   }, [navObjects]);
 
-  // Keep a ref to openRecord so event listeners always get the latest version
+  // Keep refs so event listeners always call the latest version — prevents stale closure bugs
   const openRecordRef = useRef(openRecord);
   useEffect(() => { openRecordRef.current = openRecord; });
+  const switchNavRef = useRef(switchNav);
+  useEffect(() => { switchNavRef.current = switchNav; });
 
   // Global event listener — anything can fire talentos:openRecord to navigate to a record page
   useEffect(() => {
@@ -1749,26 +1751,28 @@ function App() {
     return () => window.removeEventListener("talentos:openRecord", handler);
   }, []); // safe — uses ref, not stale closure
 
+  const reportNavRef = useRef(null);
+  reportNavRef.current = { navObjects, activeNav, setReportPreset, setActiveNav };
   // Global event listener — dashboard fires talentos:open-report to open Reports with a preset
   useEffect(() => {
     const handler = (e) => {
       const { objectSlug: slugA, object: slugB, ...config } = e.detail || {};
-      const objectSlug = slugA || slugB;          // copilot sends 'object', dashboard sends 'objectSlug'
+      const objectSlug = slugA || slugB;
       if (!objectSlug) return;
-      const obj = navObjects.find(o => o.slug === objectSlug);
+      const { navObjects: objs, activeNav: nav, setReportPreset: srp, setActiveNav: sna } = reportNavRef.current;
+      const obj = objs.find(o => o.slug === objectSlug);
       const preset = { objectId: obj?.id, objectSlug, ...config };
-      if (activeNav === "reports") {
-        // Already on reports — force ReportsPage to react by clearing then resetting
-        setReportPreset(null);
-        setTimeout(() => setReportPreset(preset), 0);
+      if (nav === "reports") {
+        srp(null);
+        setTimeout(() => srp(preset), 0);
       } else {
-        setReportPreset(preset);
-        setActiveNav("reports");
+        srp(preset);
+        sna("reports");
       }
     };
     window.addEventListener("talentos:open-report", handler);
     return () => window.removeEventListener("talentos:open-report", handler);
-  }, [navObjects, activeNav]);
+  }, []);
 
   // Listen for list context updates broadcast from RecordsView
   useEffect(() => {
@@ -1779,43 +1783,45 @@ function App() {
 
   // talentos:navigate — generic nav event (e.g. "← Dashboard" back button)
   useEffect(() => {
-    const handler = (e) => { if (e.detail) switchNav(e.detail); };
+    const handler = (e) => { if (e.detail) switchNavRef.current(e.detail); };
     window.addEventListener("talentos:navigate", handler);
     return () => window.removeEventListener("talentos:navigate", handler);
   }, []);
+  const filterNavRef = useRef(null);
+  filterNavRef.current = { activeNav, navObjects, setFilterPreset, setActiveNav };
   useEffect(() => {
     const handler = (e) => {
       const { fieldKey, fieldLabel, fieldValue, objectSlug } = e.detail || {};
       if (!fieldKey || fieldValue === undefined) return;
-      setFilterPreset({ fieldKey, fieldLabel, fieldValue });
-      // If objectSlug provided (e.g. from dashboard), navigate to that object
+      const { activeNav: nav, navObjects: objs, setFilterPreset: sfp, setActiveNav: sna } = filterNavRef.current;
+      sfp({ fieldKey, fieldLabel, fieldValue });
       if (objectSlug) {
-        const obj = navObjects.find(o => o.slug === objectSlug);
-        if (obj) { setActiveNav(`obj_${obj.id}`); return; }
+        const obj = objs.find(o => o.slug === objectSlug);
+        if (obj) { sna(`obj_${obj.id}`); return; }
       }
-      // If on a record page, navigate back to its parent object list
-      if (activeNav.startsWith("record_")) {
-        const objectId = activeNav.split("_")[2];
-        setActiveNav(`obj_${objectId}`);
+      if (nav.startsWith("record_")) {
+        const objectId = nav.split("_")[2];
+        sna(`obj_${objectId}`);
       }
     };
     window.addEventListener("talentos:filter-navigate", handler);
     return () => window.removeEventListener("talentos:filter-navigate", handler);
-  }, [activeNav, navObjects]);
+  }, []);
 
   // Navigate to People list filtered to specific person IDs (from pipeline widget)
   useEffect(() => {
     const handler = (e) => {
       const { personIds, label } = e.detail || {};
       if (!personIds?.length) return;
-      const peopleObj = navObjects.find(o => o.slug === 'people' || o.name?.toLowerCase() === 'person' || o.slug?.includes('people'));
+      const { navObjects: objs, setFilterPreset: sfp, setActiveNav: sna } = filterNavRef.current;
+      const peopleObj = objs.find(o => o.slug === 'people' || o.name?.toLowerCase() === 'person' || o.slug?.includes('people'));
       if (!peopleObj) return;
-      setFilterPreset({ fieldKey: '__ids__', fieldValue: personIds.join(','), label: label || 'Pipeline filter' });
-      setActiveNav(`obj_${peopleObj.id}`);
+      sfp({ fieldKey: '__ids__', fieldValue: personIds.join(','), label: label || 'Pipeline filter' });
+      sna(`obj_${peopleObj.id}`);
     };
     window.addEventListener("talentos:open-people-list", handler);
     return () => window.removeEventListener("talentos:open-people-list", handler);
-  }, [navObjects]);
+  }, []);
 
   // Show login page if no session
   if (!session) {
