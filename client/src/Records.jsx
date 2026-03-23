@@ -1656,7 +1656,7 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
 
         {/* Table */}
         <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:F }}>
+          <table style={{ minWidth:"100%", width:"max-content", borderCollapse:"collapse", fontFamily:F }}>
             <thead>
               <tr style={{ background:C.surface, borderBottom:`2px solid ${C.border}` }}>
                 <th style={{ width:160, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>Field</th>
@@ -6111,9 +6111,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0 }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0, overflow:"hidden" }}>
       {/* Toolbar */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", flexShrink:0, paddingBottom:12 }}>
         <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>{object.plural_name}</h1>
         <span style={{ fontSize:13, color:C.text3, fontWeight:500 }}>
           {activeFilters.length ? `${displayedRecords.length} of ${total}` : total} record{total!==1?"s":""}
@@ -6245,6 +6245,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       {/* Records tab */}
       {activeTab === "records" && <>
 
+      {/* Scrollable area — everything below toolbar scrolls */}
+      <div style={{ flex:1, overflow:"auto", minHeight:0 }}>
+
       {/* Filter bar — always visible in records tab */}
       {fields.length > 0 && (
         <div style={{ marginBottom:10 }}>
@@ -6285,7 +6288,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       )}
 
       {/* Content */}
-      <div style={{ flex:1, background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden" }}>
+      <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflowX:"auto" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:C.text3 }}>Loading…</div>
         ) : (
@@ -6316,6 +6319,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         </div>
       )}
 
+      </div>{/* end scrollable area */}
       </>}
 
       {/* Slide-out panel (expand icon) */}

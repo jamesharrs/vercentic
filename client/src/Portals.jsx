@@ -1911,7 +1911,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
               </div>
               <div>
                 <div style={{fontSize:15,fontWeight:800,color:C.text1}}>AI Brand Extractor</div>
-                <div style={{fontSize:11,color:C.text3}}>Paste any URL — Claude extracts brand colours, fonts & logo</div>
+                <div style={{fontSize:11,color:C.text3}}>Paste any URL — Vercentic extracts brand colours, fonts & logo</div>
               </div>
             </div>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}><Ic n="x" s={16}/></button>
@@ -1938,11 +1938,11 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
             {loading&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 0",gap:10}}>
               <div style={{width:40,height:40,borderRadius:"50%",border:`3px solid ${C.accentLight}`,borderTopColor:C.accent,animation:"spin 1s linear infinite"}}/>
               <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-              <div style={{fontSize:13,color:C.text3,textAlign:"center"}}>Fetching site · extracting brand signals<br/><span style={{fontSize:11}}>Claude is generating your theme…</span></div>
+              <div style={{fontSize:13,color:C.text3,textAlign:"center"}}>Fetching site · extracting brand signals<br/><span style={{fontSize:11}}>Vercentic is generating your theme…</span></div>
             </div>}
             {error && error!=="__blocked__" && <div style={{padding:"10px 14px",borderRadius:8,background:C.redLight,border:`1px solid ${C.red}40`,fontSize:13,color:C.red,marginBottom:12}}>{error}</div>}
             {error==="__blocked__"&&result&&<div style={{padding:"10px 14px",borderRadius:8,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E",marginBottom:12}}>
-              <strong>⚠ Site blocked automated scraping</strong> — Claude generated a theme from the brand name instead. Apply it or tweak colours below.
+              <strong>⚠ Site blocked automated scraping</strong> — Vercentic generated a theme from the brand name instead. Apply it or tweak colours below.
             </div>}
             {result&&!loading&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
               <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
@@ -1983,7 +1983,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
             {!result&&!loading&&!error&&<div style={{textAlign:"center",padding:"32px 0",color:C.text3}}>
               <Ic n="globe" s={40} c={C.border2}/>
               <div style={{fontSize:14,fontWeight:600,color:C.text2,marginBottom:6,marginTop:12}}>Enter any website URL</div>
-              <div style={{fontSize:12,lineHeight:1.6}}>Claude will analyse the site and extract brand colours,<br/>fonts and logo — then generate a matching portal theme.</div>
+              <div style={{fontSize:12,lineHeight:1.6}}>Vercentic will analyse the site and extract brand colours,<br/>fonts and logo — then generate a matching portal theme.</div>
             </div>}
           </>}
           {tab==="saved"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
