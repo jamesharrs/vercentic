@@ -929,10 +929,10 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         {dashOpen && (
           <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, background: "var(--t-surface)", borderRadius: 12, border: "1px solid var(--t-border)", boxShadow: "0 8px 32px rgba(0,0,0,.14)", zIndex: 700, overflow: "hidden", minWidth: 190 }}>
             {[
-              { id: "overview",    label: "Overview",    icon: "🏠", desc: "Hiring summary" },
-              { id: "interviews",  label: "Interviews",  icon: "📅", desc: "Scheduling & pipeline" },
-              { id: "offers",      label: "Offers",      icon: "💰", desc: "Acceptance & approvals" },
-              { id: "admin",       label: "Admin",       icon: "⚙️", desc: "Platform stats" },
+              { id: "overview",    label: "Overview",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>, desc: "Hiring summary" },
+              { id: "interviews",  label: "Interviews",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
+              { id: "offers",      label: "Offers",      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>, desc: "Acceptance & approvals" },
+              { id: "admin",       label: "Admin",       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, desc: "Platform stats" },
             ].map(item => {
               const active = activeDashTab === item.id || (!activeDashTab && item.id === "overview");
               return (
@@ -942,7 +942,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                     transition: "background .1s" }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--t-surface2)"; }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-                  <span style={{ fontSize: 16, width: 22, textAlign: "center" }}>{item.icon}</span>
+                  <span style={{ color: active ? "var(--t-accent)" : "var(--t-text3)", display: "flex", flexShrink: 0 }}>{item.icon}</span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "var(--t-accent)" : "var(--t-text1)" }}>{item.label}</div>
                     <div style={{ fontSize: 11, color: "var(--t-text3)" }}>{item.desc}</div>
