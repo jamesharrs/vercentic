@@ -279,6 +279,8 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     menu:"M3 12h18M3 6h18M3 18h18",
     footer2:"M3 3h18v4H3zM3 17h18v4H3zM3 10h18v4H3z",
     externalLink:"M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3",
+    monitor:"M20 3H4a1 1 0 00-1 1v12a1 1 0 001 1h7v2H8v2h8v-2h-3v-2h7a1 1 0 001-1V4a1 1 0 00-1-1zm-1 12H5V5h14v10z",
+    smartphone:"M17 1H7a2 2 0 00-2 2v18a2 2 0 002 2h10a2 2 0 002-2V3a2 2 0 00-2-2zm0 18H7V5h10v14zm-5 2a1 1 0 100-2 1 1 0 000 2z",
     film:"M19.82 2H4.18A2.18 2.18 0 002 4.18v15.64A2.18 2.18 0 004.18 22h15.64A2.18 2.18 0 0022 19.82V4.18A2.18 2.18 0 0019.82 2zM7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5",
     bookmark:"M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z",
     sparkles:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM5 3l.6 1.8L7.4 5.4 5.6 6l-.6 1.8L4.4 6l-1.8-.6L4.4 4.8zM19 15l.6 1.8 1.8.6-1.8.6-.6 1.8-.6-1.8-1.8-.6 1.8-.6z",
@@ -1218,26 +1220,33 @@ const RowSettings = ({ row, onChange, onClose }) => {
 // ─── Canvas Row ───────────────────────────────────────────────────────────────
 const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const padMap = {none:"0px",sm:"24px",md:"56px",lg:"96px",xl:"140px"};
   const padding = padMap[row.padding]||"56px";
 
   const updateCell = (ci, updated) => onUpdate({...row, cells:row.cells.map((c,i)=>i===ci?updated:c)});
   const removeWidget = (ci) => onUpdate({...row, cells:row.cells.map((c,i)=>i===ci?defaultCell():c)});
 
-  // Column flex values per preset
   const cellFlex = (ci) => {
     if (row.preset==="1")   return "1 1 100%";
     if (row.preset==="1-2") return ci===0?"0 0 33%":"0 0 67%";
     if (row.preset==="2-1") return ci===0?"0 0 67%":"0 0 33%";
-    return "1 1 0"; // 2 or 3 cols equal
+    return "1 1 0";
   };
 
   return (
-    <div draggable={isEditing} onDragStart={()=>onDragStart(index)} onDragOver={e=>{e.preventDefault();onDragOver(index);}} onDrop={()=>onDrop(index)}
-      style={{position:"relative",border:isEditing?`1.5px solid ${dragTarget?C.accent:C.border}`:"none",
+    <div
+      draggable={isEditing}
+      onDragStart={()=>onDragStart(index)}
+      onDragOver={e=>{e.preventDefault();onDragOver(index);}}
+      onDrop={()=>onDrop(index)}
+      onMouseEnter={()=>isEditing&&setHovered(true)}
+      onMouseLeave={()=>{setHovered(false);}}
+      style={{position:"relative",
+        border:isEditing?(hovered||dragTarget)?`1.5px solid ${C.accent}`:`1.5px solid ${C.border}`:"none",
         borderRadius:isEditing?10:0,marginBottom:isEditing?6:0,
         background:row.bgImage?`url(${row.bgImage}) center/cover no-repeat`:(row.bgColor||"transparent"),
-        cursor:isEditing?"grab":"default"}}>
+        cursor:isEditing?"grab":"default",transition:"border-color .12s"}}>
       {/* Overlay */}
       {row.bgImage&&(row.overlayOpacity||0)>0&&(
         <div style={{position:"absolute",inset:0,background:`rgba(0,0,0,${(row.overlayOpacity||0)/100})`,borderRadius:isEditing?10:0,pointerEvents:"none"}}/>
@@ -1252,40 +1261,36 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
           ))}
         </div>
       </div>
-      {/* Row toolbar — appears on hover */}
+      {/* Row toolbar — visible on row hover */}
       {isEditing&&(
-        <div className="row-tb" style={{position:"absolute",top:4,left:4,display:"flex",gap:2,
-          background:"rgba(255,255,255,.95)",border:`1px solid ${C.border}`,borderRadius:7,padding:"2px 4px",
-          opacity:0,transition:"opacity .15s",zIndex:50}}
-          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-          onMouseLeave={e=>e.currentTarget.style.opacity="0"}>
-          <button onClick={e=>{e.stopPropagation();onMoveUp();}} disabled={index===0}
-            style={{background:"none",border:"none",cursor:index===0?"default":"pointer",padding:3,opacity:index===0?.3:1}}>
-            <Ic n="chevD" s={11} c={C.text3} style={{transform:"rotate(180deg)"}}/>
+        <div style={{position:"absolute",top:6,right:6,display:"flex",gap:2,
+          background:"rgba(255,255,255,.97)",border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 5px",
+          boxShadow:"0 2px 8px rgba(0,0,0,.08)",zIndex:50,
+          opacity:hovered||showSettings?1:0,transition:"opacity .12s",pointerEvents:hovered||showSettings?"auto":"none"}}>
+          <button onClick={e=>{e.stopPropagation();onMoveUp();}} disabled={index===0} title="Move up"
+            style={{background:"none",border:"none",cursor:index===0?"default":"pointer",padding:"3px 4px",opacity:index===0?.3:1,display:"flex",alignItems:"center"}}>
+            <Ic n="chevD" s={12} c={C.text2} style={{transform:"rotate(180deg)"}}/>
           </button>
-          <button onClick={e=>{e.stopPropagation();onMoveDown();}} disabled={index===total-1}
-            style={{background:"none",border:"none",cursor:index===total-1?"default":"pointer",padding:3,opacity:index===total-1?.3:1}}>
-            <Ic n="chevD" s={11} c={C.text3}/>
+          <button onClick={e=>{e.stopPropagation();onMoveDown();}} disabled={index===total-1} title="Move down"
+            style={{background:"none",border:"none",cursor:index===total-1?"default":"pointer",padding:"3px 4px",opacity:index===total-1?.3:1,display:"flex",alignItems:"center"}}>
+            <Ic n="chevD" s={12} c={C.text2}/>
           </button>
-          <button onClick={e=>{e.stopPropagation();setShowSettings(s=>!s);}}
-            style={{background:"none",border:"none",cursor:"pointer",padding:3,color:showSettings?C.accent:C.text3}}>
-            <Ic n="settings" s={11} c={showSettings?C.accent:C.text3}/>
+          <div style={{width:1,height:16,background:C.border,margin:"0 2px",alignSelf:"center"}}/>
+          <button onClick={e=>{e.stopPropagation();onDuplicate();}} title="Duplicate row"
+            style={{background:"none",border:"none",cursor:"pointer",padding:"3px 4px",display:"flex",alignItems:"center"}}>
+            <Ic n="copy" s={12} c={C.text2}/>
           </button>
-          <button onClick={e=>{e.stopPropagation();onDuplicate();}}
-            style={{background:"none",border:"none",cursor:"pointer",padding:3}}>
-            <Ic n="copy" s={11} c={C.text3}/>
+          <button onClick={e=>{e.stopPropagation();setShowSettings(s=>!s);}} title="Row settings"
+            style={{background:showSettings?C.accentLight:"none",border:"none",cursor:"pointer",padding:"3px 6px",borderRadius:5,display:"flex",alignItems:"center",gap:3}}>
+            <Ic n="settings" s={12} c={showSettings?C.accent:C.text2}/>
+            <span style={{fontSize:10,fontWeight:600,color:showSettings?C.accent:C.text3}}>Style</span>
           </button>
-          <button onClick={e=>{e.stopPropagation();onDelete();}}
-            style={{background:"none",border:"none",cursor:"pointer",padding:3}}>
-            <Ic n="trash" s={11} c={C.red}/>
+          <div style={{width:1,height:16,background:C.border,margin:"0 2px",alignSelf:"center"}}/>
+          <button onClick={e=>{e.stopPropagation();onDelete();}} title="Delete row"
+            style={{background:"none",border:"none",cursor:"pointer",padding:"3px 4px",display:"flex",alignItems:"center"}}>
+            <Ic n="trash" s={12} c={C.red}/>
           </button>
         </div>
-      )}
-      {/* Hover target for row toolbar */}
-      {isEditing&&(
-        <div style={{position:"absolute",inset:0,borderRadius:10,pointerEvents:"none"}}
-          onMouseEnter={e=>{const tb=e.currentTarget.previousSibling;if(tb&&tb.classList.contains("row-tb"))tb.style.opacity="1";}}
-          onMouseLeave={e=>{const tb=e.currentTarget.previousSibling;if(tb&&tb.classList.contains("row-tb"))tb.style.opacity="0";}}/>
       )}
       {/* Settings popover */}
       {isEditing&&showSettings&&<RowSettings row={row} onChange={onUpdate} onClose={()=>setShowSettings(false)}/>}
@@ -1997,13 +2002,13 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showTheme,       setShowTheme]       = useState(false);
   const [showLibrary,     setShowLibrary]     = useState(false);
-  const [showNav,         setShowNav]         = useState(false);
-  const [showFooter,      setShowFooter]      = useState(false);
+
   const [showDomainWizard, setShowDomainWizard] = useState(false);
   const [showBrandKit,     setShowBrandKit]     = useState(false);
   const [showPortalSettings, setShowPortalSettings] = useState(false);
   const [pageActionsFor,  setPageActionsFor]  = useState(null);
   const [isEditing, setIsEditing] = useState(true);
+  const [viewportMode, setViewportMode] = useState("desktop"); // "desktop" | "mobile"
   const [saving, setSaving] = useState(false);
 
   const page = portal.pages[activePageIdx]||portal.pages[0];
@@ -2073,7 +2078,21 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
         {/* Actions */}
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <button onClick={()=>setIsEditing(e=>!e)}
+          {/* Viewport toggle (only in preview mode) */}
+          {!isEditing&&(
+            <div style={{display:"flex",gap:0,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+              {[{m:"desktop",icon:"monitor"},{m:"mobile",icon:"smartphone"}].map(({m,icon})=>(
+                <button key={m} onClick={()=>setViewportMode(m)}
+                  style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",border:"none",cursor:"pointer",
+                    background:viewportMode===m?C.accentLight:"transparent",
+                    color:viewportMode===m?C.accent:C.text3,fontFamily:F,fontSize:11}}>
+                  <Ic n={icon} s={12} c={viewportMode===m?C.accent:C.text3}/>
+                  <span style={{fontWeight:600}}>{m==="desktop"?"Desktop":"Mobile"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={()=>{setIsEditing(e=>!e);if(isEditing)setViewportMode("desktop");}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
               border:`1px solid ${C.border}`,background:isEditing?C.accentLight:"transparent",color:isEditing?C.accent:C.text2}}>
             <Ic n="eye" s={12} c={isEditing?C.accent:C.text2}/>{isEditing?"Editing":"Preview"}
@@ -2086,11 +2105,11 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:"transparent",color:C.text2}}>
             <Ic n="externalLink" s={12} c={C.text2}/>Domain
           </button>
-          <button onClick={()=>{setShowPortalSettings(s=>!s);setShowTheme(false);setShowNav(false);setShowFooter(false);}}
+          <button onClick={()=>{setShowPortalSettings(s=>!s);setShowTheme(false);}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:showPortalSettings?C.accentLight:"transparent",color:showPortalSettings?C.accent:C.text2}}>
             <Ic n="settings" s={12} c={showPortalSettings?C.accent:C.text2}/>Settings
           </button>
-          <button onClick={()=>{setShowTheme(s=>!s);setShowNav(false);setShowFooter(false);}}
+          <button onClick={()=>{setShowTheme(s=>!s);}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
               border:`1px solid ${C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2}}>
             <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
@@ -2129,18 +2148,25 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
       )}
 
       {/* Canvas with live nav + footer */}
-      <div style={{flex:1,overflow:"auto",marginRight:showTheme?320:0,transition:"margin-right .2s"}}>
-        <InlineNav
-          nav={portal.nav||defaultNav()}
-          theme={portal.theme}
-          onChange={nav=>setPortal(p=>({...p,nav}))}
-          isEditing={isEditing}/>
-        <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
-        <InlineFooter
-          footer={portal.footer||defaultFooter()}
-          theme={portal.theme}
-          onChange={footer=>setPortal(p=>({...p,footer}))}
-          isEditing={isEditing}/>
+      <div style={{flex:1,overflow:"auto",marginRight:showTheme?320:0,transition:"margin-right .2s",
+        background:!isEditing?"#e8eaf0":"transparent",display:"flex",flexDirection:"column",alignItems:"center",padding:!isEditing?"24px 0":"0"}}>
+        {/* Mobile frame wrapper in preview mode */}
+        <div style={!isEditing&&viewportMode==="mobile"?{
+          width:390,minHeight:600,background:"white",borderRadius:36,boxShadow:"0 24px 80px rgba(0,0,0,.25),inset 0 0 0 2px rgba(0,0,0,.08)",
+          overflow:"hidden",border:"8px solid #1a1a2e",flexShrink:0,
+        }:{width:"100%"}}>
+          <InlineNav
+            nav={portal.nav||defaultNav()}
+            theme={portal.theme}
+            onChange={nav=>setPortal(p=>({...p,nav}))}
+            isEditing={isEditing}/>
+          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
+          <InlineFooter
+            footer={portal.footer||defaultFooter()}
+            theme={portal.theme}
+            onChange={footer=>setPortal(p=>({...p,footer}))}
+            isEditing={isEditing}/>
+        </div>
       </div>
 
       {showLibrary&&<SectionLibrary onInsert={row=>{const rows=[...page.rows];rows.push(row);updatePage({...page,rows});}} onClose={()=>setShowLibrary(false)}/>}
