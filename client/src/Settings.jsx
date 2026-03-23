@@ -4,6 +4,7 @@ import SettingsDashboard from "./SettingsDashboard.jsx";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import FileTypesSettings from "./settings/FileTypesSettings.jsx";
+import DuplicatesSettings from "./settings/DuplicatesSettings.jsx";
 import GroupsSection from "./settings/GroupsSection.jsx";
 import AgentsSettings from "./settings/AgentsSettings.jsx";
 import AiGovernance from "./settings/AiGovernance.jsx";
@@ -2313,6 +2314,7 @@ const NAV_GROUPS = [
     label: "Data & schema",
     items: [
       { id:"datamodel",  icon:"database",    label:"Data model" },
+      { id:"duplicates", icon:"users",       label:"Duplicates" },
       { id:"file_types", icon:"paperclip",   label:"File types" },
       { id:"forms",      icon:"form",        label:"Forms" },
       { id:"questions",  icon:"help-circle", label:"Question library" },
@@ -2498,6 +2500,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="ai_governance" && <AiGovernance environment={environment}/>}
         {activeSection==="ai_matching"  && <AiMatchingSettings/>}
         {activeSection==="file_types" && <FileTypesSettings environment={environment} objects={[]}/>}
+        {activeSection==="duplicates" && <DuplicatesSettings environment={environment}/>}
         {activeSection==="forms"      && <FormsList environment={environment}/>}
         {activeSection==="appearance" && <AppearanceSection/>}
         {activeSection==="language"   && <LanguageSection/>}

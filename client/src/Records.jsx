@@ -527,6 +527,11 @@ const PeoplePicker = ({ field, value, onChange }) => {
   const inputRef = useRef(null);
   const isMulti = field.field_type === "multi_lookup" || field.field_type === "people" || field.people_multi !== false;
   const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  const [pickerCreating, setPickerCreating] = useState(false);
+  const [pickerFirst,    setPickerFirst]    = useState("");
+  const [pickerLast,     setPickerLast]     = useState("");
+  const [pickerEmail,    setPickerEmail]    = useState("");
+  const [pickerSaving,   setPickerSaving]   = useState(false);
 
   useEffect(() => {
     const h = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch(""); } };
@@ -642,6 +647,58 @@ const PeoplePicker = ({ field, value, onChange }) => {
               )}
             </div>
           ))}
+          {/* ── Inline create-new ── */}
+          {!pickerCreating ? (
+            <div style={{borderTop:`1px solid ${C.border}`,padding:"5px 8px"}}>
+              <button onMouseDown={e=>{e.preventDefault();e.stopPropagation();setPickerCreating(true);}}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:7,border:"none",background:"transparent",color:C.accent,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accentLight}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Create new person
+              </button>
+            </div>
+          ) : (
+            <div style={{borderTop:`1px solid ${C.border}`,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}} onMouseDown={e=>e.stopPropagation()}>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em"}}>Quick-create</div>
+              <div style={{display:"flex",gap:6}}>
+                <input placeholder="First name *" value={pickerFirst} onChange={e=>setPickerFirst(e.target.value)}
+                  style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}} autoFocus
+                  onKeyDown={e=>{if(e.key==="Escape"){setPickerCreating(false);setPickerFirst("");setPickerLast("");setPickerEmail("");}}}/>
+                <input placeholder="Last name" value={pickerLast} onChange={e=>setPickerLast(e.target.value)}
+                  style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <input placeholder="Email (optional)" value={pickerEmail} onChange={e=>setPickerEmail(e.target.value)}
+                style={{width:"100%",padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <div style={{display:"flex",gap:6}}>
+                <button disabled={!pickerFirst.trim()||pickerSaving}
+                  onClick={async()=>{
+                    if(!pickerFirst.trim()||!_currentEnvId) return;
+                    setPickerSaving(true);
+                    try {
+                      const objs = await api.get(`/objects?environment_id=${_currentEnvId}`);
+                      const pObj = (Array.isArray(objs)?objs:[]).find(o=>o.slug==="people"||o.name?.toLowerCase()==="person"||o.name?.toLowerCase()==="people");
+                      if (!pObj) return;
+                      const rec = await api.post("/records",{ object_id:pObj.id, environment_id:_currentEnvId, data:{first_name:pickerFirst.trim(),last_name:pickerLast.trim(),email:pickerEmail.trim()||undefined} });
+                      if (rec?.id) {
+                        const newOpt={id:rec.id,name:`${pickerFirst.trim()} ${pickerLast.trim()}`.trim()};
+                        const ck=`${field.lookup_object_id||field.related_object_slug||"people"}_${_currentEnvId}`;
+                        delete _pickerCache[ck];
+                        toggle(newOpt,null);
+                        setPickerCreating(false);setPickerFirst("");setPickerLast("");setPickerEmail("");
+                      }
+                    } catch(e){console.error(e);} finally{setPickerSaving(false);}
+                  }}
+                  style={{flex:1,padding:"6px 10px",borderRadius:6,border:"none",background:C.accent,color:"white",fontSize:12,fontWeight:700,cursor:!pickerFirst.trim()?"not-allowed":"pointer",opacity:!pickerFirst.trim()?0.5:1,fontFamily:"inherit"}}>
+                  {pickerSaving?"Saving…":"Create & select"}
+                </button>
+                <button onClick={()=>{setPickerCreating(false);setPickerFirst("");setPickerLast("");setPickerEmail("");}}
+                  style={{padding:"6px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -4265,6 +4322,67 @@ const FormPickerModal = ({ environment, record, onClose, onLinked }) => {
   );
 };
 
+// ─── SuggestedActions ────────────────────────────────────────────────────────
+const SA_ICONS = {
+  mail:"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm16 2l-8 5-8-5",
+  calendar:"M3 9h18M3 15h18M8 3v2m8-2v2M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z",
+  dollar:"M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+  users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  fileText:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  arrowRight:"M5 12h14M12 5l7 7-7 7",
+  globe:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 0c-2.76 0-5 4.48-5 10s2.24 10 5 10 5-4.48 5-10S14.76 2 12 2zM2 12h20",
+  sparkles:"M12 3l1.88 5.76H20l-4.94 3.58 1.88 5.76L12 14.52l-4.94 3.58 1.88-5.76L4 8.76h6.12L12 3z",
+  x:"M18 6L6 18M6 6l12 12",
+};
+const SuggestedActions = ({ record, environment, objectName, objectColor, onCompose }) => {
+  const [actions, setActions] = useState([]);
+  const [dismissed, setDismissed] = useState(new Set());
+  const [expanded, setExpanded] = useState(false);
+  const SaIc = ({name,size=13,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={SA_ICONS[name]||""}/></svg>;
+  useEffect(() => {
+    if (!record?.id) return;
+    let cancelled = false;
+    setDismissed(new Set());
+    fetch(`/api/records/${record.id}/suggested-actions?environment_id=${environment?.id||''}`, {
+      headers:{'x-user-id':localStorage.getItem('talentos_user_id')||'','x-tenant-slug':localStorage.getItem('talentos_tenant')||''}
+    }).then(r=>r.ok?r.json():[]).then(d=>{ if(!cancelled) setActions(Array.isArray(d)?d:[]); }).catch(()=>{});
+    return () => { cancelled = true; };
+  }, [record?.id, environment?.id]);
+  const handleCta = (action) => {
+    if (action.cta === 'compose_email') { onCompose?.('email'); return; }
+    if (action.cta === 'log_call') { onCompose?.('call'); return; }
+    window.dispatchEvent(new CustomEvent('talentos:openCopilot', { detail:{ prompt: action.copilot_prompt || `Help me: ${action.description||action.label}` } }));
+  };
+  const visible = actions.filter(a => !dismissed.has(a.id));
+  if (!visible.length) return null;
+  const shown = expanded ? visible : visible.slice(0, 3);
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 16px",background:"linear-gradient(90deg,#fefce8,#fff7ed)",borderBottom:"1px solid #fde68a",flexWrap:"wrap",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:"#92400e",marginRight:4,flexShrink:0}}>
+        <SaIc name="sparkles" size={12} color="#d97706"/> Suggested
+      </div>
+      {shown.map(action => (
+        <div key={action.id} style={{display:"flex",alignItems:"center",gap:0}}>
+          <button onClick={()=>handleCta(action)} title={action.description||action.label}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:"7px 0 0 7px",border:`1px solid ${action.color}40`,background:`${action.color}12`,color:action.color,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+            <SaIc name={action.icon} size={12} color={action.color}/> {action.label}
+          </button>
+          <button onClick={()=>setDismissed(p=>new Set([...p,action.id]))} title="Dismiss"
+            style={{display:"flex",alignItems:"center",justifyContent:"center",width:20,padding:"4px 3px",borderRadius:"0 7px 7px 0",border:`1px solid ${action.color}40`,borderLeft:"none",background:`${action.color}08`,color:`${action.color}80`,cursor:"pointer",fontFamily:"inherit"}}>
+            <SaIc name="x" size={9} color="currentColor"/>
+          </button>
+        </div>
+      ))}
+      {!expanded && visible.length > 3 && (
+        <button onClick={()=>setExpanded(true)} style={{padding:"4px 8px",borderRadius:7,border:"1px dashed #d97706",background:"transparent",color:"#92400e",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+          +{visible.length-3} more
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const RecordDetail = ({ record, fields, allObjects, environment, objectName, objectColor, onClose, fullPage, onToggleFullPage, onUpdate, onDelete, onNavigate }) => {
   const _permCtx = usePermCtx();
   const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
@@ -5260,6 +5378,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden", background:"#F4F6FB" }}>
       <FunctionalityBar/>
+      <SuggestedActions record={record} environment={environment} objectName={objectName} objectColor={objectColor} onCompose={(type)=>setComposeType(type)}/>
       {/* Full-width Linked People widget — only shown on non-Person objects */}
       {objectName !== "Person" && (
         <div style={{ flexShrink:0, borderBottom:`1px solid ${C.border}` }}>
