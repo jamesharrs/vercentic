@@ -850,8 +850,68 @@ const MultistepFormConfig = ({ cfg, set, inp, lbl }) => {
   );
 };
 
+// ─── List Widget Config (needs hooks for API calls) ───────────────────────────
+const ListWidgetConfig = ({ cfg, set, inp, lbl, environmentId }) => {
+  const [objects, setObjects] = useState([]);
+  const [savedLists, setSavedLists] = useState([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/objects?environment_id=${environmentId}`).then(d => setObjects(Array.isArray(d) ? d : []));
+  }, [environmentId]);
+
+  useEffect(() => {
+    if (!cfg.objectId || !environmentId) { setSavedLists([]); return; }
+    setLoadingLists(true);
+    api.get(`/saved-views?object_id=${cfg.objectId}&environment_id=${environmentId}`)
+      .then(d => setSavedLists(Array.isArray(d) ? d : []))
+      .catch(() => setSavedLists([]))
+      .finally(() => setLoadingLists(false));
+  }, [cfg.objectId, environmentId]);
+
+  const selObj = objects.find(o => o.id === cfg.objectId);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      <div>{lbl("Object type")}
+        <select value={cfg.objectId||""} onChange={e => { set("objectId", e.target.value); set("savedListId", ""); set("savedList", ""); }}
+          style={inp}>
+          <option value="">Select an object…</option>
+          {objects.map(o => <option key={o.id} value={o.id}>{o.plural_name || o.name}</option>)}
+        </select>
+      </div>
+      {cfg.objectId && (
+        <div>{lbl("Saved list (blank = all records)")}
+          <select value={cfg.savedListId||""} onChange={e => {
+            const list = savedLists.find(l => l.id === e.target.value);
+            set("savedListId", e.target.value);
+            set("savedList", list?.name || "");
+          }} style={inp}>
+            <option value="">All {selObj?.plural_name || "records"}</option>
+            {loadingLists && <option disabled>Loading…</option>}
+            {savedLists.map(l => <option key={l.id} value={l.id}>{l.name}{l.is_shared ? " (shared)" : ""}</option>)}
+          </select>
+          {savedLists.length === 0 && !loadingLists && cfg.objectId && (
+            <div style={{ fontSize:11, color:C.text3, marginTop:4, fontStyle:"italic" }}>
+              No saved lists for {selObj?.plural_name || "this object"}. Create one from the list view first.
+            </div>
+          )}
+        </div>
+      )}
+      <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder={selObj?.plural_name || "Records"} style={inp}/></div>
+      <div>{lbl("Max items to show (blank = unlimited)")}<input type="number" value={cfg.limit||""} onChange={e=>set("limit",e.target.value)} placeholder="All" style={inp}/></div>
+      <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:4}}>Filters shown to visitors</div>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showSearch!==false} onChange={e=>set("showSearch",e.target.checked)} style={{width:14,height:14}}/>Search bar</label>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showFilters!==false} onChange={e=>set("showFilters",e.target.checked)} style={{width:14,height:14}}/>Category / department filter</label>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showLocationFilter} onChange={e=>set("showLocationFilter",e.target.checked)} style={{width:14,height:14}}/>Location filter</label>
+      <div>{lbl("Empty state message")}<input value={cfg.emptyText||""} onChange={e=>set("emptyText",e.target.value)} placeholder="No records found." style={inp}/></div>
+    </div>
+  );
+};
+
 // ─── Widget Config Panel ──────────────────────────────────────────────────────
-const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
+const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   const cfg = cell.widgetConfig || {};
   const set = (k, v) => onUpdate({ ...cell, widgetConfig: { ...cfg, [k]: v } });
   const inp = { padding:"7px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13,
@@ -862,7 +922,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
   );
   const WIDGET_LABELS = {
     hero:"Hero Banner", text:"Rich Text", image:"Image", stats:"Stats",
-    video:"Video", jobs:"List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer",
+    video:"Video", jobs:"List", job_list:"List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer",
   };
   const renderFields = () => {
     switch (cell.widgetType) {
@@ -969,25 +1029,10 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
         </div>
       );
       case "jobs": return (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Open Positions" style={inp}/></div>
-          <div>{lbl("Filter by Saved List name (blank = all open jobs)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Engineering Roles" style={inp}/></div>
-          <div>{lbl("Max jobs to show (blank = unlimited)")}<input type="number" value={cfg.limit||""} onChange={e=>set("limit",e.target.value)} placeholder="All" style={inp}/></div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:4}}>Filters shown to candidates</div>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showSearch!==false} onChange={e=>set("showSearch",e.target.checked)} style={{width:14,height:14}}/>Search bar</label>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={cfg.showFilters!==false} onChange={e=>set("showFilters",e.target.checked)} style={{width:14,height:14}}/>Department filter</label>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showLocationFilter} onChange={e=>set("showLocationFilter",e.target.checked)} style={{width:14,height:14}}/>Location filter</label>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.text2,cursor:"pointer"}}><input type="checkbox" checked={!!cfg.showWorkTypeFilter} onChange={e=>set("showWorkTypeFilter",e.target.checked)} style={{width:14,height:14}}/>Work type filter (Remote/Hybrid/On-site)</label>
-          <div>{lbl("Empty state message")}<input value={cfg.emptyText||""} onChange={e=>set("emptyText",e.target.value)} placeholder="No open roles right now." style={inp}/></div>
-        </div>
+        <ListWidgetConfig cfg={cfg} set={set} inp={inp} lbl={lbl} environmentId={environmentId}/>
       );
       case "job_list": return (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div>{lbl("Section heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Featured Roles" style={inp}/></div>
-          <div>{lbl("Filter by Saved List name (blank = all open jobs)")}<input value={cfg.savedList||""} onChange={e=>set("savedList",e.target.value)} placeholder="e.g. Featured" style={inp}/></div>
-          <div>{lbl("Max jobs to show")}<input type="number" value={cfg.limit||5} onChange={e=>set("limit",parseInt(e.target.value)||5)} placeholder="5" style={inp}/></div>
-          <div>{lbl("'View all' link URL (optional)")}<input value={cfg.viewAllHref||""} onChange={e=>set("viewAllHref",e.target.value)} placeholder="#jobs" style={inp}/></div>
-        </div>
+        <ListWidgetConfig cfg={cfg} set={set} inp={inp} lbl={lbl} environmentId={environmentId}/>
       );
       case "team": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -1358,7 +1403,7 @@ const AddRowBar = ({ onAdd }) => {
 };
 
 // ─── Canvas ───────────────────────────────────────────────────────────────────
-const PortalCanvas = ({ page, onUpdate, theme, isEditing }) => {
+const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
   const [dragFrom, setDragFrom] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
 
@@ -2185,7 +2230,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             theme={portal.theme}
             onChange={nav=>setPortal(p=>({...p,nav}))}
             isEditing={isEditing}/>
-          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
+          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id}/>
           <InlineFooter
             footer={portal.footer||defaultFooter()}
             theme={portal.theme}
