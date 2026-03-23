@@ -68,22 +68,23 @@ function KpiCard({ label, value, sub, sub2, color, iconPath, tag, tagUp, onClick
   return (
     <div onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ background: V.card, borderRadius: 16, border: `0.5px solid ${hov && onClick ? color : V.border}`,
-        padding: "20px 22px 18px", cursor: onClick ? "pointer" : "default", position: "relative", overflow: "hidden",
+        padding: "18px 20px 16px", cursor: onClick ? "pointer" : "default", position: "relative", overflow: "hidden",
         transition: "border-color 0.15s, box-shadow 0.15s",
         boxShadow: hov && onClick ? `0 4px 24px ${color}20` : "none" }}>
       {/* coloured top strip */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: color, borderRadius: "16px 16px 0 0" }} />
-      {/* icon */}
-      <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}14`,
-        display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          {iconPath}
-        </svg>
+      {/* icon + value row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}14`,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {iconPath}
+          </svg>
+        </div>
+        <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em", color: "#111827" }}>{value}</div>
       </div>
-      {/* value */}
-      <div style={{ fontSize: 36, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em", color: "#111827" }}>{value}</div>
       {/* label */}
-      <div style={{ fontSize: 13, fontWeight: 600, color: V.gray2, marginTop: 6 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: V.gray2 }}>{label}</div>
       {/* sub lines */}
       {sub && <div style={{ fontSize: 11, color: V.gray, marginTop: 3 }}>{sub}</div>}
       {sub2 && (

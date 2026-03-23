@@ -28,21 +28,21 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
 };
 
 const StatCard = ({ label, value, sub, icon, color, trend }) => (
-  <div style={{background:C.surface,borderRadius:16,border:`1.5px solid ${C.border}`,padding:"20px 22px",flex:1,minWidth:150,
+  <div style={{background:C.surface,borderRadius:16,border:`1.5px solid ${C.border}`,padding:"16px 18px",flex:1,minWidth:150,
     boxShadow:"0 1px 4px rgba(67,97,238,0.06)"}}>
-    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}>
-      <div style={{width:42,height:42,borderRadius:12,background:`${color}14`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <Ic n={icon} s={19} c={color}/>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+      <div style={{width:36,height:36,borderRadius:10,background:`${color}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <Ic n={icon} s={18} c={color}/>
       </div>
+      <div style={{fontSize:28,fontWeight:800,color:C.text1,lineHeight:1,letterSpacing:"-0.02em"}}>{value}</div>
       {trend!==undefined&&(
-        <span style={{fontSize:11,fontWeight:700,color:trend>=0?C.green:C.red,background:trend>=0?"#ECFDF5":"#FEF2F2",padding:"3px 8px",borderRadius:99}}>
+        <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:trend>=0?C.green:C.red,background:trend>=0?"#ECFDF5":"#FEF2F2",padding:"3px 8px",borderRadius:99,flexShrink:0}}>
           {trend>=0?"+":""}{trend}%
         </span>
       )}
     </div>
-    <div style={{fontSize:26,fontWeight:800,color:C.text1,lineHeight:1,marginBottom:4}}>{value}</div>
-    <div style={{fontSize:12,fontWeight:600,color:C.text2,marginBottom:2}}>{label}</div>
-    {sub&&<div style={{fontSize:11,color:C.text3}}>{sub}</div>}
+    <div style={{fontSize:12,fontWeight:600,color:C.text2}}>{label}</div>
+    {sub&&<div style={{fontSize:11,color:C.text3,marginTop:2}}>{sub}</div>}
   </div>
 );
 
