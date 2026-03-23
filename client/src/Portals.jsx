@@ -32,7 +32,7 @@ const WIDGET_TYPES = [
   { type:"text",         label:"Rich Text",      icon:"align",     desc:"Copy & content blocks" },
   { type:"rich_text",    label:"Article",        icon:"fileText",  desc:"Markdown content with headings" },
   { type:"image",        label:"Image",          icon:"image",     desc:"Photo or illustration" },
-  { type:"jobs",         label:"Job Board",      icon:"briefcase", desc:"Live jobs from Vercentic" },
+  { type:"jobs",         label:"List",           icon:"briefcase", desc:"Records from any saved list" },
   { type:"form",         label:"Form",           icon:"form",      desc:"Linked to any object" },
   { type:"stats",        label:"Stats",          icon:"bar2",      desc:"Numbers & social proof" },
   { type:"testimonials", label:"Testimonials",   icon:"quote",     desc:"Employee quotes & stories" },
@@ -862,7 +862,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
   );
   const WIDGET_LABELS = {
     hero:"Hero Banner", text:"Rich Text", image:"Image", stats:"Stats",
-    video:"Video", jobs:"Job Board", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer",
+    video:"Video", jobs:"List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer",
   };
   const renderFields = () => {
     switch (cell.widgetType) {
@@ -1096,7 +1096,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose }) => {
 };
 
 // ─── Widget Cell ──────────────────────────────────────────────────────────────
-const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing }) => {
+const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environmentId }) => {
   const [showPicker, setShowPicker] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -1161,7 +1161,7 @@ const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing }) => {
         onSelect={type=>{onUpdate({...cell,widgetType:type,widgetConfig:{}});setShowPicker(false);setShowConfig(true);}}
         onClose={()=>setShowPicker(false)}/>}
       {showConfig&&cell.widgetType&&<WidgetConfigPanel
-        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)}/>}
+        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)} environmentId={environmentId}/>}
     </div>
   );
 };

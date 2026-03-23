@@ -823,6 +823,12 @@ const SUGGESTED_ACTIONS = {
     { label: "Change chart type",  prompt: "Change this to a pie chart" },
     { label: "Save this report",   prompt: "Save this report with a name" },
   ],
+  settings: [
+    { label: "Create a field",     prompt: "I want to create a new field" },
+    { label: "Invite a user",      prompt: "I want to invite a new user" },
+    { label: "Create a workflow",  prompt: "I want to create a new workflow" },
+    { label: "Set up integration", prompt: "Help me configure an integration" },
+  ],
   default: [
     { label: "Search records",  prompt: "Search for " },
     { label: "Create a report", prompt: "I want to build a report" },
@@ -836,7 +842,8 @@ const SuggestedActions = ({ activeNav, currentObject, onSend, isLastMsg }) => {
   if (!isLastMsg) return null;
   const slug = currentObject?.slug;
   const isReports = activeNav === 'reports';
-  const actions = isReports ? SUGGESTED_ACTIONS.reports
+  const isSettings = activeNav === 'settings';
+  const actions = isSettings ? SUGGESTED_ACTIONS.settings : isReports ? SUGGESTED_ACTIONS.reports
     : slug && SUGGESTED_ACTIONS[slug] ? SUGGESTED_ACTIONS[slug]
     : SUGGESTED_ACTIONS.default;
   return (
@@ -913,6 +920,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
   const [dragOver, setDragOver] = useState(false);
+  const [settingsSection, setSettingsSection] = useState(null);
   const [fileProcessing, setFileProcessing] = useState(false);
 
   useEffect(()=>{
@@ -940,7 +948,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         :activeNav==='offers'?'Offers (candidate offers and approvals)'
         :activeNav==='reports'?'Reports (analytics and data)'
         :activeNav==='search'?'Search (searching across all records)'
-        :activeNav==='settings'?'Settings (platform configuration)'
+        :activeNav==='settings'?'Settings'+(settingsSection?' — '+settingsSection+' section':' (platform configuration)')
         :activeNav==='orgchart'?'Org Chart (organisational structure)'
         :activeNav==='workflows'?'Workflows (automation builder)'
         :activeNav?.startsWith('obj_')?(()=>{const o=(navObjects||[]).find(o=>'obj_'+o.id===activeNav);return o?(o.plural_name||o.name)+' list':'Object list';})()
@@ -1011,13 +1019,25 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         }
         if(activeNav==='dashboard') return `Hi! I can see you're on the **Dashboard**.\n\nI can help you:\n• Understand your current pipeline\n• Find specific candidates or jobs\n• Create new records\n• Summarise recent activity\n\nWhat would you like to do?`;
         if(activeNav==='interviews') return `Hi! I can see you're in **Interviews**.\n\nI can help you:\n• Schedule a new interview\n• Review upcoming sessions\n• Answer questions about the schedule\n\nWhat would you like to do?`;
+        if(activeNav==='settings') {
+          const sec = settingsSection;
+          if(sec === 'Data Model') return `Hi! You're in **Data Model** settings.\n\nI can help you:\n• Create new objects or fields\n• Explain field types and best practices\n• Suggest field configurations for common use cases\n\nWhat would you like to configure?`;
+          if(sec === 'Users') return `Hi! You're in **User Management**.\n\nI can help you:\n• Invite a new user\n• Explain roles and permissions\n• Troubleshoot login issues\n\nWhat would you like to do?`;
+          if(sec === 'Roles & Permissions') return `Hi! You're in **Roles & Permissions**.\n\nI can help you:\n• Create a new role\n• Explain how permissions work\n• Suggest role configurations\n\nWhat would you like to configure?`;
+          if(sec === 'Workflows') return `Hi! You're in **Workflows**.\n\nI can help you:\n• Create a new workflow\n• Add stages and automation steps\n• Explain workflow types (record pipeline vs linked person)\n\nWhat would you like to build?`;
+          if(sec === 'Portals') return `Hi! You're in **Portals**.\n\nI can help you:\n• Set up a new career site or portal\n• Configure branding and themes\n• Add pages and widgets\n\nWhat would you like to do?`;
+          if(sec === 'Forms') return `Hi! You're in **Forms**.\n\nI can help you:\n• Create a new form (scorecards, surveys, screening)\n• Explain form field types\n• Suggest form templates for common use cases\n\nWhat would you like to build?`;
+          if(sec === 'Org Structure') return `Hi! You're in **Org Structure**.\n\nI can help you:\n• Explain how org units work\n• Set up the company hierarchy\n• Assign users to departments\n\nWhat would you like to do?`;
+          if(sec === 'Integrations') return `Hi! You're in **Integrations**.\n\nI can help you:\n• Configure Twilio for SMS/WhatsApp\n• Set up SendGrid for email\n• Explain available integrations\n\nWhat do you need help with?`;
+          return `Hi! You're in **Settings**.\n\nI can help you configure any part of the platform — data model, users, workflows, portals, integrations, and more.\n\nWhat would you like to do?`;
+        }
         if(activeNav==='offers') return `Hi! I can see you're in **Offers**.\n\nI can help you:\n• Create or review offers\n• Check approval status\n• Answer questions about the offer pipeline\n\nWhat would you like to do?`;
         if(activeNav?.startsWith('obj_')){
           const obj=(navObjects||[]).find(o=>'obj_'+o.id===activeNav);
           const n=obj?.plural_name||obj?.name||'records';
           return `Hi! I can see you're viewing **${n}**.\n\nI can help you:\n• Search and filter this list\n• Create a new ${obj?.name||'record'}\n• Answer questions about any record here\n\nWhat would you like to do?`;
         }
-        return `Hi! I'm your Vercentic Copilot. I can:\n• **Search** candidates, jobs, and pools\n• **Create records** — people, jobs, talent pools\n• **Build workflows** with stages and automations\n• **Invite users** and **create roles** (admin)\n\nWhat would you like to do?`;
+        return `Hi! I'm your Vercentic Copilot. I can:\n• **Search** across all your data\n• **Create** and manage records\n• **Build** workflows and reports\n• **Configure** settings and integrations\n• **Draft** emails and documents\n\nWhat would you like to do?`;
       })(),ts:new Date()}]);
     }
   },[open, currentRecord?.id, currentObject?.id, activeNav]);
@@ -1030,6 +1050,10 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     api.get("/roles").then(r=>{ if(Array.isArray(r)) setAdminRoles(r); }).catch(()=>{});
     api.get("/users").then(u=>{ if(Array.isArray(u)) setAdminUsers(u); }).catch(()=>{});
     if(environment?.id) api.get(`/interview-types?environment_id=${environment.id}`).then(t=>{ if(Array.isArray(t)) setInterviewTypes(t); }).catch(()=>{});
+    // Listen for settings section navigation
+    const handleSettingsNav = (e) => setSettingsSection(e.detail?.section || null);
+    window.addEventListener('talentos:settings-section', handleSettingsNav);
+    return () => window.removeEventListener('talentos:settings-section', handleSettingsNav);
   },[open]);
 
   // Generate proactive nudges when the copilot opens on a list page
@@ -1859,11 +1883,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                   if(activeNav==="interviews") return "In Interviews";
                   if(activeNav==="offers") return "In Offers";
                   if(activeNav==="reports") return "In Reports";
+                  if(activeNav==="settings") return settingsSection ? `Settings · ${settingsSection}` : "In Settings";
                   if(activeNav?.startsWith("obj_")){
                     const obj=(navObjects||[]).find(o=>"obj_"+o.id===activeNav);
                     return obj ? `Viewing ${obj.plural_name||obj.name}` : "Viewing records";
                   }
-                  return "Your AI recruitment assistant";
+                  return "Your AI assistant";
                 })()}
               </div>
             </div>

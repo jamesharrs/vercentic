@@ -2028,7 +2028,7 @@ function App() {
       </div>
 
       {/* Main content */}
-      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: historyOpen ? 300 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
+      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: historyOpen ? 300 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden" }}>
         {/* Top bar */}
         <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects}
              activeDashTab={activeNav === "dashboard" ? "overview" : activeNav.startsWith("dashboard_") ? activeNav.replace("dashboard_","") : null}
@@ -2061,7 +2061,7 @@ function App() {
                />
              } />
         {/* Page content */}
-        <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: activeNav.startsWith("obj_") ? "hidden" : "auto" }}>
+        <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: "auto", minHeight: 0 }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#9ca3af" }}>Loading…</div>
         ) : !selectedEnv ? (

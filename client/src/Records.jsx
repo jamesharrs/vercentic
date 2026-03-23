@@ -2094,7 +2094,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                         onUpdate={r => onStatusUpdate?.(r)}
                       />
                     )}
-                    {onEdit   && <Btn v="ghost" sz="sm" icon="edit"   onClick={()=>onEdit(record)}/>}
+
                     <Btn v="ghost" sz="sm" icon="expand" onClick={()=>onSelect(record)}/>
                     {onDelete && <Btn v="ghost" sz="sm" icon="trash"  onClick={()=>onDelete(record.id)} style={{color:"#ef4444"}}/>}
                   </div>
@@ -2173,7 +2173,7 @@ const KanbanView = ({ records, fields, objectColor, onSelect, onEdit, onDelete, 
                       </div>
                     </div>
                     <div style={{ display:"flex", justifyContent:"flex-end", gap:4, marginTop:8 }} onClick={e=>e.stopPropagation()}>
-                      {onEdit   && <button onClick={()=>onEdit(record)} style={{ background:"none", border:"none", cursor:"pointer", padding:3, color:C.text3, borderRadius:5, display:"flex" }}><Ic n="edit" s={12}/></button>}
+
                       {onDelete && <button onClick={()=>onDelete(record.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:3, color:"#ef444450", borderRadius:5, display:"flex" }}><Ic n="trash" s={12}/></button>}
                     </div>
                   </div>
@@ -6111,9 +6111,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0, overflow:"hidden" }}>
+    <div style={{ minHeight:0 }}>
       {/* Toolbar */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", flexShrink:0, paddingBottom:12 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", position:"sticky", top:0, zIndex:20, background:"var(--t-bg, #f4f5f8)", paddingBottom:12, paddingTop:4, marginTop:-4 }}>
         <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>{object.plural_name}</h1>
         <span style={{ fontSize:13, color:C.text3, fontWeight:500 }}>
           {activeFilters.length ? `${displayedRecords.length} of ${total}` : total} record{total!==1?"s":""}
@@ -6245,9 +6245,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       {/* Records tab */}
       {activeTab === "records" && <>
 
-      {/* Scrollable area — everything below toolbar scrolls */}
-      <div style={{ flex:1, overflow:"auto", minHeight:0 }}>
-
       {/* Filter bar — always visible in records tab */}
       {fields.length > 0 && (
         <div style={{ marginBottom:10 }}>
@@ -6319,7 +6316,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         </div>
       )}
 
-      </div>{/* end scrollable area */}
       </>}
 
       {/* Slide-out panel (expand icon) */}
