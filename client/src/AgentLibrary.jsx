@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import api from "./apiClient.js";
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
@@ -263,8 +264,7 @@ export default function AgentLibrary({ onUseTemplate, onClose }) {
   const [preview,   setPreview]   = useState(null);
 
   useEffect(() => {
-    fetch("/api/agents/templates")
-      .then(r => r.json())
+    api.get("/api/agents/templates")
       .then(d => { setTemplates(Array.isArray(d) ? d : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);

@@ -3,6 +3,7 @@ import AgentLibrary from "./AgentLibrary.jsx";
 import SharePicker from "./SharePicker.jsx";
 import { useState, useEffect, useCallback } from "react";
 import AiBadge from "./AiBadge.jsx";
+import api from "./apiClient.js";
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
@@ -10,13 +11,6 @@ const C = {
   accentLight: "var(--t-accent-light, #EEF2FF)", text1: "#111827", text2: "#374151",
   text3: "#6B7280", border: "#E5E7EB", green: "#0CA678", amber: "#F08C00",
   red: "#E03131", purple: "#7048E8",
-};
-
-const api = {
-  get: (url) => fetch(url).then(r => r.json()),
-  post: (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  patch: (url, body) => fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  del: (url) => fetch(url, { method: 'DELETE' }).then(r => r.json()),
 };
 
 const Ic = ({ n, s = 16, c = C.text3 }) => {
