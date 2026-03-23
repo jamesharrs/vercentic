@@ -1382,6 +1382,145 @@ const PortalCanvas = ({ page, onUpdate, theme, isEditing }) => {
 };
 
 
+// ─── Inline Nav Preview (editable in-canvas) ─────────────────────────────────
+const InlineNav = ({ nav, theme, onChange, isEditing }) => {
+  const [editOpen, setEditOpen] = useState(false);
+  const bg  = nav.bgColor  || theme?.bgColor  || '#ffffff';
+  const fg  = nav.textColor|| theme?.textColor|| '#0F1729';
+  const pr  = theme?.primaryColor || '#4361EE';
+  const ff  = theme?.fontFamily   || 'inherit';
+  const set = (k,v) => onChange({...nav,[k]:v});
+  const inp = {padding:"6px 10px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",color:C.text1,background:C.surface,width:"100%",boxSizing:"border-box"};
+  const lbl = t => <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{t}</div>;
+
+  return (
+    <div style={{position:"relative"}}>
+      {/* Live Nav render */}
+      <div style={{background:bg, borderBottom:`1px solid ${pr}18`, boxShadow:"0 1px 8px rgba(0,0,0,.06)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", height:60, fontFamily:ff}}
+        onClick={isEditing ? ()=>setEditOpen(e=>!e) : undefined}
+        title={isEditing?"Click to edit nav":""}
+        onMouseEnter={e=>{if(isEditing)e.currentTarget.style.outline=`2px dashed ${pr}`;}}
+        onMouseLeave={e=>{e.currentTarget.style.outline="none";}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {nav.logoUrl
+            ? <img src={nav.logoUrl} alt={nav.logoText||"Logo"} style={{height:32,maxWidth:140,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
+            : <span style={{fontSize:17,fontWeight:800,color:pr,fontFamily:ff}}>{nav.logoText||"Your Company"}</span>
+          }
+        </div>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          {(nav.links||[]).map(lnk=>(
+            <span key={lnk.id} style={{padding:"5px 12px",borderRadius:7,fontSize:13,fontWeight:500,color:fg,fontFamily:ff}}>{lnk.label}</span>
+          ))}
+        </div>
+        {isEditing&&<div style={{position:"absolute",top:6,right:8,fontSize:10,color:pr,fontWeight:700,background:`${pr}14`,padding:"2px 7px",borderRadius:5,pointerEvents:"none"}}>click to edit</div>}
+      </div>
+
+      {/* Popover editor */}
+      {editOpen&&isEditing&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:400,background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:"0 0 12px 12px",boxShadow:"0 8px 32px rgba(0,0,0,.15)",padding:16,display:"flex",flexDirection:"column",gap:12}}
+          onClick={e=>e.stopPropagation()}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>{lbl("Logo URL")}<input value={nav.logoUrl||""} onChange={e=>set("logoUrl",e.target.value)} placeholder="https://…/logo.svg" style={inp}/></div>
+            <div>{lbl("Logo text (fallback)")}<input value={nav.logoText||""} onChange={e=>set("logoText",e.target.value)} placeholder="Company" style={inp}/></div>
+            <div>{lbl("Background")}<input type="color" value={nav.bgColor||"#ffffff"} onChange={e=>set("bgColor",e.target.value)} style={{...inp,padding:2,height:30,cursor:"pointer"}}/></div>
+            <div>{lbl("Text colour")}<input type="color" value={nav.textColor||"#0F1729"} onChange={e=>set("textColor",e.target.value)} style={{...inp,padding:2,height:30,cursor:"pointer"}}/></div>
+          </div>
+          <div>
+            {lbl("Nav links")}
+            {(nav.links||[]).map((lnk,i)=>(
+              <div key={lnk.id} style={{display:"flex",gap:6,marginBottom:5}}>
+                <input value={lnk.label||""} onChange={e=>{const l=[...(nav.links||[])];l[i]={...l[i],label:e.target.value};set("links",l);}} placeholder="Label" style={{...inp,flex:1}}/>
+                <input value={lnk.href||""} onChange={e=>{const l=[...(nav.links||[])];l[i]={...l[i],href:e.target.value};set("links",l);}} placeholder="/path or #anchor" style={{...inp,flex:2}}/>
+                <button onClick={()=>set("links",(nav.links||[]).filter((_,j)=>j!==i))} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text3,padding:"0 8px",fontSize:16}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>set("links",[...(nav.links||[]),{id:uid(),label:"Link",href:"/"}])} style={{fontSize:11,color:C.accent,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:7,padding:"5px 12px",cursor:"pointer",fontFamily:F,width:"100%"}}>+ Add link</button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:C.text2,cursor:"pointer"}}>
+              <input type="checkbox" checked={nav.sticky!==false} onChange={e=>set("sticky",e.target.checked)}/> Sticky nav
+            </label>
+            <button onClick={()=>setEditOpen(false)} style={{padding:"5px 14px",borderRadius:7,background:C.accent,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>Done</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Inline Footer Preview (editable in-canvas) ──────────────────────────────
+const InlineFooter = ({ footer, theme, onChange, isEditing }) => {
+  const [editOpen, setEditOpen] = useState(false);
+  const bg  = footer.bgColor  || '#0F1729';
+  const fg  = footer.textColor|| '#F1F5F9';
+  const ff  = theme?.fontFamily || 'inherit';
+  const set = (k,v) => onChange({...footer,[k]:v});
+  const inp = {padding:"6px 10px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",color:C.text1,background:C.surface,width:"100%",boxSizing:"border-box"};
+  const lbl = t => <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{t}</div>;
+
+  return (
+    <div style={{position:"relative"}}>
+      {/* Live footer render */}
+      <div style={{background:bg, padding:"36px 32px 20px", fontFamily:ff}}
+        onClick={isEditing ? ()=>setEditOpen(e=>!e) : undefined}
+        title={isEditing?"Click to edit footer":""}
+        onMouseEnter={e=>{if(isEditing)e.currentTarget.style.outline=`2px dashed ${theme?.primaryColor||"#4361EE"}`;}}
+        onMouseLeave={e=>{e.currentTarget.style.outline="none";}}>
+        {/* Columns */}
+        <div style={{display:"flex",gap:48,marginBottom:28,flexWrap:"wrap"}}>
+          {(footer.columns||[]).map(col=>(
+            <div key={col.id}>
+              <div style={{fontSize:12,fontWeight:700,color:fg,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,opacity:0.6}}>{col.heading}</div>
+              {(col.links||[]).map((lnk,i)=>(
+                <div key={i} style={{fontSize:13,color:fg,opacity:0.8,marginBottom:6}}>{lnk.label}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{borderTop:`1px solid ${fg}20`,paddingTop:16,fontSize:12,color:fg,opacity:0.5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span>{footer.bottomText||"© 2026 Your Company"}</span>
+          {isEditing&&<span style={{fontSize:10,fontWeight:700,background:`${fg}20`,padding:"2px 7px",borderRadius:5}}>click to edit</span>}
+        </div>
+      </div>
+
+      {/* Popover editor */}
+      {editOpen&&isEditing&&(
+        <div style={{position:"absolute",bottom:"100%",left:0,right:0,zIndex:400,background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:"12px 12px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,.15)",padding:16,display:"flex",flexDirection:"column",gap:12,maxHeight:400,overflowY:"auto"}}
+          onClick={e=>e.stopPropagation()}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>{lbl("Background")}<input type="color" value={footer.bgColor||"#0F1729"} onChange={e=>set("bgColor",e.target.value)} style={{...inp,padding:2,height:30,cursor:"pointer"}}/></div>
+            <div>{lbl("Text colour")}<input type="color" value={footer.textColor||"#F1F5F9"} onChange={e=>set("textColor",e.target.value)} style={{...inp,padding:2,height:30,cursor:"pointer"}}/></div>
+          </div>
+          <div>{lbl("Copyright text")}<input value={footer.bottomText||""} onChange={e=>set("bottomText",e.target.value)} placeholder="© 2026 Your Company" style={inp}/></div>
+          <div>
+            {lbl("Link columns")}
+            {(footer.columns||[]).map((col,ci)=>(
+              <div key={col.id} style={{marginBottom:10,padding:10,borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                  <input value={col.heading||""} onChange={e=>{const c=[...(footer.columns||[])];c[ci]={...c[ci],heading:e.target.value};set("columns",c);}} placeholder="Column heading" style={{...inp,flex:1}}/>
+                  <button onClick={()=>set("columns",(footer.columns||[]).filter((_,j)=>j!==ci))} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text3,padding:"0 8px",fontSize:16}}>×</button>
+                </div>
+                {(col.links||[]).map((lnk,li)=>(
+                  <div key={li} style={{display:"flex",gap:5,marginBottom:4}}>
+                    <input value={lnk.label||""} onChange={e=>{const c=[...(footer.columns||[])];c[ci].links[li]={...c[ci].links[li],label:e.target.value};set("columns",c);}} placeholder="Label" style={{...inp,flex:1}}/>
+                    <input value={lnk.href||""} onChange={e=>{const c=[...(footer.columns||[])];c[ci].links[li]={...c[ci].links[li],href:e.target.value};set("columns",c);}} placeholder="/path" style={{...inp,flex:1}}/>
+                    <button onClick={()=>{const c=[...(footer.columns||[])];c[ci].links=c[ci].links.filter((_,j)=>j!==li);set("columns",c);}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text3,padding:"0 7px",fontSize:14}}>×</button>
+                  </div>
+                ))}
+                <button onClick={()=>{const c=[...(footer.columns||[])];c[ci].links=[...(c[ci].links||[]),{label:"Link",href:"#"}];set("columns",c);}} style={{fontSize:11,color:C.accent,background:"transparent",border:"none",cursor:"pointer",fontFamily:F}}>+ link</button>
+              </div>
+            ))}
+            <button onClick={()=>set("columns",[...(footer.columns||[]),{id:uid(),heading:"Column",links:[{label:"Link",href:"#"}]}])} style={{fontSize:11,color:C.accent,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:7,padding:"5px 12px",cursor:"pointer",fontFamily:F,width:"100%"}}>+ Add column</button>
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={()=>setEditOpen(false)} style={{padding:"5px 14px",borderRadius:7,background:C.accent,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>Done</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const defaultNav = () => ({ logoText:'', logoUrl:'', bgColor:'', textColor:'', sticky:true,
   links:[{id:'nl1',label:'Home',href:'/'},{id:'nl2',label:'Jobs',href:'#jobs'},{id:'nl3',label:'Apply',href:'/apply'}] });
 const defaultFooter = () => ({ bgColor:'#0F1729', textColor:'#F1F5F9',
@@ -1932,13 +2071,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
           {portal.pages.length>0&&<button onClick={()=>setPageActionsFor(page)} title="Page SEO & settings" style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer"}}><Ic n="settings" s={11}/></button>}
         </div>
         <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
-        <button onClick={()=>{setShowNav(n=>!n);setShowFooter(false);setShowTheme(false);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:showNav?C.accentLight:"transparent",color:showNav?C.accent:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>
-          <Ic n="menu" s={13} c={showNav?C.accent:C.text2}/> Nav
-        </button>
-        <button onClick={()=>{setShowFooter(f=>!f);setShowNav(false);setShowTheme(false);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:showFooter?C.accentLight:"transparent",color:showFooter?C.accent:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>
-          <Ic n="footer2" s={13} c={showFooter?C.accent:C.text2}/> Footer
-        </button>
-        <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
         {/* Actions */}
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <button onClick={()=>setIsEditing(e=>!e)}
@@ -1996,9 +2128,19 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         </div>
       )}
 
-      {/* Canvas */}
+      {/* Canvas with live nav + footer */}
       <div style={{flex:1,overflow:"auto",marginRight:showTheme?320:0,transition:"margin-right .2s"}}>
+        <InlineNav
+          nav={portal.nav||defaultNav()}
+          theme={portal.theme}
+          onChange={nav=>setPortal(p=>({...p,nav}))}
+          isEditing={isEditing}/>
         <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing}/>
+        <InlineFooter
+          footer={portal.footer||defaultFooter()}
+          theme={portal.theme}
+          onChange={footer=>setPortal(p=>({...p,footer}))}
+          isEditing={isEditing}/>
       </div>
 
       {showLibrary&&<SectionLibrary onInsert={row=>{const rows=[...page.rows];rows.push(row);updatePage({...page,rows});}} onClose={()=>setShowLibrary(false)}/>}
@@ -2014,14 +2156,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         environmentId={portal.environment_id}
         onApply={(theme,logo)=>setPortal(p=>({...p,theme:{...p.theme,...theme},nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||""}}))}
         onClose={()=>setShowBrandKit(false)}/>}
-      {showNav&&<>
-        <div onClick={()=>setShowNav(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
-        <NavEditor nav={portal.nav||defaultNav()} onChange={nav=>setPortal(p=>({...p,nav}))} theme={portal.theme} onClose={()=>setShowNav(false)}/>
-      </>}
-      {showFooter&&<>
-        <div onClick={()=>setShowFooter(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
-        <FooterEditor footer={portal.footer||defaultFooter()} onChange={footer=>setPortal(p=>({...p,footer}))} onClose={()=>setShowFooter(false)}/>
-      </>}
       {showTheme&&<>
         <div onClick={()=>setShowTheme(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
         <ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>
