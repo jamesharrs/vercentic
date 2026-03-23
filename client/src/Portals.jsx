@@ -1242,7 +1242,7 @@ const RowSettings = ({ row, onChange, onClose }) => {
 };
 
 // ─── Canvas Row ───────────────────────────────────────────────────────────────
-const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop }) => {
+const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop, environmentId }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [hovered, setHovered] = useState(false);
   const padMap = {none:"0px",sm:"24px",md:"56px",lg:"96px",xl:"140px"};
@@ -1281,7 +1281,7 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
           {row.cells.map((cell,ci)=>(
             <WidgetCell key={cell.id} cell={cell} flex={cellFlex(ci)}
               onUpdate={u=>updateCell(ci,u)} onRemove={()=>removeWidget(ci)}
-              theme={theme} isEditing={isEditing}/>
+              theme={theme} isEditing={isEditing} environmentId={environmentId}/>
           ))}
         </div>
       </div>
@@ -1402,7 +1402,8 @@ const PortalCanvas = ({ page, onUpdate, theme, isEditing }) => {
             onDuplicate={()=>duplicateRow(i)}
             theme={theme} isEditing={isEditing}
             dragTarget={dragTarget===i}
-            onDragStart={setDragFrom} onDragOver={setDragTarget} onDrop={handleDrop}/>
+            onDragStart={setDragFrom} onDragOver={setDragTarget} onDrop={handleDrop}
+            environmentId={environmentId}/>
         </div>
       ))}
       {isEditing&&<AddRowBar onAdd={preset=>addRow(preset,page.rows.length-1)}/>}
