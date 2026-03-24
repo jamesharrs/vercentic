@@ -5847,6 +5847,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   }, [autoCreate]);
   const [editRecord, setEditRecord] = useState(null);
   const [page, setPage]         = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showImport, setShowImport] = useState(false);
 
   // Clear selection when object/page/search/filters change
@@ -5903,7 +5904,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     window.dispatchEvent(new CustomEvent("talentos:list-context", {
       detail: buildListContext(object, filtered, filterChip ? filtered.length : (r.pagination?.total||0))
     }));
-  }, [object.id, environment.id, page, search, filterChip]);
+  }, [object.id, environment.id, page, search, filterChip, reloadKey]);
 
   const handleColChange = (ids) => {
     setVisibleFieldIds(ids);
@@ -6041,9 +6042,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (view.visible_field_ids?.length) { setVisibleFieldIds(view.visible_field_ids); try { localStorage.setItem(colStorageKey, JSON.stringify(view.visible_field_ids)); } catch {} }
     if (view.view_mode)         setView(view.view_mode);
     setFilterChip(null);
-    // Force a reload even if page is already 1 — toggle to 0 then back
-    setPage(0);
-    setTimeout(() => setPage(1), 0);
+    setPage(1);
+    setReloadKey(k => k + 1);
   };
 
   // Sort handler
