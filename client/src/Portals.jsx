@@ -924,7 +924,6 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId, cellId }
           <select value={cfg.savedListId||""} onChange={e => {
             const list = savedLists.find(l => l.id === e.target.value);
             const newCfg = { savedListId: e.target.value, savedList: list?.name || "" };
-            console.log('[ListWidget] Selected saved list:', e.target.value, list?.name);
             setMany(newCfg);
             // Direct server PATCH — bypass React state chain
             if (_activePortalCtx.id && cellId) {
@@ -934,18 +933,16 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId, cellId }
                 for (let ri = 0; ri < (pages[pi]?.rows||[]).length && !found; ri++) {
                   for (let ci = 0; ci < (pages[pi].rows[ri]?.cells||[]).length && !found; ci++) {
                     if (pages[pi].rows[ri].cells[ci].id === cellId) {
-                      console.log('[ListWidget] Direct PATCH to server: portal='+_activePortalCtx.id+' p'+pi+'r'+ri+'c'+ci);
                       api.patch(`/portals/${_activePortalCtx.id}/widget-config`, {
                         pageIndex: pi, rowIndex: ri, cellIndex: ci,
                         widgetConfig: { ...cfg, ...newCfg }
-                      }).then(r => console.log('[ListWidget] Direct PATCH result:', JSON.stringify(r)))
-                        .catch(e => console.error('[ListWidget] Direct PATCH failed:', e));
+                      }).catch(e => console.error('[ListWidget] Direct PATCH failed:', e));
                       found = true;
                     }
                   }
                 }
               }
-              if (!found) console.warn('[ListWidget] Could not find cell', cellId, 'in portal pages');
+              if (!found) console.warn('[ListWidget] Cell not found for direct save');
             }
           }} style={inp}>
             <option value="">All {selObj?.plural_name || "records"}</option>
@@ -2306,9 +2303,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
     autoSaveTimer.current = setTimeout(async () => {
       const p = portalRef.current;
       if (p.id && !String(p.id).startsWith("new_")) {
-        console.log('[Portal Auto-save] saving...');
         await onSaveRef.current(p);
-        console.log('[Portal Auto-save] done');
       }
     }, 2000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
@@ -2319,11 +2314,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   useEffect(() => {
     const handler = async () => {
       const p = portalRef.current;
-      console.log('[Portal Force-save] triggered, savedListId on first jobs widget:', 
-        p.pages?.[0]?.rows?.[0]?.cells?.[0]?.widgetConfig?.savedListId);
       if (p.id && !String(p.id).startsWith("new_")) {
         await onSaveRef.current(p);
-        console.log('[Portal Force-save] done');
       }
     };
     window.addEventListener('talentos:portal-force-save', handler);
@@ -2366,10 +2358,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
   const handleSave = async () => {
     const latest = portalRef.current;
-    // Debug: log what widget configs are being saved
-    (latest.pages||[]).forEach((pg,pi)=>(pg.rows||[]).forEach((r,ri)=>(r.cells||[]).forEach((c,ci)=>{
-      if(c.widgetType==='jobs') console.log('[Portal Save] jobs widget p'+pi+'r'+ri+'c'+ci+':', JSON.stringify(c.widgetConfig));
-    })));
     setSaving(true);
     await onSave(latest);
     setSaving(false);
@@ -2623,13 +2611,8 @@ export default function PortalsPage({ environment }) {
         portal={editing}
         onClose={()=>{ setEditing(null); load(); }}
         onSave={async (updated) => {
-          // Debug: log the pages being saved
-          (updated.pages||[]).forEach((pg,pi)=>(pg.rows||[]).forEach((r,ri)=>(r.cells||[]).forEach((c,ci)=>{
-            if(c.widgetType==='jobs') console.log('[Portal onSave] jobs widget p'+pi+'r'+ri+'c'+ci+':', JSON.stringify(c.widgetConfig));
-          })));
           if (updated.id&&!String(updated.id).startsWith("new_")) {
-            const res = await api.patch(`/portals/${updated.id}`, updated);
-            console.log('[Portal onSave] PATCH response pages[0].rows[0].cells[0].widgetConfig:', JSON.stringify(res?.pages?.[0]?.rows?.[0]?.cells?.[0]?.widgetConfig));
+            await api.patch(`/portals/${updated.id}`, updated);
           } else {
             const created = await api.post("/portals",{...updated,environment_id:environment.id});
             setEditing(created);
