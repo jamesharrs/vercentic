@@ -6041,7 +6041,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (view.visible_field_ids?.length) { setVisibleFieldIds(view.visible_field_ids); try { localStorage.setItem(colStorageKey, JSON.stringify(view.visible_field_ids)); } catch {} }
     if (view.view_mode)         setView(view.view_mode);
     setFilterChip(null);
-    setPage(1);
+    // Force a reload even if page is already 1 — toggle to 0 then back
+    setPage(0);
+    setTimeout(() => setPage(1), 0);
   };
 
   // Sort handler
