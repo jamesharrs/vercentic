@@ -5806,6 +5806,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [activeFilters, setActiveFilters]     = useState([]);
   const [selectedIds, setSelectedIds]         = useState(new Set());
   const [showViewsMenu, setShowViewsMenu]     = useState(false);
+  const skipColRestoreRef = useRef(false);
   const [showExport,    setShowExport]        = useState(false);
   // Sort state
   const [sortBy,  setSortBy]  = useState(null);
@@ -5865,15 +5866,20 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     const loadedFields = Array.isArray(f) ? f : [];
     setFields(loadedFields);
     // Restore saved column order/selection, or use defaults
-    try {
-      const saved = JSON.parse(localStorage.getItem(colStorageKey));
-      if (saved && saved.length) {
-        setVisibleFieldIds(saved.filter(id => loadedFields.some(ff => ff.id === id)));
-      } else {
+    // Skip if a saved view was just loaded (it already set the columns)
+    if (skipColRestoreRef.current) {
+      skipColRestoreRef.current = false;
+    } else {
+      try {
+        const saved = JSON.parse(localStorage.getItem(colStorageKey));
+        if (saved && saved.length) {
+          setVisibleFieldIds(saved.filter(id => loadedFields.some(ff => ff.id === id)));
+        } else {
+          setVisibleFieldIds(loadedFields.filter(ff => ff.show_in_list).slice(0, 6).map(ff => ff.id));
+        }
+      } catch {
         setVisibleFieldIds(loadedFields.filter(ff => ff.show_in_list).slice(0, 6).map(ff => ff.id));
       }
-    } catch {
-      setVisibleFieldIds(loadedFields.filter(ff => ff.show_in_list).slice(0, 6).map(ff => ff.id));
     }
     const loaded = r.records||[];
     // Apply active filter chip client-side
@@ -6029,7 +6035,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     return recs;
   }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs]);
 
-  const handleLoadView = (view) => {    if (view.filters)           setActiveFilters(view.filters);
+  const handleLoadView = (view) => {
+    skipColRestoreRef.current = true;
+    if (view.filters)           setActiveFilters(view.filters);
     if (view.visible_field_ids?.length) { setVisibleFieldIds(view.visible_field_ids); try { localStorage.setItem(colStorageKey, JSON.stringify(view.visible_field_ids)); } catch {} }
     if (view.view_mode)         setView(view.view_mode);
     setFilterChip(null);
