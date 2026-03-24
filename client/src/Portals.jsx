@@ -2238,6 +2238,26 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   });
   const portalRef = useRef(portal);
   useEffect(() => { portalRef.current = portal; }, [portal]);
+
+  // Auto-save 2 seconds after any change (debounced)
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
+  const autoSaveTimer = useRef(null);
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current) { hasInitialized.current = true; return; }
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      const p = portalRef.current;
+      if (p.id && !String(p.id).startsWith("new_")) {
+        console.log('[Portal Auto-save] saving...');
+        await onSaveRef.current(p);
+        console.log('[Portal Auto-save] done');
+      }
+    }, 2000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portal]);
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showTheme,       setShowTheme]       = useState(false);
   const [showLibrary,     setShowLibrary]     = useState(false);
