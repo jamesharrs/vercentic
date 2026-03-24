@@ -892,6 +892,7 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId }) => {
         <div>{lbl("Saved list (blank = all records)")}
           <select value={cfg.savedListId||""} onChange={e => {
             const list = savedLists.find(l => l.id === e.target.value);
+            console.log('[ListWidget] Selected saved list:', e.target.value, list?.name);
             setMany({ savedListId: e.target.value, savedList: list?.name || "" });
           }} style={inp}>
             <option value="">All {selObj?.plural_name || "records"}</option>
@@ -2235,6 +2236,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
     nav:   init.nav   ||defaultNav(),
     footer:init.footer||defaultFooter(),
   });
+  const portalRef = useRef(portal);
+  useEffect(() => { portalRef.current = portal; }, [portal]);
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showTheme,       setShowTheme]       = useState(false);
   const [showLibrary,     setShowLibrary]     = useState(false);
@@ -2271,8 +2274,13 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   };
 
   const handleSave = async () => {
+    const latest = portalRef.current;
+    // Debug: log what widget configs are being saved
+    (latest.pages||[]).forEach((pg,pi)=>(pg.rows||[]).forEach((r,ri)=>(r.cells||[]).forEach((c,ci)=>{
+      if(c.widgetType==='jobs') console.log('[Portal Save] jobs widget p'+pi+'r'+ri+'c'+ci+':', JSON.stringify(c.widgetConfig));
+    })));
     setSaving(true);
-    await onSave(portal);
+    await onSave(latest);
     setSaving(false);
   };
 
@@ -2524,8 +2532,13 @@ export default function PortalsPage({ environment }) {
         portal={editing}
         onClose={()=>{ setEditing(null); load(); }}
         onSave={async (updated) => {
+          // Debug: log the pages being saved
+          (updated.pages||[]).forEach((pg,pi)=>(pg.rows||[]).forEach((r,ri)=>(r.cells||[]).forEach((c,ci)=>{
+            if(c.widgetType==='jobs') console.log('[Portal onSave] jobs widget p'+pi+'r'+ri+'c'+ci+':', JSON.stringify(c.widgetConfig));
+          })));
           if (updated.id&&!String(updated.id).startsWith("new_")) {
-            await api.patch(`/portals/${updated.id}`, updated);
+            const res = await api.patch(`/portals/${updated.id}`, updated);
+            console.log('[Portal onSave] PATCH response pages[0].rows[0].cells[0].widgetConfig:', JSON.stringify(res?.pages?.[0]?.rows?.[0]?.cells?.[0]?.widgetConfig));
           } else {
             const created = await api.post("/portals",{...updated,environment_id:environment.id});
             setEditing(created);
