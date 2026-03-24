@@ -851,7 +851,7 @@ const MultistepFormConfig = ({ cfg, set, inp, lbl }) => {
 };
 
 // ─── List Widget Config (needs hooks for API calls) ───────────────────────────
-const ListWidgetConfig = ({ cfg, set, inp, lbl, environmentId }) => {
+const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId }) => {
   const [objects, setObjects] = useState([]);
   const [savedLists, setSavedLists] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -875,7 +875,7 @@ const ListWidgetConfig = ({ cfg, set, inp, lbl, environmentId }) => {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
       <div>{lbl("Object type")}
-        <select value={cfg.objectId||""} onChange={e => { onUpdate({ ...cell, widgetConfig: { ...cfg, objectId: e.target.value, savedListId: "", savedList: "" } }); }}
+        <select value={cfg.objectId||""} onChange={e => setMany({ objectId: e.target.value, savedListId: "", savedList: "" })}
           style={inp}>
           <option value="">Select an object…</option>
           {objects.map(o => <option key={o.id} value={o.id}>{o.plural_name || o.name}</option>)}
@@ -885,8 +885,7 @@ const ListWidgetConfig = ({ cfg, set, inp, lbl, environmentId }) => {
         <div>{lbl("Saved list (blank = all records)")}
           <select value={cfg.savedListId||""} onChange={e => {
             const list = savedLists.find(l => l.id === e.target.value);
-            set("savedListId", e.target.value);
-            set("savedList", list?.name || "");
+            setMany({ savedListId: e.target.value, savedList: list?.name || "" });
           }} style={inp}>
             <option value="">All {selObj?.plural_name || "records"}</option>
             {loadingLists && <option disabled>Loading…</option>}
@@ -914,6 +913,7 @@ const ListWidgetConfig = ({ cfg, set, inp, lbl, environmentId }) => {
 const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   const cfg = cell.widgetConfig || {};
   const set = (k, v) => onUpdate({ ...cell, widgetConfig: { ...cfg, [k]: v } });
+  const setMany = (obj) => onUpdate({ ...cell, widgetConfig: { ...cfg, ...obj } });
   const inp = { padding:"7px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13,
     fontFamily:F, outline:"none", color:C.text1, background:C.surface, width:"100%", boxSizing:"border-box" };
   const lbl = (text) => (
@@ -1029,10 +1029,10 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         </div>
       );
       case "jobs": return (
-        <ListWidgetConfig cfg={cfg} set={set} inp={inp} lbl={lbl} environmentId={environmentId}/>
+        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId}/>
       );
       case "job_list": return (
-        <ListWidgetConfig cfg={cfg} set={set} inp={inp} lbl={lbl} environmentId={environmentId}/>
+        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId}/>
       );
       case "team": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>

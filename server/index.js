@@ -103,6 +103,7 @@ app.use('/api/brand-kits',       require('./routes/brand_kits'));
 app.use('/api/reports',      require('./routes/reports'));
 app.use('/api/groups',       require('./routes/groups'));
 app.use('/api/saved-views',      require('./routes/saved_views'));
+app.use('/api/sandboxes', require('./routes/sandbox'));
 app.use('/api/config',           require('./routes/config'));
 app.use('/api/bot',              require('./routes/bot'));
 app.use('/api/interview-types',  require('./routes/interview_types'));
