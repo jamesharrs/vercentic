@@ -189,10 +189,18 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
           ? (Array.isArray(objs)?objs:[]).find(o => o.id === cfg.objectId)
           : (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
         if (!obj) return
-        setObjMeta({ slug: obj.slug, name: obj.name, plural_name: obj.plural_name })
         const limitParam = cfg.limit ? `&limit=${cfg.limit}` : '&limit=200'
-        const data = await api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}${limitParam}`)
-        let all = (data?.records||data||[]).filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled')
+        // Fetch fields alongside records for detail views
+        const [fieldsData, data] = await Promise.all([
+          api.get(`/fields?object_id=${obj.id}`).catch(() => []),
+          api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}${limitParam}`)
+        ])
+        setObjMeta({ slug: obj.slug, name: obj.name, plural_name: obj.plural_name, fields: Array.isArray(fieldsData) ? fieldsData : [] })
+        let all = (data?.records||data||[])
+        // Only filter by status for jobs — people/pools shouldn't be filtered this way
+        if (obj.slug === 'jobs') {
+          all = all.filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled')
+        }
 
         // Apply saved list filters if configured
         if (cfg.savedListId) {
@@ -741,6 +749,8 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'divider': return <DividerWidget cfg={cfg} theme={theme}/>
     case 'spacer':  return <SpacerWidget  cfg={cfg}/>
     case 'jobs':    return <JobsWidget    cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
+    case 'people':  return <JobsWidget    cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
+    case 'list':    return <JobsWidget    cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
     case 'team':    return <TeamWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
     case 'form':    return <FormWidget    cfg={cfg} theme={theme}/>
     case 'job_list':       return <JobsWidget    cfg={{...cfg, compact:true}} theme={theme} portal={portal} api={api} track={track}/>

@@ -913,7 +913,27 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId, cellId }
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
       <div>{lbl("Object type")}
-        <select value={cfg.objectId||""} onChange={e => setMany({ objectId: e.target.value, savedListId: "", savedList: "" })}
+        <select value={cfg.objectId||""} onChange={e => {
+            const newCfg = { objectId: e.target.value, savedListId: "", savedList: "" };
+            setMany(newCfg);
+            // Direct server PATCH — bypass React state chain
+            if (_activePortalCtx.id && cellId) {
+              const pages = _activePortalCtx.pages || [];
+              for (let pi = 0; pi < pages.length; pi++) {
+                for (let ri = 0; ri < (pages[pi]?.rows||[]).length; ri++) {
+                  for (let ci = 0; ci < (pages[pi].rows[ri]?.cells||[]).length; ci++) {
+                    if (pages[pi].rows[ri].cells[ci].id === cellId) {
+                      api.patch(`/portals/${_activePortalCtx.id}/widget-config`, {
+                        pageIndex: pi, rowIndex: ri, cellIndex: ci,
+                        widgetConfig: { ...cfg, ...newCfg }
+                      }).catch(err => console.error('[ListWidget] objectId PATCH failed:', err));
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }}
           style={inp}>
           <option value="">Select an object…</option>
           {objects.map(o => <option key={o.id} value={o.id}>{o.plural_name || o.name}</option>)}
