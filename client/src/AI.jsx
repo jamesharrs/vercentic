@@ -1158,6 +1158,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(match[1].trim()); } catch { return null; }
   };
 
+  const parseCreatePortal = (text) => {
+    const match = text.match(/<CREATE_PORTAL>([\s\S]*?)<\/CREATE_PORTAL>/);
+    if (!match) return null;
+    try { return JSON.parse(match[1].trim()); } catch { return null; }
+  };
+
   const parseCreateForm = (text) => {
     const match = text.match(/<CREATE_FORM>([\s\S]*?)<\/CREATE_FORM>/);
     if (!match) return null;
@@ -1215,6 +1221,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<CREATE_ROLE>[\s\S]*?<\/CREATE_ROLE>/g,"")
     .replace(/<SCHEDULE_INTERVIEW>[\s\S]*?<\/SCHEDULE_INTERVIEW>/g,"")
     .replace(/<CREATE_FORM>[\s\S]*?<\/CREATE_FORM>/g,"")
+    .replace(/<CREATE_PORTAL>[\s\S]*?<\/CREATE_PORTAL>/g,"")
     .replace(/<CREATE_REPORT>[\s\S]*?<\/CREATE_REPORT>/g,"")
     .replace(/<PARSE_CV>[\s\S]*?<\/PARSE_CV>/g,"")
     .replace(/<PARSE_JD>[\s\S]*?<\/PARSE_JD>/g,"")
@@ -1377,6 +1384,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setPendingRole(null);
     setPendingInterview(null);
     setPendingForm(null);
+    setPendingPortal(null);
     setPendingReport(null);
     setParsedPerson(null);
     setParsedJob(null);
@@ -1772,6 +1780,74 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       setPendingInterview(null);
     } catch(err) {
       setMessages(m=>[...m,{role:"assistant",content:`Failed to schedule interview: ${err.message}`,ts:new Date(),error:true}]);
+    }
+    setCreating(false);
+  };
+
+  const handleConfirmPortal = async () => {
+    if (!pendingPortal || !environment?.id) return;
+    setCreating(true);
+    try {
+      const uid = () => Math.random().toString(36).slice(2, 10);
+      
+      // Build the full portal object with IDs
+      const pages = (pendingPortal.pages || []).map(page => ({
+        id: uid(),
+        name: page.name || "Home",
+        slug: page.slug || "/",
+        rows: (page.rows || []).map(row => ({
+          id: uid(),
+          preset: row.preset || "1",
+          bgColor: row.bgColor || "",
+          bgImage: row.bgImage || "",
+          overlayOpacity: row.overlayOpacity || 0,
+          padding: row.padding || "lg",
+          cells: (row.cells || []).map(cell => ({
+            id: uid(),
+            widgetType: cell.widgetType || null,
+            widgetConfig: cell.widgetConfig || {},
+          })),
+        })),
+        seo: page.seo || {},
+      }));
+
+      const portal = await api.post("/portals", {
+        environment_id: environment.id,
+        name: pendingPortal.name || "New Portal",
+        slug: pendingPortal.slug || "/" + (pendingPortal.name || "portal").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        description: pendingPortal.description || "",
+        type: pendingPortal.type || "career_site",
+        status: "draft",
+        theme: pendingPortal.theme || {},
+        pages,
+        nav: pendingPortal.nav || {},
+        footer: pendingPortal.footer || {},
+        gdpr: pendingPortal.gdpr || {},
+      });
+
+      const pageSummary = pages.map(p => p.name).join(", ");
+      const widgetCount = pages.reduce((sum, p) => sum + p.rows.reduce((s, r) => s + r.cells.filter(c => c.widgetType).length, 0), 0);
+
+      setMessages(m => [...m, {
+        role: "assistant",
+        content: `✅ **${portal.name}** portal created as a draft! It has ${pages.length} page${pages.length !== 1 ? "s" : ""} with ${widgetCount} widget${widgetCount !== 1 ? "s" : ""}. Go to Settings → Portals to preview and publish it.`,
+        ts: new Date(),
+        createdNav: {
+          label: portal.name,
+          nav: "settings",
+          icon: "globe",
+          color: pendingPortal.theme?.primaryColor || "#4361EE",
+          sub: `${pendingPortal.type?.replace(/_/g, " ")} · ${pageSummary}`,
+        },
+      }]);
+      setPendingPortal(null);
+    } catch (err) {
+      setMessages(m => [...m, {
+        role: "assistant",
+        content: `Failed to create portal: ${err.message}`,
+        ts: new Date(),
+        error: true,
+      }]);
     }
     setCreating(false);
   };
@@ -2285,7 +2361,77 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                   );
                 })()}
 
-                {/* ── Form Creation Card ── */}
+                {/* ── Portal Creation Card ── */}
+{pendingPortal&&(
+  <div style={{margin:"8px 0",padding:"16px",borderRadius:14,border:"1.5px solid #4361EE",background:"linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%)"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+      <div style={{width:36,height:36,borderRadius:10,background:pendingPortal.theme?.primaryColor||"#4361EE",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(67,97,238,.3)"}}>
+        <Ic n="globe" s={18} c="white"/>
+      </div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:15,fontWeight:800,color:"#0F1729"}}>{pendingPortal.name||"New Portal"}</div>
+        <div style={{fontSize:11,color:"#6B7280",fontWeight:600}}>{(pendingPortal.type||"career_site").replace(/_/g," ")} · {(pendingPortal.pages||[]).length} page{(pendingPortal.pages||[]).length!==1?"s":""}</div>
+      </div>
+    </div>
+
+    {/* Theme preview */}
+    {pendingPortal.theme&&(
+      <div style={{marginBottom:12,padding:"10px 12px",borderRadius:10,background:"white",border:"1px solid #E8ECF8"}}>
+        <div style={{fontSize:10,fontWeight:700,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Theme</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          {[pendingPortal.theme.primaryColor,pendingPortal.theme.secondaryColor,pendingPortal.theme.bgColor,pendingPortal.theme.textColor].filter(Boolean).map((c,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:16,height:16,borderRadius:4,background:c,border:"1px solid #E8ECF8",flexShrink:0}}/>
+              <span style={{fontSize:10,color:"#6B7280",fontFamily:"monospace"}}>{c}</span>
+            </div>
+          ))}
+        </div>
+        {pendingPortal.theme.fontFamily&&(
+          <div style={{marginTop:6,fontSize:11,color:"#374151"}}>
+            Font: <strong>{pendingPortal.theme.fontFamily.replace(/'/g,"").split(",")[0]}</strong>
+            {pendingPortal.theme.buttonStyle&&<> · Button: <strong>{pendingPortal.theme.buttonStyle}</strong></>}
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* Pages & widgets summary */}
+    <div style={{marginBottom:12,display:"flex",flexDirection:"column",gap:4}}>
+      {(pendingPortal.pages||[]).map((page,pi)=>(
+        <div key={pi} style={{padding:"8px 10px",background:"white",borderRadius:8,border:"1px solid #E8ECF8"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <Ic n="fileText" s={11} c="#4361EE"/>
+            <span style={{fontSize:12,fontWeight:700,color:"#0F1729"}}>{page.name||"Page "+(pi+1)}</span>
+            <span style={{fontSize:10,color:"#9CA3AF",marginLeft:"auto"}}>{page.slug}</span>
+          </div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {(page.rows||[]).flatMap(r=>(r.cells||[])).filter(c=>c.widgetType).map((c,ci)=>(
+              <span key={ci} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:"#EEF2FF",color:"#4361EE",fontWeight:600}}>{c.widgetType.replace(/_/g," ")}</span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Nav preview */}
+    {pendingPortal.nav&&(
+      <div style={{marginBottom:12,padding:"6px 10px",borderRadius:8,background:pendingPortal.nav.bg||"#0F1729",display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:pendingPortal.nav.color||"white"}}>{pendingPortal.nav.logo_text||pendingPortal.name}</span>
+        {(pendingPortal.nav.links||[]).map((l,i)=>(
+          <span key={i} style={{fontSize:10,color:(pendingPortal.nav.color||"white")+"99"}}>{l.label}</span>
+        ))}
+      </div>
+    )}
+
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={()=>setPendingPortal(null)} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid #E5E7EB",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
+      <button onClick={handleConfirmPortal} disabled={creating} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:pendingPortal.theme?.primaryColor||"#4361EE",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxShadow:"0 2px 8px rgba(67,97,238,.25)"}}>
+        {creating?<><Ic n="loader" s={12}/> Creating…</>:<><Ic n="globe" s={12}/> Create Portal</>}
+      </button>
+    </div>
+  </div>
+)}
+{/* ── Form Creation Card ── */}
                 {msg.role==="assistant"&&msg.hasForm&&pendingForm&&i===messages.length-1&&(
                   <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #0CAF77",background:"#F0FDF4"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
