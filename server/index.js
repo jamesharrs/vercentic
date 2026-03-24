@@ -267,6 +267,27 @@ initDB().then(() => {
     saveStore();
     console.log(`[migration] Deduped ${portalsDuped} portal(s) with duplicate slugs (${portalsBefore} → ${portalsBefore - portalsDuped} active)`);
   }
+
+  // ── One-shot: set savedListId on careers portal jobs widget if missing ──────
+  const careersPortals = (store.portals || []).filter(p =>
+    !p.deleted_at && p.status === 'published' && (p.slug === '/careers' || p.slug === 'careers')
+  );
+  if (careersPortals.length > 0) {
+    // Find the hybrid jobs saved view
+    const hybridView = (store.saved_views || []).find(v => v.name === 'hybrid jobs');
+    if (hybridView) {
+      careersPortals.forEach(portal => {
+        (portal.pages || []).forEach(pg => (pg.rows || []).forEach(r => (r.cells || []).forEach(cell => {
+          if (cell.widgetType === 'jobs' && !cell.widgetConfig?.savedListId) {
+            cell.widgetConfig = { ...(cell.widgetConfig || {}), savedListId: hybridView.id, savedList: 'hybrid jobs' };
+            console.log(`[migration] Set savedListId=${hybridView.id} on portal ${portal.id} jobs widget`);
+          }
+        })));
+      });
+      const { saveStore: ss } = require('./db/init');
+      ss();
+    }
+  }
   // ───────────────────────────────────────────────────────────────────────────
 
   app.listen(PORT, () => {
