@@ -857,8 +857,11 @@ const MultistepFormConfig = ({ cfg, set, inp, lbl }) => {
   );
 };
 
+// Module-level portal context for direct widget config saves
+let _activePortalCtx = { id: null, pages: null };
+
 // ─── List Widget Config (needs hooks for API calls) ───────────────────────────
-const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId }) => {
+const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId, cellId }) => {
   const [objects, setObjects] = useState([]);
   const [savedLists, setSavedLists] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -892,10 +895,30 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId }) => {
         <div>{lbl("Saved list (blank = all records)")}
           <select value={cfg.savedListId||""} onChange={e => {
             const list = savedLists.find(l => l.id === e.target.value);
+            const newCfg = { savedListId: e.target.value, savedList: list?.name || "" };
             console.log('[ListWidget] Selected saved list:', e.target.value, list?.name);
-            setMany({ savedListId: e.target.value, savedList: list?.name || "" });
-            // Force immediate save — the state chain can be unreliable
-            setTimeout(() => window.dispatchEvent(new CustomEvent('talentos:portal-force-save')), 500);
+            setMany(newCfg);
+            // Direct server PATCH — bypass React state chain
+            if (_activePortalCtx.id && cellId) {
+              const pages = _activePortalCtx.pages || [];
+              let found = false;
+              for (let pi = 0; pi < pages.length && !found; pi++) {
+                for (let ri = 0; ri < (pages[pi]?.rows||[]).length && !found; ri++) {
+                  for (let ci = 0; ci < (pages[pi].rows[ri]?.cells||[]).length && !found; ci++) {
+                    if (pages[pi].rows[ri].cells[ci].id === cellId) {
+                      console.log('[ListWidget] Direct PATCH to server: portal='+_activePortalCtx.id+' p'+pi+'r'+ri+'c'+ci);
+                      api.patch(`/portals/${_activePortalCtx.id}/widget-config`, {
+                        pageIndex: pi, rowIndex: ri, cellIndex: ci,
+                        widgetConfig: { ...cfg, ...newCfg }
+                      }).then(r => console.log('[ListWidget] Direct PATCH result:', JSON.stringify(r)))
+                        .catch(e => console.error('[ListWidget] Direct PATCH failed:', e));
+                      found = true;
+                    }
+                  }
+                }
+              }
+              if (!found) console.warn('[ListWidget] Could not find cell', cellId, 'in portal pages');
+            }
           }} style={inp}>
             <option value="">All {selObj?.plural_name || "records"}</option>
             {loadingLists && <option disabled>Loading…</option>}
@@ -1039,10 +1062,10 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         </div>
       );
       case "jobs": return (
-        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId}/>
+        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id}/>
       );
       case "job_list": return (
-        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId}/>
+        <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id}/>
       );
       case "team": return (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -2239,7 +2262,10 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
     footer:init.footer||defaultFooter(),
   });
   const portalRef = useRef(portal);
-  useEffect(() => { portalRef.current = portal; }, [portal]);
+  useEffect(() => { 
+    portalRef.current = portal;
+    _activePortalCtx = { id: portal.id, pages: portal.pages };
+  }, [portal]);
 
   // Auto-save 2 seconds after any change (debounced)
   const onSaveRef = useRef(onSave);

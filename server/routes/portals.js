@@ -93,6 +93,28 @@ router.patch('/:id', (req, res) => {
   res.json(store.portals[idx]);
 });
 
+// PATCH /:id/widget-config — surgically update a single widget's config
+router.patch('/:id/widget-config', (req, res) => {
+  if (_checkGA(req, res, 'manage_portals') === false) return;
+  ensure();
+  const store = getStore();
+  const idx = (store.portals || []).findIndex(p => p.id === req.params.id && !p.deleted_at);
+  if (idx === -1) return res.status(404).json({ error: 'Portal not found' });
+  const { pageIndex = 0, rowIndex, cellIndex = 0, widgetConfig } = req.body;
+  if (rowIndex === undefined || !widgetConfig) return res.status(400).json({ error: 'rowIndex and widgetConfig required' });
+  const portal = store.portals[idx];
+  const page = portal.pages?.[pageIndex];
+  if (!page) return res.status(400).json({ error: 'Page not found at index ' + pageIndex });
+  const row = page.rows?.[rowIndex];
+  if (!row) return res.status(400).json({ error: 'Row not found at index ' + rowIndex });
+  const cell = row.cells?.[cellIndex];
+  if (!cell) return res.status(400).json({ error: 'Cell not found at index ' + cellIndex });
+  cell.widgetConfig = { ...cell.widgetConfig, ...widgetConfig };
+  portal.updated_at = new Date().toISOString();
+  saveStore();
+  res.json({ ok: true, widgetConfig: cell.widgetConfig });
+});
+
 // DELETE /:id — soft delete
 router.delete('/:id', (req, res) => {
   if (_checkGA(req, res, 'manage_portals') === false) return;
