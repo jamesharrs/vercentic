@@ -5873,10 +5873,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [editRecord, setEditRecord] = useState(null);
   const [page, setPage]         = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
+  const [activeListName, setActiveListName] = useState(null);
   const [showImport, setShowImport] = useState(false);
 
   // Clear selection when object/page/search/filters change
   useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
+  useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab]   = useState("records");
   const [total, setTotal]       = useState(0);
 
@@ -6068,6 +6070,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (view.view_mode)         setView(view.view_mode);
     // Restore filterChip if saved, otherwise clear it
     setFilterChip(view.filter_chip || null);
+    setActiveListName(view.name || null);
     setPage(1);
     setReloadKey(k => k + 1);
   };
@@ -6150,7 +6153,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     <div style={{ minHeight:0 }}>
       {/* Toolbar */}
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", position:"sticky", top:0, zIndex:20, background:"var(--t-bg, #f4f5f8)", paddingBottom:12, paddingTop:4, marginTop:-4 }}>
-        <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>{object.plural_name}</h1>
+        <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>
+          {object.plural_name}
+          {activeListName && <span style={{ fontWeight:400, color:C.accent, fontSize:15, marginLeft:8 }}>/ {activeListName}</span>}
+        </h1>
         <span style={{ fontSize:13, color:C.text3, fontWeight:500 }}>
           {activeFilters.length ? `${displayedRecords.length} of ${total}` : total} record{total!==1?"s":""}
         </span>
@@ -6166,7 +6172,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
               ? filterChip.label || `${filterChip.fieldValue.split(',').length} people`
               : <>{filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldValue}</span></>
             }
-            <button onClick={()=>{setFilterChip(null);setPage(1);}}
+            <button onClick={()=>{setFilterChip(null);setActiveListName(null);setPage(1);}}
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
               <Ic n="x" s={12} c={C.accent}/>
@@ -6285,7 +6291,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       {/* Filter bar — always visible in records tab */}
       {fields.length > 0 && (
         <div style={{ marginBottom:10 }}>
-          <FilterBar fields={fields} filters={activeFilters} onChange={setActiveFilters}/>
+          <FilterBar fields={fields} filters={activeFilters} onChange={f => { setActiveFilters(f); setActiveListName(null); }}/>
         </div>
       )}
 

@@ -141,12 +141,83 @@ export default function CareerSite({ portal, objects, api }) {
 
   const jobObj = objects.find(o => o.slug === 'jobs')
 
+  // Extract savedListId from the jobs widget in the page builder, or from portal config
+  const jobsWidgetConfig = (() => {
+    for (const page of (portal.pages || [])) {
+      for (const row of (page.rows || [])) {
+        for (const cell of (row.cells || [])) {
+          if (cell.widgetType === 'jobs' && cell.widgetConfig?.savedListId) return cell.widgetConfig;
+        }
+      }
+    }
+    return {};
+  })();
+  const savedListId = jobsWidgetConfig.savedListId || portal.config?.saved_view_id || null;
+
   useEffect(() => {
     if (!jobObj) { setLoading(false); return }
-    api.get(`/records?object_id=${jobObj.id}&environment_id=${portal.environment_id}&limit=50`)
-      .then(d => { setJobs((d.records||[]).filter(j => j.data?.status === 'Open' || !j.data?.status)); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [jobObj?.id])
+
+    const loadJobs = async () => {
+      try {
+        // Fetch all jobs first
+        const d = await api.get(`/records?object_id=${jobObj.id}&environment_id=${portal.environment_id}&limit=200`);
+        let allJobs = (d.records || []).filter(j => j.data?.status === 'Open' || !j.data?.status);
+
+        // If a saved list is configured, fetch its filters and apply them
+        if (savedListId) {
+          try {
+            const views = await api.get(`/saved-views?object_id=${jobObj.id}&environment_id=${portal.environment_id}`);
+            const savedView = (Array.isArray(views) ? views : []).find(v => v.id === savedListId);
+            if (savedView) {
+              // Apply filter_chip
+              if (savedView.filter_chip) {
+                const fc = savedView.filter_chip;
+                if (fc.fieldKey === '__ids__') {
+                  const ids = fc.fieldValue.split(',').map(s => s.trim()).filter(Boolean);
+                  allJobs = allJobs.filter(r => ids.includes(r.id));
+                } else {
+                  allJobs = allJobs.filter(r => {
+                    const v = r.data?.[fc.fieldKey];
+                    if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === fc.fieldValue.toLowerCase());
+                    return String(v || '').toLowerCase() === fc.fieldValue.toLowerCase();
+                  });
+                }
+              }
+              // Apply activeFilters (these use fieldId, need to resolve to api_key)
+              if (savedView.filters?.length) {
+                // Fetch fields to resolve fieldId -> api_key
+                let fieldMap = {};
+                try {
+                  const fields = await api.get(`/fields?object_id=${jobObj.id}`);
+                  if (Array.isArray(fields)) fields.forEach(f => { fieldMap[f.id] = f.api_key; });
+                } catch {}
+
+                allJobs = allJobs.filter(record => savedView.filters.every(filt => {
+                  const apiKey = fieldMap[filt.fieldId] || filt.fieldKey || '';
+                  const rawVal = record.data?.[apiKey];
+                  const op = filt.op;
+                  const fv = filt.value;
+                  if (op === 'is empty') return !rawVal;
+                  if (op === 'is not empty') return !!rawVal;
+                  const strVal = String(rawVal ?? '').toLowerCase();
+                  const strFv = String(fv ?? '').toLowerCase();
+                  if (op === 'contains') return strVal.includes(strFv);
+                  if (op === 'is') return strVal === strFv;
+                  if (op === 'is not') return strVal !== strFv;
+                  if (op === 'includes') return Array.isArray(rawVal) ? rawVal.some(v => String(v).toLowerCase() === strFv) : strVal === strFv;
+                  return true;
+                }));
+              }
+            }
+          } catch (e) { console.warn('Failed to load saved view filters:', e); }
+        }
+
+        setJobs(allJobs);
+      } catch (e) { console.error('Failed to load jobs:', e); }
+      setLoading(false);
+    };
+    loadJobs();
+  }, [jobObj?.id, savedListId])
 
   const depts = [...new Set(jobs.map(j => j.data?.department).filter(Boolean))]
   const filtered = jobs.filter(j => {

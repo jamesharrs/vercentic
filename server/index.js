@@ -71,8 +71,8 @@ app.use('/api', (req, res, next) => {
   if (AUTH_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
   // Skip portal apply + objects/records endpoints (public — unauthenticated portal visitors)
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
-  // Objects + records are read-only and needed by portal job widgets
-  if (req.method === 'GET' && (req.path.startsWith('/objects') || req.path.startsWith('/records'))) return next();
+  // Objects + records + fields + saved-views are read-only and needed by portal job widgets
+  if (req.method === 'GET' && (req.path.startsWith('/objects') || req.path.startsWith('/records') || req.path.startsWith('/fields') || req.path.startsWith('/saved-views'))) return next();
   // Skip OPTIONS (CORS preflight)
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) {
