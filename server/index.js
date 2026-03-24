@@ -245,6 +245,30 @@ initDB().then(() => {
   }
   // ───────────────────────────────────────────────────────────────────────────
 
+  // ── Portal dedup migration — remove duplicate slugs per environment ────────
+  const portalsBefore = (store.portals || []).filter(p => !p.deleted_at).length;
+  const portalSeen = {};
+  let portalsDuped = 0;
+  (store.portals || []).filter(p => !p.deleted_at).forEach(p => {
+    const key = `${p.environment_id}::${(p.slug || '').replace(/^\//, '').toLowerCase()}`;
+    if (!portalSeen[key]) portalSeen[key] = [];
+    portalSeen[key].push(p);
+  });
+  Object.values(portalSeen).forEach(group => {
+    if (group.length <= 1) return;
+    group.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+    for (let i = 1; i < group.length; i++) {
+      const idx = store.portals.findIndex(p => p.id === group[i].id);
+      if (idx !== -1) { store.portals[idx].deleted_at = new Date().toISOString(); portalsDuped++; }
+    }
+  });
+  if (portalsDuped > 0) {
+    const { saveStore } = require('./db/init');
+    saveStore();
+    console.log(`[migration] Deduped ${portalsDuped} portal(s) with duplicate slugs (${portalsBefore} → ${portalsBefore - portalsDuped} active)`);
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   app.listen(PORT, () => {
     console.log(`Vercentic API → http://localhost:${PORT}`);
     // Start agent scheduler
