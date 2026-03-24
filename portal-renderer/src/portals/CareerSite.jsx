@@ -152,7 +152,7 @@ export default function CareerSite({ portal, objects, api }) {
     }
     return {};
   })();
-  const savedListId = jobsWidgetConfig.savedListId || portal.config?.saved_view_id || null;
+  const savedListId = jobsWidgetConfig.savedListId || null;
 
   useEffect(() => {
     if (!jobObj) { setLoading(false); return }

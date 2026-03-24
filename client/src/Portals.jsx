@@ -525,62 +525,7 @@ const ThemeDrawer = ({ theme, onChange, onClose }) => {
   );
 };
 
-// ─── Portal Data Tab (saved list picker for jobs widget) ─────────────────────
-const PortalDataTab = ({ portal, onChange, lbl, inp }) => {
-  const [savedLists, setSavedLists] = useState([]);
-  const [objects, setObjects] = useState([]);
-  const cfg = portal.config || {};
-  const setCfg = (k, v) => onChange({ ...portal, config: { ...cfg, [k]: v } });
-
-  useEffect(() => {
-    if (!portal.environment_id) return;
-    api.get(`/objects?environment_id=${portal.environment_id}`).then(d => {
-      const objs = Array.isArray(d) ? d : [];
-      setObjects(objs);
-      const jobObj = objs.find(o => o.slug === 'jobs');
-      if (jobObj) {
-        api.get(`/saved-views?object_id=${jobObj.id}&environment_id=${portal.environment_id}`)
-          .then(v => setSavedLists(Array.isArray(v) ? v : []));
-      }
-    });
-  }, [portal.environment_id]);
-
-  const jobObj = objects.find(o => o.slug === 'jobs');
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.6 }}>
-        Control which records appear on your portal. Use a saved list to show a filtered subset of jobs.
-      </div>
-      {lbl("Job source")}
-      <select value={cfg.saved_view_id || ""} onChange={e => setCfg("saved_view_id", e.target.value)} style={inp}>
-        <option value="">All open jobs</option>
-        {savedLists.map(l => (
-          <option key={l.id} value={l.id}>
-            {l.name}{l.filter_chip ? ` (${l.filter_chip.fieldLabel}: ${l.filter_chip.fieldValue})` : l.filters?.length ? ` (${l.filters.length} filters)` : ""}
-          </option>
-        ))}
-      </select>
-      {!savedLists.length && jobObj && (
-        <div style={{ fontSize: 12, color: C.text3, fontStyle: "italic", padding: "8px 10px", background: C.surface2, borderRadius: 8 }}>
-          No saved lists found for Jobs. Go to the Jobs list, apply filters, then click Lists → Save current list.
-        </div>
-      )}
-      {cfg.saved_view_id && (
-        <div style={{ fontSize: 12, color: C.green, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-          <Ic n="check" s={12} c={C.green}/> Portal will show only jobs matching this saved list
-        </div>
-      )}
-      {!cfg.saved_view_id && (
-        <div style={{ fontSize: 12, color: C.text3 }}>
-          All jobs with status "Open" will be shown on the portal.
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Portal Settings Drawer (GDPR, branding info, embed) ─────────────────────
+// ─── Portal Settings Modal ────────────────────────────────────────────────────
 const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
   const [tab, setTab] = useState("branding");
   const gdpr = portal.gdpr || {};
@@ -592,23 +537,25 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
   const portalUrl = `${window.location.origin}/${(portal.slug||"careers").replace(/^\//,"")}`;
   const embedCode = `<script src="${window.location.origin}/portal-embed.js" data-portal="${portal.id}"></script>`;
   return (
-    <div style={{position:"fixed",top:0,right:0,width:340,height:"100vh",background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:500,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.1)"}}>
-      <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <Ic n="settings" s={16} c={C.accent}/>
-          <span style={{fontSize:15,fontWeight:800,color:C.text1}}>Portal Settings</span>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.4)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:C.surface,borderRadius:18,width:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"18px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <Ic n="settings" s={16} c={C.accent}/>
+            <span style={{fontSize:16,fontWeight:800,color:C.text1}}>Portal Settings</span>
+          </div>
+          <button onClick={onClose} style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text2,padding:"5px 10px",display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:600,fontFamily:F}}>
+            <Ic n="x" s={12}/> Close
+          </button>
         </div>
-        <button onClick={onClose} style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text2,padding:"5px 10px",display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:600,fontFamily:F}}>
-          <Ic n="x" s={12}/> Close
-        </button>
-      </div>
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
-        {[["branding","Branding"],["data","Data"],["gdpr","GDPR"],["embed","Embed"]].map(([id,l])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"9px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
-        {tab==="branding"&&<>
+        <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
+          {[["branding","Branding"],["domain","Domain & Embed"],["gdpr","GDPR"]].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
+          {tab==="branding"&&<>
           {lbl("Company name")}<input value={br.company_name||""} onChange={e=>setBr("company_name",e.target.value)} placeholder="Acme Corp" style={inp}/>
           {lbl("Contact email (shown on app status page)")}<input value={br.contact_email||""} onChange={e=>setBr("contact_email",e.target.value)} placeholder="careers@acme.com" style={inp}/>
           {lbl("Company logo URL")}<input value={portal.nav?.logoUrl||""} onChange={e=>onChange({...portal,nav:{...(portal.nav||{}),logoUrl:e.target.value}})} placeholder="https://…/logo.svg" style={inp}/>
@@ -616,7 +563,29 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           {lbl("Tagline / description")}<input value={br.tagline||""} onChange={e=>setBr("tagline",e.target.value)} placeholder="Building the future, one hire at a time" style={inp}/>
           {lbl("Portal name (internal)")}<input value={portal.name||""} onChange={e=>onChange({...portal,name:e.target.value})} style={inp}/>
         </>}
-        {tab==="data"&&<PortalDataTab portal={portal} onChange={onChange} lbl={lbl} inp={inp}/>}
+        {tab==="domain"&&<>
+          {lbl("Portal URL")}
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:C.surface2,fontSize:12,color:C.text1,border:`1px solid ${C.border}`,wordBreak:"break-all"}}>{portalUrl}</code>
+            <button onClick={()=>navigator.clipboard?.writeText(portalUrl)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2}}>Copy</button>
+          </div>
+          {lbl("Custom slug")}
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:12,color:C.text3}}>{window.location.origin}/</span>
+            <input value={portal.slug||""} onChange={e=>onChange({...portal,slug:e.target.value.replace(/[^a-z0-9-]/gi,"").toLowerCase()})} placeholder="careers" style={{...inp,flex:1}}/>
+          </div>
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:4}}/>
+          {lbl("Application status page")}
+          <div style={{fontSize:12,color:C.text3,marginBottom:4}}>After applying, candidates can view their status at:</div>
+          <code style={{display:"block",padding:"8px 10px",borderRadius:8,background:C.surface2,fontSize:11,color:C.text1,border:`1px solid ${C.border}`,wordBreak:"break-all"}}>{portalUrl}/application/&#123;person_id&#125;</code>
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:10}}/>
+          {lbl("Embed snippet")}
+          <div style={{fontSize:12,color:C.text3,marginBottom:6}}>Paste this on your website to show live job listings:</div>
+          <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
+            <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:"#0F1729",fontSize:11,color:"#A5F3FC",border:"none",wordBreak:"break-all",lineHeight:1.6}}>{embedCode}</code>
+            <button onClick={()=>navigator.clipboard?.writeText(embedCode)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2,marginTop:2}}>Copy</button>
+          </div>
+        </>}
         {tab==="gdpr"&&<>
           <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
             <div onClick={()=>setG("enabled",!gdpr.enabled)} style={{width:36,height:20,borderRadius:10,background:gdpr.enabled?C.green:C.border,position:"relative",cursor:"pointer",transition:"background .2s"}}>
@@ -632,25 +601,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           {lbl("Banner background colour")}
           <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={gdpr.bannerBg||"#0F1729"} onChange={e=>setG("bannerBg",e.target.value)} style={{width:34,height:28,padding:0,border:"none",cursor:"pointer",borderRadius:4}}/><input value={gdpr.bannerBg||""} onChange={e=>setG("bannerBg",e.target.value)} placeholder="#0F1729" style={{...inp,flex:1}}/></div>
         </>}
-        {tab==="embed"&&<>
-          <div style={{fontSize:13,color:C.text2,lineHeight:1.6}}>Embed this portal — or just the job board — on any existing website with a single script tag.</div>
-          {lbl("Full portal URL")}
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:C.surface2,fontSize:12,color:C.text1,border:`1px solid ${C.border}`,wordBreak:"break-all"}}>{portalUrl}</code>
-            <button onClick={()=>navigator.clipboard?.writeText(portalUrl)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2}}>Copy</button>
-          </div>
-          {lbl("Application status page")}
-          <div style={{fontSize:12,color:C.text3,marginBottom:4}}>After applying, candidates can view their status at:</div>
-          <code style={{display:"block",padding:"8px 10px",borderRadius:8,background:C.surface2,fontSize:11,color:C.text1,border:`1px solid ${C.border}`,wordBreak:"break-all"}}>{portalUrl}/application/&#123;person_id&#125;</code>
-          <div style={{fontSize:11,color:C.text3}}>The <code>person_id</code> is returned in the apply API response and should be stored client-side (e.g. in localStorage) to show the candidate their status later.</div>
-          {lbl("Embed snippet (job board only)")}
-          <div style={{fontSize:12,color:C.text3,marginBottom:6}}>Paste this anywhere on your website to show live job listings:</div>
-          <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
-            <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:"#0F1729",fontSize:11,color:"#A5F3FC",border:"none",wordBreak:"break-all",lineHeight:1.6}}>{embedCode}</code>
-            <button onClick={()=>navigator.clipboard?.writeText(embedCode)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2,marginTop:2}}>Copy</button>
-          </div>
-          <div style={{padding:"10px 12px",borderRadius:8,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E"}}>The embed script is served from <strong>vercentic.com</strong>. The job board updates live as you publish changes in the portal builder.</div>
-        </>}
+        </div>
       </div>
     </div>
   );
