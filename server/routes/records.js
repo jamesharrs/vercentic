@@ -113,7 +113,8 @@ router.get('/search', (req, res) => {
 router.get('/', (req, res) => {
   const { object_id, environment_id, page=1, limit=50, search, sort_dir='desc', filter_key, filter_value, user_id } = req.query;
   if (!object_id||!environment_id) return res.status(400).json({error:'object_id and environment_id required'});
-  if (checkPerm(req, res, object_id, 'view') === false) return;
+  // Skip permission check for unauthenticated GET requests (portal/career site visitors)
+  if (req.currentUser && checkPerm(req, res, object_id, 'view') === false) return;
   let records = query('records', r=>r.object_id===object_id&&r.environment_id===environment_id&&!r.deleted_at);
 
   // Org scoping: auto-scoped to currentUser's subtree (or explicit user_id override)
@@ -140,7 +141,8 @@ router.get('/', (req, res) => {
   records.sort((a,b)=>sort_dir==='asc'?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
   const total = records.length;
   const start = (parseInt(page)-1)*parseInt(limit);
-  const visibleRecords = applyFieldVisibilityBulk(req.currentUser, records.slice(start,start+parseInt(limit)), object_id);
+  const pageRecords = records.slice(start,start+parseInt(limit));
+  const visibleRecords = req.currentUser ? applyFieldVisibilityBulk(req.currentUser, pageRecords, object_id) : pageRecords;
   res.json({records:visibleRecords,pagination:{total,page:parseInt(page),limit:parseInt(limit),pages:Math.ceil(total/parseInt(limit))}});
 });
 
@@ -192,8 +194,8 @@ router.get('/linked-jobs', (req, res) => {
 router.get('/:id', (req, res) => {
   const r = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!r) return res.status(404).json({error:'Not found'});
-  if (checkPerm(req, res, r.object_id, 'view') === false) return;
-  res.json(applyFieldVisibility(req.currentUser, r, r.object_id));
+  if (req.currentUser && checkPerm(req, res, r.object_id, 'view') === false) return;
+  res.json(req.currentUser ? applyFieldVisibility(req.currentUser, r, r.object_id) : r);
 });
 
 router.post('/', (req, res) => {
