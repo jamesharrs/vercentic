@@ -65,6 +65,7 @@ const AUTH_EXEMPT_PATHS = [
   '/superadmin',                       // super admin console
   '/bot',                              // bot/interview routes (public)
   '/tenant-reset',                     // tenant data reset (password protected)
+  '/cleanup-seeds',                    // one-shot seed data cleanup
 ];
 app.use('/api', (req, res, next) => {
   // Skip for exempt prefixes
@@ -116,6 +117,26 @@ app.use('/api/superadmin',         require('./routes/superadmin'));
 app.use('/api/superadmin/clients', require('./routes/superadmin_clients'));
 app.use('/api/superadmin/demo',    require('./routes/demo_seed'));
 app.use('/api/tenant-reset',       require('./routes/admin_reset'));
+
+// One-shot seed data cleanup — password protected
+app.post('/api/cleanup-seeds', (req, res) => {
+  const pw = req.query.pw || req.body?.pw;
+  if (pw !== 'talentos-internal-2026') return res.status(401).json({ error: 'bad password' });
+  const store = getStore();
+  const { saveStore } = require('./db/init');
+  const results = {};
+  const seedPatterns = ['seed', 'demo', 'test-data'];
+  const isSeeded = (r) => { const c = (r.created_by||'').toLowerCase(); return seedPatterns.some(p => c.includes(p)); };
+  (store.records || []).forEach(r => {
+    if (!r.deleted_at && isSeeded(r)) {
+      r.deleted_at = new Date().toISOString();
+      const objName = r.object_id;
+      results[objName] = (results[objName] || 0) + 1;
+    }
+  });
+  saveStore();
+  res.json({ deleted: results, total: Object.values(results).reduce((a,b)=>a+b, 0) });
+});
 app.use('/api/file-types',         require('./routes/file_types'));
 app.use('/api/cv-parse',           require('./routes/cv_parse'));
 app.use('/api/doc-extract',        require('./routes/doc_extract'));
