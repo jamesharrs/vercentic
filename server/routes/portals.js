@@ -84,6 +84,8 @@ router.post('/', (req, res) => {
     slug: finalSlug,
     description: description || '',
     status: status || 'draft',
+    access_type: req.body.access_type || 'public',
+    allowed_roles: req.body.allowed_roles || [],
     theme: theme || {},
     pages: pages || [],
     deleted_at: null, created_at: now, updated_at: now,
@@ -113,7 +115,7 @@ router.patch('/:id', (req, res) => {
     if (conflict) return res.status(409).json({ error: `Slug "${newSlug}" already exists in this environment`, existing_id: conflict.id });
   }
 
-  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages', 'nav', 'footer', 'branding', 'gdpr', 'config', 'custom_domain', 'type'];
+  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages', 'nav', 'footer', 'branding', 'gdpr', 'config', 'custom_domain', 'type', 'access_type', 'allowed_roles'];
   const updates = { updated_at: new Date().toISOString() };
   allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
   store.portals[idx] = { ...store.portals[idx], ...updates };

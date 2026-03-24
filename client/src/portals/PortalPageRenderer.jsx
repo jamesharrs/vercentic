@@ -17,6 +17,8 @@ const ICONS = {
   building: "2 20h20M6 20V10l6-6 6 6v10M10 20v-5h4v5",
   arrowLeft: "19 12H5M12 19l-7-7 7-7",
   search: "21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
+  user: "20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 110 8 4 4 0 010-8z",
+  database: "21 5c0 1.1-4 2-9 2s-9-.9-9-2M21 5v14c0 1.1-4 2-9 2s-9-.9-9-2V5",
 }
 
 const Tag = ({ children, color }) => (
@@ -168,7 +170,8 @@ const SpacerWidget = ({ cfg }) => {
 }
 
 const JobsWidget = ({ cfg, theme, portal, api }) => {
-  const [jobs,     setJobs]     = useState([])
+  const [records, setRecords] = useState([])
+  const [objMeta, setObjMeta] = useState(null) // { slug, name, plural_name, fields }
   const [search,   setSearch]   = useState('')
   const [dept,     setDept]     = useState('all')
   const [location, setLocation] = useState('all')
@@ -178,11 +181,15 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
 
   useEffect(() => {
     if (!portal?.environment_id) return
-    const loadJobs = async () => {
+    const loadRecords = async () => {
       try {
         const objs = await api.get(`/objects?environment_id=${portal.environment_id}`)
-        const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
+        // Use cfg.objectId if set, otherwise fall back to jobs slug
+        const obj = cfg.objectId
+          ? (Array.isArray(objs)?objs:[]).find(o => o.id === cfg.objectId)
+          : (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
         if (!obj) return
+        setObjMeta({ slug: obj.slug, name: obj.name, plural_name: obj.plural_name })
         const limitParam = cfg.limit ? `&limit=${cfg.limit}` : '&limit=200'
         const data = await api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}${limitParam}`)
         let all = (data?.records||data||[]).filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled')
@@ -230,26 +237,73 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
             }
           } catch (e) { console.warn('Failed to load saved list filters:', e) }
         }
-        setJobs(all)
-      } catch (e) { console.error('Failed to load jobs:', e) }
+        setRecords(all)
+      } catch (e) { console.error('Failed to load records:', e) }
     }
-    loadJobs()
-  }, [portal?.environment_id, cfg.savedListId, cfg.limit])
+    loadRecords()
+  }, [portal?.environment_id, cfg.objectId, cfg.savedListId, cfg.limit])
 
-  const depts     = ['all', ...new Set(jobs.map(j => j.data?.department).filter(Boolean))]
-  const locations = ['all', ...new Set(jobs.map(j => j.data?.location).filter(Boolean))]
-  const workTypes = ['all', ...new Set(jobs.map(j => j.data?.work_type).filter(Boolean))]
-  const filtered = jobs.filter(j => {
+  const isJobs = objMeta?.slug === 'jobs'
+  const isPeople = objMeta?.slug === 'people'
+  const depts     = ['all', ...new Set(records.map(j => j.data?.department).filter(Boolean))]
+  const locations = ['all', ...new Set(records.map(j => j.data?.location).filter(Boolean))]
+  const workTypes = ['all', ...new Set(records.map(j => j.data?.work_type).filter(Boolean))]
+  const filtered = records.filter(j => {
     const d = j.data || {}
     if (dept     !== 'all' && d.department !== dept)       return false
     if (location !== 'all' && d.location   !== location)   return false
     if (workType !== 'all' && d.work_type  !== workType)   return false
-    if (search && !`${d.job_title} ${d.department} ${d.location}`.toLowerCase().includes(search.toLowerCase())) return false
+    // Generic search across all data fields
+    if (search) {
+      const haystack = Object.values(d).map(v => Array.isArray(v) ? v.join(' ') : String(v||'')).join(' ').toLowerCase()
+      if (!haystack.includes(search.toLowerCase())) return false
+    }
     return true
   })
 
-  if (selected && applying) return <ApplyForm job={selected} portal={portal} theme={theme} api={api} onBack={()=>setApplying(false)} onSuccess={()=>{setApplying(false);setSelected(null)}}/>
-  if (selected) return <JobDetail job={selected} theme={theme} onBack={()=>setSelected(null)} onApply={()=>setApplying(true)}/>
+  // Helper: get display name for a record
+  const getRecordName = (r) => {
+    const d = r.data || {}
+    if (isPeople) return [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unnamed'
+    if (isJobs) return d.job_title || d.name || 'Open Role'
+    return d.name || d.title || d.pool_name || Object.values(d).find(v => typeof v === 'string' && v.length > 2) || 'Record'
+  }
+  const getRecordSub = (r) => {
+    const d = r.data || {}
+    if (isPeople) return d.current_title || d.job_title || d.department || ''
+    if (isJobs) return d.department || ''
+    return d.description || d.category || ''
+  }
+  const getRecordIcon = () => isPeople ? ICONS.user : isJobs ? ICONS.briefcase : ICONS.database
+  const getRecordTags = (r) => {
+    const d = r.data || {}
+    const tags = []
+    if (isPeople) {
+      if (d.department) tags.push({ label: d.department, color: '#6366F1' })
+      if (d.location) tags.push({ label: d.location, color: '#0CA678' })
+      if (d.skills) { const sk = Array.isArray(d.skills) ? d.skills.slice(0,3) : []; sk.forEach(s => tags.push({ label: s, color: '#F79009' })) }
+      if (d.status) tags.push({ label: d.status, color: '#9DA8C7' })
+    } else if (isJobs) {
+      if (d.department) tags.push({ label: d.department, color: '#6366F1' })
+      if (d.location) tags.push({ label: d.location, color: '#0CA678' })
+      if (d.work_type) tags.push({ label: d.work_type, color: '#F79009' })
+      if (d.employment_type) tags.push({ label: d.employment_type, color: '#9DA8C7' })
+    } else {
+      // Generic: show first few string fields as tags
+      Object.entries(d).slice(0, 4).forEach(([k, v]) => {
+        if (typeof v === 'string' && v.length > 1 && v.length < 40 && k !== 'name' && k !== 'title')
+          tags.push({ label: v, color: '#6366F1' })
+      })
+    }
+    return tags
+  }
+
+  if (selected && applying && isJobs) return <ApplyForm job={selected} portal={portal} theme={theme} api={api} onBack={()=>setApplying(false)} onSuccess={()=>{setApplying(false);setSelected(null)}}/>
+  if (selected && isJobs) return <JobDetail job={selected} theme={theme} onBack={()=>setSelected(null)} onApply={()=>setApplying(true)}/>
+  if (selected && isPeople) return <RecordDetailView record={selected} theme={theme} getName={getRecordName} getSub={getRecordSub} getTags={getRecordTags} onBack={()=>setSelected(null)} objectName={objMeta?.name||'Record'}/>
+
+  const searchPlaceholder = isPeople ? 'Search people…' : isJobs ? 'Search roles…' : `Search ${objMeta?.plural_name||'records'}…`
+  const countLabel = isJobs ? `${filtered.length} open position${filtered.length!==1?'s':''}` : `${filtered.length} ${(objMeta?.plural_name||'records').toLowerCase()}`
 
   return (
     <div id="jobs">
@@ -257,7 +311,7 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
       <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap' }}>
         <div style={{ flex:'1 1 200px', position:'relative', display:'flex', alignItems:'center' }}>
           <Icon path={ICONS.search} size={16} color="#9CA3AF" style={{ position:'absolute', left:12, pointerEvents:'none' }}/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search roles…"
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={searchPlaceholder}
             style={{ width:'100%', padding:'10px 16px 10px 38px', borderRadius:theme.borderRadius||8, border:'1.5px solid #E8ECF8', fontSize:14, fontFamily:theme.fontFamily, outline:'none', color:theme.textColor||'#0F1729', background:'#fff', boxSizing:'border-box' }}/>
         </div>
         {depts.length > 2 && cfg.showFilters !== false && (
@@ -285,32 +339,72 @@ const JobsWidget = ({ cfg, theme, portal, api }) => {
           </button>
         )}
       </div>
-      <p style={{ fontSize:13, color:theme.textColor||'#6B7280', opacity:0.6, marginBottom:16, fontFamily:theme.fontFamily }}>{filtered.length} open position{filtered.length!==1?'s':''}</p>
+      <p style={{ fontSize:13, color:theme.textColor||'#6B7280', opacity:0.6, marginBottom:16, fontFamily:theme.fontFamily }}>{countLabel}</p>
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {filtered.map(job => {
-          const d = job.data||{}
+        {filtered.map(rec => {
+          const d = rec.data||{}
+          const initials = isPeople ? [d.first_name?.[0],d.last_name?.[0]].filter(Boolean).join('').toUpperCase() : null
           return (
-            <div key={job.id} onClick={() => setSelected(job)}
+            <div key={rec.id} onClick={() => setSelected(rec)}
               style={{ background:'#fff', borderRadius:theme.borderRadius||12, border:'1.5px solid #E8ECF8', padding:'18px 24px', cursor:'pointer', display:'flex', alignItems:'center', gap:16, transition:'all .15s' }}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=theme.primaryColor;e.currentTarget.style.boxShadow=`0 4px 20px ${theme.primaryColor}20`}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor='#E8ECF8';e.currentTarget.style.boxShadow='none'}}>
-              <div style={{ width:44, height:44, borderRadius:12, background:`${theme.primaryColor}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <Icon path={ICONS.briefcase} size={20} color={theme.primaryColor}/>
-              </div>
+              {isPeople ? (
+                <div style={{ width:44, height:44, borderRadius:'50%', background:`${theme.primaryColor}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:15, fontWeight:700, color:theme.primaryColor }}>
+                  {initials || '?'}
+                </div>
+              ) : (
+                <div style={{ width:44, height:44, borderRadius:12, background:`${theme.primaryColor}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <Icon path={getRecordIcon()} size={20} color={theme.primaryColor}/>
+                </div>
+              )}
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:16, fontWeight:700, color:theme.textColor||'#0F1729', fontFamily:theme.fontFamily, marginBottom:4 }}>{d.job_title||'Open Role'}</div>
+                <div style={{ fontSize:16, fontWeight:700, color:theme.textColor||'#0F1729', fontFamily:theme.fontFamily, marginBottom:4 }}>{getRecordName(rec)}</div>
+                {getRecordSub(rec) && <div style={{ fontSize:13, color:theme.textColor||'#6B7280', opacity:0.7, marginBottom:4 }}>{getRecordSub(rec)}</div>}
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {d.department&&<Tag color="#6366F1">{d.department}</Tag>}
-                  {d.location&&<Tag color="#0CA678">{d.location}</Tag>}
-                  {d.work_type&&<Tag color="#F79009">{d.work_type}</Tag>}
-                  {d.employment_type&&<Tag color="#9DA8C7">{d.employment_type}</Tag>}
+                  {getRecordTags(rec).map((t,i) => <Tag key={i} color={t.color}>{t.label}</Tag>)}
                 </div>
               </div>
-              <span style={{ ...getButtonStyle(theme), textDecoration:'none', fontSize:13, padding:'8px 16px' }}>View Role →</span>
+              {isJobs && <span style={{ ...getButtonStyle(theme), textDecoration:'none', fontSize:13, padding:'8px 16px' }}>View Role →</span>}
+              {isPeople && <span style={{ ...getButtonStyle(theme), textDecoration:'none', fontSize:13, padding:'8px 16px' }}>View Profile →</span>}
             </div>
           )
         })}
-        {filtered.length===0 && <div style={{ textAlign:'center', padding:'48px 24px', color:theme.textColor||'#6B7280', opacity:0.5, fontFamily:theme.fontFamily }}>No open positions match your search.</div>}
+        {filtered.length===0 && <div style={{ textAlign:'center', padding:'48px 24px', color:theme.textColor||'#6B7280', opacity:0.5, fontFamily:theme.fontFamily }}>{cfg.emptyText || `No ${(objMeta?.plural_name||'records').toLowerCase()} match your search.`}</div>}
+      </div>
+    </div>
+  )
+}
+
+// Generic record detail view (for People, Talent Pools etc.)
+const RecordDetailView = ({ record, theme, getName, getSub, getTags, onBack, objectName }) => {
+  const d = record.data || {}
+  const name = getName(record)
+  const sub = getSub(record)
+  const tags = getTags(record)
+  const initials = [d.first_name?.[0], d.last_name?.[0]].filter(Boolean).join('').toUpperCase()
+  return (
+    <div>
+      <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:theme.primaryColor, fontWeight:600, fontSize:14, padding:'0 0 20px', fontFamily:theme.fontFamily, display:'flex', alignItems:'center', gap:6 }}>
+        <Icon path={ICONS.arrowLeft} size={14} color={theme.primaryColor}/> Back to all {objectName?.toLowerCase() || 'records'}
+      </button>
+      <div style={{ background:'#fff', borderRadius:16, border:'1px solid #E8ECF8', padding:32 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:24 }}>
+          {initials && <div style={{ width:64, height:64, borderRadius:'50%', background:`${theme.primaryColor}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:700, color:theme.primaryColor, flexShrink:0 }}>{initials}</div>}
+          <div>
+            <h1 style={{ margin:'0 0 4px', fontSize:26, fontWeight:800, color:theme.textColor||'#0F1729', fontFamily:theme.headingFont||theme.fontFamily }}>{name}</h1>
+            {sub && <p style={{ margin:0, fontSize:15, color:theme.textColor||'#6B7280', opacity:0.7 }}>{sub}</p>}
+          </div>
+        </div>
+        {tags.length > 0 && <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:24 }}>{tags.map((t,i)=><Tag key={i} color={t.color}>{t.label}</Tag>)}</div>}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:16 }}>
+          {Object.entries(d).filter(([k,v]) => v && typeof v !== 'object' && !['id','created_at','updated_at','deleted_at'].includes(k)).map(([k,v]) => (
+            <div key={k} style={{ padding:'12px 16px', background:'#F8F9FC', borderRadius:10 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{k.replace(/_/g,' ')}</div>
+              <div style={{ fontSize:14, color:theme.textColor||'#0F1729', fontWeight:500 }}>{String(v)}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

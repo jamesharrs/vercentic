@@ -59,7 +59,107 @@ export default function PortalApp({ slug }) {
   if (loading) return <Spinner color={portal?.branding?.primary_color}/>
   if (error || !portal) return <ErrorScreen message={error}/>
 
-  const props = { portal, objects, api }
-  // Always use the page renderer — it renders the actual pages/widgets from the builder
+  // Internal portal — require login
+  if (portal.access_type === 'internal') {
+    return <InternalPortalGate portal={portal} api={api}/>
+  }
+
+  // Public portal — render directly
   return <PortalPageRenderer portal={portal} api={api}/>
+}
+
+// ─── Internal Portal Gate ─────────────────────────────────────────────────────
+function InternalPortalGate({ portal, api }) {
+  const [user, setUser] = useState(null)
+  const [checking, setChecking] = useState(true)
+  const [loginError, setLoginError] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
+  const br = portal.branding || portal.theme || {}
+  const primary = br.primary_color || br.primaryColor || '#4361EE'
+
+  // Check if already logged in
+  useEffect(() => {
+    api.get('/auth/me').then(u => {
+      if (u?.id) {
+        // Check role if allowed_roles is set
+        if (portal.allowed_roles?.length) {
+          const roleSlug = u.role?.slug || ''
+          if (portal.allowed_roles.includes(roleSlug) || roleSlug === 'super_admin' || roleSlug === 'admin') {
+            setUser(u)
+          } else {
+            setLoginError('You do not have permission to access this portal.')
+          }
+        } else {
+          setUser(u)
+        }
+      }
+    }).catch(() => {}).finally(() => setChecking(false))
+  }, [])
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoggingIn(true)
+    setLoginError('')
+    try {
+      const res = await api.post('/users/auth/login', { email, password })
+      if (res?.id || res?.user?.id) {
+        const u = res.user || res
+        if (portal.allowed_roles?.length) {
+          const roleSlug = u.role?.slug || ''
+          if (!portal.allowed_roles.includes(roleSlug) && roleSlug !== 'super_admin' && roleSlug !== 'admin') {
+            setLoginError('You do not have permission to access this portal.')
+            setLoggingIn(false)
+            return
+          }
+        }
+        setUser(u)
+      } else {
+        setLoginError(res?.error || 'Invalid credentials')
+      }
+    } catch {
+      setLoginError('Login failed. Please try again.')
+    }
+    setLoggingIn(false)
+  }
+
+  if (checking) return <Spinner color={primary}/>
+  if (user) return <PortalPageRenderer portal={portal} api={api}/>
+
+  // Login screen
+  const font = br.font || "'Geist', sans-serif"
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
+      background:`linear-gradient(135deg, ${primary}08, ${primary}18)`, fontFamily:font }}>
+      <div style={{ width:380, background:'white', borderRadius:16, boxShadow:'0 8px 32px rgba(0,0,0,.1)',
+        overflow:'hidden' }}>
+        <div style={{ padding:'32px 32px 0', textAlign:'center' }}>
+          {br.logo_url && <img src={br.logo_url} alt="" style={{ height:36, marginBottom:16, objectFit:'contain' }}/>}
+          <h2 style={{ margin:'0 0 6px', fontSize:20, fontWeight:800, color:'#0F1729' }}>
+            {br.company_name || portal.name || 'Portal Login'}
+          </h2>
+          <p style={{ margin:'0 0 24px', fontSize:13, color:'#9CA3AF' }}>
+            Sign in to access this portal
+          </p>
+        </div>
+        <form onSubmit={handleLogin} style={{ padding:'0 32px 32px', display:'flex', flexDirection:'column', gap:12 }}>
+          <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="Email"
+            style={{ padding:'10px 14px', borderRadius:8, border:'1.5px solid #E8ECF8', fontSize:14, fontFamily:font,
+              outline:'none', width:'100%', boxSizing:'border-box' }} autoFocus/>
+          <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="Password"
+            style={{ padding:'10px 14px', borderRadius:8, border:'1.5px solid #E8ECF8', fontSize:14, fontFamily:font,
+              outline:'none', width:'100%', boxSizing:'border-box' }}/>
+          {loginError && <div style={{ fontSize:12, color:'#EF4444', padding:'6px 10px', background:'#FEF2F2',
+            borderRadius:6 }}>{loginError}</div>}
+          <button type="submit" disabled={loggingIn || !email || !password}
+            style={{ padding:'11px', borderRadius:8, border:'none', background:primary, color:'white',
+              fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:font,
+              opacity:(!email||!password||loggingIn)?0.5:1 }}>
+            {loggingIn ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
 }

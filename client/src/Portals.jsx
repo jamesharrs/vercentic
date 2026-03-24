@@ -550,7 +550,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           </button>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
-          {[["branding","Branding"],["domain","Domain & Embed"],["gdpr","GDPR"]].map(([id,l])=>(
+          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"]].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
           ))}
         </div>
@@ -562,6 +562,34 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           {(portal.nav?.logoUrl)&&<img src={portal.nav.logoUrl} alt="logo preview" style={{maxHeight:40,maxWidth:160,objectFit:"contain",borderRadius:4}} onError={e=>e.target.style.display="none"}/>}
           {lbl("Tagline / description")}<input value={br.tagline||""} onChange={e=>setBr("tagline",e.target.value)} placeholder="Building the future, one hire at a time" style={inp}/>
           {lbl("Portal name (internal)")}<input value={portal.name||""} onChange={e=>onChange({...portal,name:e.target.value})} style={inp}/>
+        </>}
+        {tab==="access"&&<>
+          {lbl("Portal visibility")}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {[
+              {value:"public",label:"Public",desc:"Anyone with the link can access this portal. Ideal for career sites and application pages."},
+              {value:"internal",label:"Internal (requires login)",desc:"Only logged-in users can access this portal. Ideal for hiring manager portals, agency portals, and internal tools."},
+            ].map(opt=>(
+              <label key={opt.value} onClick={()=>onChange({...portal,access_type:opt.value})}
+                style={{display:"flex",gap:12,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${(portal.access_type||"public")===opt.value?C.accent:C.border}`,
+                  background:(portal.access_type||"public")===opt.value?C.accentLight:"transparent",cursor:"pointer",transition:"all .15s"}}>
+                <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${(portal.access_type||"public")===opt.value?C.accent:C.border}`,flexShrink:0,marginTop:1,
+                  display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {(portal.access_type||"public")===opt.value&&<div style={{width:10,height:10,borderRadius:"50%",background:C.accent}}/>}
+                </div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{opt.label}</div>
+                  <div style={{fontSize:12,color:C.text3,marginTop:2,lineHeight:1.5}}>{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          {(portal.access_type||"public")==="internal"&&<>
+            {lbl("Allowed roles (blank = any logged-in user)")}
+            <input value={portal.allowed_roles?.join(", ")||""} onChange={e=>onChange({...portal,allowed_roles:e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})}
+              placeholder="e.g. recruiter, hiring_manager" style={inp}/>
+            <div style={{fontSize:11,color:C.text3}}>Comma-separated role slugs. Leave empty to allow any authenticated user.</div>
+          </>}
         </>}
         {tab==="domain"&&<>
           {lbl("Portal URL")}
