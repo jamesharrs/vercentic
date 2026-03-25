@@ -192,14 +192,6 @@ function DemoDataTab({ client, stats }) {
   const R = C;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:20}}>
-      {/* Warning banner */}
-      <div style={{padding:'12px 16px',borderRadius:10,background:'#fffbeb',border:'1px solid #fbbf24',display:'flex',gap:10,alignItems:'flex-start'}}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59f00" strokeWidth="2" style={{flexShrink:0,marginTop:1}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-        <div style={{fontSize:13,color:'#92400e'}}>
-          <strong>Railway Free Tier Warning:</strong> Data on Railway resets on every new deployment because there is no persistent volume attached. Re-run the seed after each deployment to restore demo data. Upgrade to Railway Hobby ($5/mo) and add a persistent volume to fix this permanently.
-        </div>
-      </div>
-
       {/* Action buttons */}
       <div style={{display:'flex',gap:12,alignItems:'center'}}>
         <button onClick={()=>runSeed(false)} disabled={seeding||clearing||!envId} style={{padding:'10px 20px',borderRadius:9,border:'none',background:R.accent,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:seeding||clearing?0.6:1}}>
