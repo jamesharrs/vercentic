@@ -3054,6 +3054,27 @@ export default function PortalsPage({ environment, onFullScreen }) {
 
   useEffect(()=>{ load(); },[load]);
 
+  // Listen for copilot portal creation — reload list and open the new portal
+  useEffect(() => {
+    const handler = async (e) => {
+      const portalId = e.detail?.portalId;
+      if (!portalId || !environment?.id) return;
+      // Reload list to include the newly created portal
+      const data = await api.get(\`/portals?environment_id=\${environment.id}\`);
+      const list = Array.isArray(data) ? data : [];
+      setPortals(list);
+      loadStats(list);
+      // Find and open the portal
+      const portal = list.find(p => p.id === portalId);
+      if (portal) {
+        setEditing(portal);
+        setLoading(false);
+      }
+    };
+    window.addEventListener("talentos:open-portal", handler);
+    return () => window.removeEventListener("talentos:open-portal", handler);
+  }, [environment?.id, loadStats]);
+
   // Tell Settings to go full-width when builder is open
   useEffect(() => {
     if (onFullScreen) onFullScreen(!!editing);

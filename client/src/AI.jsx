@@ -2264,6 +2264,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           label: portal.name,
           nav: "settings",
           settingsSection: "portals",
+          portalId: portal.id,
           icon: "globe",
           color: pendingPortal.theme?.primaryColor || "#4361EE",
           sub: `${pendingPortal.type?.replace(/_/g, " ")} · ${pageSummary}`,
@@ -2553,7 +2554,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 {/* Created nav link (for workflows, forms, roles) */}
                 {msg.role==="assistant"&&msg.createdNav&&(
                   <div style={{marginTop:8,marginLeft:34}}>
-                    <div onClick={()=>{if(msg.createdNav.settingsSection)sessionStorage.setItem("talentos_settings_section",msg.createdNav.settingsSection);window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:msg.createdNav.nav}));setOpen(false);}}
+                    <div onClick={()=>{
+                      if(msg.createdNav.settingsSection)sessionStorage.setItem("talentos_settings_section",msg.createdNav.settingsSection);
+                      window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:msg.createdNav.nav}));
+                      if(msg.createdNav.portalId)setTimeout(()=>window.dispatchEvent(new CustomEvent("talentos:open-portal",{detail:{portalId:msg.createdNav.portalId}})),200);
+                      setOpen(false);
+                    }}
                       style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"white",borderRadius:10,border:`1.5px solid ${msg.createdNav.color||C.ai}40`,cursor:"pointer",transition:"all .12s"}}
                       onMouseEnter={e=>{e.currentTarget.style.background=`${msg.createdNav.color||C.ai}08`;e.currentTarget.style.borderColor=`${msg.createdNav.color||C.ai}70`;}}
                       onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.borderColor=`${msg.createdNav.color||C.ai}40`;}}>
