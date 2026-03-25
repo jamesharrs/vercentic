@@ -638,7 +638,7 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
     </div>
   );
 };
-const WorkflowEditor = ({
+const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave, onClose }) => {
   // Tell copilot we're editing a workflow
   useEffect(() => {
     if (!workflow) return;
@@ -653,7 +653,6 @@ const WorkflowEditor = ({
     return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow?.name]);
- workflow, objects: parentObjects, environment, onSave, onClose }) => {
   const [name, setName]       = useState(workflow?.name || "");
   const [objectId, setObjectId] = useState(workflow?.object_id || "");
   const [desc, setDesc]       = useState(workflow?.description || "");
