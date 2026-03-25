@@ -1191,8 +1191,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   },[open, currentRecord?.id, currentObject?.id, activeNav]);
 
   // ── Navigation change notification ─────────────────────────────────────────
-  // When nav or record changes during an active conversation, inject a clear
-  // page-change marker so Claude never reads stale history context.
+  // When nav or record changes during an active conversation, inject a user+assistant
+  // exchange into message history so Claude sees the context change in the API payload.
+  // system_notice role = UI pill only; nav_ctx roles = sent to API as user/assistant.
   useEffect(()=>{
     const navChanged = prevNavRef.current !== activeNav;
     const recChanged = prevRecRef.current !== (currentRecord?.id ?? null);
@@ -1200,39 +1201,41 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     prevNavRef.current = activeNav;
     prevRecRef.current = currentRecord?.id ?? null;
 
-    // Only inject if copilot is open AND there's an active conversation (not just welcome msg)
+    // Only inject if copilot is open AND there's a real conversation (not just welcome)
     if (!open || messages.length <= 1) return;
     if (!navChanged && !recChanged) return;
 
-    // Build a compact page label
+    // Build a plain-English description of the new page
     const getPageLabel = () => {
       if (currentRecord && currentObject) {
         const d = currentRecord.data || {};
         const name = (d.first_name ? `${d.first_name} ${d.last_name||''}`.trim() : null)
-          || d.job_title || d.pool_name || d.name || 'record';
-        return `viewing ${currentObject.name}: **${name}**`;
+          || d.job_title || d.pool_name || d.name || 'a record';
+        return `viewing ${currentObject.name}: ${name}`;
       }
-      if (activeNav === 'dashboard')   return 'on the **Dashboard**';
-      if (activeNav === 'settings')    return `in **Settings**${settingsSection ? ' — ' + settingsSection : ''}`;
-      if (activeNav === 'interviews')  return 'in **Interviews**';
-      if (activeNav === 'offers')      return 'in **Offers**';
-      if (activeNav === 'reports')     return 'in **Reports**';
-      if (activeNav === 'orgchart')    return 'in **Org Chart**';
-      if (activeNav === 'search')      return 'in **Search**';
+      if (activeNav === 'dashboard')   return 'the Dashboard';
+      if (activeNav === 'settings')    return `Settings${settingsSection ? ' — ' + settingsSection : ''}`;
+      if (activeNav === 'interviews')  return 'Interviews';
+      if (activeNav === 'offers')      return 'Offers';
+      if (activeNav === 'reports')     return 'Reports';
+      if (activeNav === 'orgchart')    return 'Org Chart';
+      if (activeNav === 'search')      return 'Search';
       if (activeNav?.startsWith('obj_')) {
         const obj = (navObjects||[]).find(o => 'obj_'+o.id === activeNav);
-        return `viewing **${obj?.plural_name || obj?.name || 'list'}**`;
+        return `the ${obj?.plural_name || obj?.name || 'records'} list`;
       }
-      return `on **${activeNav}**`;
+      return activeNav;
     };
+
+    const pageLabel = getPageLabel();
 
     setMessages(prev => [
       ...prev,
-      {
-        role: 'system_notice',
-        content: `📍 Page changed — now ${getPageLabel()}`,
-        ts: new Date(),
-      }
+      // UI pill — visible to user, filtered from API
+      { role: 'system_notice', content: `📍 Navigated to ${pageLabel}`, ts: new Date() },
+      // API pair — sent to Claude so it knows context changed
+      { role: 'user',      content: `[Page navigation: I am now on ${pageLabel}]`, ts: new Date(), hidden: true },
+      { role: 'assistant', content: `Understood — I can see you're now on ${pageLabel}. I'll answer based on this new context.`, ts: new Date(), hidden: true },
     ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open, activeNav, currentRecord?.id, currentObject?.id]);
@@ -2282,14 +2285,16 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           <div style={{flex:1,overflow:"auto",padding:"16px 16px",display:"flex",flexDirection:"column",gap:14,background:"linear-gradient(180deg,#f5f3ff 0%,#eef2ff 100%)"}}>
             {messages.map((msg,i)=>(
               <div key={i}>
-                {/* ── Navigation change pill ── */}
+                {/* ── Navigation change pill (UI only, not sent to API) ── */}
                 {msg.role==="system_notice"&&(
                   <div style={{display:"flex",justifyContent:"center",margin:"2px 0"}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.18)",fontSize:10,fontWeight:600,color:"#7c3aed",fontFamily:F}}
                       dangerouslySetInnerHTML={{__html:renderMessage(msg.content)}}/>
                   </div>
                 )}
-                {msg.role!=="system_notice"&&(
+                {/* ── Hidden API context messages — not rendered in UI ── */}
+                {msg.hidden&&null}
+                {!msg.hidden&&msg.role!=="system_notice"&&(
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",flexDirection:msg.role==="user"?"row-reverse":"row"}}>
                   {msg.role==="assistant"&&(
                     <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${C.ai},#3b5bdb)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
