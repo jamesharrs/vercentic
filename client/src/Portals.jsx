@@ -2592,6 +2592,207 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   );
 };
 
+// ─── Mini Preview ─────────────────────────────────────────────────────────────
+const WIDGET_COLORS = {
+  hero:"#4361EE", text:"#6B7280", rich_text:"#6B7280", image:"#8B5CF6",
+  jobs:"#0891B2", form:"#0CAF77", stats:"#D97706", testimonials:"#EC4899",
+  team:"#7C3AED", video:"#EF4444", map_embed:"#059669", cta_banner:"#F79009",
+  divider:"#D1D5DB", spacer:"transparent",
+};
+const WIDGET_LABELS = {
+  hero:"Hero", text:"Text", rich_text:"Article", image:"Image",
+  jobs:"List", form:"Form", stats:"Stats", testimonials:"Quotes",
+  team:"Team", video:"Video", map_embed:"Map", cta_banner:"CTA",
+  divider:"—", spacer:"",
+};
+const PRESET_FRACS = { "1":[1], "2":[1,1], "3":[1,1,1], "1-2":[1,2], "2-1":[2,1] };
+
+const MiniPreview = ({ portal, onClick }) => {
+  const t = portal.theme || defaultTheme();
+  const pages = portal.pages || [];
+  const page = pages[0]; // show first page
+  const rows = page?.rows || [];
+  const nav = portal.nav || {};
+  const navBg = nav.bgColor || t.primaryColor || "#4361EE";
+
+  return (
+    <div onClick={onClick} style={{
+      cursor:"pointer", borderRadius:"10px 10px 0 0", overflow:"hidden",
+      background:t.bgColor||"#FFFFFF", position:"relative", height:160,
+    }}>
+      {/* Browser chrome */}
+      <div style={{height:18,background:"#E8ECF8",display:"flex",alignItems:"center",padding:"0 8px",gap:4}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:"#FC5C5C"}}/>
+        <div style={{width:6,height:6,borderRadius:"50%",background:"#FCBB40"}}/>
+        <div style={{width:6,height:6,borderRadius:"50%",background:"#34C749"}}/>
+        <div style={{flex:1,marginLeft:6}}>
+          <div style={{background:"#FFFFFF",borderRadius:3,height:10,maxWidth:120,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:5,color:"#9CA3AF",letterSpacing:".3px"}}>{portal.slug||"/"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Mini nav bar */}
+      <div style={{height:10,background:navBg,display:"flex",alignItems:"center",padding:"0 8px",gap:4}}>
+        <div style={{width:16,height:5,borderRadius:1,background:"rgba(255,255,255,.85)"}}/>
+        <div style={{flex:1}}/>
+        {[1,2,3].map(i=><div key={i} style={{width:12,height:3,borderRadius:1,background:"rgba(255,255,255,.45)"}}/>)}
+      </div>
+
+      {/* Page rows */}
+      <div style={{padding:4,display:"flex",flexDirection:"column",gap:2,overflow:"hidden",height:130}}>
+        {rows.length===0 ? (
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:8,color:"#D1D5DB"}}>Empty page</span>
+          </div>
+        ) : rows.slice(0,8).map(row => {
+          const fracs = PRESET_FRACS[row.preset] || [1];
+          const totalFrac = fracs.reduce((a,b)=>a+b,0);
+          const cells = row.cells || [];
+          const rowBg = row.bgColor || "transparent";
+          const isHero = cells.some(c=>c.widgetType==="hero");
+          const isSpacer = cells.every(c=>c.widgetType==="spacer"||!c.widgetType);
+
+          if (isSpacer) return <div key={row.id} style={{height:3}}/>;
+
+          return (
+            <div key={row.id} style={{
+              display:"flex", gap:2,
+              background: rowBg!=="transparent" ? rowBg+"18" : "transparent",
+              borderRadius:2, padding: isHero ? "0" : "1px 2px",
+              minHeight: isHero ? 36 : 14,
+            }}>
+              {fracs.map((fr,i) => {
+                const cell = cells[i];
+                const wt = cell?.widgetType;
+                const wColor = WIDGET_COLORS[wt] || "#E5E7EB";
+                const label = WIDGET_LABELS[wt] || "";
+                const widthPct = `${(fr/totalFrac)*100}%`;
+
+                if (!wt) return (
+                  <div key={i} style={{width:widthPct,borderRadius:2,border:"1px dashed #E5E7EB",minHeight:12}}/>
+                );
+
+                if (wt === "hero") return (
+                  <div key={i} style={{
+                    width:widthPct, borderRadius:2, minHeight:36,
+                    background:`linear-gradient(135deg,${t.primaryColor}30,${t.secondaryColor||t.primaryColor}18)`,
+                    display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:4,
+                  }}>
+                    <div style={{width:"60%",height:4,borderRadius:1,background:t.primaryColor+"90"}}/>
+                    <div style={{width:"40%",height:3,borderRadius:1,background:t.primaryColor+"40"}}/>
+                    <div style={{width:18,height:5,borderRadius:2,background:t.primaryColor,marginTop:2}}/>
+                  </div>
+                );
+
+                if (wt === "image") return (
+                  <div key={i} style={{
+                    width:widthPct, borderRadius:2, minHeight:18,
+                    background:`linear-gradient(135deg,${wColor}20,${wColor}08)`,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                  }}>
+                    <Ic n="image" s={8} c={wColor+"80"}/>
+                  </div>
+                );
+
+                if (wt === "jobs") return (
+                  <div key={i} style={{width:widthPct,borderRadius:2,padding:"2px 3px",display:"flex",flexDirection:"column",gap:1}}>
+                    {[1,2,3].map(j=>(
+                      <div key={j} style={{height:4,borderRadius:1,background:wColor+"20",display:"flex",alignItems:"center",gap:2,padding:"0 2px"}}>
+                        <div style={{width:3,height:3,borderRadius:"50%",background:wColor+"60"}}/>
+                        <div style={{flex:1,height:2,borderRadius:1,background:wColor+"30"}}/>
+                      </div>
+                    ))}
+                  </div>
+                );
+
+                if (wt === "stats") return (
+                  <div key={i} style={{width:widthPct,borderRadius:2,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:3}}>
+                    {[1,2,3].map(j=>(
+                      <div key={j} style={{textAlign:"center"}}>
+                        <div style={{width:10,height:6,borderRadius:1,background:wColor+"30",margin:"0 auto"}}/>
+                        <div style={{width:14,height:2,borderRadius:1,background:wColor+"20",marginTop:1}}/>
+                      </div>
+                    ))}
+                  </div>
+                );
+
+                if (wt === "form") return (
+                  <div key={i} style={{width:widthPct,borderRadius:2,padding:"3px 4px",display:"flex",flexDirection:"column",gap:2}}>
+                    {[1,2].map(j=>(
+                      <div key={j} style={{height:4,borderRadius:1,border:`1px solid ${wColor}30`,background:"transparent"}}/>
+                    ))}
+                    <div style={{width:16,height:5,borderRadius:2,background:wColor,alignSelf:"flex-end"}}/>
+                  </div>
+                );
+
+                if (wt === "testimonials") return (
+                  <div key={i} style={{width:widthPct,borderRadius:2,display:"flex",gap:2,padding:2}}>
+                    {[1,2].map(j=>(
+                      <div key={j} style={{flex:1,borderRadius:2,background:wColor+"12",padding:2,display:"flex",flexDirection:"column",gap:1}}>
+                        <div style={{width:6,height:6,borderRadius:"50%",background:wColor+"30"}}/>
+                        <div style={{width:"80%",height:2,borderRadius:1,background:wColor+"20"}}/>
+                      </div>
+                    ))}
+                  </div>
+                );
+
+                if (wt === "divider") return (
+                  <div key={i} style={{width:widthPct,display:"flex",alignItems:"center",padding:"0 4px"}}>
+                    <div style={{flex:1,height:1,background:"#D1D5DB"}}/>
+                  </div>
+                );
+
+                if (wt === "cta_banner") return (
+                  <div key={i} style={{
+                    width:widthPct,borderRadius:2,minHeight:16,
+                    background:`linear-gradient(90deg,${t.primaryColor}20,${t.accentColor||t.primaryColor}12)`,
+                    display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:2,
+                  }}>
+                    <div style={{width:"30%",height:3,borderRadius:1,background:t.primaryColor+"60"}}/>
+                    <div style={{width:14,height:5,borderRadius:2,background:t.primaryColor}}/>
+                  </div>
+                );
+
+                // Generic widget block
+                return (
+                  <div key={i} style={{
+                    width:widthPct,borderRadius:2,minHeight:14,
+                    background:wColor+"12",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                  }}>
+                    <span style={{fontSize:5,fontWeight:700,color:wColor+"80",letterSpacing:".3px"}}>{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Status badge */}
+      <div style={{position:"absolute",top:22,right:6}}>
+        <span style={{fontSize:7,fontWeight:700,padding:"1px 5px",borderRadius:99,
+          background:portal.status==="published"?"#ECFDF5":"#FFFBEB",
+          color:portal.status==="published"?"#0CAF77":"#F79009",
+          border:`1px solid ${portal.status==="published"?"#0CAF7730":"#F7900930"}`,
+        }}>
+          {portal.status==="published"?"LIVE":"DRAFT"}
+        </span>
+      </div>
+
+      {/* Page count */}
+      {pages.length > 1 && (
+        <div style={{position:"absolute",bottom:4,right:6}}>
+          <span style={{fontSize:6,color:"#9CA3AF",background:"rgba(255,255,255,.85)",padding:"1px 4px",borderRadius:3}}>
+            {pages.length} pages
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Portal Card ──────────────────────────────────────────────────────────────
 const PortalCard = ({ portal, onEdit, onDelete, onDuplicate, stats }) => {
   const t = portal.theme||defaultTheme();
@@ -2602,26 +2803,8 @@ const PortalCard = ({ portal, onEdit, onDelete, onDuplicate, stats }) => {
     <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",transition:"all .15s"}}
       onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 20px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=C.border2;}}
       onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
-      {/* Preview strip */}
-      <div onClick={onEdit} style={{height:96,background:`linear-gradient(135deg,${t.primaryColor}22,${t.secondaryColor}12)`,
-        position:"relative",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-        <div style={{textAlign:"center"}}>
-          <div style={{fontSize:13,fontWeight:700,color:t.primaryColor,fontFamily:t.headingFont||F}}>{portal.name}</div>
-          <div style={{fontSize:10,color:C.text3,marginTop:2}}>{pageCount} page{pageCount!==1?"s":""} · {widgetCount} widget{widgetCount!==1?"s":""}</div>
-        </div>
-        <div style={{position:"absolute",bottom:8,left:10,display:"flex",gap:3}}>
-          {[t.primaryColor,t.secondaryColor,t.accentColor].map((col,i)=>(
-            <div key={i} style={{width:8,height:8,borderRadius:"50%",background:col||C.text3}}/>
-          ))}
-        </div>
-        <div style={{position:"absolute",top:8,right:8}}>
-          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,
-            background:portal.status==="published"?C.greenLight:C.amberLight,
-            color:portal.status==="published"?C.green:C.amber}}>
-            {portal.status==="published"?"LIVE":"DRAFT"}
-          </span>
-        </div>
-      </div>
+      {/* Mini Preview */}
+      <MiniPreview portal={portal} onClick={onEdit}/>
       {stats&&<div style={{padding:"6px 14px",background:C.surface2,borderTop:`1px solid ${C.border}`,display:"flex",gap:16}}>
         {[{label:"Views",val:stats.views_period},{label:"Clicks",val:stats.job_clicks},{label:"Apps",val:stats.applications},{label:"Conv.",val:stats.conversion_rate+"%"}].map(({label,val})=>(<div key={label} style={{textAlign:"center"}}><div style={{fontSize:14,fontWeight:800,color:C.text1}}>{val??'—'}</div><div style={{fontSize:9,color:C.text3}}>{label}</div></div>))}
       </div>}
