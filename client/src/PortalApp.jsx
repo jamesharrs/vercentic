@@ -78,24 +78,29 @@ function InternalPortalGate({ portal, api }) {
   const [loggingIn, setLoggingIn] = useState(false)
   const br = portal.branding || portal.theme || {}
   const primary = br.primary_color || br.primaryColor || '#4361EE'
+  const STORAGE_KEY = `vercentic_portal_user_${portal.id}`
 
-  // Check if already logged in
+  // Check if already logged in via sessionStorage
   useEffect(() => {
-    api.get('/auth/me').then(u => {
-      if (u?.id) {
-        // Check role if allowed_roles is set
-        if (portal.allowed_roles?.length) {
-          const roleSlug = u.role?.slug || ''
-          if (portal.allowed_roles.includes(roleSlug) || roleSlug === 'super_admin' || roleSlug === 'admin') {
-            setUser(u)
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const u = JSON.parse(saved)
+        if (u?.id) {
+          if (portal.allowed_roles?.length) {
+            const roleSlug = u.role?.slug || ''
+            if (portal.allowed_roles.includes(roleSlug) || roleSlug === 'super_admin' || roleSlug === 'admin') {
+              setUser(u)
+            } else {
+              setLoginError('You do not have permission to access this portal.')
+            }
           } else {
-            setLoginError('You do not have permission to access this portal.')
+            setUser(u)
           }
-        } else {
-          setUser(u)
         }
       }
-    }).catch(() => {}).finally(() => setChecking(false))
+    } catch {}
+    setChecking(false)
   }, [])
 
   const handleLogin = async (e) => {
@@ -114,6 +119,7 @@ function InternalPortalGate({ portal, api }) {
             return
           }
         }
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(u))
         setUser(u)
       } else {
         setLoginError(res?.error || 'Invalid credentials')

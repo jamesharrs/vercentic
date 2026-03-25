@@ -100,6 +100,7 @@ app.use('/api/csv',          require('./routes/csv'));
 app.use('/api/workflows',    require('./routes/workflows'));
 app.use('/api/portals',          require('./routes/portals'));
 app.use('/api/portal-analytics', require('./routes/portal_analytics'));
+app.use('/api/email-builder',     require('./routes/email_builder'));
 app.use('/api/brand-kits',       require('./routes/brand_kits'));
 app.use('/api/reports',      require('./routes/reports'));
 app.use('/api/groups',       require('./routes/groups'));
