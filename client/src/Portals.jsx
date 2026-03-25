@@ -1430,6 +1430,22 @@ const RowSettings = ({ row, onChange, onClose }) => {
                     cursor:"pointer",fontFamily:F,textTransform:"capitalize"}}>{a}</button>
               ))}
             </div>
+
+            {lbl("Full width")}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:row.fullWidth?C.greenLight:C.surface2,borderRadius:8,border:`1px solid ${row.fullWidth?C.green:C.border}`}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:C.text1}}>Edge-to-edge</div>
+                <div style={{fontSize:10,color:C.text3}}>Content spans full viewport width</div>
+              </div>
+              <button onClick={()=>set("fullWidth",!row.fullWidth)} style={{width:36,height:20,borderRadius:10,background:row.fullWidth?C.green:"#D1D5DB",position:"relative",cursor:"pointer",transition:"background 0.2s",border:"none"}}>
+                <div style={{position:"absolute",top:2,left:row.fullWidth?18:2,width:16,height:16,borderRadius:"50%",background:"white",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </button>
+            </div>
+
+            {lbl("Max height")}
+            <input value={style.maxHeight||""} onChange={e=>setStyle("maxHeight",e.target.value)}
+              placeholder="e.g. 500px, 60vh" style={inp}/>
+            <div style={{fontSize:10,color:C.text3}}>Content will be clipped if it exceeds this height. Useful for hero banners.</div>
           </div>}
 
           {/* SPACING TAB */}
@@ -1607,13 +1623,13 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
         ...(row.style?.marginTop?{marginTop:row.style.marginTop}:{}),
         ...(row.style?.marginBottom?{marginBottom:row.style.marginBottom}:{}),
         ...(row.style?.overflow?{overflow:row.style.overflow}:{}),
-        ...(row.style?.zIndex?{zIndex:row.style.zIndex}:{})}}>
+        ...(row.style?.zIndex?{zIndex:row.style.zIndex}:{}),...(row.style?.maxHeight?{maxHeight:row.style.maxHeight,overflow:"hidden"}:{})}}>
       {/* Overlay */}
       {row.bgImage&&(row.overlayOpacity||0)>0&&(
         <div style={{position:"absolute",inset:0,background:`rgba(0,0,0,${(row.overlayOpacity||0)/100})`,borderRadius:isEditing?10:0,pointerEvents:"none"}}/>
       )}
       {/* Content */}
-      <div style={{position:"relative",padding:`${padding} ${isEditing?"16px":"0"}`,maxWidth:(row.style?.maxWidth)||theme.maxWidth||"1200px",margin:"0 auto",boxSizing:"border-box",textAlign:row.style?.textAlign||undefined,...(row.style?.paddingTop?{paddingTop:row.style.paddingTop}:{}),...(row.style?.paddingBottom?{paddingBottom:row.style.paddingBottom}:{}),...(row.style?.paddingLeft?{paddingLeft:row.style.paddingLeft}:{}),...(row.style?.paddingRight?{paddingRight:row.style.paddingRight}:{}),...(row.style?.borderRadius?{borderRadius:row.style.borderRadius}:{}),...(row.style?.boxShadow?{boxShadow:row.style.boxShadow}:{}),...(row.style?.minHeight?{minHeight:row.style.minHeight}:{})}}>
+      <div style={{position:"relative",padding:`${padding} ${isEditing?"16px":"0"}`,maxWidth:row.fullWidth?"none":(row.style?.maxWidth)||theme.maxWidth||"1200px",margin:row.fullWidth?"0":"0 auto",boxSizing:"border-box",textAlign:row.style?.textAlign||undefined,...(row.style?.paddingTop?{paddingTop:row.style.paddingTop}:{}),...(row.style?.paddingBottom?{paddingBottom:row.style.paddingBottom}:{}),...(row.style?.paddingLeft?{paddingLeft:row.style.paddingLeft}:{}),...(row.style?.paddingRight?{paddingRight:row.style.paddingRight}:{}),...(row.style?.borderRadius?{borderRadius:row.style.borderRadius}:{}),...(row.style?.boxShadow?{boxShadow:row.style.boxShadow}:{}),...(row.style?.minHeight?{minHeight:row.style.minHeight}:{})}}>
         <div style={{display:"flex",gap:row.style?.gap||16,alignItems:"stretch",flexWrap:"wrap"}}>
           {row.cells.map((cell,ci)=>(
             <WidgetCell key={cell.id} cell={cell} flex={cellFlex(ci)}
@@ -1763,7 +1779,7 @@ const InlineNav = ({ nav, theme, onChange, isEditing }) => {
   return (
     <div style={{position:"relative"}}>
       {/* Live Nav render */}
-      <div style={{background:bg, borderBottom:`1px solid ${pr}18`, boxShadow:"0 1px 8px rgba(0,0,0,.06)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", height:60, fontFamily:ff}}
+      <div style={{background:nav.overlay?"transparent":bg, borderBottom:nav.overlay?"none":`1px solid ${pr}18`, boxShadow:nav.overlay?"none":"0 1px 8px rgba(0,0,0,.06)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", height:60, fontFamily:ff, ...(nav.overlay?{position:"absolute",top:0,left:0,right:0,zIndex:50}:{})}}
         onClick={isEditing ? ()=>setEditOpen(e=>!e) : undefined}
         title={isEditing?"Click to edit nav":""}
         onMouseEnter={e=>{if(isEditing)e.currentTarget.style.outline=`2px dashed ${pr}`;}}
@@ -1804,9 +1820,14 @@ const InlineNav = ({ nav, theme, onChange, isEditing }) => {
             <button onClick={()=>set("links",[...(nav.links||[]),{id:uid(),label:"Link",href:"/"}])} style={{fontSize:11,color:C.accent,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:7,padding:"5px 12px",cursor:"pointer",fontFamily:F,width:"100%"}}>+ Add link</button>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:C.text2,cursor:"pointer"}}>
-              <input type="checkbox" checked={nav.sticky!==false} onChange={e=>set("sticky",e.target.checked)}/> Sticky nav
-            </label>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:C.text2,cursor:"pointer"}}>
+                <input type="checkbox" checked={nav.sticky!==false} onChange={e=>set("sticky",e.target.checked)}/> Sticky nav
+              </label>
+              <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:C.text2,cursor:"pointer"}}>
+                <input type="checkbox" checked={!!nav.overlay} onChange={e=>set("overlay",e.target.checked)}/> Overlay hero (transparent, floats over content)
+              </label>
+            </div>
             <button onClick={()=>setEditOpen(false)} style={{padding:"5px 14px",borderRadius:7,background:C.accent,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>Done</button>
           </div>
         </div>

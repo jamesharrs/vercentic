@@ -626,9 +626,9 @@ const PortalRow = ({ row, theme, portal, api, track }) => {
   if (row.bgColor) bgStyle.background = row.bgColor
   if (row.bgImage) { bgStyle.backgroundImage=`url(${row.bgImage})`; bgStyle.backgroundSize='cover'; bgStyle.backgroundPosition='center' }
   return (
-    <div id={row.anchorId||undefined} style={{ position:'relative', ...bgStyle }}>
+    <div id={row.anchorId||undefined} style={{ position:'relative', ...bgStyle, ...(row.style?.maxHeight?{maxHeight:row.style.maxHeight,overflow:'hidden'}:{}) }}>
       {row.bgImage&&(row.overlayOpacity||0)>0&&<div style={{ position:'absolute', inset:0, background:`rgba(0,0,0,${(row.overlayOpacity||0)/100})`, pointerEvents:'none' }}/>}
-      <div style={{ position:'relative', maxWidth:theme.maxWidth||'1200px', margin:'0 auto', padding:`${padding} 24px`, boxSizing:'border-box' }}>
+      <div style={{ position:'relative', maxWidth:row.fullWidth?'none':(row.style?.maxWidth||theme.maxWidth||'1200px'), margin:row.fullWidth?'0':'0 auto', padding:`${padding} ${row.fullWidth?'0':'24px'}`, boxSizing:'border-box' }}>
         <div style={{ display:'flex', gap:32, flexWrap:'wrap', alignItems:'flex-start' }}>
           {(row.cells||[]).map((cell, ci) => (
             <div key={cell.id} style={{ flex:cellFlex(ci,(row.cells||[]).length,row.preset), minWidth:0 }}>
@@ -662,11 +662,13 @@ const PortalFooter = ({ portal, theme }) => {
 const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
   const nav = portal.nav || {}
   const bg  = nav.bgColor   || theme.bgColor   || '#fff'
-  const fg  = nav.textColor || theme.textColor || '#0F1729'
+  const fg  = nav.overlay ? (nav.textColor || '#FFFFFF') : (nav.textColor || theme.textColor || '#0F1729')
   const navLinks = nav.links || []
   return (
-    <nav style={{ position: nav.sticky !== false ? 'sticky' : 'relative', top:0, zIndex:100,
-      background:bg, borderBottom:`1px solid ${theme.primaryColor}18`, boxShadow:'0 1px 8px rgba(0,0,0,.06)' }}>
+    <nav style={{ position: nav.overlay ? 'absolute' : nav.sticky !== false ? 'sticky' : 'relative', top:0, left:0, right:0, zIndex:100,
+      background: nav.overlay ? 'transparent' : bg,
+      borderBottom: nav.overlay ? 'none' : `1px solid ${theme.primaryColor}18`,
+      boxShadow: nav.overlay ? 'none' : '0 1px 8px rgba(0,0,0,.06)' }}>
       <div style={{ maxWidth:theme.maxWidth||'1200px', margin:'0 auto', padding:'0 24px',
         display:'flex', alignItems:'center', justifyContent:'space-between', height:64 }}>
         {nav.logoUrl
