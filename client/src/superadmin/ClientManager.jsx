@@ -138,6 +138,132 @@ export function ClientList({ onProvision, onSelectClient }) {
   );
 }
 
+}
+
+// ── Demo Data Tab ─────────────────────────────────────────────────────────────
+function DemoDataTab({ client, stats }) {
+  const [seeding,   setSeeding]   = useState(false);
+  const [clearing,  setClearing]  = useState(false);
+  const [log,       setLog]       = useState([]);
+  const [progress,  setProgress]  = useState(0);
+  const [results,   setResults]   = useState(null);
+  const [error,     setError]     = useState(null);
+
+  const envId = stats?.environments?.[0]?.id || client?.environments?.[0]?.id;
+
+  const runSeed = async (clearFirst=false) => {
+    if (!envId) { setError('No environment found for this client'); return; }
+    setSeeding(true); setLog([]); setProgress(0); setResults(null); setError(null);
+    try {
+      const resp = await fetch('/api/superadmin/demo/seed', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ environment_id: envId, clear_first: clearFirst })
+      });
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(l=>l.startsWith('data:'));
+        for (const line of lines) {
+          try {
+            const d = JSON.parse(line.slice(5));
+            if (d.pct != null) setProgress(d.pct);
+            if (d.message) setLog(prev=>[...prev, d.message]);
+            if (d.step === 'complete') setResults(d.results);
+            if (d.step === 'error') setError(d.message);
+          } catch{}
+        }
+      }
+    } catch(e) { setError(e.message); }
+    finally { setSeeding(false); }
+  };
+
+  const clearDemo = async () => {
+    if (!envId) return;
+    setClearing(true);
+    try {
+      const r = await fetch('/api/superadmin/demo/clear', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({environment_id:envId}) });
+      const d = await r.json();
+      setLog([`Cleared ${d.removed} demo records`]); setResults(null);
+    } catch(e) { setError(e.message); }
+    finally { setClearing(false); }
+  };
+
+  const R = C;
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      {/* Warning banner */}
+      <div style={{padding:'12px 16px',borderRadius:10,background:'#fffbeb',border:'1px solid #fbbf24',display:'flex',gap:10,alignItems:'flex-start'}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59f00" strokeWidth="2" style={{flexShrink:0,marginTop:1}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+        <div style={{fontSize:13,color:'#92400e'}}>
+          <strong>Railway Free Tier Warning:</strong> Data on Railway resets on every new deployment because there is no persistent volume attached. Re-run the seed after each deployment to restore demo data. Upgrade to Railway Hobby ($5/mo) and add a persistent volume to fix this permanently.
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{display:'flex',gap:12,alignItems:'center'}}>
+        <button onClick={()=>runSeed(false)} disabled={seeding||clearing||!envId} style={{padding:'10px 20px',borderRadius:9,border:'none',background:R.accent,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:seeding||clearing?0.6:1}}>
+          {seeding ? `Seeding… ${progress}%` : '🌱 Seed Demo Data'}
+        </button>
+        <button onClick={()=>runSeed(true)} disabled={seeding||clearing||!envId} style={{padding:'10px 20px',borderRadius:9,border:`1.5px solid ${R.accent}`,background:'transparent',color:R.accent,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:seeding||clearing?0.6:1}}>
+          🔄 Clear & Re-seed
+        </button>
+        <button onClick={clearDemo} disabled={seeding||clearing||!envId} style={{padding:'10px 20px',borderRadius:9,border:'1.5px solid #e03131',background:'transparent',color:'#e03131',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:seeding||clearing?0.6:1}}>
+          {clearing ? 'Clearing…' : '🗑 Clear Demo Data'}
+        </button>
+        {!envId && <span style={{fontSize:12,color:R.text3}}>No environment found — provision this client first</span>}
+      </div>
+
+      {/* Progress bar */}
+      {seeding && (
+        <div style={{background:'#f3f4f6',borderRadius:99,height:8,overflow:'hidden'}}>
+          <div style={{height:8,width:`${progress}%`,background:R.accent,borderRadius:99,transition:'width .3s'}}/>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && <div style={{padding:'12px 16px',borderRadius:10,background:'#fef2f2',border:'1px solid #fecaca',color:'#e03131',fontSize:13}}>{error}</div>}
+
+      {/* Results */}
+      {results && (
+        <div style={{padding:'16px 20px',borderRadius:12,background:'#f0fdf4',border:'1px solid #bbf7d0'}}>
+          <div style={{fontSize:14,fontWeight:700,color:'#064e3b',marginBottom:12}}>✅ Demo data seeded successfully</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            {[['Jobs',results.jobs,'#4361ee'],['Candidates',results.candidates,'#0ca678'],['Interviews',results.interviews,'#7c3aed'],['Offers',results.offers,'#f59f00'],['Comms',results.communications,'#3b82f6'],['Notes',results.notes,'#9ca3af'],['Workflows',results.workflows,'#0d9488']].map(([label,val,col])=>(
+              <div key={label} style={{background:'white',borderRadius:8,padding:'10px 14px',borderLeft:`3px solid ${col}`}}>
+                <div style={{fontSize:20,fontWeight:800,color:'#111827'}}>{val||0}</div>
+                <div style={{fontSize:11,color:'#6b7280',fontWeight:600,textTransform:'uppercase'}}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Log */}
+      {log.length > 0 && (
+        <div style={{background:'#1a1a2e',borderRadius:10,padding:'14px 16px',fontFamily:'ui-monospace,monospace',fontSize:12}}>
+          {log.map((l,i)=><div key={i} style={{color:i===log.length-1?'#a5f3fc':'#64748b',marginBottom:3}}>▸ {l}</div>)}
+        </div>
+      )}
+
+      {/* What gets seeded */}
+      <div style={{background:'white',borderRadius:12,border:'1px solid #f0f0f0',padding:'16px 20px'}}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#111827'}}>What gets seeded</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12,color:'#374151'}}>
+          {[['40 Jobs','Across Engineering, Finance, HR, Sales, Marketing'],['50 Candidates','With realistic profiles, skills, locations, sources'],['30 Interviews','Past (completed/cancelled) + upcoming scheduled'],['18 Offers','Draft, pending, sent, accepted, declined statuses'],['Talent Pools','Active Candidates, Dubai Pipeline, Tech Pipeline'],['Communications','Email threads, SMS, call logs per candidate'],['Workflows','Application Review, Technical Screen, Offer Process'],['Notes','Recruiter notes on each candidate']].map(([t,d])=>(
+            <div key={t} style={{display:'flex',gap:8,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>
+              <span style={{fontWeight:700,color:'#4361ee',flexShrink:0}}>✓</span>
+              <div><div style={{fontWeight:600,color:'#111827'}}>{t}</div><div style={{color:'#6b7280',marginTop:1}}>{d}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
   const [client,setClient]=useState(null); const [stats,setStats]=useState(null);
   const [loading,setLoading]=useState(true); const [tab,setTab]=useState('overview');
@@ -200,7 +326,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
       )}
 
       <div style={{display:'flex',gap:4,marginBottom:16,background:C.surface2,borderRadius:10,padding:4,width:'fit-content'}}>
-        {[['overview','Overview'],['environments','Environments'],['users','Users'],['log','Provision Log']].map(([id,label])=>(
+        {[['overview','Overview'],['environments','Environments'],['users','Users'],['demo','Demo Data'],['log','Provision Log']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={TAB(id)}>{label}</button>
         ))}
       </div>
@@ -309,6 +435,10 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
             ))
           }
         </div>
+      )}
+
+      {tab==='demo' && (
+        <DemoDataTab client={client} stats={stats} />
       )}
 
       {tab==='log' && (

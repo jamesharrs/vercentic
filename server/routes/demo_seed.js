@@ -326,10 +326,67 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
   }
   saveStore();
 
+  // ── Interviews ─────────────────────────────────────────────────────────────
+  progressCb({ step:'interviews', message:'Scheduling interviews…', pct:82 });
+  if (!store.interviews) store.interviews = [];
+  const INT_TYPES  = ['Phone Screen','Video Interview','Technical Assessment','Panel Interview','Final Interview'];
+  const INT_FMTS   = ['video','phone','in_person','panel'];
+  const INT_OUTS   = ['Strong Yes','Yes','Yes','No','Strong No'];
+  const INT_STATS_PAST = ['completed','completed','cancelled'];
+  for (let i = 0; i < Math.min(candidateRecords.length, 30); i++) {
+    const cand = candidateRecords[i];
+    const job  = jobRecords[i % jobRecords.length];
+    const dOff = randInt(-21, 28);
+    const isPast = dOff < 0;
+    const status = isPast ? pick(INT_STATS_PAST) : 'scheduled';
+    const intDate = new Date(Date.now() + dOff*86400000).toISOString().slice(0,10);
+    store.interviews.push({
+      id:uuidv4(), environment_id:environmentId,
+      candidate_id:cand.id,
+      candidate_name:`${cand.data.first_name} ${cand.data.last_name}`,
+      job_id:job.id, job_title:job.data.job_title,
+      type_name:pick(INT_TYPES), date:intDate,
+      time:`${String(randInt(9,17)).padStart(2,'0')}:00`,
+      duration_minutes:pick([30,45,60]), format:pick(INT_FMTS),
+      status, outcome:status==='completed'?pick(INT_OUTS):null,
+      notes:status==='completed'?'Interview completed.':null,
+      created_at:isoAgo(randInt(1,30)), updated_at:new Date().toISOString(), _demo:true
+    });
+  }
+  saveStore();
+
+  // ── Offers ─────────────────────────────────────────────────────────────────
+  progressCb({ step:'offers', message:'Creating offers…', pct:90 });
+  if (!store.offers) store.offers = [];
+  const OFF_STATS = ['draft','pending_approval','sent','sent','accepted','accepted','accepted','declined','expired'];
+  const completedCands = candidateRecords.filter((_,i)=>i<20);
+  for (let i = 0; i < Math.min(completedCands.length, 18); i++) {
+    const cand = completedCands[i];
+    const job  = jobRecords[i % jobRecords.length];
+    const status = pick(OFF_STATS);
+    const sal  = (job.data.salary_min||80000) + randInt(0, (job.data.salary_max||120000)-(job.data.salary_min||80000));
+    const startDate = new Date(Date.now()+randInt(14,90)*86400000).toISOString().slice(0,10);
+    store.offers.push({
+      id:uuidv4(), environment_id:environmentId,
+      candidate_id:cand.id,
+      candidate_name:`${cand.data.first_name} ${cand.data.last_name}`,
+      job_id:job.id, job_title:job.data.job_title,
+      status, currency:'USD', base_salary:sal,
+      bonus:Math.round(sal*0.1), start_date:startDate,
+      expiry_date:new Date(Date.now()+randInt(7,21)*86400000).toISOString().slice(0,10),
+      approvers:[], notes:'Demo offer.',
+      data:{ start_date:startDate, docs_status:status==='accepted'?pick(['complete','pending']):'pending', job_title:job.data.job_title },
+      created_at:isoAgo(randInt(1,45)), updated_at:new Date().toISOString(), _demo:true
+    });
+  }
+  saveStore();
+
   progressCb({ step:'done', message:'Demo data ready!', pct:100 });
   return {
     jobs: jobRecords.length, candidates: candidateRecords.length,
     workflows: wfRecords.length,
+    interviews: store.interviews.filter(i=>i._demo&&i.environment_id===environmentId).length,
+    offers: store.offers.filter(o=>o._demo&&o.environment_id===environmentId).length,
     links: store.people_links.filter(l=>l._demo&&l.environment_id===environmentId).length,
     notes: store.notes.filter(n=>n._demo&&n.environment_id===environmentId).length,
     communications: store.communications.filter(c=>c._demo&&c.environment_id===environmentId).length,
@@ -447,7 +504,7 @@ router.delete('/clear', (req, res) => {
     const store = getStore();
     let removed = 0;
     ['records','workflows','workflow_steps','record_workflow_assignments',
-     'people_links','notes','communications'].forEach(table => {
+     'people_links','notes','communications','interviews','offers'].forEach(table => {
       if (store[table]) {
         const before = store[table].length;
         store[table] = store[table].filter(r => !(r._demo && r.environment_id === environment_id));
