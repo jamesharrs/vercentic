@@ -928,65 +928,150 @@ const SecuritySection = () => {
 
 // ── Audit Log Section ────────────────────────────────────────────────────────
 const AuditLogSection = () => {
-  const [logs, setLogs] = useState([]);
+  const [items, setItems] = useState([]);
+  const [stats, setStats] = useState(null);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
+  const [tab, setTab] = useState("events"); // "events" | "summary"
+  const [expanded, setExpanded] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const d = await api.get(`/security/audit-log?page=${page}&limit=20${filter?`&action=${filter}`:""}`);
-    setLogs(d.logs||[]);
-    setTotal(d.pagination?.total||0);
+    try {
+      const params = [`page=${page}`, `limit=25`];
+      if (severityFilter) params.push(`severity=${severityFilter}`);
+      if (eventFilter) params.push(`event_type=${eventFilter}`);
+      const d = await api.get(`/security-audit?${params.join("&")}`);
+      setItems(d.items || []);
+      setTotal(d.total || 0);
+    } catch { setItems([]); setTotal(0); }
+    try { const s = await api.get("/security-audit/stats"); setStats(s); } catch {}
     setLoading(false);
-  }, [page, filter]);
+  }, [page, severityFilter, eventFilter]);
 
   useEffect(() => { load(); }, [load]);
 
-  const actionColor = (action) => {
-    if (action.includes("delete")||action.includes("deactivat")) return "#e03131";
-    if (action.includes("create")||action.includes("invite")) return "#0ca678";
-    if (action.includes("login")) return "#3b5bdb";
-    return "#868e96";
+  const sevColor = { CRITICAL:"#e03131", HIGH:"#f76707", MEDIUM:"#f59f00", LOW:"#868e96", INFO:"#3b5bdb" };
+  const sevIcon  = { CRITICAL:"alert-triangle", HIGH:"shield", LOW:"check", INFO:"activity" };
+
+  const exportCsv = async () => {
+    try {
+      const res = await fetch("/api/security-audit/export", { headers: { "X-User-Id": JSON.parse(localStorage.getItem("talentos_session")||"{}").userId } });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `security-audit-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Export failed"); }
   };
 
   return (
-    <Card title="Audit Log" subtitle={`${total} total events`}
+    <Card title="Security Audit Log" subtitle={`${total} events recorded`}
       action={
-        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-          <option value="">All events</option>
-          <option value="auth">Authentication</option>
-          <option value="user">User management</option>
-          <option value="record">Data changes</option>
-        </select>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <Btn v="secondary" sz="sm" onClick={exportCsv}><Ic n="download" s={12}/> Export CSV</Btn>
+          <Btn v="secondary" sz="sm" onClick={load}><Ic n="refresh-cw" s={12}/> Refresh</Btn>
+        </div>
       }>
-      {loading ? <div style={{padding:24,textAlign:"center",color:C.text3}}>Loading…</div> : (
-        <div style={{marginTop:16}}>
-          {logs.length===0 ? (
-            <div style={{padding:32,textAlign:"center",color:C.text3,fontSize:13}}>No audit events found</div>
-          ) : logs.map(log=>(
-            <div key={log.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:actionColor(log.action),flexShrink:0,marginTop:5}}/>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <code style={{fontSize:12,fontFamily:"ui-monospace,monospace",color:actionColor(log.action),fontWeight:600}}>{log.action}</code>
-                  {log.actor&&<span style={{fontSize:12,color:C.text3}}>by {log.actor}</span>}
-                </div>
-                {log.details&&Object.keys(log.details).length>0&&(
-                  <div style={{fontSize:11,color:C.text3,marginTop:2,fontFamily:"ui-monospace,monospace"}}>{JSON.stringify(log.details).slice(0,120)}</div>
-                )}
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,marginTop:12,marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:8}}>
+        {[{id:"events",label:"Events"},{id:"summary",label:"Summary"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?700:500,background:tab===t.id?C.accentLight:"transparent",color:tab===t.id?C.accent:C.text3,fontFamily:F}}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab === "summary" && stats ? (
+        <div>
+          {/* Severity cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:20}}>
+            {Object.entries(stats.by_severity||{}).map(([sev,count])=>(
+              <div key={sev} style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${sevColor[sev]||C.border}25`,background:`${sevColor[sev]||C.border}08`}}>
+                <div style={{fontSize:20,fontWeight:800,color:sevColor[sev]||C.text1}}>{count}</div>
+                <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{sev}</div>
               </div>
-              <div style={{fontSize:11,color:C.text3,flexShrink:0}}>{new Date(log.created_at).toLocaleString()}</div>
-            </div>
-          ))}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16}}>
-            <span style={{fontSize:12,color:C.text3}}>Showing {logs.length} of {total}</span>
-            <div style={{display:"flex",gap:6}}>
-              <Btn v="secondary" sz="sm" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Previous</Btn>
-              <Btn v="secondary" sz="sm" onClick={()=>setPage(p=>p+1)} disabled={logs.length<20}>Next</Btn>
-            </div>
+            ))}
           </div>
+          {/* Most denied */}
+          {stats.most_denied?.length > 0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.text1,marginBottom:8}}>Most Denied Actions</div>
+              {stats.most_denied.map((d,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
+                  <code style={{fontSize:11,color:"#e03131",fontWeight:600,flex:1}}>{d.action}</code>
+                  <span style={{fontSize:12,fontWeight:700,color:C.text1}}>{d.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Recent critical */}
+          {stats.recent_critical?.length > 0 && (
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.text1,marginBottom:8}}>Recent Critical Events</div>
+              {stats.recent_critical.map((e,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{width:6,height:6,borderRadius:"50%",background:"#e03131",flexShrink:0}}/>
+                  <code style={{fontSize:11,color:"#e03131",fontWeight:600}}>{e.event_type}</code>
+                  <span style={{fontSize:11,color:C.text3,flex:1}}>{e.actor_email||"system"}</span>
+                  <span style={{fontSize:10,color:C.text3}}>{new Date(e.timestamp).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          {/* Filters */}
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+            <select value={severityFilter} onChange={e=>{setSeverityFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
+              <option value="">All severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+              <option value="INFO">Info</option>
+            </select>
+            <select value={eventFilter} onChange={e=>{setEventFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
+              <option value="">All event types</option>
+              <option value="ACCESS_DENIED">Access Denied</option>
+              <option value="PERMISSIONS_CHANGED">Permissions Changed</option>
+              <option value="ROLE_CREATED">Role Created</option>
+              <option value="ROLE_DELETED">Role Deleted</option>
+              <option value="FIELD_VISIBILITY_CHANGED">Field Visibility Changed</option>
+            </select>
+          </div>
+
+          {loading ? <div style={{padding:24,textAlign:"center",color:C.text3}}>Loading…</div> : items.length === 0 ? (
+            <div style={{padding:32,textAlign:"center",color:C.text3,fontSize:13}}>No security audit events found</div>
+          ) : (
+            <div>
+              {items.map(item => (
+                <div key={item.id} onClick={()=>setExpanded(expanded===item.id?null:item.id)} style={{borderBottom:`1px solid ${C.border}`,cursor:"pointer",transition:"background .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#f9f9fb"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0"}}>
+                    <span style={{display:"inline-flex",padding:"2px 7px",borderRadius:4,fontSize:10,fontWeight:700,color:sevColor[item.severity]||C.text3,background:`${sevColor[item.severity]||C.border}15`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>{item.severity}</span>
+                    <code style={{fontSize:12,fontWeight:600,color:C.text1,flex:1}}>{item.event_type}</code>
+                    <span style={{fontSize:11,color:C.text3}}>{item.actor_email||"system"}</span>
+                    <span style={{fontSize:10,color:C.text3,flexShrink:0}}>{new Date(item.timestamp).toLocaleString()}</span>
+                  </div>
+                  {expanded===item.id && item.details && (
+                    <div style={{padding:"0 0 10px 30px",fontSize:11,color:C.text2,fontFamily:"ui-monospace,monospace",lineHeight:1.6,whiteSpace:"pre-wrap",maxHeight:200,overflow:"auto"}}>
+                      {JSON.stringify(item.details, null, 2)}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16}}>
+                <span style={{fontSize:12,color:C.text3}}>Page {page} · {items.length} of {total}</span>
+                <div style={{display:"flex",gap:6}}>
+                  <Btn v="secondary" sz="sm" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Previous</Btn>
+                  <Btn v="secondary" sz="sm" onClick={()=>setPage(p=>p+1)} disabled={items.length<25}>Next</Btn>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Card>
@@ -2374,8 +2459,10 @@ const NAV_GROUPS = [
 
 export default function SettingsPage({ currentUser, environment, initialSection, onSectionChange }) {
   const [activeSection, setActiveSectionState] = useState(initialSection || null);
+  const [fullScreenMode, setFullScreenMode] = useState(false);
 
   const setActiveSection = (id) => {
+    if (id !== "portals") setFullScreenMode(false);
     window.dispatchEvent(new CustomEvent("talentos:settings-section", { detail: id }));
     setActiveSectionState(id);
     if (onSectionChange) onSectionChange(id);
@@ -2387,7 +2474,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
   );
   const [sideHovered, setSideHovered]     = useState(false);
   const sideExpanded = !sideCollapsed || sideHovered;
-  const SIDE_W = sideExpanded ? 210 : 44;
+  const SIDE_W = fullScreenMode ? 0 : sideExpanded ? 210 : 44;
   const toggleSide = () => setSideCollapsed(v => {
     const next = !v;
     localStorage.setItem('vrc_settings_nav_collapsed', String(next));
@@ -2406,6 +2493,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
       {/* Settings sidebar */}
       <div
         onMouseEnter={() => sideCollapsed && setSideHovered(true)}
+        data-settings-sidebar="1"
         onMouseLeave={() => setSideHovered(false)}
         style={{width:SIDE_W,flexShrink:0,paddingRight:sideExpanded?20:0,display:"flex",flexDirection:"column",
           overflow:"hidden",transition:"width 0.2s cubic-bezier(0.4,0,0.2,1)"}}>
@@ -2529,7 +2617,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="appearance" && <AppearanceSection/>}
         {activeSection==="language"   && <LanguageSection/>}
         {activeSection==="workflows"  && <WorkflowsPage environment={environment}/>}
-        {activeSection==="portals"    && <PortalsPage environment={environment}/>}
+        {activeSection==="portals"    && <PortalsPage environment={environment} onFullScreen={setFullScreenMode}/>}
         {activeSection==="questions"  && <QuestionBankSettings/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
         {activeSection==="superadmin"  && <IntegrationsSettings environment={environment}/>}

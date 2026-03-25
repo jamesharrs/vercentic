@@ -2428,7 +2428,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",fontFamily:F,background:C.bg,position:"fixed",inset:0,zIndex:150}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",fontFamily:F,background:C.bg}}>
       {/* Top bar */}
       <div style={{height:48,background:C.surface,borderBottom:`1px solid ${C.border}`,zIndex:200,position:"relative",display:"flex",alignItems:"center",gap:0,flexShrink:0,padding:"0 12px",overflow:"hidden"}}>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:6,fontFamily:F,fontSize:13}}
@@ -2662,7 +2662,7 @@ const PortalCard = ({ portal, onEdit, onDelete, onDuplicate, stats }) => {
 };
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export default function PortalsPage({ environment }) {
+export default function PortalsPage({ environment, onFullScreen }) {
   const [portals, setPortals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -2683,6 +2683,11 @@ export default function PortalsPage({ environment }) {
   }, [environment?.id]);
 
   useEffect(()=>{ load(); },[load]);
+
+  // Tell Settings to go full-width when builder is open
+  useEffect(() => {
+    if (onFullScreen) onFullScreen(!!editing);
+  }, [editing, onFullScreen]);
 
   if (editing) {
     return (

@@ -1556,6 +1556,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         adminUsers.length?`\n\nEXISTING USERS (${adminUsers.length} total):\n${adminUsers.map(u=>`- ${u.first_name} ${u.last_name} <${u.email}> role:${adminRoles.find(r=>r.id===u.role_id)?.name||u.role_id} status:${u.status}`).join("\n")}`:"",
         interviewTypes.length?`\n\nAVAILABLE INTERVIEW TYPES:\n${interviewTypes.map(t=>`- ${t.name} (id:${t.id}, duration:${t.duration}min, format:${t.format||t.interview_format||'Video Call'})`).join("\n")}`
           :"\n\nINTERVIEW TYPES: None configured yet — you can still schedule a custom interview.",
+        // RBAC: inject user role so AI knows what actions are allowed
+        _pcAI?.permissions?._roleSlug ? `\n\nUSER ROLE: ${_pcAI.permissions._roleSlug}${_pcAI.permissions._roleSlug==='super_admin'?' (full access)':_pcAI.permissions._roleSlug==='read_only'?' — READ ONLY, do NOT suggest any create/edit/delete actions':''}` : '',
       ].join("");
 
       // First AI call
@@ -1639,6 +1641,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   };
 
   const handleConfirmCreate = async () => {    if(!pendingRecord||!environment?.id) return;
+    // RBAC: check create permission on the target object
+    const _slug = _COPILOT_PERM_SLUG_MAP[pendingRecord.object_slug] || pendingRecord.object_slug;
+    if (_pcAI && !_pcAI.can(_slug, 'create')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to create records in this object. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingRecord(null); return;
+    }
     setCreating(true);
     const obj = objects.find(o=>o.slug===pendingRecord.object_slug);
     if(!obj){setCreating(false);return;}
@@ -1663,6 +1671,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const handleConfirmWorkflow = async () => {
     if (!pendingWorkflow || !environment?.id) return;
+    // RBAC: check manage_workflows permission
+    if (_pcAI && !_pcAI.canGlobal('manage_workflows')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to create workflows. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingWorkflow(null); return;
+    }
     setCreating(true);
     try {
       const obj = objects.find(o => o.slug === pendingWorkflow.object_slug);
@@ -1691,6 +1704,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const handleConfirmUser = async () => {
     if (!pendingUser) return;
+    // RBAC: check manage_users permission
+    if (_pcAI && !_pcAI.canGlobal('manage_users')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to invite users. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingUser(null); return;
+    }
     setCreating(true);
     try {
       // Resolve role_name → role_id
@@ -1714,6 +1732,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const handleConfirmRole = async () => {
     if (!pendingRole) return;
+    // RBAC: check manage_roles permission
+    if (_pcAI && !_pcAI.canGlobal('manage_roles')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to create roles. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingRole(null); return;
+    }
     setCreating(true);
     try {
       const result = await api.post("/roles", {
@@ -1891,6 +1914,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     // Use passed-in snapshot to avoid stale-state issues when pendingInterview was reset
     const iv = interviewSnapshot || pendingInterview;
     if (!iv || !environment?.id) return;
+    // RBAC: check interview scheduling permission
+    if (_pcAI && !_pcAI.canGlobal('record_schedule_interview')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to schedule interviews. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingInterview(null); return;
+    }
     setCreating(true);
     try {
       const candidateId = iv.candidate_id || currentRecord?.id || null;
@@ -1932,6 +1960,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const handleConfirmPortal = async () => {
     if (!pendingPortal || !environment?.id) return;
+    // RBAC: check manage_portals permission
+    if (_pcAI && !_pcAI.canGlobal('manage_portals')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to create portals. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingPortal(null); return;
+    }
     setCreating(true);
     try {
       const uid = () => Math.random().toString(36).slice(2, 10);
@@ -2000,6 +2033,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const handleConfirmForm = async () => {
     if (!pendingForm || !environment?.id) return;
+    // RBAC: check manage_forms permission
+    if (_pcAI && !_pcAI.canGlobal('manage_forms')) {
+      setMessages(m=>[...m,{role:"assistant",content:"You don't have permission to create forms. Contact your administrator.",ts:new Date(),error:true}]);
+      setPendingForm(null); return;
+    }
     setCreating(true);
     try {
       // Ensure each field has a unique id and api_key
