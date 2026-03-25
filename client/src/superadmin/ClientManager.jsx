@@ -98,7 +98,7 @@ export function ClientList({ onProvision, onSelectClient }) {
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:C.surface2,borderBottom:`1px solid ${C.border}`}}>
-                {['Client','Plan','Status','Envs','Records','Contact','Actions'].map(h=>(
+                {['Client','Plan','Status','Environment','Records','Contact','Actions'].map(h=>(
                   <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
@@ -114,7 +114,23 @@ export function ClientList({ onProvision, onSelectClient }) {
                   </td>
                   <td style={{padding:'12px 14px'}}><PlanBadge plan={c.plan}/></td>
                   <td style={{padding:'12px 14px'}}><StatusBadge status={c.status}/></td>
-                  <td style={{padding:'12px 14px',color:C.text2,fontSize:13}}>{c.env_count||0}</td>
+                  <td style={{padding:'12px 14px'}}>
+                    {c.env_count > 0 ? (
+                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <a href={c.app_url || 'https://vercentic.vercel.app'}
+                           target="_blank" rel="noreferrer"
+                           style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,fontWeight:600,color:'#60a5fa',textDecoration:'none',padding:'4px 9px',borderRadius:6,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.25)',width:'fit-content'}}
+                           onMouseEnter={e=>e.currentTarget.style.background='rgba(96,165,250,0.2)'}
+                           onMouseLeave={e=>e.currentTarget.style.background='rgba(96,165,250,0.12)'}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                          Open app ↗
+                        </a>
+                        <span style={{fontSize:10,color:C.text3}}>{c.env_count} env{c.env_count!==1?'s':''}</span>
+                      </div>
+                    ) : (
+                      <span style={{fontSize:12,color:C.text3}}>Not provisioned</span>
+                    )}
+                  </td>
                   <td style={{padding:'12px 14px',color:C.text2,fontSize:13}}>{c.record_count||0}</td>
                   <td style={{padding:'12px 14px'}}>
                     <div style={{fontSize:12,color:C.text2}}>{c.primary_contact_name||'—'}</div>
