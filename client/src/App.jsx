@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
+import ReportingErrorBoundary from "./ErrorBoundary.jsx";
 import InboxModule, { useInboxUnreadCount } from "./Inbox";
 import { MobileShell, useIsMobile } from "./MobileApp.jsx";
 import MaintenanceOverlay from "./MaintenanceOverlay";
@@ -2195,22 +2196,7 @@ function App() {
   );
 }
 
-// ─── Error Boundary ───────────────────────────────────────────────────────────
-import { Component } from "react";
-class ErrorBoundary extends Component {
-  state = { error: null };
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    if (this.state.error) return (
-      <div style={{padding:40,fontFamily:"monospace",color:"red"}}>
-        <h2>Runtime Error</h2>
-        <pre style={{whiteSpace:"pre-wrap"}}>{this.state.error?.toString()}</pre>
-        <pre style={{whiteSpace:"pre-wrap",fontSize:11,color:"#555"}}>{this.state.error?.stack}</pre>
-      </div>
-    );
-    return this.props.children;
-  }
-}
+// ErrorBoundary: using the reporting version from ErrorBoundary.jsx (reports to /api/error-logs)
 
 // ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
 function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
@@ -2296,10 +2282,10 @@ export default function AppRoot() {
     return <InterviewSession />;
   }
   return (
-    <ErrorBoundary>
+    <ReportingErrorBoundary>
       <ThemeProvider>
         <App />
       </ThemeProvider>
-    </ErrorBoundary>
+    </ReportingErrorBoundary>
   );
 }

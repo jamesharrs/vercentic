@@ -69,6 +69,7 @@ const AUTH_EXEMPT_PATHS = [
   '/bot',                              // bot/interview routes (public)
   '/tenant-reset',                     // tenant data reset (password protected)
   '/cleanup-seeds',                    // one-shot seed data cleanup
+  '/error-logs',                       // allow error reporting without auth
 ];
 app.use('/api', (req, res, next) => {
   // Skip for exempt prefixes

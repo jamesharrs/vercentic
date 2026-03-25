@@ -256,6 +256,281 @@ const CtaBannerWidget = ({ cfg, theme }) => {
 };
 function clamp(n) { return Math.min(Math.max(Number(n)||32, 16), 64); }
 
+const TextWidget = ({ cfg, theme }) => {
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const hf = theme.headingFont || ff;
+  const hw = parseInt(theme.headingWeight) || 700;
+  const tc = theme.textColor || '#1a1a2e';
+  return (
+    <div style={{ fontFamily:ff, lineHeight:1.7 }}>
+      {cfg.heading && <h2 style={{ fontSize:clamp(cfg.headingSize||28), fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 12px' }}>{cfg.heading}</h2>}
+      {cfg.content && <p style={{ fontSize:clamp(cfg.bodySize||16), color:tc, opacity:0.75, margin:0, whiteSpace:'pre-wrap' }}>{cfg.content}</p>}
+    </div>
+  );
+};
+
+const ImageWidget = ({ cfg }) => {
+  if (!cfg.url) return <div style={{ background:'#f0f0f5', minHeight:120, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}><span style={{ color:'#9ca3af', fontSize:13 }}>No image</span></div>;
+  return (
+    <div style={{ borderRadius: cfg.rounded ? 12 : 0, overflow:'hidden' }}>
+      <img src={cfg.url} alt={cfg.alt||''} style={{ width:'100%', display:'block', maxHeight: cfg.maxHeight || 'none', objectFit: cfg.fit || 'cover' }}/>
+      {cfg.caption && <p style={{ fontSize:13, color:'#6b7280', margin:'8px 0 0', textAlign:'center' }}>{cfg.caption}</p>}
+    </div>
+  );
+};
+
+const StatsWidget = ({ cfg, theme }) => {
+  const pr = theme.primaryColor || '#4361EE';
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const hf = theme.headingFont || ff;
+  const stats = cfg.stats || [{value:'—',label:'Stat'}];
+  return (
+    <div style={{ display:'flex', gap:32, justifyContent:'center', flexWrap:'wrap', fontFamily:ff, padding:'8px 0' }}>
+      {stats.map((s,i) => (
+        <div key={i} style={{ textAlign:'center', minWidth:80 }}>
+          <div style={{ fontSize:clamp(cfg.valueSize||36), fontWeight:800, color:pr, fontFamily:hf, lineHeight:1.2 }}>{s.value}</div>
+          <div style={{ fontSize:clamp(cfg.labelSize||14), color: theme.textColor||'#1a1a2e', opacity:0.6, marginTop:4 }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const VideoWidget = ({ cfg }) => {
+  if (!cfg.url) return <div style={{ background:'#000', minHeight:200, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8 }}><span style={{ color:'rgba(255,255,255,.5)', fontSize:13 }}>No video URL</span></div>;
+  const isYT = /youtu/.test(cfg.url); const isV = /vimeo/.test(cfg.url);
+  if (isYT || isV) {
+    let eu = cfg.url;
+    if (isYT) { const id = cfg.url.match(/(?:v=|\/)([\w-]{11})/)?.[1]; if (id) eu = 'https://www.youtube.com/embed/'+id; }
+    if (isV) { const id = cfg.url.match(/vimeo\.com\/(\d+)/)?.[1]; if (id) eu = 'https://player.vimeo.com/video/'+id; }
+    return <div style={{ position:'relative', paddingBottom:'56.25%', borderRadius:8, overflow:'hidden' }}><iframe src={eu} style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'none' }} allow="autoplay; fullscreen" allowFullScreen/></div>;
+  }
+  return <video src={cfg.url} controls={!cfg.autoplay} autoPlay={!!cfg.autoplay} loop={!!cfg.loop} muted={!!cfg.autoplay} playsInline style={{ width:'100%', borderRadius:8, display:'block' }}/>;
+};
+
+const DividerWidget = ({ cfg, theme }) => (
+  <div style={{ display:'flex', justifyContent:'center', padding:'4px 0' }}>
+    <div style={{ flex:1, maxWidth: cfg.maxWidth || '100%', borderTop: (cfg.thickness||1)+'px '+(cfg.dividerStyle||'solid')+' '+(cfg.color || (theme.primaryColor||'#4361EE')+'30') }}/>
+  </div>
+);
+
+const SpacerWidget = ({ cfg }) => {
+  const MAP = { xs:16, sm:32, md:64, lg:96, xl:128 };
+  const px = cfg.height === 'custom' ? (cfg.customHeight || 64) : MAP[cfg.height] ?? (parseInt(cfg.height) || 64);
+  return <div style={{ height:px }}/>;
+};
+
+
+const JobsWidget = ({ cfg, theme, portal, api, track }) => {
+  const [jobs, setJobs] = useState([]);
+  const [search, setSearch] = useState('');
+  const [dept, setDept] = useState('all');
+  const [selected, setSelected] = useState(null);
+  const [applying, setApplying] = useState(false);
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const pr = theme.primaryColor || '#4361EE';
+  const tc = theme.textColor || '#1a1a2e';
+  const br = theme.borderRadius || '8px';
+  useEffect(() => {
+    if (!portal?.environment_id) return;
+    api.get('/objects?environment_id='+portal.environment_id)
+      .then(objs => {
+        const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs');
+        if (!obj) return null;
+        return api.get('/records?object_id='+obj.id+'&environment_id='+portal.environment_id+'&limit='+(cfg.limit||200));
+      })
+      .then(data => {
+        if (!data) return;
+        setJobs((data?.records||data||[]).filter(r => r.data?.status !== 'Closed' && r.data?.status !== 'Filled'));
+      }).catch(() => {});
+  }, [portal?.environment_id]);
+
+  const depts = [...new Set(jobs.map(j => j.data?.department).filter(Boolean))];
+  const filtered = jobs.filter(j => {
+    const d = j.data || {};
+    if (search && !JSON.stringify(d).toLowerCase().includes(search.toLowerCase())) return false;
+    if (dept !== 'all' && d.department !== dept) return false;
+    return true;
+  });
+  if (selected) {
+    const d = selected.data || {};
+    return (
+      <div style={{ fontFamily:ff }}>
+        <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:12 }}>← Back</button>
+        <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
+        <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+        {d.description && <div style={{ fontSize:14, color:tc, lineHeight:1.7, whiteSpace:'pre-wrap', marginBottom:20 }}>{d.description}</div>}
+        {!applying ? (
+          <button onClick={() => { setApplying(true); if(track) track('job_click', { job_id: selected.id, title: d.job_title }); }}
+            style={{ padding:'12px 28px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Apply Now</button>
+        ) : (
+          <div style={{ padding:16, background:pr+'08', borderRadius:br, border:'1px solid '+pr+'20' }}>
+            <p style={{ margin:'0 0 8px', fontSize:14, fontWeight:600, color:tc }}>Application submitted!</p>
+            <p style={{ margin:0, fontSize:13, color:tc+'80' }}>Thank you. We'll be in touch.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div style={{ fontFamily:ff }}>
+      <h2 style={{ fontSize:clamp(cfg.headingSize||22), fontWeight:700, color:tc, margin:'0 0 16px', fontFamily:theme.headingFont||ff }}>{cfg.heading || 'Open Positions'}</h2>
+
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search roles..." style={{ flex:'1 1 200px', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'30', fontSize:13, fontFamily:ff, outline:'none' }}/>
+        {depts.length > 1 && (
+          <select value={dept} onChange={e=>setDept(e.target.value)} style={{ padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'30', fontSize:13, fontFamily:ff, background:'white' }}>
+            <option value="all">All departments</option>
+            {depts.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        )}
+      </div>
+      {filtered.length === 0 ? <p style={{ color:tc+'60', fontSize:14 }}>No open positions.</p> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {filtered.map(j => {
+            const d = j.data || {};
+            return (
+              <div key={j.id} onClick={() => setSelected(j)}
+                style={{ padding:'14px 18px', borderRadius:br, border:'1px solid '+pr+'18', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = pr; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = pr+'18'; }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:600, color:tc }}>{d.job_title || d.name || 'Untitled'}</div>
+                  <div style={{ fontSize:12, color:tc+'70', marginTop:2 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+                </div>
+                <span style={{ fontSize:12, color:pr, fontWeight:600 }}>View →</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TeamWidget = ({ cfg, theme, portal, api }) => {
+  const [members, setMembers] = useState([]);
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const tc = theme.textColor || '#1a1a2e';
+  const pr = theme.primaryColor || '#4361EE';
+  useEffect(() => {
+    if (!portal?.environment_id) return;
+    api.get('/objects?environment_id='+portal.environment_id)
+      .then(objs => { const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='people'); return obj ? api.get('/records?object_id='+obj.id+'&environment_id='+portal.environment_id+'&limit=50') : null; })
+      .then(data => { if (!data) return; setMembers((data?.records||data||[]).filter(r => r.data?.person_type === 'Employee').slice(0, cfg.limit || 12)); })
+      .catch(() => {});
+  }, [portal?.environment_id]);
+  return (
+    <div style={{ fontFamily:ff }}>
+      <h3 style={{ fontSize:18, fontWeight:700, color:tc, margin:'0 0 16px', fontFamily:theme.headingFont||ff }}>{cfg.heading || 'Meet the Team'}</h3>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:16 }}>
+        {members.map(m => {
+          const d = m.data || {};
+          const name = [d.first_name, d.last_name].filter(Boolean).join(' ') || 'Team Member';
+          const initials = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+          return (
+            <div key={m.id} style={{ textAlign:'center' }}>
+              <div style={{ width:64, height:64, borderRadius:'50%', background:pr+'15', border:'2px solid '+pr+'30', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 8px', fontSize:18, fontWeight:700, color:pr }}>{initials}</div>
+              <div style={{ fontSize:13, fontWeight:600, color:tc }}>{name}</div>
+              {d.job_title && <div style={{ fontSize:11, color:tc+'70' }}>{d.job_title}</div>}
+            </div>
+          );
+        })}
+        {members.length === 0 && <p style={{ color:tc+'60', fontSize:13, gridColumn:'1 / -1' }}>No team members to display.</p>}
+      </div>
+    </div>
+  );
+};
+
+const FormWidget = ({ cfg, theme }) => {
+  const [submitted, setSubmitted] = useState(false);
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const pr = theme.primaryColor || '#4361EE';
+  const tc = theme.textColor || '#1a1a2e';
+  const br = theme.borderRadius || '8px';
+  if (submitted) return (
+    <div style={{ textAlign:'center', padding:'32px 16px', fontFamily:ff }}>
+      <div style={{ fontSize:32, marginBottom:8 }}>✓</div>
+      <h3 style={{ margin:'0 0 8px', color:tc, fontWeight:700 }}>{cfg.successTitle || 'Thank you!'}</h3>
+      <p style={{ margin:0, color:tc+'80', fontSize:14 }}>{cfg.successMessage || "We've received your submission."}</p>
+    </div>
+  );
+  return (
+    <div style={{ fontFamily:ff }}>
+      <h3 style={{ fontSize:18, fontWeight:700, color:tc, margin:'0 0 16px', fontFamily:theme.headingFont||ff }}>{cfg.title || 'Get in Touch'}</h3>
+      {(cfg.fields || ['Name','Email','Message']).map((f, i) => {
+        const label = typeof f === 'string' ? f : f.label;
+        const type = typeof f === 'string' ? (f.toLowerCase() === 'email' ? 'email' : f.toLowerCase() === 'message' ? 'textarea' : 'text') : f.type;
+        return (
+          <div key={i} style={{ marginBottom:12 }}>
+            <label style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{label}</label>
+            {type === 'textarea'
+              ? <textarea rows={3} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
+              : <input type={type||'text'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
+            }
+          </div>
+        );
+      })}
+      <button onClick={() => setSubmitted(true)} style={{ padding:'10px 24px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff, marginTop:4 }}>
+        {cfg.submitText || 'Submit'}
+      </button>
+    </div>
+  );
+};
+
+const MultistepFormWidget = ({ cfg, theme, portal, api, track }) => {
+  const [step, setStep] = useState(0);
+  const [values, setValues] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const pr = theme.primaryColor || '#4361EE';
+  const tc = theme.textColor || '#1a1a2e';
+  const br = theme.borderRadius || '8px';
+  const steps = cfg.steps || [{ title:'Step 1', fields:[{ id:'name', type:'text', label:'Name', required:true }] }];
+  const current = steps[step] || steps[0];
+  if (submitted) return (
+    <div style={{ textAlign:'center', padding:'32px 16px', fontFamily:ff }}>
+      <div style={{ width:48, height:48, borderRadius:'50%', background:pr+'15', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}><span style={{ fontSize:24, color:pr }}>✓</span></div>
+      <h3 style={{ margin:'0 0 8px', color:tc, fontWeight:700 }}>{cfg.successTitle || 'Application Submitted!'}</h3>
+      <p style={{ margin:0, color:tc+'80', fontSize:14 }}>{cfg.successMessage || "Thank you! We'll be in touch."}</p>
+    </div>
+  );
+  const setValue = (id, v) => setValues(prev => ({ ...prev, [id]: v }));
+  return (
+    <div style={{ fontFamily:ff }}>
+      {cfg.formTitle && <h3 style={{ fontSize:18, fontWeight:700, color:tc, margin:'0 0 16px' }}>{cfg.formTitle}</h3>}
+      <div style={{ display:'flex', gap:4, marginBottom:20 }}>
+        {steps.map((s, i) => (<div key={i} style={{ flex:1, height:4, borderRadius:2, background: i <= step ? pr : pr+'20', transition:'background .2s' }}/>))}
+      </div>
+      <div style={{ fontSize:11, color:tc+'60', marginBottom:6 }}>Step {step+1} of {steps.length}</div>
+      <h4 style={{ fontSize:15, fontWeight:600, color:tc, margin:'0 0 14px' }}>{current.title}</h4>
+      {(current.fields || []).map(f => (
+        <div key={f.id} style={{ marginBottom:12 }}>
+          <label style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{f.label}{f.required && <span style={{ color:'#ef4444' }}> *</span>}</label>
+          {f.type === 'textarea'
+            ? <textarea value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} rows={3} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
+            : f.type === 'select' || f.type === 'radio'
+              ? <select value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, background:'white', boxSizing:'border-box' }}>
+                  <option value="">Select...</option>
+                  {(f.options||'').split(',').map(o => o.trim()).filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              : <input type={f.type||'text'} value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
+          }
+        </div>
+      ))}
+      <div style={{ display:'flex', gap:8, marginTop:16 }}>
+        {step > 0 && <button onClick={() => setStep(s => s-1)} style={{ padding:'10px 20px', borderRadius:br, border:'1px solid '+pr+'30', background:'white', color:tc, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>← Back</button>}
+        <button onClick={() => { if (step < steps.length-1) { setStep(s => s+1); } else { setSubmitted(true); if (track) track('form_complete', { form: cfg.formTitle }); } }}
+          style={{ flex:1, padding:'10px 20px', borderRadius:br, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>
+          {step < steps.length-1 ? 'Next →' : (cfg.submitText || 'Submit')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const JobsWidget_export = JobsWidget;
+
 const Widget = ({ cell, theme, portal, api, track }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
