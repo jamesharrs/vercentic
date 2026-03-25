@@ -1535,7 +1535,7 @@ function App() {
     if (obj) return `obj_${obj.id}`;
     // Named pages (settings sub-pages use seg0 only — section handled inside Settings)
     const named = [
-      'dashboard','dashboard_interviews','dashboard_offers',
+      'dashboard','dashboard_interviews','dashboard_offers','dashboard_agents',
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
@@ -1721,6 +1721,7 @@ function App() {
       dashboard:            { label: "Dashboard",   objectName: "Overview",   objectColor: "#4361EE" },
       dashboard_interviews: { label: "Interviews",  objectName: "Dashboard",  objectColor: "#0891b2" },
       dashboard_offers:     { label: "Offers",      objectName: "Dashboard",  objectColor: "#059669" },
+      dashboard_agents:     { label: "Agents",      objectName: "Dashboard",  objectColor: "#7c3aed" },
       search:               { label: "Search",      objectName: "Search",     objectColor: "#7c3aed" },
       interviews:           { label: "Interviews",  objectName: "Scheduling", objectColor: "#0891b2" },
       offers:               { label: "Offers",      objectName: "Offers",     objectColor: "#059669" },
@@ -1972,7 +1973,7 @@ function App() {
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 4, height: navExpanded ? undefined : 0, overflow: "hidden", opacity: navExpanded ? 1 : 0, transition: "opacity 0.15s, height 0.15s" }}>{section.label}</div>
               {section.items.map(item => {
                 const isDashboard = item.id === "dashboard";
-                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin";
+                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_agents";
                 const isActive = isDashboard ? dashActive : (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`));
                 return (
                   <div key={item.id}>
@@ -2071,7 +2072,7 @@ function App() {
         <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} onNavigate={openRecord} />
-        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" ? (
+        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" ? (
           <DashboardHub
             tab={activeNav === "dashboard" ? "overview" : activeNav.replace("dashboard_", "")}
             onTabChange={(tab) => setActiveNav(tab === "overview" ? "dashboard" : `dashboard_${tab}`)}

@@ -5,6 +5,27 @@ import { useState, useEffect, useCallback } from "react";
 import AiBadge from "./AiBadge.jsx";
 import api from "./apiClient.js";
 
+// ── Agent avatar presets ──────────────────────────────────────────────────────
+const AGENT_AVATARS = [
+  { id: "robot",     label: "Robot",      path: "M12 2a2 2 0 012 2v1h3a2 2 0 012 2v3a2 2 0 01-2 2h-1v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4H5a2 2 0 01-2-2V7a2 2 0 012-2h3V4a2 2 0 012-2zM9 12a1 1 0 100-2 1 1 0 000 2zM15 12a1 1 0 100-2 1 1 0 000 2z" },
+  { id: "brain",     label: "Brain",      path: "M12 2C8.5 2 6 4.5 6 7c0 1.5.5 2.8 1.4 3.8A6 6 0 006 15c0 3.3 2.7 6 6 6s6-2.7 6-6a6 6 0 00-1.4-4.2C17.5 9.8 18 8.5 18 7c0-2.5-2.5-5-6-5z" },
+  { id: "sparkles",  label: "Magic",      path: "M12 2l1.582 6.135a2 2 0 001.437 1.437L21.154 11.154a.5.5 0 010 .964L15.019 13.7a2 2 0 00-1.437 1.437L12 21.271a.5.5 0 01-.963 0L9.455 15.136a2 2 0 00-1.437-1.437L1.883 12.118a.5.5 0 010-.964L8.018 9.572A2 2 0 009.455 8.135L12 2z" },
+  { id: "target",    label: "Target",     path: "M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z" },
+  { id: "shield",    label: "Shield",     path: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
+  { id: "zap",       label: "Lightning",  path: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
+  { id: "search",    label: "Search",     path: "M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" },
+  { id: "mail",      label: "Mail",       path: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" },
+  { id: "calendar",  label: "Calendar",   path: "M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18" },
+  { id: "bar-chart", label: "Analytics",  path: "M18 20V10M12 20V4M6 20v-6" },
+  { id: "users",     label: "People",     path: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" },
+  { id: "clipboard", label: "Clipboard",  path: "M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2M9 2h6a1 1 0 011 1v1a1 1 0 01-1 1H9a1 1 0 01-1-1V3a1 1 0 011-1z" },
+  { id: "code",      label: "Code",       path: "M16 18l6-6-6-6M8 6l-6 6 6 6" },
+  { id: "globe",     label: "Global",     path: "M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" },
+  { id: "mic",       label: "Voice",      path: "M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" },
+  { id: "eye",       label: "Monitor",    path: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z" },
+];
+const AGENT_COLORS = ["#4361EE","#7c3aed","#0891b2","#059669","#10b981","#e11d48","#f59e0b","#d97706","#6366f1","#0d9488","#dc2626","#2563eb"];
+
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
   bg: "var(--t-bg, #EEF2FF)", card: "white", accent: "var(--t-accent, #4361EE)",
@@ -120,6 +141,31 @@ function AgentFeedRow({ item }) {
 }
 
 // ── AGENT CARD ────────────────────────────────────────────────────────────────
+
+// ── Agent Avatar component ────────────────────────────────────────────────────
+function AgentAvatar({ agent, size = 40 }) {
+  const color = agent.avatar_color || TRIGGER_COLORS[agent.trigger_type] || C.accent;
+  const avatarDef = AGENT_AVATARS.find(a => a.id === agent.avatar_icon);
+  const initials = (agent.name || "A").slice(0, 2).toUpperCase();
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: size * 0.28,
+      background: `${color}15`, border: `2px solid ${color}30`,
+      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+      transition: "all .15s"
+    }}>
+      {avatarDef ? (
+        <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none"
+          stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d={avatarDef.path}/>
+        </svg>
+      ) : (
+        <span style={{ fontSize: size * 0.32, fontWeight: 800, color, fontFamily: F, letterSpacing: "-0.02em" }}>{initials}</span>
+      )}
+    </div>
+  );
+}
+
 function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
   const [running, setRunning] = useState(false);
   const handleRun = async (e) => { e.stopPropagation(); setRunning(true); await onRun(agent.id); setRunning(false); };
@@ -131,9 +177,7 @@ function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
       <div style={{height:3,background:trigColor}}/>
       <div style={{padding:"14px 16px"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
-          <div style={{width:36,height:36,borderRadius:10,background:`${trigColor}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <Ic n={TRIGGER_ICONS[agent.trigger_type]||"zap"} s={16} c={trigColor}/>
-          </div>
+          <AgentAvatar agent={agent} size={36}/>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:700,color:C.text1,marginBottom:2}}>{agent.name}</div>
             {agent.description&&<div style={{fontSize:12,color:C.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{agent.description}</div>}
@@ -621,9 +665,7 @@ function AgentDetail({ agent, onEdit, onClose }) {
       <div style={{height:3,background:trigColor}}/>
       <div style={{padding:"16px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-          <div style={{width:40,height:40,borderRadius:12,background:`${trigColor}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <Ic n={TRIGGER_ICONS[agent.trigger_type]||"zap"} s={18} c={trigColor}/>
-          </div>
+          <AgentAvatar agent={agent} size={40}/>
           <div style={{flex:1}}>
             <div style={{fontSize:15,fontWeight:700,color:C.text1}}>{agent.name}</div>
             <div style={{fontSize:12,color:C.text3}}>{agent.description||'No description'}</div>
@@ -680,7 +722,7 @@ export default function AgentsModule({ environment }) {
   const [feed, setFeed] = useState(null);
   const [loading, setLoading] = useState(true);
   const [objects, setObjects] = useState([]);
-  const [view, setView] = useState('dashboard');
+  const [view, setView] = useState('agents');
   const [pendingCount, setPendingCount] = useState(0);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editAgent, setEditAgent] = useState(null);
@@ -775,7 +817,7 @@ export default function AgentsModule({ environment }) {
       {/* ── View tabs ── */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
         <div style={{display:"flex",background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,padding:3}}>
-          {[{id:'dashboard',label:'Dashboard'},{id:'agents',label:'All Agents'},{id:'approvals',label:`Approvals${pendingCount>0?` (${pendingCount})`:''}`}].map(v=>(
+          {[{id:'agents',label:'All Agents'},{id:'approvals',label:`Approvals${pendingCount>0?` (${pendingCount})`:''}`}].map(v=>(
             <button key={v.id} onClick={()=>setView(v.id)} style={{padding:"6px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F,fontSize:13,fontWeight:view===v.id?700:500,background:view===v.id?C.accent:"transparent",color:view===v.id?"white":C.text3}}>
               {v.label}
             </button>
@@ -785,7 +827,7 @@ export default function AgentsModule({ environment }) {
       </div>
 
       {/* ── DASHBOARD VIEW ── */}
-      {view==='dashboard' && (
+      {false && view==='__removed_dashboard__' && (
         <div>
           {dash && (
             <div style={{marginBottom:16}}>
