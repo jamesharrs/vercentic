@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import FeedbackWidget from './FeedbackWidget.jsx'
 
 const PADDING_MAP = { none:'0px', sm:'24px', md:'56px', lg:'96px', xl:'140px' }
 
@@ -496,6 +497,7 @@ export default function PortalPageRenderer({ portal, api }) {
         </p>
       </div>
       <PortalFooter portal={portal} theme={theme}/>
+      <FeedbackWidget portal={portal} currentPageSlug={currentPage?.slug || "/"} api={api}/>
     </div>
   );
 

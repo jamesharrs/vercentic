@@ -63,7 +63,8 @@ const AUTH_EXEMPT_PATHS = [
   '/environments',                     // needed before login to resolve tenant
   '/portals/public',                   // public portal renderer + application status
   '/portals/slug',                     // public portal slug lookup (career sites etc.)
-  '/portal-analytics',                 // analytics tracking from public portals (unauthenticated)
+  '/portal-analytics',
+  '/portal-feedback',                 // analytics tracking from public portals (unauthenticated)
   '/superadmin',                       // super admin console
   '/bot',                              // bot/interview routes (public)
   '/tenant-reset',                     // tenant data reset (password protected)
@@ -102,6 +103,7 @@ app.use('/api/ai',           require('./routes/ai-proxy'));
 app.use('/api/csv',          require('./routes/csv'));
 app.use('/api/workflows',    require('./routes/workflows'));
 app.use('/api/portals',          require('./routes/portals'));
+app.use('/api/portal-feedback', require('./routes/portal_feedback'));
 app.use('/api/portal-analytics', require('./routes/portal_analytics'));
 app.use('/api/email-builder',     require('./routes/email_builder'));
 app.use('/api/brand-kits',       require('./routes/brand_kits'));

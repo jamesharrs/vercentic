@@ -530,8 +530,27 @@ const ThemeDrawer = ({ theme, onChange, onClose }) => {
   );
 };
 
+
+// ─── Feedback Tab (config + reports) ──────────────────────────────────────────
+const FeedbackTab = ({ portal, onChange, accent, api: apiProp }) => {
+  const [sub, setSub] = useState("configure");
+  const _api = apiProp || { get: p => fetch("/api"+p).then(r=>r.json()), post: (p,b) => fetch("/api"+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()) };
+  return (<div>
+    <div style={{display:"flex",gap:4,marginBottom:16}}>
+      {[["configure","Configure"],["reports","Reports"]].map(([id,l])=>(
+        <button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"7px 0",borderRadius:8,border:`1.5px solid ${sub===id?(accent||"#4361EE"):"#E5E7EB"}`,
+          background:sub===id?((accent||"#4361EE")+"0A"):"transparent",fontSize:12,fontWeight:sub===id?700:400,
+          cursor:"pointer",fontFamily:"'Geist',sans-serif",color:sub===id?(accent||"#4361EE"):"#6B7280"}}>{l}</button>
+      ))}
+    </div>
+    {sub==="configure"&&<FeedbackConfigPanel portal={portal} onChange={onChange} accent={accent}/>}
+    {sub==="reports"&&portal.id&&<FeedbackReports portalId={portal.id} accent={accent} api={_api}/>}
+    {sub==="reports"&&!portal.id&&<div style={{padding:24,textAlign:"center",color:"#9CA3AF",fontSize:13}}>Save the portal first to view feedback reports.</div>}
+  </div>);
+};
+
 // ─── Portal Settings Modal ────────────────────────────────────────────────────
-const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
+const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   const [tab, setTab] = useState("branding");
   const gdpr = portal.gdpr || {};
   const br = portal.branding || {};
@@ -555,7 +574,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           </button>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
-          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"]].map(([id,l])=>(
+          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["feedback","Feedback"]].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
           ))}
         </div>
@@ -634,6 +653,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose }) => {
           {lbl("Banner background colour")}
           <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={gdpr.bannerBg||"#0F1729"} onChange={e=>setG("bannerBg",e.target.value)} style={{width:34,height:28,padding:0,border:"none",cursor:"pointer",borderRadius:4}}/><input value={gdpr.bannerBg||""} onChange={e=>setG("bannerBg",e.target.value)} placeholder="#0F1729" style={{...inp,flex:1}}/></div>
         </>}
+        {tab==="feedback"&&<FeedbackTab portal={portal} onChange={onChange} accent={C.accent} api={apiProp}/>}
         </div>
       </div>
     </div>
@@ -2514,6 +2534,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
                   {icon:"sparkles",label:"Brand Kit",onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
                   {icon:"externalLink",label:"Domain",onClick:()=>{setShowDomainWizard(true);setShowMoreMenu(false);}},
                   {icon:"settings",label:"Settings",onClick:()=>{setShowPortalSettings(s=>!s);setShowTheme(false);setShowMoreMenu(false);}},
+                  {icon:"star",label:"Feedback",onClick:()=>{setShowPortalSettings(true);setShowTheme(false);setShowMoreMenu(false);}},
                 ].map(item=>(
                   <button key={item.label} onClick={item.onClick}
                     style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:7,border:"none",background:"transparent",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:500,color:C.text1,textAlign:"left"}}
@@ -2595,7 +2616,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         onDelete={()=>handleDeletePage(pageActionsFor)}
         onClose={()=>setPageActionsFor(null)}/>}
       {showDomainWizard&&<DomainWizard portal={portal} onSave={updated=>setPortal(updated)} onClose={()=>setShowDomainWizard(false)}/>}
-      {showPortalSettings&&<PortalSettingsDrawer portal={portal} onChange={updated=>setPortal(updated)} onClose={()=>setShowPortalSettings(false)}/>}
+      {showPortalSettings&&<PortalSettingsDrawer portal={portal} onChange={updated=>setPortal(updated)} onClose={()=>setShowPortalSettings(false)} api={api}/>}
       {showBrandKit&&<BrandKitAgent
         environmentId={portal.environment_id}
         onApply={(theme,logo)=>setPortal(p=>({...p,theme:{...p.theme,...theme},nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||""}}))}
