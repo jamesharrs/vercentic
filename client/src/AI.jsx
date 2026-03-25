@@ -1060,6 +1060,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const bottomRef  = useRef(null);
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
+  const prevNavRef = useRef(activeNav);   // track previous nav for change detection
+  const prevRecRef = useRef(null);        // track previous record id
   const [dragOver, setDragOver] = useState(false);
   const [settingsSection, setSettingsSection] = useState(null);
   const [fileProcessing, setFileProcessing] = useState(false);
@@ -1149,7 +1151,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection]);
 
   useEffect(()=>{
     if(!open) return;
@@ -1187,6 +1189,53 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       })(),ts:new Date()}]);
     }
   },[open, currentRecord?.id, currentObject?.id, activeNav]);
+
+  // ── Navigation change notification ─────────────────────────────────────────
+  // When nav or record changes during an active conversation, inject a clear
+  // page-change marker so Claude never reads stale history context.
+  useEffect(()=>{
+    const navChanged = prevNavRef.current !== activeNav;
+    const recChanged = prevRecRef.current !== (currentRecord?.id ?? null);
+
+    prevNavRef.current = activeNav;
+    prevRecRef.current = currentRecord?.id ?? null;
+
+    // Only inject if copilot is open AND there's an active conversation (not just welcome msg)
+    if (!open || messages.length <= 1) return;
+    if (!navChanged && !recChanged) return;
+
+    // Build a compact page label
+    const getPageLabel = () => {
+      if (currentRecord && currentObject) {
+        const d = currentRecord.data || {};
+        const name = (d.first_name ? `${d.first_name} ${d.last_name||''}`.trim() : null)
+          || d.job_title || d.pool_name || d.name || 'record';
+        return `viewing ${currentObject.name}: **${name}**`;
+      }
+      if (activeNav === 'dashboard')   return 'on the **Dashboard**';
+      if (activeNav === 'settings')    return `in **Settings**${settingsSection ? ' — ' + settingsSection : ''}`;
+      if (activeNav === 'interviews')  return 'in **Interviews**';
+      if (activeNav === 'offers')      return 'in **Offers**';
+      if (activeNav === 'reports')     return 'in **Reports**';
+      if (activeNav === 'orgchart')    return 'in **Org Chart**';
+      if (activeNav === 'search')      return 'in **Search**';
+      if (activeNav?.startsWith('obj_')) {
+        const obj = (navObjects||[]).find(o => 'obj_'+o.id === activeNav);
+        return `viewing **${obj?.plural_name || obj?.name || 'list'}**`;
+      }
+      return `on **${activeNav}**`;
+    };
+
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'system_notice',
+        content: `📍 Page changed — now ${getPageLabel()}`,
+        ts: new Date(),
+      }
+    ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[open, activeNav, currentRecord?.id, currentObject?.id]);
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
 
@@ -1445,7 +1494,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                  : "\n\nPlease analyse this document and let me know what it contains. If it looks like a CV or job description, parse it automatically.";
 
       // Build the message to send to the AI
-      const apiMessages = [...messages.filter(m=>!m.isFile).map(m=>({role:m.role,content:m.content}))];
+      const apiMessages = [...messages.filter(m=>!m.isFile&&m.role!=="system_notice").map(m=>({role:m.role,content:m.content}))];
 
       if (base64) {
         // Vision / PDF analysis
@@ -1563,7 +1612,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       // First AI call
       const response = await fetch("/api/ai/chat",{
         method:"POST", headers:aiHeaders(),
-        body:JSON.stringify({system:systemFull,messages:newMessages.map(m=>({role:m.role,content:m.content}))}),
+        body:JSON.stringify({system:systemFull,messages:newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content}))}),
       });
       const data = await response.json();
       if(data.error) throw new Error(data.error);
@@ -1585,7 +1634,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           : "No results found.";
 
         // Second AI call with injected results
-        const followUp = [...newMessages.map(m=>({role:m.role,content:m.content})),
+        const followUp = [...newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),
           {role:"assistant", content:reply},
           {role:"user", content:`[SEARCH_RESULTS for "${searchQ}"]\n${resultsText}\n\nPlease summarise these results concisely.`}
         ];
@@ -2233,6 +2282,14 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           <div style={{flex:1,overflow:"auto",padding:"16px 16px",display:"flex",flexDirection:"column",gap:14,background:"linear-gradient(180deg,#f5f3ff 0%,#eef2ff 100%)"}}>
             {messages.map((msg,i)=>(
               <div key={i}>
+                {/* ── Navigation change pill ── */}
+                {msg.role==="system_notice"&&(
+                  <div style={{display:"flex",justifyContent:"center",margin:"2px 0"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.18)",fontSize:10,fontWeight:600,color:"#7c3aed",fontFamily:F}}
+                      dangerouslySetInnerHTML={{__html:renderMessage(msg.content)}}/>
+                  </div>
+                )}
+                {msg.role!=="system_notice"&&(
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",flexDirection:msg.role==="user"?"row-reverse":"row"}}>
                   {msg.role==="assistant"&&(
                     <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${C.ai},#3b5bdb)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
@@ -2262,6 +2319,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     )}
                   </div>
                 </div>
+                )}
 
                 {/* Search results */}
                 {msg.role==="assistant"&&msg.hasSearch&&searchResults[msg.searchIndex]&&(
