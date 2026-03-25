@@ -2365,6 +2365,22 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   }, []);
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  // Tell the copilot we're inside the portal builder
+  useEffect(() => {
+    const dispatch = () => window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+      detail: {
+        type: 'portal',
+        name: portal.name || 'Portal',
+        portalType: portal.type || 'career_site',
+        activePage: portal.pages?.[activePageIdx]?.name || 'Home',
+        status: portal.status || 'draft',
+      }
+    }));
+    dispatch();
+    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portal.name, portal.type, activePageIdx]);
   const [showTheme,       setShowTheme]       = useState(false);
   const [showLibrary,     setShowLibrary]     = useState(false);
 

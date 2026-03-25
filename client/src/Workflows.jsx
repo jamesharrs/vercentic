@@ -638,7 +638,22 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
     </div>
   );
 };
-const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave, onClose }) => {
+const WorkflowEditor = ({
+  // Tell copilot we're editing a workflow
+  useEffect(() => {
+    if (!workflow) return;
+    window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+      detail: {
+        type: 'workflow',
+        name: workflow.name || 'New Workflow',
+        objectSlug: workflow.object_slug || '',
+        stepCount: (workflow.steps || []).length,
+      }
+    }));
+    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflow?.name]);
+ workflow, objects: parentObjects, environment, onSave, onClose }) => {
   const [name, setName]       = useState(workflow?.name || "");
   const [objectId, setObjectId] = useState(workflow?.object_id || "");
   const [desc, setDesc]       = useState(workflow?.description || "");
@@ -1100,7 +1115,10 @@ export default function WorkflowsPage({ environment }) {
       {/* Editor panel */}
       {editing !== null && (
         <WorkflowEditor workflow={editing?.id ? editing : null} objects={objects} environment={environment}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+        setEditing(null);
+        window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+      }}
           onSave={(wf) => {
             setWorkflows(ws => ws.find(w => w.id === wf.id) ? ws.map(w => w.id === wf.id ? wf : w) : [...ws, wf]);
             setEditing(null);

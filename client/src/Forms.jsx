@@ -155,6 +155,19 @@ const FieldEditor = ({ field, index, total, onChange, onRemove, onMove }) => {
 
 // ── Form Builder Modal ────────────────────────────────────────────────────────
 const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
+  // Tell the copilot we're inside the form builder
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+      detail: {
+        type: 'form',
+        name: form?.name || 'New Form',
+        category: form?.category || 'general',
+        fieldCount: (form?.fields || []).length,
+      }
+    }));
+    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form?.name]);
   const isEdit = !!form?.id;
   const [tab, setTab] = useState('fields');
   const [saving, setSaving] = useState(false);

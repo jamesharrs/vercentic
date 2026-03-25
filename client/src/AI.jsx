@@ -902,6 +902,26 @@ const CONTEXT_ACTIONS = {
     { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
     { id:"perm", icon:"lock",        label:"Edit Permissions",    prompt:"Help me configure what each role can see and do across the platform" },
   ],
+  // ── Deep editor actions (inside sub-editors) ─────────────────────────────
+  "editor:portal": [
+    { id:"et",   icon:"edit",       label:"Edit text",           prompt:"Help me rewrite the text on this section — make it more compelling and on-brand" },
+    { id:"as",   icon:"plus",       label:"Add a section",       prompt:"Suggest a section I should add to this portal page and write the content for it" },
+    { id:"seo",  icon:"search",     label:"SEO & meta",          prompt:"Write an SEO meta title and description for this portal page" },
+    { id:"cta",  icon:"arrowR",     label:"Improve CTA",         prompt:"Rewrite the call-to-action buttons and headlines on this page to increase applications" },
+    { id:"pub",  icon:"globe",      label:"Ready to publish?",   prompt:"Review this portal and tell me if it's ready to publish — what's missing or needs improvement?" },
+  ],
+  "editor:form": [
+    { id:"af",   icon:"plus",       label:"Add a field",         prompt:"What field should I add to this form? Suggest the best next field based on its purpose." },
+    { id:"imp",  icon:"zap",        label:"Improve questions",   prompt:"Review the fields on this form and suggest improvements to make it clearer and more effective" },
+    { id:"logic",icon:"workflow",   label:"Add logic",           prompt:"Suggest conditional logic rules for this form — which fields should show/hide based on other answers?" },
+    { id:"req",  icon:"check",      label:"Set required fields", prompt:"Which fields on this form should be required? Recommend based on the form's purpose." },
+  ],
+  "editor:workflow": [
+    { id:"as",   icon:"plus",       label:"Add a stage",         prompt:"Suggest the next stage I should add to this workflow and what it should do" },
+    { id:"auto", icon:"sparkles",   label:"Add automation",      prompt:"Suggest an automation for the current stage — an AI prompt, email, or field update that would be useful" },
+    { id:"rev",  icon:"fileText",   label:"Review workflow",     prompt:"Review this workflow and tell me if the stages and automations make sense for the use case" },
+    { id:"email",icon:"mail",       label:"Write stage email",   prompt:"Write a professional email template for the current workflow stage" },
+  ],
 };
 
 // Object list pages — dynamic based on which object is active
@@ -930,7 +950,13 @@ const SETTINGS_ID_MAP = {
   sessions:     "settings:active-sessions",
 };
 
-function getContextActions(activeNav, settingsSection, navObjects) {
+function getContextActions(activeNav, settingsSection, navObjects, editorContext) {
+  // Deep editor context — inside portal builder, form editor, workflow editor, etc.
+  if (editorContext?.type) {
+    const key = "editor:" + editorContext.type;
+    if (CONTEXT_ACTIONS[key]) return CONTEXT_ACTIONS[key];
+  }
+
   // Settings sub-sections — try ID map first, then slug normalisation
   if (activeNav === "settings" && settingsSection) {
     const key = SETTINGS_ID_MAP[settingsSection]
@@ -1083,6 +1109,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const prevRecRef = useRef(null);        // track previous record id
   const [dragOver, setDragOver] = useState(false);
   const [settingsSection, setSettingsSection] = useState(null);
+  const [editorContext,   setEditorContext]   = useState(null); // { type, name, ... } from sub-editors
   const [fileProcessing, setFileProcessing] = useState(false);
 
   useEffect(()=>{
@@ -1105,6 +1132,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     const h = e => setSettingsSection(e.detail);
     window.addEventListener("talentos:settings-section", h);
     return () => window.removeEventListener("talentos:settings-section", h);
+  },[]);
+
+  useEffect(()=>{
+    const h = e => setEditorContext(e.detail || null);
+    window.addEventListener("talentos:editor-context", h);
+    return () => window.removeEventListener("talentos:editor-context", h);
   },[]);
   // Build rich page context from everything we know
   useEffect(()=>{
@@ -1139,6 +1172,21 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
     if(pageContext){parts.push('');parts.push('ADDITIONAL PAGE CONTEXT:');parts.push(pageContext);}
 
+    // Inject sub-editor context (portal builder, form builder, workflow editor)
+    if(editorContext){
+      parts.push('');
+      if(editorContext.type==='portal'){
+        parts.push(`EDITING PORTAL: "${editorContext.name}" (type: ${editorContext.portalType}, active page: ${editorContext.activePage}, status: ${editorContext.status})`);
+        parts.push('The user is inside the portal builder canvas. They can edit content, layout, theme, nav, SEO, and publish.');
+      } else if(editorContext.type==='form'){
+        parts.push(`EDITING FORM: "${editorContext.name}" (category: ${editorContext.category}, ${editorContext.fieldCount} fields)`);
+        parts.push('The user is inside the form builder. They can add/edit fields, change categories, set visibility rules.');
+      } else if(editorContext.type==='workflow'){
+        parts.push(`EDITING WORKFLOW: "${editorContext.name}" (object: ${editorContext.objectSlug}, ${editorContext.stepCount} steps)`);
+        parts.push('The user is inside the workflow editor. They can add stages, configure automations, reorder steps.');
+      }
+    }
+
     // Inject real AI match scores when on a person record so copilot uses same engine as AI Match widget
     if(currentRecord && currentObject?.slug==='people' && allJobs.length>0){
       const scored = allJobs
@@ -1170,7 +1218,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection,editorContext]);
 
   useEffect(()=>{
     if(!open) return;
@@ -2276,7 +2324,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     </div>
                   )}
                   {(()=>{
-                    const actions = getContextActions(activeNav, settingsSection, navObjects);
+                    const actions = getContextActions(activeNav, settingsSection, navObjects, editorContext);
                     const cols = actions.length <= 4 ? "1fr 1fr" : "1fr 1fr 1fr";
                     return (
                   <div style={{display:"grid",gridTemplateColumns:cols,gap:6}}>
@@ -2797,7 +2845,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             // On a record: show record-specific actions; elsewhere: show page context actions
             const actions = (currentRecord && currentObject)
               ? (RECORD_ACTIONS[currentObject.slug] || RECORD_ACTIONS.people).slice(0, 4)
-              : getContextActions(activeNav, settingsSection, navObjects).slice(0, 5);
+              : getContextActions(activeNav, settingsSection, navObjects, editorContext).slice(0, 5);
             const col = (currentRecord && currentObject)
               ? (currentObject.color || "#7c3aed")
               : "#7c3aed";
