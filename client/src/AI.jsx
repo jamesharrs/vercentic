@@ -1131,6 +1131,12 @@ const SUGGESTED_ACTIONS = {
     { label: "Create a workflow",  prompt: "I want to create a new workflow" },
     { label: "Set up integration", prompt: "Help me configure an integration" },
   ],
+  portals: [
+    { label: "Build Portal",       prompt: "I want to build a new portal — a career site or external experience" },
+    { label: "Write Portal Content", prompt: "Help me write compelling content for a career site" },
+    { label: "Design a Theme",     prompt: "Help me design a portal theme — suggest colours, fonts, and button styles" },
+    { label: "SEO & Meta",         prompt: "Write an SEO meta title and description for this portal page" },
+  ],
   default: [
     { label: "Search records",  prompt: "Search for " },
     { label: "Create a report", prompt: "I want to build a report" },
@@ -1140,12 +1146,15 @@ const SUGGESTED_ACTIONS = {
 };
 
 /* ─── AI Copilot ─────────────────────────────────────────────────────────── */
-const SuggestedActions = ({ activeNav, currentObject, onSend, isLastMsg, _canPerm, _canGlobalPerm }) => {
+const SuggestedActions = ({ activeNav, settingsSection, currentObject, onSend, isLastMsg, _canPerm, _canGlobalPerm }) => {
   if (!isLastMsg) return null;
   const slug = currentObject?.slug;
   const isReports = activeNav === 'reports';
   const isSettings = activeNav === 'settings';
-  const actions = isSettings ? SUGGESTED_ACTIONS.settings : isReports ? SUGGESTED_ACTIONS.reports
+  const isPortals = isSettings && settingsSection === 'portals';
+  const actions = isPortals ? SUGGESTED_ACTIONS.portals
+    : isSettings ? SUGGESTED_ACTIONS.settings
+    : isReports ? SUGGESTED_ACTIONS.reports
     : slug && SUGGESTED_ACTIONS[slug] ? SUGGESTED_ACTIONS[slug]
     : SUGGESTED_ACTIONS.default;
   return (
@@ -2516,6 +2525,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     {msg.role==="assistant"&&!msg.error&&(
                       <SuggestedActions
                         activeNav={activeNav}
+                        settingsSection={settingsSection}
                         currentObject={currentObject}
                         onSend={sendMessage}
                         isLastMsg={i===messages.length-1}
