@@ -29,6 +29,17 @@ function timeAgo(ts) {
   return `${Math.floor(h/24)}d ago`;
 }
 
+// Simple markdown bold renderer
+function renderInlineBold(text) {
+  if (!text) return text;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) =>
+    p.startsWith('**') && p.endsWith('**')
+      ? <strong key={i} style={{ color:'#F1F5F9', fontWeight:700 }}>{p.slice(2,-2)}</strong>
+      : p
+  );
+}
+
 export default function ErrorLogViewer() {
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState(null);
@@ -41,6 +52,7 @@ export default function ErrorLogViewer() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [aiAnalysis, setAiAnalysis] = useState({}); // { [logId]: { loading, result, error } }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +85,48 @@ export default function ErrorLogViewer() {
     if (!confirm('Delete this error log permanently?')) return;
     await fetch(`/api/error-logs/${log.id}`, { method:'DELETE' });
     setSelected(null); load();
+  };
+
+  const analyseError = async (log) => {
+    setAiAnalysis(prev => ({ ...prev, [log.id]: { loading: true, result: null, error: null } }));
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: `You are a senior full-stack engineer debugging a React + Express application called Vercentic (a talent acquisition platform).
+Analyse the error below and provide:
+
+1. **Root Cause** — what's actually wrong, in plain language
+2. **Impact** — what this breaks for the user
+3. **Fix** — the exact code change needed (file path, what to change)
+4. **Prevention** — how to prevent this class of error in future
+
+Keep your response concise and actionable. Use markdown formatting.
+The tech stack is: React 19 + Vite (frontend), Express + JSON file store (backend), deployed on Vercel (client) + Railway (server).`,
+          messages: [{
+            role: 'user',
+            content: `Analyse this error:
+
+**Code:** ${log.code || 'N/A'}
+**Severity:** ${log.severity}
+**Message:** ${log.message}
+**Component:** ${log.component || 'Unknown'}
+**URL:** ${log.url || 'N/A'}
+**Environment:** ${log.environment_name || 'N/A'}
+**User:** ${log.user_email || 'Anonymous'}
+**Time:** ${log.created_at}
+${log.stack ? '\n**Stack Trace:**\n```\n' + log.stack + '\n```' : ''}
+${log.context ? '\n**Additional Context:**\n' + JSON.stringify(log.context, null, 2) : ''}`
+          }],
+        }),
+      });
+      const data = await res.json();
+      const text = data.content?.map(c => c.text || '').join('\n') || data.error || 'No response';
+      setAiAnalysis(prev => ({ ...prev, [log.id]: { loading: false, result: text, error: null } }));
+    } catch (e) {
+      setAiAnalysis(prev => ({ ...prev, [log.id]: { loading: false, result: null, error: e.message } }));
+    }
   };
 
   return (
@@ -187,6 +241,70 @@ export default function ErrorLogViewer() {
                 <pre style={{ background:'#0F1729', borderRadius:8, padding:10, fontSize:11, color:'#CBD5E1', overflowX:'auto', lineHeight:1.6, whiteSpace:'pre-wrap', wordBreak:'break-all', border:`1px solid ${C.border}`, maxHeight:200 }}>{selected.stack}</pre>
               </details>
             )}
+            {/* AI Analysis */}
+            <div style={{ marginBottom:16 }}>
+              {!aiAnalysis[selected.id]?.result && !aiAnalysis[selected.id]?.loading ? (
+                <button onClick={()=>analyseError(selected)}
+                  style={{ width:'100%', padding:'10px 14px', borderRadius:10, border:`1.5px solid ${C.accent}`,
+                    background:`${C.accent}12`, color:C.accent, fontSize:13, fontWeight:700,
+                    cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    transition:'all .15s' }}
+                  onMouseEnter={e=>{e.currentTarget.style.background=`${C.accent}25`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=`${C.accent}12`;}}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  Analyse with Vercentic AI
+                </button>
+              ) : aiAnalysis[selected.id]?.loading ? (
+                <div style={{ padding:'16px 14px', borderRadius:10, border:`1.5px solid ${C.accent}40`,
+                  background:`${C.accent}08`, textAlign:'center' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                    <div style={{ width:14, height:14, border:`2px solid ${C.accent}40`, borderTop:`2px solid ${C.accent}`,
+                      borderRadius:'50%', animation:'aiSpin 0.8s linear infinite' }}/>
+                    <span style={{ fontSize:13, color:C.accent, fontWeight:600 }}>Analysing error...</span>
+                  </div>
+                  <style>{'@keyframes aiSpin { to { transform: rotate(360deg); } }'}</style>
+                </div>
+              ) : aiAnalysis[selected.id]?.error ? (
+                <div style={{ padding:14, borderRadius:10, border:'1px solid #3F1F1F', background:'#1F1111' }}>
+                  <div style={{ fontSize:12, color:'#EF4444', fontWeight:600, marginBottom:4 }}>Analysis failed</div>
+                  <div style={{ fontSize:11, color:C.text2 }}>{aiAnalysis[selected.id].error}</div>
+                  <button onClick={()=>analyseError(selected)} style={{ marginTop:8, padding:'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, cursor:'pointer', fontFamily:F }}>Retry</button>
+                </div>
+              ) : (
+                <div style={{ borderRadius:12, border:`1.5px solid ${C.accent}30`, overflow:'hidden' }}>
+                  <div style={{ padding:'10px 14px', background:`${C.accent}15`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      <span style={{ fontSize:12, fontWeight:700, color:C.accent }}>Vercentic AI Analysis</span>
+                    </div>
+                    <div style={{ display:'flex', gap:4 }}>
+                      <button onClick={()=>{ navigator.clipboard?.writeText(aiAnalysis[selected.id].result); }}
+                        style={{ padding:'3px 8px', borderRadius:5, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:10, cursor:'pointer', fontFamily:F }}>Copy</button>
+                      <button onClick={()=>analyseError(selected)}
+                        style={{ padding:'3px 8px', borderRadius:5, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:10, cursor:'pointer', fontFamily:F }}>Re-analyse</button>
+                    </div>
+                  </div>
+                  <div style={{ padding:'14px', fontSize:13, color:C.text1, lineHeight:1.7 }}>
+                    {aiAnalysis[selected.id].result.split('\n').map((line, i) => {
+                      if (line.startsWith('# '))  return <h3 key={i} style={{ fontSize:15, fontWeight:800, color:C.text1, margin:'14px 0 6px' }}>{line.slice(2)}</h3>;
+                      if (line.startsWith('## ')) return <h4 key={i} style={{ fontSize:13, fontWeight:700, color:C.accent, margin:'12px 0 4px' }}>{line.slice(3)}</h4>;
+                      if (line.startsWith('**') && line.endsWith('**')) return <div key={i} style={{ fontSize:13, fontWeight:700, color:C.accent, margin:'12px 0 4px' }}>{line.slice(2,-2)}</div>;
+                      if (line.startsWith('- '))  return <div key={i} style={{ paddingLeft:12, position:'relative' }}><span style={{ position:'absolute', left:0, color:C.accent }}>•</span>{renderInlineBold(line.slice(2))}</div>;
+                      if (line.startsWith('```')) return null;
+                      if (line.trim() === '') return <div key={i} style={{ height:8 }}/>;
+                      return <div key={i}>{renderInlineBold(line)}</div>;
+                    })}
+                  </div>
+                  <div style={{ padding:'8px 14px', borderTop:`1px solid ${C.accent}20`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ fontSize:10, color:C.text2 }}>AI suggestions may not be accurate — verify before applying</span>
+                    <button onClick={()=>{setNote(aiAnalysis[selected.id].result.slice(0,500));}}
+                      style={{ padding:'4px 10px', borderRadius:5, border:`1px solid ${C.accent}40`, background:`${C.accent}10`, color:C.accent, fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+                      Use as resolution note
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             {selected.resolved ? (
               <div style={{ background:'#0B2D20', border:'1px solid #065F46', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
                 <div style={{ color:C.success, fontSize:12, fontWeight:700, marginBottom:4 }}>✓ Resolved {selected.resolved_at?`— ${timeAgo(selected.resolved_at)}`:''}</div>
