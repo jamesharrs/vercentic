@@ -439,6 +439,189 @@ router.get('/:id/stats', (req, res) => {
   });
 });
 
+// ── Activity Report — per environment or global ──────────────────────────────
+router.get('/:id/activity-report', (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Not found' });
+
+  const days = parseInt(req.query.days) || 30;
+  const envFilter = req.query.environment_id || null;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+
+  // Get environments for this client
+  const envs = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
+  const envIds = envFilter ? new Set([envFilter]) : new Set(envs.map(e=>e.id));
+  // Also check environments table for legacy data
+  const allEnvIds = new Set([...envIds, ...(s.environments||[]).filter(e=>envIds.has(e.id)).map(e=>e.id)]);
+
+  // Activity log entries
+  const allActivity = (s.activity||[]).filter(a => allEnvIds.has(a.environment_id));
+  const recentActivity = allActivity.filter(a => a.created_at >= cutoff);
+
+  // Records
+  const allRecords = (s.records||[]).filter(r => allEnvIds.has(r.environment_id) && !r.deleted_at);
+  const recentRecords = allRecords.filter(r => r.created_at >= cutoff);
+
+  // Users
+  const allUsers = (s.users||[]).filter(u => {
+    if (u.client_id === client.id) return true;
+    // Also match users by environment_id
+    return u.environment_id && allEnvIds.has(u.environment_id);
+  }).filter(u => !u.deleted_at);
+
+  // Objects
+  const objects = (s.objects||[]).filter(o => allEnvIds.has(o.environment_id) && !o.deleted_at);
+
+  // Communications
+  const comms = (s.communications||[]).filter(c => allEnvIds.has(c.environment_id) && c.created_at >= cutoff);
+
+  // Workflows
+  const workflows = (s.workflows||[]).filter(w => allEnvIds.has(w.environment_id) && !w.deleted_at);
+
+  // Interviews
+  const interviews = (s.interviews||[]).filter(i => allEnvIds.has(i.environment_id) && i.created_at >= cutoff);
+
+  // Offers
+  const offers = (s.offers||[]).filter(o => allEnvIds.has(o.environment_id) && !o.deleted_at);
+
+  // Portal feedback
+  const feedback = (s.portal_feedback||[]).filter(f => allEnvIds.has(f.environment_id) && f.created_at >= cutoff);
+
+  // ── Aggregations ──
+
+  // Activity by action type
+  const byAction = {};
+  recentActivity.forEach(a => { byAction[a.action] = (byAction[a.action]||0) + 1; });
+
+  // Activity by object
+  const byObject = {};
+  recentActivity.forEach(a => {
+    const obj = objects.find(o => o.id === a.object_id);
+    const name = obj?.plural_name || obj?.name || 'Unknown';
+    if (!byObject[name]) byObject[name] = { name, created:0, updated:0, deleted:0, total:0 };
+    byObject[name][a.action] = (byObject[name][a.action]||0) + 1;
+    byObject[name].total++;
+  });
+
+  // Daily activity trend
+  const dailyTrend = [];
+  for (let i = days-1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayActivity = recentActivity.filter(a => a.created_at.startsWith(dateStr));
+    const dayRecords = recentRecords.filter(r => r.created_at.startsWith(dateStr));
+    const dayComms = comms.filter(c => c.created_at.startsWith(dateStr));
+    dailyTrend.push({
+      date: dateStr,
+      activities: dayActivity.length,
+      records_created: dayRecords.length,
+      communications: dayComms.length,
+    });
+  }
+
+  // Active users (logged in during period)
+  const activeUsers = allUsers.filter(u => u.last_login && u.last_login >= cutoff)
+    .map(u => ({
+      id: u.id, email: u.email, name: [u.first_name, u.last_name].filter(Boolean).join(' '),
+      role: u.role?.name || u.role_name || '—',
+      last_login: u.last_login, login_count: u.login_count || 0,
+    }))
+    .sort((a,b) => (b.last_login||'').localeCompare(a.last_login||''));
+
+  // Recent activity feed (last 50)
+  const recentFeed = recentActivity.slice().sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,50).map(a => {
+    const obj = objects.find(o => o.id === a.object_id);
+    const record = allRecords.find(r => r.id === a.record_id);
+    const recordName = record?.data?.first_name
+      ? [record.data.first_name, record.data.last_name].filter(Boolean).join(' ')
+      : record?.data?.job_title || record?.data?.name || record?.data?.pool_name || a.record_id?.slice(0,8);
+    return {
+      id: a.id, action: a.action, object_name: obj?.name || '—', record_name: recordName,
+      actor: a.actor || 'system', created_at: a.created_at,
+      changes_summary: a.changes ? Object.keys(a.changes).slice(0,5).join(', ') : null,
+    };
+  });
+
+  // Per-environment breakdown (if viewing all envs)
+  const envBreakdown = envs.map(env => {
+    const envActivity = recentActivity.filter(a => a.environment_id === env.id);
+    const envRecords = allRecords.filter(r => r.environment_id === env.id);
+    const envUsers = allUsers.filter(u => u.environment_id === env.id || u.client_id === client.id);
+    return {
+      id: env.id, name: env.name, type: env.type || 'production',
+      total_records: envRecords.length,
+      recent_activity: envActivity.length,
+      active_users: envUsers.filter(u => u.last_login && u.last_login >= cutoff).length,
+      last_activity: envActivity.length ? envActivity.sort((a,b)=>b.created_at.localeCompare(a.created_at))[0].created_at : null,
+    };
+  });
+
+  res.json({
+    client_id: client.id,
+    client_name: client.name,
+    period_days: days,
+    environment_filter: envFilter,
+    summary: {
+      total_records: allRecords.length,
+      records_created: recentRecords.length,
+      total_activity: recentActivity.length,
+      active_users: activeUsers.length,
+      total_users: allUsers.length,
+      total_objects: objects.length,
+      total_workflows: workflows.length,
+      communications_sent: comms.length,
+      interviews_scheduled: interviews.length,
+      offers: offers.length,
+      feedback_received: feedback.length,
+    },
+    by_action: byAction,
+    by_object: Object.values(byObject).sort((a,b)=>b.total-a.total),
+    daily_trend: dailyTrend,
+    active_users: activeUsers,
+    recent_feed: recentFeed,
+    environments: envBreakdown,
+  });
+});
+
+// ── Global activity report (all clients) ─────────────────────────────────────
+router.get('/reports/activity-summary', (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const days = parseInt(req.query.days) || 30;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+
+  const clients = (s.clients||[]).filter(c=>!c.deleted_at);
+  const allActivity = (s.activity||[]).filter(a => a.created_at >= cutoff);
+  const allRecords = (s.records||[]).filter(r => !r.deleted_at);
+  const allUsers = (s.users||[]).filter(u => !u.deleted_at);
+
+  const clientSummaries = clients.map(c => {
+    const envs = (s.client_environments||[]).filter(e=>e.client_id===c.id&&!e.deleted_at);
+    const envIds = new Set(envs.map(e=>e.id));
+    const activity = allActivity.filter(a => envIds.has(a.environment_id));
+    const records = allRecords.filter(r => envIds.has(r.environment_id));
+    const users = allUsers.filter(u => u.client_id === c.id);
+    const activeUsers = users.filter(u => u.last_login && u.last_login >= cutoff);
+    return {
+      id: c.id, name: c.name, plan: c.plan, status: c.status,
+      total_records: records.length, recent_activity: activity.length,
+      total_users: users.length, active_users: activeUsers.length,
+      last_activity: activity.length ? activity.sort((a,b)=>b.created_at.localeCompare(a.created_at))[0].created_at : null,
+    };
+  }).sort((a,b) => b.recent_activity - a.recent_activity);
+
+  res.json({
+    period_days: days,
+    total_clients: clients.length,
+    total_activity: allActivity.length,
+    total_records: allRecords.length,
+    total_users: allUsers.length,
+    clients: clientSummaries,
+  });
+});
+
 router.get('/:id', (req, res) => {
   ensureCollections();
   const s = getStore();

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { ClientList, ClientDetail, ProvisionWizard, Performance } from './superadmin/ClientManager.jsx';
+import ActivityReport from './superadmin/ActivityReport.jsx';
 import DemoDataManager from './superadmin/DemoDataManager';
 import ErrorLogViewer from './superadmin/ErrorLogViewer.jsx';
 import { ReleaseNotesAdmin } from './ReleaseNotes.jsx';
@@ -269,6 +270,7 @@ const NAV_ICONS = {
   errors:   "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
   bell:     "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0",
   cases:    "M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z",
+  activity: "M22 12h-4l-3 9L9 3l-3 9H2",
 };
 
 const NavIcon = ({ id, size=14, color="currentColor" }) => {
@@ -359,6 +361,7 @@ export default function SuperAdminConsole() {
           <ProvisionWizard onDone={()=>{ setSection('clients'); setClientView('list'); }} onCancel={()=>setSection('clients')}/>
         )}
         {section === 'perf' && <Performance/>}
+        {section === 'activity' && <ActivityReport clientId={clientView==='detail'?selectedClient?.id:null} clientName={selectedClient?.name}/>}
         {section === 'demo' && <DemoDataManager/>}
         {section === 'errors' && <ErrorLogViewer/>}
         {section === 'release_notes' && <ReleaseNotesAdmin />}
