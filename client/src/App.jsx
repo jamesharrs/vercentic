@@ -1667,7 +1667,6 @@ function App() {
     {
       label: t("nav.overview"),
       items: [
-        { id: "dashboard",   icon: "home",    label: t("nav.dashboard") },
         { id: "inbox",       icon: "inbox",   label: "Inbox", badge: inboxUnread || null },
       ]
     },
