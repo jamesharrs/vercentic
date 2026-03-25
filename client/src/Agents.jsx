@@ -236,6 +236,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
     conditions: agent?.conditions||[], actions: agent?.actions||[],
     is_active: agent?.is_active!==undefined?agent.is_active:1, schedule_time: agent?.schedule_time||'09:00',
     sharing: agent?.sharing || { visibility: 'private', user_ids: [], group_ids: [] },
+    avatar_icon: agent?.avatar_icon || '', avatar_color: agent?.avatar_color || '',
   });
 
   useEffect(()=>{ api.get('/agents/meta').then(setMeta).catch(()=>{}); },[]);
@@ -273,8 +274,14 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
         onMouseDown={e=>e.stopPropagation()}>
         <div style={{padding:"20px 24px 0",borderBottom:`1px solid ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-            <div style={{width:40,height:40,borderRadius:12,background:`${C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <Ic n="zap" s={20} c={C.purple}/>
+            <div style={{width:40,height:40,borderRadius:12,background:`${form.avatar_color||C.purple}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {form.avatar_icon ? (
+                <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={form.avatar_color||C.purple} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d={(AGENT_AVATARS.find(a=>a.id===form.avatar_icon)||{}).path||"M13 2L3 14h9l-1 8 10-12h-9l1-8z"}/>
+                </svg>
+              ) : (
+                <Ic n="zap" s={20} c={form.avatar_color||C.purple}/>
+              )}
             </div>
             <div style={{flex:1}}>
               <div style={{fontSize:16,fontWeight:800,color:C.text1}}>{isEdit?'Edit Agent':'New Agent'}</div>
@@ -551,6 +558,37 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                 <div><div style={{fontSize:13,fontWeight:600,color:C.text1}}>Active</div><div style={{fontSize:11,color:C.text3}}>Enable or disable this agent</div></div>
                 <div onClick={()=>set('is_active',form.is_active?0:1)} style={{width:40,height:24,borderRadius:12,background:form.is_active?C.green:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s"}}>
                   <div style={{width:18,height:18,borderRadius:"50%",background:"white",position:"absolute",top:3,left:form.is_active?19:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                </div>
+              </div>
+              <div style={{paddingTop:4,borderBottom:`1px solid ${C.border}`,paddingBottom:16}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text1,marginBottom:3}}>Avatar</div>
+                <div style={{fontSize:11,color:C.text3,marginBottom:10}}>Choose an icon and colour for this agent</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                  {AGENT_AVATARS.map(av=>(
+                    <div key={av.id} onClick={()=>set('avatar_icon',av.id)} title={av.label}
+                      style={{
+                        width:38,height:38,borderRadius:10,cursor:"pointer",
+                        background:form.avatar_icon===av.id?`${form.avatar_color||C.accent}18`:C.bg,
+                        border:`2px solid ${form.avatar_icon===av.id?form.avatar_color||C.accent:"transparent"}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"
+                      }}>
+                      <svg width={17} height={17} viewBox="0 0 24 24" fill="none"
+                        stroke={form.avatar_icon===av.id?form.avatar_color||C.accent:C.text3}
+                        strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d={av.path}/>
+                      </svg>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:5}}>
+                  {AGENT_COLORS.map(col=>(
+                    <div key={col} onClick={()=>set('avatar_color',col)}
+                      style={{
+                        width:24,height:24,borderRadius:"50%",background:col,cursor:"pointer",
+                        border:`2.5px solid ${(form.avatar_color||C.accent)===col?C.text1:"transparent"}`,
+                        transition:"border .12s"
+                      }}/>
+                  ))}
                 </div>
               </div>
               <div style={{paddingTop:4}}>
