@@ -1601,9 +1601,12 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
   const removeWidget = (ci) => onUpdate({...row, cells:row.cells.map((c,i)=>i===ci?defaultCell():c)});
 
   const cellFlex = (ci) => {
+    const g = parseInt(row.style?.gap) || 16;
+    const half = g/2;
     if (row.preset==="1")   return "1 1 100%";
-    if (row.preset==="1-2") return ci===0?"0 0 33%":"0 0 67%";
-    if (row.preset==="2-1") return ci===0?"0 0 67%":"0 0 33%";
+    if (row.preset==="1-1") return `0 0 calc(50% - ${half}px)`;
+    if (row.preset==="1-2") return ci===0?`0 0 calc(33.33% - ${half}px)`:`0 0 calc(66.66% - ${half}px)`;
+    if (row.preset==="2-1") return ci===0?`0 0 calc(66.66% - ${half}px)`:`0 0 calc(33.33% - ${half}px)`;
     return "1 1 0";
   };
 

@@ -618,9 +618,11 @@ const PortalRow = ({ row, theme, portal, api, track }) => {
   const padding = PADDING_MAP[row.padding]||'56px'
   const cellFlex = (ci, total, preset) => {
     if (preset==='1') return '1 1 100%'
-    if (preset==='1-2') return ci===0?'0 0 33%':'0 0 67%'
-    if (preset==='2-1') return ci===0?'0 0 67%':'0 0 33%'
-    return `1 1 ${Math.floor(100/total)}%`
+    if (preset==='1-2') return ci===0?'0 0 calc(33.33% - 16px)':'0 0 calc(66.66% - 16px)'
+    if (preset==='2-1') return ci===0?'0 0 calc(66.66% - 16px)':'0 0 calc(33.33% - 16px)'
+    if (total===2) return '0 0 calc(50% - 16px)'
+    if (total===3) return '0 0 calc(33.33% - 22px)'
+    return `1 1 calc(${Math.floor(100/total)}% - 16px)`
   }
   const bgStyle = {}
   if (row.bgColor) bgStyle.background = row.bgColor
