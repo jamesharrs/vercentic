@@ -2331,6 +2331,8 @@ const NAV_GROUPS = [
     id: "processes",
     label: "Processes",
     items: [
+      { id:"brand_kits",      icon:"palette",  label:"Brand Kits" },
+      { id:"email_templates", icon:"mail",     label:"Email Templates" },
       { id:"workflows", icon:"workflow", label:"Workflows" },
       { id:"portals",   icon:"globe",    label:"Portals" },
     ],
@@ -2516,6 +2518,8 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
         {activeSection==="superadmin"  && <IntegrationsSettings environment={environment}/>}
         {activeSection==="sandbox"     && <SandboxManager environment={environment}/>}
+        {activeSection==="brand_kits"  && <BrandKitSettings environment={environment}/>}
+        {activeSection==="email_templates" && <EmailTemplateBuilder environment={environment}/>}
         {activeSection==="config"      && <ConfigSection environment={environment}/>}
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}

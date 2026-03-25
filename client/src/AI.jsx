@@ -792,19 +792,142 @@ const RECORD_ACTIONS = {
 };
 const QUICK_ACTIONS = RECORD_ACTIONS.people; // fallback (unused but kept for safety)
 
-const CREATE_ACTIONS = [
-  { id:"new-person",   icon:"user",      label:"New Person",      prompt:"I want to add a new person" },
-  { id:"new-job",      icon:"briefcase", label:"New Job",         prompt:"I want to create a new job" },
-  { id:"new-pool",     icon:"layers",    label:"New Talent Pool", prompt:"I want to create a new talent pool" },
-  { id:"new-workflow",   icon:"workflow",  label:"New Workflow",    prompt:"I want to create a new workflow" },
-  { id:"new-interview",  icon:"calendar",  label:"Schedule Interview", prompt:"I want to schedule an interview" },
-  { id:"new-form",       icon:"form",      label:"Create Form",        prompt:"I want to create a new form" },
-  { id:"new-portal",     icon:"globe",     label:"Build Portal",       prompt:"I want to build a new portal — a branded external experience like a career site" },
-  { id:"new-report",     icon:"bar-chart-2", label:"Build a report",   prompt:"I want to build a report" },
-  { id:"new-user",     icon:"user",      label:"Invite User",     prompt:"I want to invite a new user" },
-  { id:"new-role",     icon:"shield",    label:"New Role",        prompt:"I want to create a new role" },
-  { id:"search",       icon:"search",    label:"Search records",  prompt:"Search for " },
+const CONTEXT_ACTIONS = {
+  // ── Main nav pages ──────────────────────────────────────────────────────
+  dashboard: [
+    { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
+    { id:"pipe", icon:"activity",    label:"Pipeline summary",    prompt:"Give me a summary of the current hiring pipeline — open jobs, candidates in process, and any bottlenecks" },
+    { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
+    { id:"np",   icon:"user",        label:"New Person",          prompt:"I want to add a new person" },
+  ],
+  interviews: [
+    { id:"si",   icon:"calendar",    label:"Schedule Interview",  prompt:"I want to schedule an interview" },
+    { id:"it",   icon:"clipboard",   label:"Create Interview Type",prompt:"Help me create a new interview type with scoring criteria" },
+    { id:"sc",   icon:"form",        label:"Generate Scorecard",  prompt:"Help me design an interview scorecard with competency ratings" },
+    { id:"srch", icon:"search",      label:"Find interviews",     prompt:"Search for scheduled interviews" },
+  ],
+  offers: [
+    { id:"co",   icon:"dollar",      label:"Create Offer",        prompt:"I want to create a new offer" },
+    { id:"dl",   icon:"fileText",    label:"Draft Offer Letter",  prompt:"Help me draft an offer letter for a candidate" },
+    { id:"rpt",  icon:"bar-chart-2", label:"Offer analytics",     prompt:"Show me a report on offer acceptance rates and time-to-offer" },
+    { id:"srch", icon:"search",      label:"Search offers",       prompt:"Search for " },
+  ],
+  reports: [
+    { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
+    { id:"pipe", icon:"activity",    label:"Pipeline funnel",     prompt:"Build me a pipeline funnel report showing candidates by stage" },
+    { id:"ttf",  icon:"clock",       label:"Time-to-fill report", prompt:"Build a report showing average time-to-fill by department" },
+    { id:"src",  icon:"users",       label:"Source analysis",     prompt:"Build a report showing candidate sources and their conversion rates" },
+  ],
+  orgchart: [
+    { id:"rel",  icon:"git-branch",  label:"Add Relationship",    prompt:"Help me add a reporting relationship between two people" },
+    { id:"role", icon:"briefcase",   label:"Create Open Role",    prompt:"I want to create an open role in the org chart" },
+    { id:"np",   icon:"user",        label:"New Person",          prompt:"I want to add a new person" },
+    { id:"srch", icon:"search",      label:"Search people",       prompt:"Search for " },
+  ],
+  search: [
+    { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
+    { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
+    { id:"np",   icon:"user",        label:"New Person",          prompt:"I want to add a new person" },
+    { id:"nj",   icon:"briefcase",   label:"New Job",             prompt:"I want to create a new job" },
+  ],
+  calendar: [
+    { id:"si",   icon:"calendar",    label:"Schedule Interview",  prompt:"I want to schedule an interview" },
+    { id:"np",   icon:"user",        label:"New Person",          prompt:"I want to add a new person" },
+    { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
+  ],
+
+  // ── Settings sub-sections ───────────────────────────────────────────────
+  "settings:portals": [
+    { id:"bp",   icon:"globe",       label:"Build Portal",        prompt:"I want to build a new portal — a branded external experience like a career site" },
+    { id:"wc",   icon:"align",       label:"Write Portal Content",prompt:"Help me write compelling content for a career site — hero headlines, company description, and CTA text" },
+    { id:"dt",   icon:"sliders",     label:"Design a Theme",      prompt:"Help me design a portal theme — suggest colours, fonts, and button styles for my brand" },
+    { id:"seo",  icon:"search",      label:"SEO & Meta Tags",     prompt:"Help me write SEO meta titles and descriptions for my career site pages" },
+  ],
+  "settings:users": [
+    { id:"iu",   icon:"user",        label:"Invite User",         prompt:"I want to invite a new user" },
+    { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
+    { id:"perm", icon:"lock",        label:"Set Permissions",     prompt:"Help me configure role permissions — what should each role be able to see and do?" },
+  ],
+  "settings:data-model": [
+    { id:"cf",   icon:"plus",        label:"Create Field",        prompt:"I want to add a new field to an object" },
+    { id:"co",   icon:"database",    label:"Create Object",       prompt:"I want to create a new custom object" },
+    { id:"imp",  icon:"upload",      label:"Import Config",       prompt:"Help me import a data model configuration" },
+  ],
+  "settings:workflows": [
+    { id:"nw",   icon:"workflow",    label:"New Workflow",         prompt:"I want to create a new workflow" },
+    { id:"sg",   icon:"zap",         label:"Suggest Stages",      prompt:"Suggest workflow stages for a typical recruitment process" },
+    { id:"auto", icon:"sparkles",    label:"Add Automation",      prompt:"Help me add automation actions to a workflow — like sending emails or updating fields at each stage" },
+  ],
+  "settings:forms": [
+    { id:"nf",   icon:"form",        label:"Create Form",         prompt:"I want to create a new form" },
+    { id:"sv",   icon:"clipboard",   label:"Design Survey",       prompt:"Help me design an employee or candidate survey with the right questions" },
+    { id:"sc",   icon:"star",        label:"Build Scorecard",     prompt:"Help me build an interview scorecard with competency-based ratings" },
+  ],
+  "settings:file-types": [
+    { id:"ft",   icon:"paperclip",   label:"Add File Type",       prompt:"Help me configure a new file type with extraction rules" },
+    { id:"map",  icon:"link",        label:"Configure Extraction",prompt:"Help me set up AI data extraction mappings for a document type like ID or passport" },
+  ],
+  "settings:integrations": [
+    { id:"int",  icon:"zap",         label:"Set Up Integration",  prompt:"Help me set up an integration — Twilio for SMS/WhatsApp, SendGrid for email, or webhooks" },
+    { id:"test", icon:"activity",    label:"Test Connection",     prompt:"Help me test if my integrations are working correctly" },
+  ],
+  "settings:appearance": [
+    { id:"th",   icon:"sliders",     label:"Change Theme",        prompt:"Help me pick a colour scheme and theme for the platform" },
+    { id:"br",   icon:"globe",       label:"Set Branding",        prompt:"Help me configure the platform branding — logo, colours, company name" },
+  ],
+  "settings:language": [
+    { id:"tl",   icon:"globe",       label:"Add Language",        prompt:"Help me add a new language translation to the platform" },
+  ],
+  "settings:org-structure": [
+    { id:"ou",   icon:"git-branch",  label:"Create Unit",         prompt:"Help me create a new organisational unit in the hierarchy" },
+    { id:"rel",  icon:"users",       label:"Assign Users",        prompt:"Help me assign users to organisational units" },
+  ],
+  "settings:roles-permissions": [
+    { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
+    { id:"perm", icon:"lock",        label:"Edit Permissions",    prompt:"Help me configure what each role can see and do across the platform" },
+  ],
+};
+
+// Object list pages — dynamic based on which object is active
+const getObjectActions = (objName, objSlug) => [
+  { id:"new",  icon:objSlug==="jobs"?"briefcase":objSlug==="talent-pools"?"layers":"user", label:`New ${objName||"Record"}`, prompt:`I want to create a new ${(objName||"record").toLowerCase()}` },
+  { id:"srch", icon:"search",      label:`Search ${objName||"records"}`, prompt:"Search for " },
+  { id:"rpt",  icon:"bar-chart-2", label:`${objName} report`,   prompt:`Build me a report on ${(objName||"records").toLowerCase()}` },
+  { id:"imp",  icon:"upload",      label:"Import CSV",          prompt:`Help me import ${(objName||"records").toLowerCase()} from a CSV file` },
 ];
+
+function getContextActions(activeNav, settingsSection, navObjects) {
+  // Settings sub-sections
+  if (activeNav === "settings" && settingsSection) {
+    const key = "settings:" + settingsSection.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+    if (CONTEXT_ACTIONS[key]) return CONTEXT_ACTIONS[key];
+  }
+
+  // Main nav pages
+  if (CONTEXT_ACTIONS[activeNav]) return CONTEXT_ACTIONS[activeNav];
+
+  // Object list pages (obj_xxx)
+  if (activeNav?.startsWith("obj_")) {
+    const objId = activeNav.replace("obj_", "");
+    const obj = (navObjects || []).find(o => o.id === objId);
+    if (obj) return getObjectActions(obj.name, obj.slug);
+  }
+
+  // Default fallback — show everything
+  return [
+    { id:"np",   icon:"user",        label:"New Person",          prompt:"I want to add a new person" },
+    { id:"nj",   icon:"briefcase",   label:"New Job",             prompt:"I want to create a new job" },
+    { id:"ntp",  icon:"layers",      label:"New Talent Pool",     prompt:"I want to create a new talent pool" },
+    { id:"nw",   icon:"workflow",    label:"New Workflow",         prompt:"I want to create a new workflow" },
+    { id:"si",   icon:"calendar",    label:"Schedule Interview",  prompt:"I want to schedule an interview" },
+    { id:"nf",   icon:"form",        label:"Create Form",         prompt:"I want to create a new form" },
+    { id:"bp",   icon:"globe",       label:"Build Portal",        prompt:"I want to build a new portal — a branded external experience like a career site" },
+    { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
+    { id:"iu",   icon:"user",        label:"Invite User",         prompt:"I want to invite a new user" },
+    { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
+    { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
+  ];
+}
 
 const SUGGESTED_ACTIONS = {
   people: [
@@ -2031,7 +2154,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     </div>
                   )}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-                    {CREATE_ACTIONS.map(a=>(
+                    {getContextActions(activeNav, settingsSection, navObjects).map(a=>(
                       <button key={a.id} onClick={()=>sendMessage(a.prompt)} className="copilot-action-btn"
                         style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:10,border:"1px solid rgba(124,58,237,.18)",background:"rgba(124,58,237,.04)",color:"#5b21b6",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s",textAlign:"left"}}>
                         <div style={{width:22,height:22,borderRadius:6,background:"rgba(124,58,237,.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
