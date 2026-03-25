@@ -799,6 +799,7 @@ const CREATE_ACTIONS = [
   { id:"new-workflow",   icon:"workflow",  label:"New Workflow",    prompt:"I want to create a new workflow" },
   { id:"new-interview",  icon:"calendar",  label:"Schedule Interview", prompt:"I want to schedule an interview" },
   { id:"new-form",       icon:"form",      label:"Create Form",        prompt:"I want to create a new form" },
+  { id:"new-portal",     icon:"globe",     label:"Build Portal",       prompt:"I want to build a new portal — a branded external experience like a career site" },
   { id:"new-report",     icon:"bar-chart-2", label:"Build a report",   prompt:"I want to build a report" },
   { id:"new-user",     icon:"user",      label:"Invite User",     prompt:"I want to invite a new user" },
   { id:"new-role",     icon:"shield",    label:"New Role",        prompt:"I want to create a new role" },

@@ -1,4 +1,6 @@
 import { tFetch } from "./apiClient.js";
+import BrandKitSettings from "./settings/BrandKitSettings.jsx";
+import EmailTemplateBuilder from "./settings/EmailTemplateBuilder.jsx";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import SettingsDashboard from "./SettingsDashboard.jsx";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
