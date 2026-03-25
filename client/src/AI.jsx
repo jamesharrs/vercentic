@@ -2792,8 +2792,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             <div ref={bottomRef}/>
           </div>
 
-          {/* ── Persistent context actions strip — always visible, updates on nav ── */}
-          {(()=>{
+          {/* ── Persistent context actions strip — only shown once conversation is active ── */}
+          {messages.length > 1 && (()=>{
             // On a record: show record-specific actions; elsewhere: show page context actions
             const actions = (currentRecord && currentObject)
               ? (RECORD_ACTIONS[currentObject.slug] || RECORD_ACTIONS.people).slice(0, 4)
