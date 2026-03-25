@@ -124,18 +124,17 @@ export default function InterviewDashboard({ environment, session, onNavigate })
   })).filter(t => t.count > 0);
 
   if (loading) return (
-
-      {/* Quick Links */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"14px 18px", background:"white", borderRadius:14, border:"1px solid #f0f0f0" }}>
-        <span style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>
-        <button onClick={()=>{window.dispatchEvent(new CustomEvent('talentos:nav',{detail:'interviews'}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #4361ee30`, background:`#4361ee08`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#4361ee", fontFamily:"inherit", whiteSpace:"nowrap" }}>All Interviews</button>
-        <button onClick={()=>{window.dispatchEvent(new CustomEvent('talentos:openCopilot',{detail:{message:'schedule an interview'}}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #0ca67830`, background:`#0ca67808`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#0ca678", fontFamily:"inherit", whiteSpace:"nowrap" }}>Schedule Interview</button>
-        <button onClick={()=>{window.dispatchEvent(new CustomEvent('talentos:nav',{detail:'people'}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #7c3aed30`, background:`#7c3aed08`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#7c3aed", fontFamily:"inherit", whiteSpace:"nowrap" }}>Candidates</button>
-        <button onClick={()=>{window.dispatchEvent(new CustomEvent('talentos:nav',{detail:'interviews'}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #f59f0030`, background:`#f59f0008`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#f59f00", fontFamily:"inherit", whiteSpace:"nowrap" }}>Interview Templates</button>
-        <button onClick={()=>{window.dispatchEvent(new CustomEvent('talentos:nav',{detail:'jobs'}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #3b82f630`, background:`#3b82f608`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#3b82f6", fontFamily:"inherit", whiteSpace:"nowrap" }}>Open Jobs</button>
-        <button onClick={()=>{console.log('scorecards coming soon')}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:`1.5px solid #9ca3af30`, background:`#9ca3af08`, cursor:"pointer", fontSize:13, fontWeight:600, color:"#9ca3af", fontFamily:"inherit", whiteSpace:"nowrap" }}>Scorecards</button>
-      </div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:300,color:C.text3,fontFamily:F}}>
+
+        {/* Quick Links */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"14px 18px", background:"white", borderRadius:14, border:"1px solid #f0f0f0" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"interviews"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #4361ee30", background:"#4361ee08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#4361ee", fontFamily:"inherit", whiteSpace:"nowrap" }}>All Interviews</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:openCopilot",{detail:{message:"schedule an interview"}}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #0ca67830", background:"#0ca67808", cursor:"pointer", fontSize:13, fontWeight:600, color:"#0ca678", fontFamily:"inherit", whiteSpace:"nowrap" }}>Schedule Interview</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"people"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #7c3aed30", background:"#7c3aed08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#7c3aed", fontFamily:"inherit", whiteSpace:"nowrap" }}>Candidates</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"jobs"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #3b82f630", background:"#3b82f608", cursor:"pointer", fontSize:13, fontWeight:600, color:"#3b82f6", fontFamily:"inherit", whiteSpace:"nowrap" }}>Open Jobs</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"screening"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #f59f0030", background:"#f59f0008", cursor:"pointer", fontSize:13, fontWeight:600, color:"#f59f00", fontFamily:"inherit", whiteSpace:"nowrap" }}>Screening</button>
+        </div>
       Loading interview data…
     </div>
   );
