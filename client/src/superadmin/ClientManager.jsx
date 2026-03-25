@@ -138,8 +138,6 @@ export function ClientList({ onProvision, onSelectClient }) {
   );
 }
 
-}
-
 // ── Demo Data Tab ─────────────────────────────────────────────────────────────
 function DemoDataTab({ client, stats }) {
   const [seeding,   setSeeding]   = useState(false);
