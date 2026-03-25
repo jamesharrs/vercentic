@@ -7,6 +7,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove, getStore } = require('../db/init');
 const { hasGlobalAction } = require('../middleware/rbac');
+const { logFieldVisibilityChange } = require('../middleware/security-audit');
 
 function checkGlobal(req, res, action) {
   const user = req.currentUser;
@@ -64,6 +65,8 @@ router.put('/', (req, res) => {
   }
 
   require('../db/init').saveStore();
+  // AUDIT: field visibility changed
+  logFieldVisibilityChange(req, role_id, object_id, rules);
   res.json({ saved: rules.length });
 });
 

@@ -1,4 +1,5 @@
 const { hasGlobalAction } = require("../middleware/rbac");
+const { logSecurityEvent, logPermissionChange, SEC_EVENT, SEVERITY, auditContext } = require('../middleware/security-audit');
 function checkGlobal(req,res,action){const u=req.currentUser;if(!u)return null;if(!hasGlobalAction(u,action)){res.status(403).json({error:"Permission denied",code:"FORBIDDEN",required:{action}});return false;}return null;}
 const express = require('express');
 const router = express.Router();
@@ -40,6 +41,10 @@ router.post('/', (req, res) => {
       insert('permissions', { ...perm, id: uuidv4(), role_id: id, created_at: new Date().toISOString() });
     }
   }
+  // AUDIT: role created
+  logSecurityEvent({ ...auditContext(req), event: SEC_EVENT.ROLE_CREATED, severity: SEVERITY.CRITICAL,
+    target_type: 'role', target_id: id, action: 'create_role',
+    details: { name, slug, clone_from_role_id: clone_from_role_id || null } });
   res.status(201).json(role);
 });
 
@@ -59,6 +64,10 @@ router.delete('/:id', (req, res) => {
   const role = findOne('roles', r => r.id === req.params.id);
   if (!role) return res.status(404).json({ error: 'Not found' });
   if (role.is_system) return res.status(403).json({ error: 'Cannot delete system roles' });
+  // AUDIT: role deleted
+  logSecurityEvent({ ...auditContext(req), event: SEC_EVENT.ROLE_DELETED, severity: SEVERITY.CRITICAL,
+    target_type: 'role', target_id: req.params.id, action: 'delete_role',
+    details: { name: role.name, slug: role.slug } });
   remove('roles', r => r.id === req.params.id);
   remove('permissions', p => p.role_id === req.params.id);
   res.json({ deleted: true });
@@ -79,6 +88,12 @@ router.put('/:id/permissions', (req, res) => {
     if (existing) update('permissions', p => p.id === existing.id, { allowed: perm.allowed ? 1 : 0 });
     else insert('permissions', { id:uuidv4(), role_id:req.params.id, object_slug:perm.object_slug, action:perm.action, allowed:perm.allowed?1:0, created_at:new Date().toISOString() });
   }
+  // AUDIT: permissions changed
+  const role = findOne('roles', r => r.id === req.params.id);
+  logPermissionChange(req, req.params.id, role?.name || 'unknown', {
+    permissions_count: permissions.length,
+    summary: permissions.slice(0, 5).map(p => `${p.object_slug}:${p.action}=${p.allowed}`)
+  });
   res.json(query('permissions', p => p.role_id === req.params.id));
 });
 

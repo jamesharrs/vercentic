@@ -4,6 +4,7 @@ const cors = require('cors');
 const { initDB, getStore } = require('./db/init');
 const tenantMiddleware = require('./middleware/tenant');
 const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
+const { auditResponseMiddleware } = require('./middleware/security-audit');
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use(express.json({ limit: '10mb' }));
 // Tenant is resolved from: X-Tenant-Slug header → subdomain → master (default)
 app.use(tenantMiddleware);
 app.use(attachUser); // attach current user to every request (non-blocking)
+app.use(auditResponseMiddleware); // log all 403 responses to security audit
 
 // ── Global auth guard ─────────────────────────────────────────────────────────
 // All /api/* routes require authentication EXCEPT public endpoints.
@@ -83,6 +85,7 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/auth',        require('./routes/auth'));
+app.use('/api/security-audit', require('./routes/security_audit'));
 app.use('/api/field-visibility', require('./routes/field_visibility'));
 app.use('/api/environments', require('./routes/environments'));
 app.use('/api/objects',      require('./routes/objects'));

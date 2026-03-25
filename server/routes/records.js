@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove, getStore, saveStore } = require('../db/init');
-const { hasPermission, hasGlobalAction, applyFieldVisibility, applyFieldVisibilityBulk } = require('../middleware/rbac');
+const { hasPermission, hasGlobalAction, applyFieldVisibility, applyFieldVisibilityBulk, isSuperAdmin, getHiddenFieldKeys } = require('../middleware/rbac');
 
 // Lazy-load agent engine to avoid circular deps at startup
 let agentEngine = null;
@@ -107,7 +107,14 @@ router.get('/search', (req, res) => {
   }
 
   merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  res.json(merged.slice(0, lim));
+  // RBAC: filter by object permission + apply field visibility
+  const user = req.currentUser;
+  let visible = merged.slice(0, lim);
+  if (user && !isSuperAdmin(user)) {
+    visible = visible.filter(r => hasPermission(user, r.object_slug, 'view'));
+    visible = visible.map(r => applyFieldVisibility(user, r, r.object_id));
+  }
+  res.json(visible);
 });
 
 router.get('/', (req, res) => {
@@ -255,6 +262,11 @@ router.delete('/:id', (req, res) => {
 });
 
 router.get('/:id/activity', (req, res) => {
+  // RBAC: check view permission on the parent record's object
+  const parentRecord = findOne('records', r => r.id === req.params.id && !r.deleted_at);
+  if (parentRecord && req.currentUser) {
+    if (checkPerm(req, res, parentRecord.object_id, 'view') === false) return;
+  }
   const { page=1, limit=10, search='', category='' } = req.query;
   let items = query('activity', a => a.record_id === req.params.id)
     .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
@@ -279,7 +291,22 @@ router.get('/:id/activity', (req, res) => {
   const lm = Math.min(50, Math.max(1, parseInt(limit)));
   const paged = items.slice((pg-1)*lm, pg*lm);
 
-  res.json({ items: paged, total, page: pg, limit: lm, pages: Math.ceil(total/lm) });
+  // RBAC: redact hidden field values from activity entries
+  const hiddenKeys = parentRecord ? getHiddenFieldKeys(req.currentUser, parentRecord.object_id) : new Set();
+  const redacted = hiddenKeys.size > 0 ? paged.map(a => {
+    if (!a.changes) return a;
+    const clean = { ...a, changes: { ...a.changes } };
+    if (clean.changes.field_key && hiddenKeys.has(clean.changes.field_key)) {
+      clean.changes.old_value = '[hidden]';
+      clean.changes.new_value = '[hidden]';
+    }
+    if (typeof clean.changes === 'object' && !clean.changes.field_key) {
+      for (const k of hiddenKeys) { if (k in clean.changes) clean.changes[k] = '[hidden]'; }
+    }
+    return clean;
+  }) : paged;
+
+  res.json({ items: redacted, total, page: pg, limit: lm, pages: Math.ceil(total/lm) });
 });
 
 module.exports = router;

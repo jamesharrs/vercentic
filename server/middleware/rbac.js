@@ -1,5 +1,6 @@
 'use strict';
 const { findOne, query } = require('../db/init');
+const { logAccessDenied } = require('./security-audit');
 
 const ACTIONS = { VIEW:'view', CREATE:'create', EDIT:'edit', DELETE:'delete', EXPORT:'export' };
 
@@ -75,8 +76,11 @@ function requirePermission(objectSlug, action) {
   return (req, res, next) => {
     const user = req.currentUser || resolveUser(req);
     if (!user) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
-    if (!hasPermission(user, objectSlug, action))
+    if (!hasPermission(user, objectSlug, action)) {
+      req._accessDenialLogged = true;
+      logAccessDenied(req, objectSlug, action, 'Missing object permission');
       return res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { objectSlug, action } });
+    }
     req.currentUser = user;
     next();
   };
@@ -86,8 +90,11 @@ function requireGlobalAction(action) {
   return (req, res, next) => {
     const user = req.currentUser || resolveUser(req);
     if (!user) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
-    if (!hasGlobalAction(user, action))
+    if (!hasGlobalAction(user, action)) {
+      req._accessDenialLogged = true;
+      logAccessDenied(req, '__global__', action, 'Missing global action permission');
       return res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
+    }
     req.currentUser = user;
     next();
   };
@@ -204,9 +211,53 @@ function applyFieldVisibilityBulk(user, records, objectId) {
   return records.map(r => applyFieldVisibility(user, r, objectId));
 }
 
+/**
+ * Auto-seed permissions for a newly created custom object.
+ */
+function seedPermissionsForNewObject(objectSlug) {
+  try {
+    const { getStore, saveStore } = require('../db/init');
+    const { v4: uuidv4 } = require('uuid');
+    const store = getStore();
+    const now = new Date().toISOString();
+    const roles = store.roles || [];
+    let added = 0;
+    for (const role of roles) {
+      for (const action of Object.values(ACTIONS)) {
+        const exists = (store.permissions || []).find(p =>
+          p.role_id === role.id && p.object_slug === objectSlug && p.action === action);
+        if (!exists) {
+          const allowed = (role.slug === 'super_admin' || role.slug === 'admin') ? 1 : (action === 'view' ? 1 : 0);
+          if (!store.permissions) store.permissions = [];
+          store.permissions.push({ id: uuidv4(), role_id: role.id, object_slug: objectSlug, action, allowed, created_at: now });
+          added++;
+        }
+      }
+    }
+    if (added > 0) { saveStore(); console.log(`✅ Seeded ${added} permissions for new object "${objectSlug}"`); }
+  } catch (err) { console.error(`Failed to seed permissions for "${objectSlug}":`, err.message); }
+}
+
+/**
+ * Get the set of hidden field api_keys for a user+object (for activity log redaction).
+ */
+function getHiddenFieldKeys(user, objectId) {
+  if (!user || isSuperAdmin(user)) return new Set();
+  try {
+    const store = require('../db/init').getStore();
+    if (!store.field_visibility || store.field_visibility.length === 0) return new Set();
+    const fieldIds = query('fields', f => f.object_id === objectId).map(f => f.id);
+    const hiddenFieldIds = new Set(
+      store.field_visibility.filter(r => r.role_id === user.role_id && r.hidden && fieldIds.includes(r.field_id)).map(r => r.field_id));
+    if (hiddenFieldIds.size === 0) return new Set();
+    return new Set(query('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key));
+  } catch { return new Set(); }
+}
+
 module.exports = {
   attachUser, requireAuth, requirePermission, requireGlobalAction,
   hasPermission, hasGlobalAction, getUserPermissions, seedDefaultPermissions,
+  seedPermissionsForNewObject,
   isSuperAdmin, ACTIONS, GLOBAL_ACTIONS,
-  applyFieldVisibility, applyFieldVisibilityBulk
+  applyFieldVisibility, applyFieldVisibilityBulk, getHiddenFieldKeys,
 };
