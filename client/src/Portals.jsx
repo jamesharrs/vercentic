@@ -2593,189 +2593,148 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 };
 
 // ─── Mini Preview ─────────────────────────────────────────────────────────────
-const WIDGET_COLORS = {
-  hero:"#4361EE", text:"#6B7280", rich_text:"#6B7280", image:"#8B5CF6",
-  jobs:"#0891B2", form:"#0CAF77", stats:"#D97706", testimonials:"#EC4899",
-  team:"#7C3AED", video:"#EF4444", map_embed:"#059669", cta_banner:"#F79009",
-  divider:"#D1D5DB", spacer:"transparent",
-};
-const WIDGET_LABELS = {
-  hero:"Hero", text:"Text", rich_text:"Article", image:"Image",
-  jobs:"List", form:"Form", stats:"Stats", testimonials:"Quotes",
-  team:"Team", video:"Video", map_embed:"Map", cta_banner:"CTA",
-  divider:"—", spacer:"",
-};
 const PRESET_FRACS = { "1":[1], "2":[1,1], "3":[1,1,1], "1-2":[1,2], "2-1":[2,1] };
 
 const MiniPreview = ({ portal, onClick }) => {
   const t = portal.theme || defaultTheme();
   const pages = portal.pages || [];
-  const page = pages[0]; // show first page
+  const page = pages[0];
   const rows = page?.rows || [];
   const nav = portal.nav || {};
-  const navBg = nav.bgColor || t.primaryColor || "#4361EE";
+  const footer = portal.footer || {};
+
+  const navBg = nav.bgColor || t.bgColor || "#FFFFFF";
+  const navFg = nav.textColor || t.textColor || "#0F1729";
+  const pr = t.primaryColor || "#4361EE";
+  const ff = t.fontFamily || F;
+  const ftBg = footer.bgColor || "#0F1729";
+  const ftFg = footer.textColor || "#F1F5F9";
+
+  // Scale: render at 1200px wide, fit into card width (~320px → scale ~0.25)
+  const renderW = 1200;
+  const cardH = 200;
+  const scale = 0.27;
 
   return (
     <div onClick={onClick} style={{
       cursor:"pointer", borderRadius:"10px 10px 0 0", overflow:"hidden",
-      background:t.bgColor||"#FFFFFF", position:"relative", height:160,
+      height: cardH, position:"relative", background:"#F3F4F8",
     }}>
       {/* Browser chrome */}
-      <div style={{height:18,background:"#E8ECF8",display:"flex",alignItems:"center",padding:"0 8px",gap:4}}>
-        <div style={{width:6,height:6,borderRadius:"50%",background:"#FC5C5C"}}/>
-        <div style={{width:6,height:6,borderRadius:"50%",background:"#FCBB40"}}/>
-        <div style={{width:6,height:6,borderRadius:"50%",background:"#34C749"}}/>
-        <div style={{flex:1,marginLeft:6}}>
-          <div style={{background:"#FFFFFF",borderRadius:3,height:10,maxWidth:120,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:5,color:"#9CA3AF",letterSpacing:".3px"}}>{portal.slug||"/"}</span>
+      <div style={{height:20,background:"#E8ECF2",display:"flex",alignItems:"center",padding:"0 10px",gap:4,zIndex:2,position:"relative"}}>
+        <div style={{width:7,height:7,borderRadius:"50%",background:"#FC5C5C"}}/>
+        <div style={{width:7,height:7,borderRadius:"50%",background:"#FCBB40"}}/>
+        <div style={{width:7,height:7,borderRadius:"50%",background:"#34C749"}}/>
+        <div style={{flex:1,marginLeft:8}}>
+          <div style={{background:"#FFFFFF",borderRadius:4,height:12,maxWidth:140,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #E5E7EB"}}>
+            <span style={{fontSize:7,color:"#9CA3AF",letterSpacing:".3px"}}>{portal.slug||"yoursite.com"}</span>
           </div>
         </div>
       </div>
 
-      {/* Mini nav bar */}
-      <div style={{height:10,background:navBg,display:"flex",alignItems:"center",padding:"0 8px",gap:4}}>
-        <div style={{width:16,height:5,borderRadius:1,background:"rgba(255,255,255,.85)"}}/>
-        <div style={{flex:1}}/>
-        {[1,2,3].map(i=><div key={i} style={{width:12,height:3,borderRadius:1,background:"rgba(255,255,255,.45)"}}/>)}
-      </div>
-
-      {/* Page rows */}
-      <div style={{padding:4,display:"flex",flexDirection:"column",gap:2,overflow:"hidden",height:130}}>
-        {rows.length===0 ? (
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:8,color:"#D1D5DB"}}>Empty page</span>
+      {/* Scaled portal render */}
+      <div style={{
+        width: renderW, transformOrigin:"top left", transform:`scale(${scale})`,
+        position:"relative", background: t.bgColor||"#FFFFFF",
+      }}>
+        {/* ── Nav bar ── */}
+        <div style={{
+          background:navBg, borderBottom:`1px solid ${pr}18`,
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"0 48px", height:64, fontFamily:ff,
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {nav.logoUrl
+              ? <img src={nav.logoUrl} alt="" style={{height:32,maxWidth:140,objectFit:"contain"}} onError={e=>{e.target.style.display="none";}}/>
+              : <span style={{fontSize:20,fontWeight:800,color:pr,fontFamily:ff}}>{nav.logoText||portal.name||"Your Company"}</span>
+            }
           </div>
-        ) : rows.slice(0,8).map(row => {
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {(nav.links||[]).map(lnk=>(
+              <span key={lnk.id} style={{padding:"6px 14px",borderRadius:8,fontSize:14,fontWeight:500,color:navFg,fontFamily:ff}}>{lnk.label}</span>
+            ))}
+            {(nav.links||[]).length===0 && <>
+              <span style={{padding:"6px 14px",fontSize:14,color:navFg+"90",fontFamily:ff}}>Careers</span>
+              <span style={{padding:"6px 14px",fontSize:14,color:navFg+"90",fontFamily:ff}}>About</span>
+              <span style={{padding:"6px 14px",fontSize:14,color:navFg+"90",fontFamily:ff}}>Contact</span>
+            </>}
+          </div>
+        </div>
+
+        {/* ── Page rows ── */}
+        {rows.map(row => {
           const fracs = PRESET_FRACS[row.preset] || [1];
           const totalFrac = fracs.reduce((a,b)=>a+b,0);
           const cells = row.cells || [];
-          const rowBg = row.bgColor || "transparent";
-          const isHero = cells.some(c=>c.widgetType==="hero");
-          const isSpacer = cells.every(c=>c.widgetType==="spacer"||!c.widgetType);
-
-          if (isSpacer) return <div key={row.id} style={{height:3}}/>;
+          const padObj = PADDING_OPTS.find(p=>p.value===(row.padding||"md"));
+          const py = padObj?.py || "56px";
 
           return (
             <div key={row.id} style={{
-              display:"flex", gap:2,
-              background: rowBg!=="transparent" ? rowBg+"18" : "transparent",
-              borderRadius:2, padding: isHero ? "0" : "1px 2px",
-              minHeight: isHero ? 36 : 14,
+              background: row.bgColor || "transparent",
+              backgroundImage: row.bgImage ? `url(${row.bgImage})` : "none",
+              backgroundSize:"cover", backgroundPosition:"center",
+              position:"relative",
             }}>
-              {fracs.map((fr,i) => {
-                const cell = cells[i];
-                const wt = cell?.widgetType;
-                const wColor = WIDGET_COLORS[wt] || "#E5E7EB";
-                const label = WIDGET_LABELS[wt] || "";
-                const widthPct = `${(fr/totalFrac)*100}%`;
-
-                if (!wt) return (
-                  <div key={i} style={{width:widthPct,borderRadius:2,border:"1px dashed #E5E7EB",minHeight:12}}/>
-                );
-
-                if (wt === "hero") return (
-                  <div key={i} style={{
-                    width:widthPct, borderRadius:2, minHeight:36,
-                    background:`linear-gradient(135deg,${t.primaryColor}30,${t.secondaryColor||t.primaryColor}18)`,
-                    display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:4,
-                  }}>
-                    <div style={{width:"60%",height:4,borderRadius:1,background:t.primaryColor+"90"}}/>
-                    <div style={{width:"40%",height:3,borderRadius:1,background:t.primaryColor+"40"}}/>
-                    <div style={{width:18,height:5,borderRadius:2,background:t.primaryColor,marginTop:2}}/>
-                  </div>
-                );
-
-                if (wt === "image") return (
-                  <div key={i} style={{
-                    width:widthPct, borderRadius:2, minHeight:18,
-                    background:`linear-gradient(135deg,${wColor}20,${wColor}08)`,
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                  }}>
-                    <Ic n="image" s={8} c={wColor+"80"}/>
-                  </div>
-                );
-
-                if (wt === "jobs") return (
-                  <div key={i} style={{width:widthPct,borderRadius:2,padding:"2px 3px",display:"flex",flexDirection:"column",gap:1}}>
-                    {[1,2,3].map(j=>(
-                      <div key={j} style={{height:4,borderRadius:1,background:wColor+"20",display:"flex",alignItems:"center",gap:2,padding:"0 2px"}}>
-                        <div style={{width:3,height:3,borderRadius:"50%",background:wColor+"60"}}/>
-                        <div style={{flex:1,height:2,borderRadius:1,background:wColor+"30"}}/>
-                      </div>
-                    ))}
-                  </div>
-                );
-
-                if (wt === "stats") return (
-                  <div key={i} style={{width:widthPct,borderRadius:2,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:3}}>
-                    {[1,2,3].map(j=>(
-                      <div key={j} style={{textAlign:"center"}}>
-                        <div style={{width:10,height:6,borderRadius:1,background:wColor+"30",margin:"0 auto"}}/>
-                        <div style={{width:14,height:2,borderRadius:1,background:wColor+"20",marginTop:1}}/>
-                      </div>
-                    ))}
-                  </div>
-                );
-
-                if (wt === "form") return (
-                  <div key={i} style={{width:widthPct,borderRadius:2,padding:"3px 4px",display:"flex",flexDirection:"column",gap:2}}>
-                    {[1,2].map(j=>(
-                      <div key={j} style={{height:4,borderRadius:1,border:`1px solid ${wColor}30`,background:"transparent"}}/>
-                    ))}
-                    <div style={{width:16,height:5,borderRadius:2,background:wColor,alignSelf:"flex-end"}}/>
-                  </div>
-                );
-
-                if (wt === "testimonials") return (
-                  <div key={i} style={{width:widthPct,borderRadius:2,display:"flex",gap:2,padding:2}}>
-                    {[1,2].map(j=>(
-                      <div key={j} style={{flex:1,borderRadius:2,background:wColor+"12",padding:2,display:"flex",flexDirection:"column",gap:1}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:wColor+"30"}}/>
-                        <div style={{width:"80%",height:2,borderRadius:1,background:wColor+"20"}}/>
-                      </div>
-                    ))}
-                  </div>
-                );
-
-                if (wt === "divider") return (
-                  <div key={i} style={{width:widthPct,display:"flex",alignItems:"center",padding:"0 4px"}}>
-                    <div style={{flex:1,height:1,background:"#D1D5DB"}}/>
-                  </div>
-                );
-
-                if (wt === "cta_banner") return (
-                  <div key={i} style={{
-                    width:widthPct,borderRadius:2,minHeight:16,
-                    background:`linear-gradient(90deg,${t.primaryColor}20,${t.accentColor||t.primaryColor}12)`,
-                    display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:2,
-                  }}>
-                    <div style={{width:"30%",height:3,borderRadius:1,background:t.primaryColor+"60"}}/>
-                    <div style={{width:14,height:5,borderRadius:2,background:t.primaryColor}}/>
-                  </div>
-                );
-
-                // Generic widget block
-                return (
-                  <div key={i} style={{
-                    width:widthPct,borderRadius:2,minHeight:14,
-                    background:wColor+"12",
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                  }}>
-                    <span style={{fontSize:5,fontWeight:700,color:wColor+"80",letterSpacing:".3px"}}>{label}</span>
-                  </div>
-                );
-              })}
+              {row.bgImage && (row.overlayOpacity||0)>0 && (
+                <div style={{position:"absolute",inset:0,background:`rgba(0,0,0,${(row.overlayOpacity||0)/100})`}}/>
+              )}
+              <div style={{
+                maxWidth: t.maxWidth||"1200px", margin:"0 auto",
+                padding:`${py} 40px`,
+                display:"flex", gap:24, position:"relative", zIndex:1,
+              }}>
+                {fracs.map((fr,i) => {
+                  const cell = cells[i];
+                  if (!cell || !cell.widgetType) return (
+                    <div key={i} style={{flex:fr,minHeight:40}}/>
+                  );
+                  return (
+                    <div key={i} style={{flex:fr, minWidth:0}}>
+                      <WidgetPreview cell={cell} theme={t}/>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
+
+        {rows.length===0 && (
+          <div style={{padding:"80px 40px",textAlign:"center"}}>
+            <div style={{fontSize:18,color:"#D1D5DB"}}>Empty page — click to start building</div>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div style={{
+          background:ftBg, padding:"40px 48px 32px",
+          fontFamily:ff, color:ftFg,
+        }}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:40}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>{footer.companyName||nav.logoText||portal.name||"Company"}</div>
+              <div style={{fontSize:12,opacity:.6,maxWidth:280}}>{footer.tagline||"Building the future of work."}</div>
+            </div>
+            <div style={{display:"flex",gap:24}}>
+              <span style={{fontSize:12,opacity:.6}}>Privacy</span>
+              <span style={{fontSize:12,opacity:.6}}>Terms</span>
+              <span style={{fontSize:12,opacity:.6}}>Contact</span>
+            </div>
+          </div>
+          <div style={{marginTop:24,paddingTop:16,borderTop:`1px solid ${ftFg}20`,fontSize:11,opacity:.4}}>
+            © {new Date().getFullYear()} {footer.companyName||nav.logoText||portal.name||"Company"}. All rights reserved.
+          </div>
+        </div>
       </div>
 
-      {/* Status badge */}
-      <div style={{position:"absolute",top:22,right:6}}>
-        <span style={{fontSize:7,fontWeight:700,padding:"1px 5px",borderRadius:99,
+      {/* Status badge overlay */}
+      <div style={{position:"absolute",top:24,right:8,zIndex:3}}>
+        <span style={{fontSize:8,fontWeight:700,padding:"2px 7px",borderRadius:99,
           background:portal.status==="published"?"#ECFDF5":"#FFFBEB",
           color:portal.status==="published"?"#0CAF77":"#F79009",
           border:`1px solid ${portal.status==="published"?"#0CAF7730":"#F7900930"}`,
+          boxShadow:"0 1px 4px rgba(0,0,0,.1)",
         }}>
           {portal.status==="published"?"LIVE":"DRAFT"}
         </span>
@@ -2783,12 +2742,16 @@ const MiniPreview = ({ portal, onClick }) => {
 
       {/* Page count */}
       {pages.length > 1 && (
-        <div style={{position:"absolute",bottom:4,right:6}}>
-          <span style={{fontSize:6,color:"#9CA3AF",background:"rgba(255,255,255,.85)",padding:"1px 4px",borderRadius:3}}>
+        <div style={{position:"absolute",bottom:6,right:8,zIndex:3}}>
+          <span style={{fontSize:7,fontWeight:600,color:"#6B7280",background:"rgba(255,255,255,.9)",padding:"2px 6px",borderRadius:4,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
             {pages.length} pages
           </span>
         </div>
       )}
+
+      {/* Fade to white at bottom */}
+      <div style={{position:"absolute",bottom:0,left:0,right:0,height:40,
+        background:"linear-gradient(transparent, rgba(255,255,255,.95))",zIndex:2,pointerEvents:"none"}}/>
     </div>
   );
 };
