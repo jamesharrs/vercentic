@@ -80,7 +80,7 @@ app.use('/api', (req, res, next) => {
   // Skip portal apply + objects/records endpoints (public — unauthenticated portal visitors)
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   // Objects + records + fields + saved-views are read-only and needed by portal job widgets
-  if (req.method === 'GET' && (req.path.startsWith('/objects') || req.path.startsWith('/records') || req.path.startsWith('/fields') || req.path.startsWith('/saved-views'))) return next();
+  if (req.method === 'GET' && (req.path.startsWith('/objects') || req.path.startsWith('/records') || req.path.startsWith('/fields') || req.path.startsWith('/saved-views') || req.path.startsWith('/company-documents/search') || req.path.startsWith('/company-documents/meta'))) return next();
   // Skip OPTIONS (CORS preflight)
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) {
@@ -227,6 +227,7 @@ app.use('/api/cases',              require('./routes/cases'));
 app.use('/api/release-notes',      require('./routes/release_notes'));
 app.use('/api/error-logs',         require('./routes/error_logs'));
 app.use('/api/company-research',   require('./routes/company_research'));
+app.use('/api/company-documents',  require('./routes/company_documents'));
 app.use('/api/rpo-clients',        require('./routes/rpo_clients'));
 app.use('/api/question-bank',      require('./routes/question_bank'));
 app.use('/api/ai-interview',       require('./routes/ai_interview'));

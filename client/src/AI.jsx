@@ -1219,6 +1219,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
   const [interviewTypes, setInterviewTypes] = useState([]);
+  const [companyDocs, setCompanyDocs] = useState([]);
   const _pcAI = _usePermCtxAI();
   const canRecord = (flag) => _pcAI ? _pcAI.canGlobal(flag) : true;
   const [pendingInterview, setPendingInterview] = useState(null);
@@ -1343,8 +1344,25 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
 
+    // Inject company knowledge base context
+    if(companyDocs.length>0){
+      parts.push('');
+      parts.push(`COMPANY KNOWLEDGE BASE — ${companyDocs.length} documents available:`);
+      companyDocs.forEach(d=>{
+        parts.push(`  📄 "${d.name}" [${(d.visibility||'internal').toUpperCase()}] (${d.category}, ${d.word_count||0} words)`);
+        if(d.description) parts.push(`     ${d.description}`);
+      });
+      parts.push('');
+      parts.push('When writing job descriptions, answering questions about benefits/culture/policies, or drafting content:');
+      parts.push('1. Search these documents using <DOC_SEARCH>query terms</DOC_SEARCH>');
+      parts.push('2. The system will return relevant snippets from matching documents');
+      parts.push('3. Use the snippets to write accurate, on-brand content');
+      parts.push('4. IMPORTANT: For candidate-facing content, only reference CANDIDATE or PUBLIC documents. Never share INTERNAL document content with candidates.');
+      parts.push('5. When citing information, mention the document name naturally (e.g. "According to our Benefits Guide...")');
+    }
+
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection,editorContext]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection,editorContext,companyDocs]);
 
   useEffect(()=>{
     if(!open) return;
@@ -1453,6 +1471,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     api.get("/roles").then(r=>{ if(Array.isArray(r)) setAdminRoles(r); }).catch(()=>{});
     api.get("/users").then(u=>{ if(Array.isArray(u)) setAdminUsers(u); }).catch(()=>{});
     if(environment?.id) api.get(`/interview-types?environment_id=${environment.id}`).then(t=>{ if(Array.isArray(t)) setInterviewTypes(t); }).catch(()=>{});
+    if(environment?.id) api.get(`/company-documents?environment_id=${environment.id}`).then(d=>{ if(Array.isArray(d)) setCompanyDocs(d); }).catch(()=>{});
     // (settings-section listener is in its own useEffect above)
   },[open]);
 
@@ -1627,6 +1646,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<PARSE_JD>[\s\S]*?<\/PARSE_JD>/g,"")
     .replace(/<PROPOSE_ACTION>[\s\S]*?<\/PROPOSE_ACTION>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
+    .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
     .trim();
 
   const runSearch = async ({ q, slug }) => {
@@ -1847,6 +1867,28 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         const r2 = await fetch("/api/ai/chat",{method:"POST",headers:aiHeaders(),body:JSON.stringify({system:systemFull,messages:followUp})});
         const d2 = await r2.json();
         reply = d2.content || reply;
+      }
+
+      // Handle document search — copilot wants to reference company knowledge base
+      const docSearchMatch = reply.match(/<DOC_SEARCH>([\s\S]*?)<\/DOC_SEARCH>/);
+      if (docSearchMatch && environment?.id) {
+        setLoadingLabel("Searching company documents…");
+        const docQ = docSearchMatch[1].trim();
+        try {
+          const docResults = await api.get(`/company-documents/search/query?q=${encodeURIComponent(docQ)}&environment_id=${environment.id}&limit=4`);
+          if (docResults?.results?.length) {
+            const snippets = docResults.results.map(r =>
+              `[📄 ${r.doc_name} — ${r.category}, ${r.visibility.toUpperCase()}]\n${r.snippet}`
+            ).join('\n\n---\n\n');
+            const docFollowUp = [...newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),
+              {role:"assistant", content:reply},
+              {role:"user", content:`Here are relevant excerpts from the company knowledge base:\n\n${snippets}\n\nNow rewrite your response incorporating this information naturally. Cite document names where appropriate (e.g. "According to our Benefits Guide..."). Do NOT include <DOC_SEARCH> tags in your response.`}
+            ];
+            const dr = await fetch("/api/ai/chat",{method:"POST",headers:aiHeaders(),body:JSON.stringify({system:systemFull,messages:docFollowUp})});
+            const dd = await dr.json();
+            reply = dd.content || reply;
+          }
+        } catch(e) { console.warn('Doc search failed:', e); }
       }
 
       const createData    = parseCreateRecord(reply);
