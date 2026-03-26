@@ -409,6 +409,11 @@ router.get('/', (req, res) => {
 });
 
 router.get('/provision/templates', (req, res) => {
+  res.json(Object.entries(TEMPLATES).map(([key, tpl]) => ({
+    key, label: tpl.label, description: tpl.description, icon: tpl.icon,
+    object_count: (tpl.objects||[]).length + ((tpl.extra_objects||[]).length),
+  })));
+});
 
 router.get('/provision/log', (req, res) => {
   ensureCollections();
