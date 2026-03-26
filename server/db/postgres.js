@@ -52,7 +52,7 @@ async function saveTenant(slug, store) {
       const chunk = rows.slice(i, i + CHUNK); if (chunk.length === 0) continue;
       const values = chunk.map((r, idx) => { const base = idx * 4; return `($${base+1}, $${base+2}, $${base+3}, $${base+4}::jsonb)`; }).join(', ');
       const params = chunk.flatMap(r => [slug, r.tableName, r.id, JSON.stringify(r.data)]);
-      await client.query(`INSERT INTO tenant_store (tenant_slug, table_name, record_id, data, updated_at) VALUES ${values} ON CONFLICT (tenant_slug, table_name, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, params);
+      await client.query(`INSERT INTO tenant_store (tenant_slug, table_name, record_id, data) VALUES ${values} ON CONFLICT (tenant_slug, table_name, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, params);
     }
     for (const [tableName, items] of Object.entries(store)) {
       if (!Array.isArray(items) || items.length === 0) continue;
@@ -64,7 +64,7 @@ async function saveTenant(slug, store) {
 }
 async function upsertRecord(slug, tableName, record) {
   const p = getPool(); if (!p || !record?.id) return;
-  await p.query(`INSERT INTO tenant_store (tenant_slug, table_name, record_id, data, updated_at) VALUES ($1, $2, $3, $4::jsonb, NOW()) ON CONFLICT (tenant_slug, table_name, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, [slug, tableName, String(record.id), JSON.stringify(record)]);
+  await p.query(`INSERT INTO tenant_store (tenant_slug, table_name, record_id, data) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (tenant_slug, table_name, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, [slug, tableName, String(record.id), JSON.stringify(record)]);
 }
 async function deleteRecord(slug, tableName, recordId) {
   const p = getPool(); if (!p) return;
