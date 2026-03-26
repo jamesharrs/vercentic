@@ -133,12 +133,15 @@ function findTenantForEnv(environmentId) {
 }
 
 async function runSeed({ environmentId, clearFirst, progressCb }) {
-  const store = getStore();
+  // Resolve which store holds this environment (master or a tenant file)
+  const tenantSlug = findTenantForEnv(environmentId);
+  const store = tenantSlug ? loadTenantStore(tenantSlug) : getStore();
+  const save  = () => saveStore(tenantSlug); // always saves to the right store
 
   progressCb({ step:'init', message:'Resolving environment and objects…', pct:2 });
 
   const env = store.environments?.find(e => e.id === environmentId);
-  if (!env) throw new Error(`Environment ${environmentId} not found`);
+  if (!env) throw new Error(`Environment ${environmentId} not found in ${tenantSlug ? `tenant:${tenantSlug}` : 'master'} store`);
 
   const allObjects = store.objects || store.object_definitions || [];
   const objects    = allObjects.filter(o => o.environment_id === environmentId);
@@ -160,7 +163,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
      'people_links','notes','communications'].forEach(table => {
       if (store[table]) store[table] = store[table].filter(r => !(r._demo && r.environment_id === environmentId));
     });
-    saveStore();
+    save();
   }
 
   // ── Fetch 300 real profiles ──────────────────────────────────────────────
@@ -203,7 +206,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
     store.records.push(rec);
     jobRecords.push(rec);
   }
-  saveStore();
+  save();
 
   // ── Create 4 workflows ───────────────────────────────────────────────────
   progressCb({ step:'workflows', message:'Creating workflows and stages…', pct:22 });
@@ -224,7 +227,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
     });
     wfRecords.push({ wf:store.workflows[store.workflows.length-1], steps });
   }
-  saveStore();
+  save();
 
   // ── Assign workflows to jobs ─────────────────────────────────────────────
   progressCb({ step:'assign', message:'Assigning workflows to jobs…', pct:26 });
@@ -245,7 +248,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
   assign(techJobs.slice(0,10), 2);
   assign(gradJobs, 3);
   assign(jobRecords.filter(j => !assigned.has(j.id)), 0);
-  saveStore();
+  save();
 
   // ── Create 300 candidates ────────────────────────────────────────────────
   progressCb({ step:'candidates', message:'Creating 300 candidate profiles…', pct:30 });
@@ -272,7 +275,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
     candidateRecords.push(rec);
     if (i % 50 === 0) progressCb({ step:'candidates', message:`Creating candidates… ${i}/300`, pct:30+Math.floor((i/300)*25) });
   }
-  saveStore();
+  save();
 
   // ── Link candidates to jobs ──────────────────────────────────────────────
   progressCb({ step:'links', message:'Linking candidates to jobs via pipelines…', pct:55 });
@@ -293,7 +296,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
         linked_at:isoAgo(randInt(1,120)), updated_at:isoNow(), _demo:true });
     });
   }
-  saveStore();
+  save();
 
   // ── Notes ────────────────────────────────────────────────────────────────
   progressCb({ step:'notes', message:'Adding recruiter notes…', pct:68 });
@@ -305,7 +308,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
         author:'Admin User', created_at:isoAgo(randInt(1,90)), _demo:true });
     }
   }
-  saveStore();
+  save();
 
   // ── Communications ───────────────────────────────────────────────────────
   progressCb({ step:'comms', message:'Adding email communications…', pct:78 });
@@ -324,7 +327,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
         sent_at:isoAgo(randInt(1,120)), created_at:isoAgo(randInt(1,120)), _demo:true });
     }
   }
-  saveStore();
+  save();
 
   // ── Interviews ─────────────────────────────────────────────────────────────
   progressCb({ step:'interviews', message:'Scheduling interviews…', pct:82 });
@@ -353,7 +356,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
       created_at:isoAgo(randInt(1,30)), updated_at:new Date().toISOString(), _demo:true
     });
   }
-  saveStore();
+  save();
 
   // ── Offers ─────────────────────────────────────────────────────────────────
   progressCb({ step:'offers', message:'Creating offers…', pct:90 });
@@ -379,7 +382,7 @@ async function runSeed({ environmentId, clearFirst, progressCb }) {
       created_at:isoAgo(randInt(1,45)), updated_at:new Date().toISOString(), _demo:true
     });
   }
-  saveStore();
+  save();
 
   progressCb({ step:'done', message:'Demo data ready!', pct:100 });
   return {
@@ -455,7 +458,8 @@ router.get('/environments', (req, res) => {
 
 router.get('/status', (req, res) => {
   const { environment_id } = req.query;
-  const store = getStore();
+  const tenantSlug = findTenantForEnv(environment_id);
+  const store = tenantSlug ? loadTenantStore(tenantSlug) : getStore();
   const demoRecs  = (store.records||[]).filter(r=>r._demo&&r.environment_id===environment_id);
   const demoLinks = (store.people_links||[]).filter(l=>l._demo&&l.environment_id===environment_id);
   res.json({
@@ -500,20 +504,18 @@ router.delete('/clear', (req, res) => {
   const { environment_id } = req.body;
   if (!environment_id) return res.status(400).json({ error:'environment_id required' });
   const tenantSlug = findTenantForEnv(environment_id);
-  tenantStorage.run(tenantSlug || 'master', () => {
-    const store = getStore();
-    let removed = 0;
-    ['records','workflows','workflow_steps','record_workflow_assignments',
-     'people_links','notes','communications','interviews','offers'].forEach(table => {
-      if (store[table]) {
-        const before = store[table].length;
-        store[table] = store[table].filter(r => !(r._demo && r.environment_id === environment_id));
-        removed += before - store[table].length;
-      }
-    });
-    saveStore();
-    res.json({ removed });
+  const store = tenantSlug ? loadTenantStore(tenantSlug) : getStore();
+  let removed = 0;
+  ['records','workflows','workflow_steps','record_workflow_assignments',
+   'people_links','notes','communications','interviews','offers'].forEach(table => {
+    if (store[table]) {
+      const before = store[table].length;
+      store[table] = store[table].filter(r => !(r._demo && r.environment_id === environment_id));
+      removed += before - store[table].length;
+    }
   });
+  saveStore(tenantSlug);
+  res.json({ removed });
 });
 
 module.exports = router;
