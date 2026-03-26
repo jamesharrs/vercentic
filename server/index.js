@@ -70,7 +70,7 @@ const AUTH_EXEMPT_PATHS = [
   '/tenant-reset',                     // tenant data reset (password protected)
   '/cleanup-seeds',                    // one-shot seed data cleanup
   '/seed-dashboards',                  // one-shot dashboard seed
-  '/error-logs',                       // allow error reporting without auth
+  '/debug-headers',                   // temporary diagnostic
   '/ai',                               // AI proxy — session user is optional, key is server-side
   '/translate',                        // translation proxy
 ];
