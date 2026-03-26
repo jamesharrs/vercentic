@@ -766,4 +766,96 @@ router.post('/load-test-data', async (req, res) => {
   });
 });
 
+
+// ── Clear all records for an environment ─────────────────────────────────────
+// DELETE /api/superadmin/clients/:id/environments/:envId/records
+// Deletes ALL records (and related data) in the environment. Irreversible.
+router.delete('/:clientId/environments/:envId/records', (req, res) => {
+  ensureCollections();
+  const { clientId, envId } = req.params;
+  const { confirm } = req.query; // require ?confirm=yes as safety gate
+  if (confirm !== 'yes') {
+    return res.status(400).json({ error: 'Add ?confirm=yes to confirm this destructive action' });
+  }
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===clientId&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  // Find which store to operate on
+  const tenantSlug = client.tenant_slug;
+  const store = tenantSlug ? loadTenantStore(tenantSlug) : s;
+
+  // Tables to clear for this environment
+  const CLEARABLE = [
+    'records','notes','communications','interviews','offers',
+    'attachments','people_links','record_workflow_assignments',
+    'activity','activity_log','form_responses',
+  ];
+
+  const counts = {};
+  CLEARABLE.forEach(table => {
+    if (!store[table]) return;
+    const before = store[table].length;
+    store[table] = store[table].filter(r => r.environment_id !== envId);
+    counts[table] = before - store[table].length;
+  });
+
+  const totalRemoved = Object.values(counts).reduce((a,b)=>a+b, 0);
+  saveStore(tenantSlug);
+
+  // Log it
+  s.provision_log = s.provision_log || [];
+  s.provision_log.push({
+    id: uuidv4(), client_id: clientId, environment_id: envId,
+    action: 'clear_all_records',
+    details: `Deleted ${totalRemoved} records across ${Object.keys(counts).filter(k=>counts[k]>0).join(', ')}`,
+    performed_by: 'superadmin', created_at: new Date().toISOString(),
+  });
+  saveStore();
+
+  res.json({ success: true, total_removed: totalRemoved, breakdown: counts });
+});
+
+// ── Clear ALL records across ALL environments for a client ────────────────────
+// DELETE /api/superadmin/clients/:id/records
+router.delete('/:clientId/records', (req, res) => {
+  ensureCollections();
+  const { confirm } = req.query;
+  if (confirm !== 'yes') {
+    return res.status(400).json({ error: 'Add ?confirm=yes to confirm this destructive action' });
+  }
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.clientId&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const tenantSlug = client.tenant_slug;
+  const store = tenantSlug ? loadTenantStore(tenantSlug) : s;
+
+  const CLEARABLE = [
+    'records','notes','communications','interviews','offers',
+    'attachments','people_links','record_workflow_assignments',
+    'activity','activity_log','form_responses',
+  ];
+
+  let totalRemoved = 0;
+  CLEARABLE.forEach(table => {
+    if (!store[table]) return;
+    totalRemoved += store[table].length;
+    store[table] = [];
+  });
+
+  saveStore(tenantSlug);
+
+  s.provision_log = s.provision_log || [];
+  s.provision_log.push({
+    id: uuidv4(), client_id: client.id,
+    action: 'clear_all_records_all_environments',
+    details: `Deleted all ${totalRemoved} records across all environments`,
+    performed_by: 'superadmin', created_at: new Date().toISOString(),
+  });
+  saveStore();
+
+  res.json({ success: true, total_removed: totalRemoved });
+});
+
 module.exports = router;

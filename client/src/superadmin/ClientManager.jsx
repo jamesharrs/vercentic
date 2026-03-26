@@ -12,6 +12,7 @@ const sa = {
   post:  (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
   patch: (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
   del:   p     => fetch(`/api/superadmin/clients${p}`,{method:'DELETE'}).then(r=>r.json()),
+  delConfirm: p => fetch(`/api/superadmin/clients${p}?confirm=yes`,{method:'DELETE'}).then(r=>{ if(!r.ok) return r.json().then(d=>{throw new Error(d.error||r.status);}); return r.json(); }),
 };
 
 const inputSt = { width:'100%',padding:'9px 12px',borderRadius:8,border:`1.5px solid ${C.border2}`,background:C.surface2,color:C.text1,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box' };
@@ -156,8 +157,12 @@ export function ClientList({ onProvision, onSelectClient }) {
 
 // ── Demo Data Tab ─────────────────────────────────────────────────────────────
 function DemoDataTab({ client, stats }) {
-  const [seeding,   setSeeding]   = useState(false);
-  const [clearing,  setClearing]  = useState(false);
+  const [seeding,        setSeeding]        = useState(false);
+  const [clearing,       setClearing]       = useState(false);
+  const [clearingAll,    setClearingAll]     = useState(false);
+  const [clearingEnv,    setClearingEnv]     = useState(null); // envId being cleared
+  const [confirmAll,     setConfirmAll]      = useState(false);
+  const [confirmEnv,     setConfirmEnv]      = useState(null); // envId awaiting confirm
   const [log,       setLog]       = useState([]);
   const [progress,  setProgress]  = useState(0);
   const [results,   setResults]   = useState(null);
@@ -254,16 +259,79 @@ function DemoDataTab({ client, stats }) {
         </div>
       )}
 
-      {/* What gets seeded */}
-      <div style={{background:'white',borderRadius:12,border:'1px solid #f0f0f0',padding:'16px 20px'}}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#111827'}}>What gets seeded</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12,color:'#374151'}}>
-          {[['40 Jobs','Across Engineering, Finance, HR, Sales, Marketing'],['50 Candidates','With realistic profiles, skills, locations, sources'],['30 Interviews','Past (completed/cancelled) + upcoming scheduled'],['18 Offers','Draft, pending, sent, accepted, declined statuses'],['Talent Pools','Active Candidates, Dubai Pipeline, Tech Pipeline'],['Communications','Email threads, SMS, call logs per candidate'],['Workflows','Application Review, Technical Screen, Offer Process'],['Notes','Recruiter notes on each candidate']].map(([t,d])=>(
-            <div key={t} style={{display:'flex',gap:8,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>
-              <span style={{fontWeight:700,color:'#4361ee',flexShrink:0}}>✓</span>
-              <div><div style={{fontWeight:600,color:'#111827'}}>{t}</div><div style={{color:'#6b7280',marginTop:1}}>{d}</div></div>
+      {/* ── Clear All Records section ──────────────────────────── */}
+      <div style={{background:'#fff5f5',borderRadius:12,border:'1px solid #fecaca',padding:'16px 20px'}}>
+        <div style={{fontSize:13,fontWeight:700,color:'#991b1b',marginBottom:4}}>Danger Zone — Clear Records</div>
+        <div style={{fontSize:12,color:'#7f1d1d',marginBottom:14}}>
+          Permanently deletes all records from this environment. Keeps objects, fields, workflows and users intact.
+          This cannot be undone.
+        </div>
+
+        {/* Per-environment clear */}
+        {(stats?.environments||[]).map(env => (
+          <div key={env.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,padding:'10px 14px',background:'#fff',borderRadius:8,border:'1px solid #fecaca'}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#111827'}}>{env.name||'Environment'}</div>
+              <div style={{fontSize:11,color:'#6b7280',fontFamily:'monospace'}}>{env.id}</div>
             </div>
-          ))}
+            <div style={{fontSize:12,fontWeight:600,color:'#374151',minWidth:80,textAlign:'right'}}>
+              {env.record_count||0} records
+            </div>
+            {confirmEnv === env.id ? (
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <span style={{fontSize:11,color:'#e03131',fontWeight:700}}>Sure?</span>
+                <button
+                  disabled={clearingEnv===env.id}
+                  onClick={async()=>{
+                    setClearingEnv(env.id); setConfirmEnv(null);
+                    try {
+                      const d = await sa.delConfirm(`/${client.id}/environments/${env.id}/records`);
+                      setLog(prev=>[...prev,`✓ Cleared ${d.total_removed} records from ${env.name}`]);
+                    } catch(e){setError(e.message);}
+                    setClearingEnv(null);
+                  }}
+                  style={{padding:'4px 10px',borderRadius:6,border:'none',background:'#e03131',color:'white',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                  {clearingEnv===env.id?'Clearing…':'Yes, delete'}
+                </button>
+                <button onClick={()=>setConfirmEnv(null)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #d1d5db',background:'transparent',fontSize:11,cursor:'pointer',color:'#374151'}}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                disabled={clearingEnv===env.id}
+                onClick={()=>setConfirmEnv(env.id)}
+                style={{padding:'5px 12px',borderRadius:6,border:'1px solid #e03131',background:'transparent',color:'#e03131',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                Clear records
+              </button>
+            )}
+          </div>
+        ))}
+
+        {/* Clear ALL environments */}
+        <div style={{borderTop:'1px solid #fecaca',marginTop:10,paddingTop:10,display:'flex',alignItems:'center',gap:10}}>
+          <div style={{flex:1,fontSize:12,color:'#7f1d1d',fontWeight:600}}>Clear records from ALL environments</div>
+          {confirmAll ? (
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <span style={{fontSize:11,color:'#e03131',fontWeight:700}}>Permanently delete everything?</span>
+              <button
+                disabled={clearingAll}
+                onClick={async()=>{
+                  setClearingAll(true); setConfirmAll(false);
+                  try {
+                    const d = await sa.delConfirm(`/${client.id}/records`);
+                    setLog(prev=>[...prev,`✓ Cleared all ${d.total_removed} records across all environments`]);
+                  } catch(e){setError(e.message);}
+                  setClearingAll(false);
+                }}
+                style={{padding:'5px 12px',borderRadius:6,border:'none',background:'#e03131',color:'white',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                {clearingAll?'Clearing…':'Yes, delete all'}
+              </button>
+              <button onClick={()=>setConfirmAll(false)} style={{padding:'5px 12px',borderRadius:6,border:'1px solid #d1d5db',background:'transparent',fontSize:11,cursor:'pointer',color:'#374151'}}>Cancel</button>
+            </div>
+          ) : (
+            <button onClick={()=>setConfirmAll(true)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid #e03131',background:'transparent',color:'#e03131',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              🗑 Clear all records
+            </button>
+          )}
         </div>
       </div>
     </div>
