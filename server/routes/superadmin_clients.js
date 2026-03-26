@@ -367,7 +367,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
       ts.company_documents.push({ id: uuidv4(), environment_id: environment.id, name: d.name, category: d.category, visibility: d.visibility, description: d.description, original_filename: d.name.toLowerCase().replace(/\s+/g,'_')+'.txt', mime_type:'text/plain', file_size: d.text.length, text_content: d.text, word_count: words.length, chunks: chunks.map((c,i)=>({index:i,text:c})), chunk_count: chunks.length, created_at: now, updated_at: now, created_by:'system' });
     });
 
-    saveStore(tenantSlug);
+    saveStoreNow(tenantSlug); // synchronous — must complete before response
   });
 
   return {
