@@ -1,28 +1,30 @@
 // server/middleware/tenant.js
-// Sets the tenant context for each request via AsyncLocalStorage.
-// getStore() in db/init.js handles lazy loading automatically.
+// Routes every request to the correct tenant store.
+// Tenant resolution priority:
+//   1. X-Tenant-Slug header (set by client after login)
+//   2. ?tenant= query param (super admin client links)
+//   3. Subdomain of the request host
+//   4. null → master store
 
-const { tenantStorage, getStore } = require('../db/init');
+const { tenantStorage, getStore, loadTenantStore, listTenants } = require('../db/init');
+
+// Subdomains that are infrastructure — never treated as tenant slugs
+const RESERVED = new Set(['www', 'app', 'api', 'admin', 'portal', 'localhost', 'mail', 'smtp', 'ftp', 'static', 'cdn', 'assets']);
 
 function slugFromHost(host) {
   if (!host) return null;
-  const h = host.split(':')[0];
+  const h = host.split(':')[0].toLowerCase();
   const parts = h.split('.');
-  if (parts.length < 2) return null;
+  // Must have at least subdomain.domain.tld
+  if (parts.length < 3) return null;
   const sub = parts[0];
-  // Skip reserved/infra subdomains
-  if (['www','app','api','admin','localhost','client','portal'].includes(sub)) return null;
-  // Skip Railway/Vercel/infra hosts
-  if (parts.some(p => ['railway','vercel','up','netlify'].includes(p))) return null;
+  if (RESERVED.has(sub)) return null;
+  // Skip Railway/Vercel/Netlify infra hosts
+  if (parts.some(p => ['railway', 'vercel', 'up', 'netlify', 'herokuapp'].includes(p))) return null;
   return sub;
 }
 
 function tenantMiddleware(req, res, next) {
-  // Priority order:
-  // 1. X-Tenant-Slug header (dev/testing/API clients)
-  // 2. ?tenant= query param (used by super admin client links)
-  // 3. Subdomain (production custom domains e.g. jamesco.talentos.io)
-  // 4. null → master store
   const slug =
     req.headers['x-tenant-slug'] ||
     req.query.tenant ||
@@ -30,21 +32,26 @@ function tenantMiddleware(req, res, next) {
     null;
 
   if (!slug || slug === 'master') {
-    // No tenant — use master store
     tenantStorage.run('master', next);
     return;
   }
 
-  // Validate: check the user exists in the requested tenant store.
-  // If user is in master but not in the tenant, fall back to master.
-  // This prevents ?tenant= param from locking out master admins.
+  // Validate the slug actually exists as a tenant file
+  const knownTenants = new Set(listTenants ? listTenants() : []);
+  if (!knownTenants.has(slug)) {
+    // Unknown slug — fall back to master
+    tenantStorage.run('master', next);
+    return;
+  }
+
   const userId = req.headers['x-user-id'];
   if (userId) {
+    // Check if user exists in the tenant store
     tenantStorage.run(slug, () => {
       const tenantStore = getStore();
-      const userInTenant = (tenantStore.users || []).find(u => u.id === userId);
+      const userInTenant = (tenantStore.users || []).find(u => u.id === userId && u.status !== 'deactivated');
       if (!userInTenant) {
-        // User not found in tenant store — fall back to master
+        // User not in tenant store — fall back to master
         tenantStorage.run('master', next);
         return;
       }
@@ -53,8 +60,9 @@ function tenantMiddleware(req, res, next) {
     return;
   }
 
-  // No user ID yet (pre-auth requests like login) — use the requested tenant
+  // Pre-auth request (e.g. login) — use the tenant store directly
   tenantStorage.run(slug, next);
 }
 
 module.exports = tenantMiddleware;
+module.exports.slugFromHost = slugFromHost;

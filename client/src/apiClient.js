@@ -13,15 +13,18 @@ function getSession() {
 }
 
 function getTenantSlug() {
+  // 1. Use slug stored in session after login (most reliable)
   const sess = getSession();
   if (sess?.tenant_slug && sess.tenant_slug !== 'master') return sess.tenant_slug;
+  // 2. ?tenant= query param (super admin links)
   const params = new URLSearchParams(window.location.search);
   if (params.get('tenant')) return params.get('tenant');
+  // 3. Subdomain detection — skip infra-only subdomains, NOT tenant slugs like "client"
   const host = window.location.hostname;
   const parts = host.split('.');
-  const reserved = ['www','app','api','admin','localhost','client','portal'];
-  if (parts.length >= 2 && !reserved.includes(parts[0]) &&
-      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r))) {
+  const INFRA = new Set(['www','app','api','admin','portal','localhost','mail','cdn','static','assets']);
+  if (parts.length >= 3 && !INFRA.has(parts[0]) &&
+      !['vercel','railway','up','netlify','herokuapp','localhost'].some(r => host.includes(r))) {
     return parts[0];
   }
   return null;

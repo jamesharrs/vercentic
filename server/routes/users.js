@@ -114,22 +114,49 @@ router.post('/auth/login', (req, res) => {
 
 module.exports = router;
 
-// POST /api/users/login — simple credential check, returns user + role + permissions
+// POST /api/users/login — credential check across current tenant store + fallback search
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
-  const u = findOne('users', u => u.email === email);
+
+  const hashed = hashPassword(password);
+  const { getCurrentTenant, listTenants, loadTenantStore, tenantStorage } = require('../db/init');
+
+  // Try current store first (set by tenant middleware based on subdomain/header)
+  let u = findOne('users', u => u.email === email);
+  let resolvedTenantSlug = (() => { const t = getCurrentTenant(); return (t && t !== 'master') ? t : null; })();
+
+  // If not found in current store, search all tenant stores
+  if (!u) {
+    const tenants = listTenants ? listTenants() : [];
+    for (const slug of tenants) {
+      const ts = loadTenantStore(slug);
+      const found = (ts.users || []).find(u => u.email === email);
+      if (found) { u = found; resolvedTenantSlug = slug; break; }
+    }
+  }
+
   if (!u) return res.status(401).json({ error: 'Invalid credentials' });
   if (u.status === 'deactivated') return res.status(403).json({ error: 'Account deactivated' });
-  const hashed = hashPassword(password);
   if (u.password_hash !== hashed) return res.status(401).json({ error: 'Invalid credentials' });
-  const role = findOne('roles', r => r.id === u.role_id);
-  const permissions = query('permissions', p => p.role_id === u.role_id && p.allowed);
-  // Update last login
-  update('users', x => x.id === u.id, { last_login: new Date().toISOString(), login_count: (u.login_count||0)+1 });
-  insert('audit_log', { id:require('uuid').v4(), action:'user.login', actor:u.id, target_id:u.id, target_type:'user', details:{ email }, created_at:new Date().toISOString() });
-  const tenantSlug = require('../db/init').getCurrentTenant();
-  res.json({ ...u, password_hash: undefined, role, permissions, tenant_slug: (tenantSlug && tenantSlug !== 'master') ? tenantSlug : null });
+
+  // Fetch role + permissions from the correct store
+  const doInStore = (slug, fn) => {
+    let result;
+    tenantStorage.run(slug || 'master', () => { result = fn(); });
+    return result;
+  };
+  const storeKey = resolvedTenantSlug || 'master';
+  const role        = doInStore(storeKey, () => findOne('roles', r => r.id === u.role_id)) || findOne('roles', r => r.id === u.role_id);
+  const permissions = doInStore(storeKey, () => query('permissions', p => p.role_id === u.role_id && p.allowed)) || query('permissions', p => p.role_id === u.role_id && p.allowed);
+
+  // Update last login in the correct store
+  doInStore(storeKey, () => {
+    update('users', x => x.id === u.id, { last_login: new Date().toISOString(), login_count: (u.login_count||0)+1 });
+    insert('audit_log', { id:require('uuid').v4(), action:'user.login', actor:u.id, target_id:u.id, target_type:'user', details:{ email }, created_at:new Date().toISOString() });
+  });
+
+  res.json({ ...u, password_hash: undefined, role, permissions, tenant_slug: resolvedTenantSlug });
 });
 
 // GET /api/users/me/:id — refresh user session data
