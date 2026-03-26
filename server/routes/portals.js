@@ -185,6 +185,48 @@ router.post('/cleanup', (req, res) => {
   res.json({ cleaned: removed.length, removed });
 });
 
+
+// ── Job Alerts signup ─────────────────────────────────────────────────────────
+router.post('/job-alerts', (req, res) => {
+  const { portal_id, environment_id, email, keywords, department } = req.body;
+  if (!email) return res.status(400).json({ error: 'email required' });
+  const { insert } = require('../db/init');
+  insert('job_alerts', {
+    portal_id: portal_id || null,
+    environment_id: environment_id || null,
+    email,
+    keywords: keywords || '',
+    department: department || '',
+    created_at: new Date().toISOString(),
+  });
+  res.json({ ok: true });
+});
+
+// ── Application status lookup ─────────────────────────────────────────────────
+router.get('/application-status', (req, res) => {
+  const { portal_id, email } = req.query;
+  if (!email) return res.status(400).json({ error: 'email required' });
+  const { query } = require('../db/init');
+  const people = query('records', function(r) {
+    return (r.data && r.data.email || '').toLowerCase() === email.toLowerCase();
+  });
+  if (!people.length) return res.json({ applications: [] });
+  const links = query('people_links', function(l) {
+    return people.some(function(p) { return p.id === l.person_id; });
+  });
+  const applications = links.map(function(link) {
+    return {
+      job_title: link.target_title || 'Application',
+      status: link.stage || 'Submitted',
+      reference: (link.id || '').slice(0, 8).toUpperCase(),
+      applied_at: link.created_at,
+      message: null,
+    };
+  });
+  res.json({ applications: applications });
+});
+
+
 module.exports = router;
 
 // ── Career site: submit application ──────────────────────────────────────────

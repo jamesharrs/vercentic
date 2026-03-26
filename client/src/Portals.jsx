@@ -42,6 +42,16 @@ const WIDGET_TYPES = [
   { type:"video",        label:"Video",          icon:"play",      desc:"YouTube or Vimeo embed" },
   { type:"map_embed",    label:"Map",            icon:"map",       desc:"Google Maps office location" },
   { type:"cta_banner",   label:"CTA Banner",     icon:"megaphone", desc:"Full-width call to action" },
+  { type:"dept_grid",     label:"Dept Grid",      icon:"grid",      desc:"Clickable department tiles" },
+  { type:"benefits_grid", label:"Benefits Grid",  icon:"gift",      desc:"Icon + title + text benefit cards" },
+  { type:"faq",           label:"FAQ",            icon:"info",      desc:"Expandable Q&A accordion" },
+  { type:"featured_jobs", label:"Featured Jobs",  icon:"star",      desc:"Latest or pinned job cards/list" },
+  { type:"trust_bar",     label:"Stats Bar",      icon:"bar2",      desc:"Company stats strip (500+ employees…)" },
+  { type:"job_alerts",    label:"Job Alerts",     icon:"bell",      desc:"Email sign-up for new role notifications" },
+  { type:"image_gallery", label:"Image Gallery",  icon:"image",     desc:"Photo grid with lightbox" },
+  { type:"app_status",    label:"App Status",     icon:"search",    desc:"Candidate self-service status lookup" },
+  { type:"saved_jobs",    label:"Saved Jobs",     icon:"bookmark",  desc:"Candidate's bookmarked roles" },
+  { type:"tabs",          label:"Tabs",           icon:"layout",    desc:"Tabbed content sections" },
   { type:"divider",      label:"Divider",        icon:"minus",     desc:"Horizontal separator" },
   { type:"spacer",       label:"Spacer",         icon:"square",    desc:"Blank vertical space" },
 ];
@@ -844,6 +854,18 @@ const WidgetPreview = ({ cell, theme }) => {
   );
 
   const wt = WIDGET_TYPES.find(w=>w.type===cell.widgetType);
+  const NEW_PREVIEW_TYPES = { dept_grid:'Dept Grid', benefits_grid:'Benefits Grid', faq:'FAQ Accordion', featured_jobs:'Featured Jobs', trust_bar:'Stats Bar', job_alerts:'Job Alerts', image_gallery:'Image Gallery', app_status:'App Status', saved_jobs:'Saved Jobs', tabs:'Tabs' };
+  if (NEW_PREVIEW_TYPES[cell.widgetType]) return (
+    <div style={{padding:"16px 20px",display:"flex",gap:10,alignItems:"center"}}>
+      <div style={{width:32,height:32,borderRadius:8,background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <Ic n={wt?.icon||"square"} s={15} c={C.accent}/>
+      </div>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{NEW_PREVIEW_TYPES[cell.widgetType]}</div>
+        <div style={{fontSize:11,color:C.text3}}>{wt?.desc||'Click to configure'}</div>
+      </div>
+    </div>
+  );
   return (
     <div style={{padding:"16px 20px",display:"flex",gap:10,alignItems:"center"}}>
       <div style={{width:32,height:32,borderRadius:8,background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1393,6 +1415,94 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
           {lbl("Secondary CTA link")}<input value={cfg.secondaryCtaLink||""} onChange={e=>set("secondaryCtaLink",e.target.value)} placeholder="/about" style={inp}/>
           {lbl("Background colour")}
           <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={cfg.bgColor||"#3B5BDB"} onChange={e=>set("bgColor",e.target.value)} style={{width:36,height:28,padding:0,border:"none",cursor:"pointer",borderRadius:4}}/><input value={cfg.bgColor||""} onChange={e=>set("bgColor",e.target.value)} placeholder="#3B5BDB or use theme primary" style={{...inp,flex:1}}/></div>
+        </div>
+      );
+      case "dept_grid": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Explore by department" style={inp}/>
+          {lbl("Columns")}
+          <select value={cfg.columns||4} onChange={e=>set("columns",Number(e.target.value))} style={inp}>
+            {[2,3,4,5].map(n=><option key={n} value={n}>{n} columns</option>)}
+          </select>
+          {lbl("Text align")}
+          <select value={cfg.align||"center"} onChange={e=>set("align",e.target.value)} style={inp}><option value="left">Left</option><option value="center">Center</option></select>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Department tiles are pulled live from your Jobs object and auto-detected from job data.</p>
+        </div>
+      );
+      case "benefits_grid": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Why join us?" style={inp}/>
+          {lbl("Subheading")}<input value={cfg.subheading||""} onChange={e=>set("subheading",e.target.value)} placeholder="Optional supporting text" style={inp}/>
+          {lbl("Layout")}
+          <select value={cfg.layout||"card"} onChange={e=>set("layout",e.target.value)} style={inp}><option value="card">Cards</option><option value="icon-left">Icon left</option><option value="minimal">Minimal</option></select>
+          {lbl("Columns")}
+          <select value={cfg.columns||3} onChange={e=>set("columns",Number(e.target.value))} style={inp}><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+        </div>
+      );
+      case "faq": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Frequently asked questions" style={inp}/>
+          {lbl("Text align")}
+          <select value={cfg.align||"left"} onChange={e=>set("align",e.target.value)} style={inp}><option value="left">Left</option><option value="center">Center</option></select>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Default Q&As shown until you customise the items array via JSON config.</p>
+        </div>
+      );
+      case "featured_jobs": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Latest opportunities" style={inp}/>
+          {lbl("Layout")}
+          <select value={cfg.layout||"cards"} onChange={e=>set("layout",e.target.value)} style={inp}><option value="cards">Cards</option><option value="list">List</option></select>
+          {lbl("Max jobs to show")}
+          <select value={cfg.limit||5} onChange={e=>set("limit",Number(e.target.value))} style={inp}><option value="3">3</option><option value="5">5</option><option value="8">8</option><option value="10">10</option></select>
+          {lbl("Filter by department (optional)")}<input value={cfg.department||""} onChange={e=>set("department",e.target.value)} placeholder="e.g. Engineering" style={inp}/>
+          {lbl("View all link")}<input value={cfg.viewAllHref||""} onChange={e=>set("viewAllHref",e.target.value)} placeholder="#jobs or /vacancies" style={inp}/>
+          {lbl("View all button text")}<input value={cfg.viewAllText||""} onChange={e=>set("viewAllText",e.target.value)} placeholder="View all jobs" style={inp}/>
+        </div>
+      );
+      case "trust_bar": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Layout")}
+          <select value={cfg.layout||"centered"} onChange={e=>set("layout",e.target.value)} style={inp}><option value="centered">Centred</option><option value="spread">Spread</option><option value="cards">Cards</option></select>
+          {lbl("Background colour")}<input value={cfg.bgColor||""} onChange={e=>set("bgColor",e.target.value)} placeholder="#FAFAFA" style={inp}/>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Defaults: 500+ Employees, 15 Offices, 8 Countries, 4.3★ Glassdoor.</p>
+        </div>
+      );
+      case "job_alerts": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Never miss an opportunity" style={inp}/>
+          {lbl("Subheading")}<input value={cfg.subheading||""} onChange={e=>set("subheading",e.target.value)} placeholder="Get notified when new roles are posted." style={inp}/>
+          {lbl("Layout")}
+          <select value={cfg.layout||"inline"} onChange={e=>set("layout",e.target.value)} style={inp}><option value="inline">Inline (single row)</option><option value="card">Stacked card</option></select>
+          {lbl("Button text")}<input value={cfg.buttonText||""} onChange={e=>set("buttonText",e.target.value)} placeholder="Get alerts" style={inp}/>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}><input type="checkbox" checked={!!cfg.showKeywords} onChange={e=>set("showKeywords",e.target.checked)}/><span style={{fontSize:12,color:C.text2}}>Show keywords field</span></div>
+          {lbl("GDPR note text")}<input value={cfg.gdprNote||""} onChange={e=>set("gdprNote",e.target.value)} placeholder="We will only use your email to send job alerts." style={inp}/>
+        </div>
+      );
+      case "image_gallery": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Life at our offices" style={inp}/>
+          {lbl("Columns")}
+          <select value={cfg.columns||3} onChange={e=>set("columns",Number(e.target.value))} style={inp}><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Default stock images shown until you customise the items array.</p>
+        </div>
+      );
+      case "app_status": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Track your application" style={inp}/>
+          {lbl("Subheading")}<input value={cfg.subheading||""} onChange={e=>set("subheading",e.target.value)} placeholder="Enter your email to check your application status." style={inp}/>
+        </div>
+      );
+      case "saved_jobs": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Your saved jobs" style={inp}/>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Saved jobs are stored in the candidate's browser localStorage.</p>
+        </div>
+      );
+      case "tabs": return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {lbl("Tab style")}
+          <select value={cfg.tabStyle||"underline"} onChange={e=>set("tabStyle",e.target.value)} style={inp}><option value="underline">Underline</option><option value="pill">Pill</option><option value="boxed">Boxed</option></select>
+          <p style={{fontSize:11,color:C.text3,margin:"4px 0 0"}}>Default culture/learning/D&I tabs shown until you customise the tabs array.</p>
         </div>
       );
       default: return <p style={{ fontSize:12, color:C.text3, margin:0 }}>No settings for this widget.</p>;

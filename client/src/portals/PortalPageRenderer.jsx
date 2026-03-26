@@ -627,6 +627,599 @@ const MultistepFormWidget = ({ cfg, theme, portal, api, track }) => {
 };
 
 
+// ── Saved Jobs helpers (localStorage) ────────────────────────────────────────
+const useSavedJobs = () => {
+  const [saved, setSaved] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('vrc_saved_jobs') || '[]') } catch { return [] }
+  })
+  const toggle = (id) => setSaved(prev => {
+    const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    localStorage.setItem('vrc_saved_jobs', JSON.stringify(next))
+    return next
+  })
+  return { saved, toggle, isSaved: id => saved.includes(id) }
+}
+
+// ── Department Grid Widget ────────────────────────────────────────────────────
+const DeptGridWidget = ({ cfg, theme, portal, api }) => {
+  const [depts,    setDepts]    = useState([])
+  const [counts,   setCounts]   = useState({})
+  const [loading,  setLoading]  = useState(true)
+  const pr  = theme.primaryColor || '#3B5BDB'
+  const ff  = theme.fontFamily   || 'inherit'
+  const br  = theme.buttonRadius || '12px'
+  const tc  = theme.textColor    || '#0F1729'
+
+  useEffect(() => {
+    if (!portal?.environment_id) { setLoading(false); return }
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(objs => {
+        const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === 'jobs')
+        if (!obj) { setLoading(false); return null }
+        return api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}&limit=500`)
+      })
+      .then(data => {
+        if (!data) return
+        const jobs = (data?.records || data || []).filter(r =>
+          r.data?.status !== 'Closed' && r.data?.status !== 'Filled'
+        )
+        if (cfg.categories?.length) {
+          setDepts(cfg.categories)
+          const cnt = {}
+          cfg.categories.forEach(cat => { cnt[cat.label] = jobs.filter(j => (j.data?.department||'')=== cat.label).length })
+          setCounts(cnt)
+        } else {
+          const deptMap = {}
+          jobs.forEach(j => { const d = j.data?.department||'Other'; deptMap[d]=(deptMap[d]||0)+1 })
+          setDepts(Object.keys(deptMap).sort().map(d => ({ label:d, color:pr })))
+          setCounts(deptMap)
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [portal?.environment_id])
+
+  const DEPT_ICONS = {
+    Technology:  'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+    Engineering: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
+    Sales:       'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z',
+    Marketing:   'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z',
+    Finance:     'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    HR:          'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
+    Product:     'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+    Operations:  'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+  }
+  const getIcon = label => DEPT_ICONS[label] || 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
+  const cols = cfg.columns || 4
+  const heading = cfg.heading || 'Explore by department'
+
+  if (loading) return <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ width:32, height:32, border:`3px solid ${pr}30`, borderTop:`3px solid ${pr}`, borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+  </div>
+
+  return (
+    <div style={{ fontFamily:ff }}>
+      {heading && <h2 style={{ margin:'0 0 28px', fontSize:28, fontWeight:800, color:tc, textAlign:cfg.align||'center', letterSpacing:'-0.5px' }}>{heading}</h2>}
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(cols, depts.length||1)}, 1fr)`, gap:12 }}>
+        {depts.map((dept, i) => {
+          const label = dept.label || dept
+          const count = counts[label] || 0
+          const color = dept.color || pr
+          return (
+            <a key={i}
+              href={`?dept=${encodeURIComponent(label)}`}
+              onClick={e => { e.preventDefault(); window.dispatchEvent(new CustomEvent('vrc:filterJobs', { detail: { dept: label } })); const el=document.getElementById('vrc-jobs-section'); if(el) el.scrollIntoView({ behavior:'smooth' }) }}
+              style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:10, padding:'20px', borderRadius:br, background:'white', border:`1.5px solid ${color}22`, textDecoration:'none', cursor:'pointer', transition:'all .18s', boxShadow:'0 1px 4px rgba(0,0,0,.05)' }}
+              onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow=`0 8px 24px ${color}20`; e.currentTarget.style.borderColor=color }}
+              onMouseLeave={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.05)'; e.currentTarget.style.borderColor=`${color}22` }}
+            >
+              <div style={{ width:44, height:44, borderRadius:10, background:`${color}12`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={getIcon(label)}/></svg>
+              </div>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:4 }}>{label}</div>
+                {count > 0 ? <div style={{ fontSize:12, color, fontWeight:600 }}>{count} open role{count!==1?'s':''}</div>
+                  : <div style={{ fontSize:12, color:'#9CA3AF' }}>No open roles</div>}
+              </div>
+              <div style={{ marginTop:'auto', display:'flex', alignItems:'center', gap:4, fontSize:12, color, fontWeight:600 }}>
+                View roles <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </div>
+            </a>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Benefits Grid Widget ──────────────────────────────────────────────────────
+const BenefitsGridWidget = ({ cfg, theme }) => {
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '12px'
+  const DEFAULTS = [
+    { icon:'💰', title:'Competitive salary', body:'Market-leading pay with performance bonus and annual review.' },
+    { icon:'🏥', title:'Private medical', body:'Full family cover with dental and optical add-on options.' },
+    { icon:'📆', title:'33 days holiday', body:'25 days plus bank holidays, with the option to buy or sell 5 more.' },
+    { icon:'🏠', title:'Hybrid working', body:'Flexible home/office split designed around you and your team.' },
+    { icon:'📈', title:'Pension scheme', body:'We match your contribution up to 8.5% and add an extra 2.5%.' },
+    { icon:'🎓', title:'Learning & development', body:'Dedicated budget for courses, conferences and certifications.' },
+  ]
+  const items  = cfg.items?.length ? cfg.items : DEFAULTS
+  const cols   = cfg.columns || 3
+  const layout = cfg.layout  || 'card'
+  const heading = cfg.heading || 'Why join us?'
+  const sub    = cfg.subheading || ''
+  return (
+    <div style={{ fontFamily:ff }}>
+      {heading && <h2 style={{ margin:'0 0 8px', fontSize:32, fontWeight:800, color:tc, textAlign:'center', letterSpacing:'-0.5px' }}>{heading}</h2>}
+      {sub && <p style={{ margin:'0 0 40px', fontSize:17, color:'#6B7280', textAlign:'center', maxWidth:600, marginLeft:'auto', marginRight:'auto' }}>{sub}</p>}
+      {!sub && heading && <div style={{ marginBottom:40 }}/>}
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:20 }}>
+        {items.map((item, i) => layout === 'icon-left' ? (
+          <div key={i} style={{ display:'flex', gap:16, padding:'20px', borderRadius:br, background:'#FAFAFA', border:'1px solid #F3F4F6' }}>
+            <div style={{ fontSize:28, flexShrink:0 }}>{item.icon}</div>
+            <div><div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:6 }}>{item.title}</div><div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>{item.body}</div></div>
+          </div>
+        ) : layout === 'minimal' ? (
+          <div key={i} style={{ padding:'24px 0', borderTop:`2px solid ${pr}20` }}>
+            <div style={{ fontSize:24, marginBottom:10 }}>{item.icon}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:tc, marginBottom:6 }}>{item.title}</div>
+            <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>{item.body}</div>
+          </div>
+        ) : (
+          <div key={i} style={{ padding:'28px 24px', borderRadius:br, background:'white', border:'1.5px solid #F3F4F6', boxShadow:'0 2px 8px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12 }}>
+            <div style={{ width:48, height:48, borderRadius:12, background:`${pr}12`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>{item.icon}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:tc }}>{item.title}</div>
+            <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.65, flex:1 }}>{item.body}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── FAQ Accordion Widget ──────────────────────────────────────────────────────
+const FaqWidget = ({ cfg, theme }) => {
+  const [open, setOpen] = useState(null)
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const DEFAULTS = [
+    { q:'How long does the recruitment process take?', a:'Typically 2–4 weeks from application to offer, depending on the role. We aim to keep you informed at every stage.' },
+    { q:'Can I apply for more than one role at a time?', a:'Yes — you can apply for multiple roles simultaneously. Each application is reviewed independently.' },
+    { q:'Do you offer visa sponsorship?', a:'We assess sponsorship on a role-by-role basis. Check the job description or reach out to our recruitment team for specific roles.' },
+    { q:'Is there a chance to work remotely?', a:'Many of our roles offer hybrid or fully remote working. The working arrangement is specified in each job posting.' },
+    { q:'I was unsuccessful — can I apply again?', a:'Absolutely. We encourage candidates to reapply after six months if they have the experience for a new opening.' },
+  ]
+  const items   = cfg.items?.length ? cfg.items : DEFAULTS
+  const heading = cfg.heading || 'Frequently asked questions'
+  return (
+    <div style={{ fontFamily:ff, maxWidth:760, margin:'0 auto' }}>
+      {heading && <h2 style={{ margin:'0 0 32px', fontSize:28, fontWeight:800, color:tc, textAlign:cfg.align||'left', letterSpacing:'-0.3px' }}>{heading}</h2>}
+      <div style={{ display:'flex', flexDirection:'column' }}>
+        {items.map((item, i) => {
+          const isOpen = open === i
+          return (
+            <div key={i} style={{ borderBottom:'1px solid #F3F4F6' }}>
+              <button onClick={() => setOpen(isOpen ? null : i)} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, padding:'20px 0', background:'none', border:'none', cursor:'pointer', textAlign:'left', fontFamily:ff }}>
+                <span style={{ fontSize:15, fontWeight:600, color:tc, lineHeight:1.4 }}>{item.q}</span>
+                <div style={{ width:24, height:24, borderRadius:'50%', background:isOpen ? pr : '#F3F4F6', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all .2s' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isOpen ? 'white' : '#6B7280'} strokeWidth="2.5" style={{ transform:isOpen ? 'rotate(180deg)' : 'none', transition:'transform .2s' }}><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+              </button>
+              {isOpen && <div style={{ padding:'0 40px 20px 0', fontSize:14, color:'#6B7280', lineHeight:1.7 }}>{item.a}</div>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Featured / Latest Jobs Strip ──────────────────────────────────────────────
+const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
+  const [jobs,    setJobs]    = useState([])
+  const [loading, setLoading] = useState(true)
+  const { saved, toggle, isSaved } = useSavedJobs()
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '12px'
+
+  useEffect(() => {
+    if (!portal?.environment_id) { setLoading(false); return }
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(objs => {
+        const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
+        if (!obj) { setLoading(false); return null }
+        return api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}&limit=100`)
+      })
+      .then(data => {
+        if (!data) return
+        let all = (data?.records||data||[]).filter(r => r.data?.status!=='Closed' && r.data?.status!=='Filled')
+        if (cfg.department) all = all.filter(j => j.data?.department === cfg.department)
+        all.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+        setJobs(all.slice(0, cfg.limit || 5))
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [portal?.environment_id])
+
+  const fmtDate = d => {
+    if (!d) return ''
+    const diff = Math.floor((Date.now() - new Date(d)) / 86400000)
+    if (diff < 1) return 'Today'
+    if (diff === 1) return '1 day ago'
+    if (diff < 7) return `${diff} days ago`
+    if (diff < 30) return `${Math.floor(diff/7)} wk${Math.floor(diff/7)>1?'s':''} ago`
+    return new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short' })
+  }
+
+  const heading = cfg.heading || 'Latest opportunities'
+  const layout  = cfg.layout  || 'cards'
+
+  if (loading) return <div style={{ height:160, display:'flex', alignItems:'center', justifyContent:'center' }}><div style={{ width:28, height:28, border:`3px solid ${pr}30`, borderTop:`3px solid ${pr}`, borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/></div>
+
+  return (
+    <div style={{ fontFamily:ff }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
+        {heading && <h2 style={{ margin:0, fontSize:26, fontWeight:800, color:tc, letterSpacing:'-0.3px' }}>{heading}</h2>}
+        <a href={cfg.viewAllHref||'#'} style={{ fontSize:14, fontWeight:600, color:pr, textDecoration:'none', display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+          {cfg.viewAllText||'View all jobs'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={pr} strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+      {layout === 'list' ? (
+        <div style={{ display:'flex', flexDirection:'column' }}>
+          {jobs.map((job, i) => (
+            <a key={job.id||i} onClick={e => { e.preventDefault(); window.dispatchEvent(new CustomEvent('vrc:openJob', { detail: job })) }} href="#"
+              style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 0', borderBottom:'1px solid #F3F4F6', textDecoration:'none', cursor:'pointer' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:4 }}>{job.data?.job_title||'Untitled role'}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {[job.data?.department, job.data?.location, job.data?.work_type].filter(Boolean).map((t,ti)=><span key={ti} style={{ fontSize:12, color:'#6B7280' }}>{ti>0?'· ':''}{t}</span>)}
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+                <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmtDate(job.created_at)}</span>
+                <span style={{ fontSize:11, fontWeight:600, color:'white', background:pr, padding:'3px 10px', borderRadius:20 }}>{job.data?.employment_type||'Permanent'}</span>
+                <button onClick={e=>{ e.preventDefault(); e.stopPropagation(); toggle(job.id) }} style={{ background:'none', border:'none', cursor:'pointer', padding:4 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill={isSaved(job.id)?pr:'none'} stroke={isSaved(job.id)?pr:'#9CA3AF'} strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
+          {jobs.map((job, i) => (
+            <div key={job.id||i} style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12 }}
+              onClick={() => window.dispatchEvent(new CustomEvent('vrc:openJob', { detail: job }))}
+              onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 8px 24px ${pr}16`; e.currentTarget.style.borderColor=`${pr}40`; e.currentTarget.style.transform='translateY(-2px)' }}
+              onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; e.currentTarget.style.borderColor='#F3F4F6'; e.currentTarget.style.transform='none' }}
+            >
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                <div style={{ fontSize:15, fontWeight:700, color:tc, lineHeight:1.4 }}>{job.data?.job_title||'Untitled role'}</div>
+                <button onClick={e=>{ e.stopPropagation(); toggle(job.id) }} style={{ background:'none', border:'none', cursor:'pointer', padding:2, flexShrink:0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill={isSaved(job.id)?pr:'none'} stroke={isSaved(job.id)?pr:'#9CA3AF'} strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {[job.data?.department, job.data?.location, job.data?.work_type].filter(Boolean).map((tag,ti)=><span key={ti} style={{ fontSize:11, fontWeight:600, color:'#6B7280', background:'#F3F4F6', padding:'3px 8px', borderRadius:20 }}>{tag}</span>)}
+              </div>
+              {job.data?.advertising_salary && <div style={{ fontSize:13, fontWeight:600, color:pr }}>{job.data.advertising_salary}</div>}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto', paddingTop:8, borderTop:'1px solid #F9FAFB' }}>
+                <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmtDate(job.created_at)}</span>
+                <span style={{ fontSize:11, fontWeight:700, color:pr }}>Apply →</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {jobs.length===0 && !loading && <div style={{ textAlign:'center', padding:'48px 24px', color:'#9CA3AF' }}><div style={{ fontSize:40, marginBottom:12 }}>🔍</div><div style={{ fontWeight:600 }}>No open roles right now</div><div style={{ fontSize:13, marginTop:6 }}>Check back soon or sign up for job alerts</div></div>}
+    </div>
+  )
+}
+
+// ── Trust Bar / Stats Strip ───────────────────────────────────────────────────
+const TrustBarWidget = ({ cfg, theme }) => {
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const bg = cfg.bgColor || '#FAFAFA'
+  const DEFAULTS = [
+    { value:'500+', label:'Employees' }, { value:'15', label:'Office locations' },
+    { value:'8', label:'Countries' }, { value:'20+', label:'Years in business' }, { value:'4.3★', label:'Glassdoor rating' },
+  ]
+  const items  = cfg.items?.length ? cfg.items : DEFAULTS
+  const layout = cfg.layout || 'centered'
+  return (
+    <div style={{ background:bg, padding:'32px 24px', fontFamily:ff, borderTop:'1px solid #F3F4F6', borderBottom:'1px solid #F3F4F6' }}>
+      <div style={{ maxWidth:960, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:layout==='spread'?'space-between':'center', flexWrap:'wrap', gap:layout==='cards'?16:40 }}>
+        {layout === 'cards' ? (
+          items.map((item, i) => (
+            <div key={i} style={{ flex:'1 1 120px', textAlign:'center', background:'white', borderRadius:12, padding:'20px 16px', border:'1px solid #F3F4F6', boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+              <div style={{ fontSize:28, fontWeight:900, color:pr, letterSpacing:'-1px' }}>{item.value}</div>
+              <div style={{ fontSize:12, color:'#6B7280', marginTop:4 }}>{item.label}</div>
+            </div>
+          ))
+        ) : items.map((item, i) => (
+          <div key={i} style={{ textAlign:'center' }}>
+            <div style={{ fontSize:28, fontWeight:900, color:pr, letterSpacing:'-1px' }}>{item.value}</div>
+            <div style={{ fontSize:12, color:'#6B7280', marginTop:2 }}>{item.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Job Alerts Widget ────────────────────────────────────────────────────────
+const JobAlertsWidget = ({ cfg, theme, portal, api, track }) => {
+  const [email, setEmail] = useState('')
+  const [keywords, setKeywords] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '8px'
+  const heading = cfg.heading || 'Never miss an opportunity'
+  const sub     = cfg.subheading || 'Get notified when new roles matching your interests are posted.'
+  const layout  = cfg.layout || 'inline'
+
+  const handleSubmit = async e => {
+    e.preventDefault()
+    if (!email) { setError('Please enter your email address'); return }
+    setLoading(true)
+    try {
+      await api.post('/portals/job-alerts', { portal_id: portal?.id, environment_id: portal?.environment_id, email, keywords })
+      setSubmitted(true)
+      if (track) track('job_alert_signup', { email })
+    } catch { setError('Something went wrong. Please try again.') }
+    setLoading(false)
+  }
+
+  if (submitted) return (
+    <div style={{ textAlign:'center', padding:'48px 24px', fontFamily:ff }}>
+      <div style={{ width:56, height:56, borderRadius:'50%', background:`${pr}12`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={pr} strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <h3 style={{ margin:'0 0 8px', fontSize:20, fontWeight:800, color:tc }}>{cfg.successTitle||"You're on the list!"}</h3>
+      <p style={{ margin:0, color:'#6B7280', fontSize:14 }}>{cfg.successBody||"We'll email you when new matching roles are posted."}</p>
+    </div>
+  )
+
+  const inp = { padding:'11px 14px', borderRadius:br, border:'1.5px solid #E5E7EB', fontSize:14, fontFamily:ff, outline:'none', background:'white', width:'100%', boxSizing:'border-box' }
+  return (
+    <div style={{ fontFamily:ff, textAlign:layout==='card'?'center':'left' }}>
+      {heading && <h2 style={{ margin:'0 0 8px', fontSize:26, fontWeight:800, color:tc, letterSpacing:'-0.3px' }}>{heading}</h2>}
+      {sub && <p style={{ margin:'0 0 24px', fontSize:15, color:'#6B7280', lineHeight:1.6 }}>{sub}</p>}
+      <form onSubmit={handleSubmit}>
+        {layout==='inline' ? (
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="your@email.com" required style={{ ...inp, flex:'1 1 200px' }}/>
+            {cfg.showKeywords && <input value={keywords} onChange={e=>setKeywords(e.target.value)} placeholder="Keywords (optional)" style={{ ...inp, flex:'1 1 160px' }}/>}
+            <button type="submit" disabled={loading} style={{ padding:'11px 24px', borderRadius:br, background:pr, color:'white', border:'none', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:ff, flexShrink:0, opacity:loading?0.7:1 }}>{loading?'Setting up…':(cfg.buttonText||'Get alerts')}</button>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:12, maxWidth:400, margin:layout==='card'?'0 auto':'0' }}>
+            <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="your@email.com" required style={inp}/>
+            {cfg.showKeywords && <input value={keywords} onChange={e=>setKeywords(e.target.value)} placeholder="Job title or keywords" style={inp}/>}
+            <button type="submit" disabled={loading} style={{ padding:'12px', borderRadius:br, background:pr, color:'white', border:'none', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:ff, opacity:loading?0.7:1 }}>{loading?'Setting up…':(cfg.buttonText||'Set up job alert')}</button>
+          </div>
+        )}
+        {error && <p style={{ margin:'8px 0 0', fontSize:12, color:'#EF4444' }}>{error}</p>}
+      </form>
+      {cfg.gdprNote && <p style={{ margin:'12px 0 0', fontSize:11, color:'#9CA3AF', lineHeight:1.5 }}>{cfg.gdprNote}</p>}
+    </div>
+  )
+}
+
+// ── Image Gallery Widget ──────────────────────────────────────────────────────
+const ImageGalleryWidget = ({ cfg, theme }) => {
+  const [lightbox, setLightbox] = useState(null)
+  const pr = theme.primaryColor || '#3B5BDB'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '12px'
+  const DEFAULTS = [
+    { src:'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80', caption:'Our open plan workspace' },
+    { src:'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80', caption:'Weekly team catch-up' },
+    { src:'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=600&q=80', caption:'Friday team lunches' },
+    { src:'https://images.unsplash.com/photo-1568992687947-868a62a9f521?w=600&q=80', caption:'Bright collaborative spaces' },
+    { src:'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=600&q=80', caption:'Design and strategy sessions' },
+    { src:'https://images.unsplash.com/photo-1576267423048-15c0040fec78?w=600&q=80', caption:'Annual company day' },
+  ]
+  const items   = cfg.items?.length ? cfg.items : DEFAULTS
+  const cols    = cfg.columns || 3
+  const heading = cfg.heading || ''
+
+  return (
+    <div style={{ fontFamily:ff }}>
+      {heading && <h2 style={{ margin:'0 0 24px', fontSize:26, fontWeight:800, color:theme.textColor||'#0F1729', textAlign:cfg.align||'left' }}>{heading}</h2>}
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:12 }}>
+        {items.map((img, i) => (
+          <div key={i} style={{ position:'relative', overflow:'hidden', borderRadius:br, cursor:'pointer', aspectRatio:'4/3' }}
+            onClick={() => setLightbox(i)}>
+            <img src={img.src} alt={img.alt||''} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', transition:'transform .3s' }}
+              onMouseEnter={e=>e.target.style.transform='scale(1.05)'} onMouseLeave={e=>e.target.style.transform='scale(1)'}/>
+            {img.caption && <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'20px 12px 10px', background:'linear-gradient(0deg, rgba(0,0,0,.5) 0%, transparent 100%)', opacity:0, transition:'opacity .2s' }}
+              onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='0'}>
+              <span style={{ fontSize:12, color:'white', fontWeight:500 }}>{img.caption}</span>
+            </div>}
+          </div>
+        ))}
+      </div>
+      {lightbox !== null && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,.92)', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={() => setLightbox(null)}>
+          <button onClick={e=>{ e.stopPropagation(); setLightbox(l => Math.max(0,l-1)) }} style={{ position:'absolute', left:20, top:'50%', transform:'translateY(-50%)', background:'rgba(255,255,255,.15)', border:'none', borderRadius:'50%', width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <div style={{ maxWidth:'85vw', maxHeight:'85vh' }} onClick={e=>e.stopPropagation()}>
+            <img src={items[lightbox]?.src} alt="" style={{ maxWidth:'100%', maxHeight:'80vh', objectFit:'contain', borderRadius:8 }}/>
+            {items[lightbox]?.caption && <div style={{ color:'rgba(255,255,255,.7)', textAlign:'center', marginTop:12, fontSize:13 }}>{items[lightbox].caption}</div>}
+          </div>
+          <button onClick={e=>{ e.stopPropagation(); setLightbox(l => Math.min(items.length-1,l+1)) }} style={{ position:'absolute', right:20, top:'50%', transform:'translateY(-50%)', background:'rgba(255,255,255,.15)', border:'none', borderRadius:'50%', width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+          <button onClick={() => setLightbox(null)} style={{ position:'absolute', right:16, top:16, background:'rgba(255,255,255,.15)', border:'none', borderRadius:'50%', width:36, height:36, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Application Status Tracker ────────────────────────────────────────────────
+const AppStatusWidget = ({ cfg, theme, portal, api }) => {
+  const [email, setEmail]     = useState('')
+  const [result, setResult]   = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
+  const [searched, setSearched] = useState(false)
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '8px'
+  const STATUS_COLORS = { Submitted:'#3B5BDB', 'Under review':'#F59F00', Shortlisted:'#1098AD', Interview:'#7048E8', Offered:'#2F9E44', Declined:'#E03131' }
+
+  const handleSearch = async e => {
+    e.preventDefault()
+    if (!email) { setError('Please enter your email address'); return }
+    setLoading(true); setError('')
+    try {
+      const data = await api.get(`/portals/application-status?portal_id=${portal?.id}&email=${encodeURIComponent(email)}`)
+      setResult(data); setSearched(true)
+    } catch { setError('No applications found for this email address.'); setResult(null); setSearched(true) }
+    setLoading(false)
+  }
+
+  const inp = { padding:'11px 14px', borderRadius:br, border:'1.5px solid #E5E7EB', fontSize:14, fontFamily:ff, outline:'none', background:'white', width:'100%', boxSizing:'border-box' }
+  return (
+    <div style={{ fontFamily:ff, maxWidth:560 }}>
+      <h2 style={{ margin:'0 0 8px', fontSize:24, fontWeight:800, color:tc }}>{cfg.heading||'Track your application'}</h2>
+      <p style={{ margin:'0 0 24px', fontSize:14, color:'#6B7280', lineHeight:1.6 }}>{cfg.subheading||'Enter your email address to check the status of your application.'}</p>
+      <form onSubmit={handleSearch} style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="your@email.com" required style={inp}/>
+        <button type="submit" disabled={loading} style={{ padding:'12px', borderRadius:br, background:pr, color:'white', border:'none', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:ff, opacity:loading?0.7:1 }}>{loading?'Searching…':'Check status'}</button>
+      </form>
+      {error && <p style={{ margin:'12px 0 0', fontSize:13, color:'#EF4444' }}>{error}</p>}
+      {searched && result?.applications?.length > 0 && (
+        <div style={{ marginTop:24, display:'flex', flexDirection:'column', gap:12 }}>
+          {result.applications.map((app, i) => {
+            const status = app.status || 'Submitted'
+            const color  = STATUS_COLORS[status] || pr
+            return (
+              <div key={i} style={{ background:'white', borderRadius:12, border:`1.5px solid ${color}22`, padding:'16px 20px', boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:4 }}>{app.job_title||'Application'}</div>
+                    {app.applied_at && <div style={{ fontSize:12, color:'#9CA3AF' }}>Applied {new Date(app.applied_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}</div>}
+                  </div>
+                  <span style={{ fontSize:12, fontWeight:700, color:'white', background:color, padding:'4px 10px', borderRadius:20, flexShrink:0 }}>{status}</span>
+                </div>
+                {app.message && <p style={{ margin:'12px 0 0', fontSize:13, color:'#374151', lineHeight:1.6, background:'#F9FAFB', borderRadius:8, padding:'10px 12px' }}>{app.message}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {searched && !result?.applications?.length && <div style={{ marginTop:16, fontSize:13, color:'#6B7280', padding:'16px', background:'#F9FAFB', borderRadius:8 }}>No applications found. Please check your email and try again.</div>}
+    </div>
+  )
+}
+
+// ── Saved Jobs Widget ────────────────────────────────────────────────────────
+const SavedJobsWidget = ({ cfg, theme, portal, api }) => {
+  const { saved, toggle } = useSavedJobs()
+  const [jobs,    setJobs]    = useState([])
+  const [loading, setLoading] = useState(true)
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const br = theme.buttonRadius || '12px'
+
+  useEffect(() => {
+    if (!saved.length || !portal?.environment_id) { setLoading(false); return }
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(objs => {
+        const obj = (Array.isArray(objs)?objs:[]).find(o => o.slug==='jobs')
+        if (!obj) { setLoading(false); return null }
+        return api.get(`/records?object_id=${obj.id}&environment_id=${portal.environment_id}&limit=500`)
+      })
+      .then(data => {
+        if (!data) { setLoading(false); return }
+        setJobs((data?.records||data||[]).filter(j => saved.includes(j.id)))
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [JSON.stringify(saved)])
+
+  if (!saved.length) return (
+    <div style={{ textAlign:'center', padding:'48px 24px', fontFamily:ff }}>
+      <div style={{ width:56, height:56, borderRadius:'50%', background:'#F3F4F6', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+      </div>
+      <h3 style={{ margin:'0 0 8px', fontSize:18, fontWeight:700, color:tc }}>No saved jobs yet</h3>
+      <p style={{ margin:0, fontSize:13, color:'#6B7280' }}>Click the bookmark icon on any job to save it here.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ fontFamily:ff }}>
+      <h2 style={{ margin:'0 0 20px', fontSize:24, fontWeight:800, color:tc }}>{cfg.heading||'Your saved jobs'} <span style={{ fontSize:16, fontWeight:600, color:pr }}>({saved.length})</span></h2>
+      {loading ? <div style={{ height:100, display:'flex', alignItems:'center', justifyContent:'center' }}><div style={{ width:24, height:24, border:`3px solid ${pr}30`, borderTop:`3px solid ${pr}`, borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/></div>
+        : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {jobs.map((job, i) => (
+              <div key={job.id||i} style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'16px 20px', display:'flex', alignItems:'center', gap:16 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:4 }}>{job.data?.job_title||'Untitled role'}</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>{[job.data?.department, job.data?.location].filter(Boolean).map((t,ti)=><span key={ti} style={{ fontSize:12, color:'#6B7280' }}>{t}</span>)}</div>
+                </div>
+                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent('vrc:openJob', { detail: job }))} style={{ padding:'8px 16px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:ff }}>View</button>
+                  <button onClick={() => toggle(job.id)} style={{ padding:'8px', borderRadius:br, background:'#FEF2F2', border:'1px solid #FECACA', cursor:'pointer', display:'flex', alignItems:'center' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>}
+    </div>
+  )
+}
+
+// ── Tabs Widget ───────────────────────────────────────────────────────────────
+const TabsWidget = ({ cfg, theme }) => {
+  const [active, setActive] = useState(0)
+  const pr = theme.primaryColor || '#3B5BDB'
+  const tc = theme.textColor    || '#0F1729'
+  const ff = theme.fontFamily   || 'inherit'
+  const DEFAULTS = [
+    { label:'Our culture', content:'We believe in trust, flexibility, and genuine teamwork. Our culture has been built around enabling people to do the best work of their careers.' },
+    { label:'Growth & learning', content:'Every employee receives a dedicated learning budget and access to our internal learning platform. We support certifications, conferences, and online courses.' },
+    { label:'Diversity & inclusion', content:'We are committed to building a team that reflects the world around us. Our colleague networks champion representation and create spaces for everyone.' },
+  ]
+  const tabs  = cfg.tabs?.length ? cfg.tabs : DEFAULTS
+  const style = cfg.tabStyle || 'underline'
+  return (
+    <div style={{ fontFamily:ff }}>
+      <div style={{ display:'flex', gap:style==='pill'?8:0, borderBottom:style!=='pill'?'2px solid #F3F4F6':'none', background:style==='boxed'?'#F9FAFB':'transparent', borderRadius:style==='pill'?12:0, padding:style==='pill'?4:0 }}>
+        {tabs.map((tab, i) => {
+          const isActive = active === i
+          return (
+            <button key={i} onClick={() => setActive(i)} style={{ padding:'12px 20px', border:'none', cursor:'pointer', fontFamily:ff, fontSize:14, fontWeight:isActive?700:500, background:((style==='pill'||style==='boxed')&&isActive)?'white':'transparent', color:isActive?pr:'#6B7280', borderBottom:style==='underline'?`2px solid ${isActive?pr:'transparent'}`:'none', borderRadius:(style==='pill'||style==='boxed')?8:0, marginBottom:style==='underline'?-2:0, boxShadow:((style==='pill'||style==='boxed')&&isActive)?'0 1px 4px rgba(0,0,0,.08)':'none', transition:'all .15s' }}>{tab.label}</button>
+          )
+        })}
+      </div>
+      <div style={{ padding:'24px 0', fontSize:15, color:'#374151', lineHeight:1.75 }}>{tabs[active]?.content}</div>
+    </div>
+  )
+}
+
 const Widget = ({ cell, theme, portal, api, track }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
@@ -649,6 +1242,16 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'rich_text':      return <RichTextWidget     cfg={cfg} theme={theme}/>
     case 'map_embed':      return <MapEmbedWidget     cfg={cfg}/>
     case 'cta_banner':     return <CtaBannerWidget    cfg={cfg} theme={theme}/>
+    case 'dept_grid':      return <DeptGridWidget      cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'benefits_grid':  return <BenefitsGridWidget  cfg={cfg} theme={theme}/>
+    case 'faq':            return <FaqWidget           cfg={cfg} theme={theme}/>
+    case 'featured_jobs':  return <FeaturedJobsWidget  cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'trust_bar':      return <TrustBarWidget      cfg={cfg} theme={theme}/>
+    case 'job_alerts':     return <JobAlertsWidget     cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
+    case 'image_gallery':  return <ImageGalleryWidget  cfg={cfg} theme={theme}/>
+    case 'app_status':     return <AppStatusWidget     cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'saved_jobs':     return <SavedJobsWidget     cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'tabs':           return <TabsWidget          cfg={cfg} theme={theme}/>
     default:        return null
   }
 }
