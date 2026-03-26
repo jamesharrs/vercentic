@@ -246,7 +246,7 @@ require('./routes/enterprise_settings').migrate();
 require('./routes/skills_intelligence').migrate();
 require('./routes/datasets').migrate();
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.4.1', build: 'integration-monitor' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.4.2', build: 'demo-seed-fix' }));
 
 const PORT = process.env.PORT || 3001;
 
