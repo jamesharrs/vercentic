@@ -1,0 +1,32 @@
+{
+  "name": "vercentic-components",
+  "version": "1.0.0",
+  "description": "React components for Vercentic recruitment platform with company context-aware copilot",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "keywords": [
+    "recruitment",
+    "ats",
+    "copilot",
+    "ai",
+    "knowledge-base",
+    "document-management"
+  ],
+  "author": "Vercentic",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "^14.0.0",
+    "lucide-react": "^0.294.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0"
+  }
+}
