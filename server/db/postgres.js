@@ -84,4 +84,20 @@ async function queryRecordsDirect(slug, filters = {}) {
   ]);
   return { records: dataRes.rows.map(r => r.data), total: parseInt(countRes.rows[0].count, 10) };
 }
-module.exports = { getPool, isEnabled, initSchema, loadTenant, saveTenant, upsertRecord, deleteRecord, queryRecordsDirect };
+async function bootstrap() {
+  await initSchema();
+  return true;
+}
+async function migrateFromJson(dataDir) {
+  const fs   = require('fs');
+  const path = require('path');
+  const masterFile = path.join(dataDir, 'talentos.json');
+  if (!fs.existsSync(masterFile)) { console.log('[PG] No talentos.json found — skipping migration'); return; }
+  try {
+    const store = JSON.parse(fs.readFileSync(masterFile, 'utf8'));
+    await saveTenant('master', store);
+    const counts = Object.fromEntries(Object.entries(store).map(([k,v]) => [k, Array.isArray(v) ? v.length : 0]));
+    console.log('[PG] Migrated master JSON to PostgreSQL:', counts);
+  } catch(e) { console.error('[PG] Migration error:', e.message); }
+}
+module.exports = { getPool, isEnabled, bootstrap, initSchema, loadTenant, saveTenant, upsertRecord, deleteRecord, queryRecordsDirect, migrateFromJson };
