@@ -394,16 +394,13 @@ router.get('/', (req, res) => {
     const envIds = envs.map(e=>e.id);
     // Load from tenant store if provisioned
     const ts      = c.tenant_slug ? loadTenantStore(c.tenant_slug) : s;
-    // Records — fall back to master if tenant store is empty
-    let records = (ts.records||[]).filter(r=>envIds.includes(r.environment_id)&&!r.deleted_at);
-    if (records.length === 0 && c.tenant_slug) {
-      records = (s.records||[]).filter(r=>envIds.includes(r.environment_id)&&!r.deleted_at);
-    }
+    // Records — always use tenant store. Never fall back to master (would show wrong data).
+    const records = (ts.records||[]).filter(r=>envIds.includes(r.environment_id)&&!r.deleted_at);
     // Users — check both stores
     const tsU = (ts.users||[]).filter(u=>(u.client_id===c.id||envIds.includes(u.environment_id))&&!u.deleted_at);
     const msU = (s.users||[]).filter(u=>(u.client_id===c.id||envIds.includes(u.environment_id))&&!u.deleted_at);
     const seenU = new Set(); const users = [...tsU,...msU].filter(u=>{ if(seenU.has(u.id)) return false; seenU.add(u.id); return true; });
-    return { ...c, env_count: envs.length, record_count: records.length, user_count: users.length };
+    return { ...c, env_count: envs.length, record_count: records.length, user_count: users.length, tenant_slug: c.tenant_slug || null };
   });
   res.json(enriched);
 });
@@ -453,11 +450,8 @@ router.get('/:id/stats', (req, res) => {
   // Load from tenant store if provisioned, otherwise master
   const ts = client.tenant_slug ? loadTenantStore(client.tenant_slug) : s;
 
-  // Records — check tenant store first, fall back to master if empty
-  let records = (ts.records||[]).filter(r=>envIds.has(r.environment_id)&&!r.deleted_at);
-  if (records.length === 0 && client.tenant_slug) {
-    records = (s.records||[]).filter(r=>envIds.has(r.environment_id)&&!r.deleted_at);
-  }
+  // Records — always use tenant store only. Never fall back to master.
+  const records = (ts.records||[]).filter(r=>envIds.has(r.environment_id)&&!r.deleted_at);
 
   // Users — check both stores (user may be in master store with env_id pointing to tenant env)
   const tsUsers = (ts.users||[]).filter(u=>(u.client_id===client.id||envIds.has(u.environment_id))&&!u.deleted_at);
@@ -468,11 +462,8 @@ router.get('/:id/stats', (req, res) => {
     userIds.add(u.id); return true;
   });
 
-  // Objects — check tenant store first, fall back to master
-  let objects = (ts.objects||[]).filter(o=>envIds.has(o.environment_id)&&!o.deleted_at);
-  if (objects.length === 0 && client.tenant_slug) {
-    objects = (s.objects||[]).filter(o=>envIds.has(o.environment_id)&&!o.deleted_at);
-  }
+  // Objects — always use tenant store only
+  const objects = (ts.objects||[]).filter(o=>envIds.has(o.environment_id)&&!o.deleted_at);
   const log     = (s.provision_log||[]).filter(l=>l.client_id===client.id);
   const thirtyDaysAgo = new Date(Date.now()-30*24*60*60*1000);
   const byDay = {};

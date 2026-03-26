@@ -117,7 +117,7 @@ export function ClientList({ onProvision, onSelectClient }) {
                   <td style={{padding:'12px 14px'}}>
                     {c.env_count > 0 ? (
                       <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                        <a href={c.app_url || 'https://vercentic.vercel.app'}
+                        <a href={c.tenant_slug ? `https://www.vercentic.com/?tenant=${c.tenant_slug}` : 'https://www.vercentic.com'}
                            target="_blank" rel="noreferrer"
                            style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,fontWeight:600,color:'#60a5fa',textDecoration:'none',padding:'4px 9px',borderRadius:6,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.25)',width:'fit-content'}}
                            onMouseEnter={e=>e.currentTarget.style.background='rgba(96,165,250,0.2)'}
@@ -125,6 +125,9 @@ export function ClientList({ onProvision, onSelectClient }) {
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
                           Open app ↗
                         </a>
+                        {c.tenant_slug && (
+                          <span style={{fontSize:10,color:'#60a5fa',opacity:0.7,fontFamily:'monospace'}}>?tenant={c.tenant_slug}</span>
+                        )}
                         <span style={{fontSize:10,color:C.text3}}>{c.env_count} env{c.env_count!==1?'s':''}</span>
                       </div>
                     ) : (
@@ -364,9 +367,9 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
             <div style={{padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
               {(() => {
                 const slug = client.tenant_slug;
-                const tenantUrl = slug ? `https://${slug}.vercentic.com` : window.location.origin;
+                const tenantUrl = slug ? `https://www.vercentic.com/?tenant=${slug}` : window.location.origin;
                 const latest = (client.provision_log||[]).slice(-1)[0];
-                const copyTxt = `Vercentic Login\nURL: ${tenantUrl}\nTenant: ${slug||'(default)'}\nEmail: ${latest?.admin_email||'(see provision log)'}\nPassword: Admin1234! (or as set during provisioning)`;
+                const copyTxt = `Vercentic Login\nURL: ${tenantUrl}\nEmail: ${latest?.admin_email||'(see provision log)'}\nPassword: Admin1234! (or as set during provisioning)`;
                 return (<>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12,color:C.text3,marginBottom:4}}>Login URL</div>
@@ -374,6 +377,9 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
                       style={{fontFamily:'monospace',fontSize:13,color:C.accent,textDecoration:'none',fontWeight:600}}>
                       {tenantUrl}
                     </a>
+                    {slug && (
+                      <div style={{fontSize:11,color:C.text3,marginTop:3}}>Tenant: <span style={{fontFamily:'monospace',color:C.text2}}>{slug}</span></div>
+                    )}
                   </div>
                   <button onClick={()=>navigator.clipboard.writeText(copyTxt)}
                     style={{background:C.accentLight,border:`1px solid ${C.accent}30`,borderRadius:8,cursor:'pointer',padding:'8px 14px',fontSize:12,fontWeight:700,color:C.accent,flexShrink:0}}>
@@ -556,7 +562,7 @@ export function ProvisionWizard({ onDone, onCancel }) {
       {(() => {
         const slug = result.tenant_slug || result.credentials?.tenant_slug;
         const tenantUrl = slug
-          ? `https://${slug}.vercentic.com`
+          ? `https://www.vercentic.com/?tenant=${slug}`
           : window.location.origin;
         return (
           <div style={{background:'#EFF6FF',borderRadius:12,border:'1px solid #BFDBFE',padding:14,marginBottom:16,textAlign:'left'}}>
@@ -572,7 +578,7 @@ export function ProvisionWizard({ onDone, onCancel }) {
                 Copy
               </button>
             </div>
-            {slug && <div style={{fontSize:11,color:'#3B82F6',marginTop:6}}>Tenant: <code style={{background:'#DBEAFE',padding:'1px 5px',borderRadius:4}}>{slug}</code></div>}
+            {slug && <div style={{fontSize:11,color:'#3B82F6',marginTop:6}}>Tenant key: <code style={{background:'#DBEAFE',padding:'1px 5px',borderRadius:4}}>{slug}</code></div>}
           </div>
         );
       })()}
@@ -583,8 +589,8 @@ export function ProvisionWizard({ onDone, onCancel }) {
           <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em'}}>Credentials</div>
           <button onClick={()=>{
             const slug = result.tenant_slug || result.credentials?.tenant_slug;
-            const tenantUrl = slug ? `https://${slug}.vercentic.com` : window.location.origin;
-            const txt = `Vercentic Login\nURL: ${tenantUrl}\nTenant: ${slug||'(default)'}\nEmail: ${result.credentials?.email}\nPassword: ${result.credentials?.password}`;
+            const tenantUrl = slug ? `https://www.vercentic.com/?tenant=${slug}` : window.location.origin;
+            const txt = `Vercentic Login\nURL: ${tenantUrl}\nEmail: ${result.credentials?.email}\nPassword: ${result.credentials?.password}`;
             navigator.clipboard.writeText(txt);
           }} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,cursor:'pointer',padding:'3px 8px',fontSize:10,fontWeight:700,color:C.text2}}>
             Copy all
