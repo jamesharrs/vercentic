@@ -7,21 +7,16 @@ const C = {
   accent:"#3b82f6", green:"#10b981", amber:"#f59e0b", red:"#ef4444", purple:"#8b5cf6", cyan:"#06b6d4",
 };
 
-function saHeaders(extra = {}) {
-  try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
-    const uid = sess?.user?.id;
-    const h = { 'Content-Type': 'application/json', ...extra };
-    if (uid) h['X-User-Id'] = uid;
-    return h;
-  } catch { return { 'Content-Type': 'application/json', ...extra }; }
-}
+const saFetch = (url, opts = {}) => {
+  const h = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  return fetch(url, { ...opts, headers: h });
+};
 const sa = {
-  get:        p     => fetch(`/api/superadmin/clients${p}`, { headers: saHeaders() }).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }),
-  post:       (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'POST',  headers:saHeaders(),body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:      (p,b) => fetch(`/api/superadmin/clients${p}`,{method:'PATCH', headers:saHeaders(),body:JSON.stringify(b)}).then(r=>r.json()),
-  del:        p     => fetch(`/api/superadmin/clients${p}`,{method:'DELETE',headers:saHeaders()}).then(r=>r.json()),
-  delConfirm: p     => fetch(`/api/superadmin/clients${p}?confirm=yes`,{method:'DELETE',headers:saHeaders()}).then(r=>{ if(!r.ok) return r.json().then(d=>{throw new Error(d.error||r.status);}); return r.json(); }),
+  get:        p     => saFetch(`/api/superadmin/clients${p}`).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }),
+  post:       (p,b) => saFetch(`/api/superadmin/clients${p}`,{method:'POST',  body:JSON.stringify(b)}).then(r=>r.json()),
+  patch:      (p,b) => saFetch(`/api/superadmin/clients${p}`,{method:'PATCH', body:JSON.stringify(b)}).then(r=>r.json()),
+  del:        p     => saFetch(`/api/superadmin/clients${p}`,{method:'DELETE'}).then(r=>r.json()),
+  delConfirm: p     => saFetch(`/api/superadmin/clients${p}?confirm=yes`,{method:'DELETE'}).then(r=>{ if(!r.ok) return r.json().then(d=>{throw new Error(d.error||r.status);}); return r.json(); }),
 };
 
 const inputSt = { width:'100%',padding:'9px 12px',borderRadius:8,border:`1.5px solid ${C.border2}`,background:C.surface2,color:C.text1,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box' };
@@ -184,7 +179,7 @@ function DemoDataTab({ client, stats }) {
     setSeeding(true); setLog([]); setProgress(0); setResults(null); setError(null);
     try {
       const resp = await fetch('/api/superadmin/demo/seed', {
-        method:'POST', headers: saHeaders(),
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ environment_id: envId, clear_first: clearFirst })
       });
       const reader = resp.body.getReader();
@@ -212,7 +207,7 @@ function DemoDataTab({ client, stats }) {
     if (!envId) return;
     setClearing(true);
     try {
-      const r = await fetch('/api/superadmin/demo/clear', { method:'DELETE', headers: saHeaders(), body:JSON.stringify({environment_id:envId}) });
+      const r = await fetch('/api/superadmin/demo/clear', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({environment_id:envId}) });
       const d = await r.json();
       setLog([`Cleared ${d.removed} demo records`]); setResults(null);
     } catch(e) { setError(e.message); }
