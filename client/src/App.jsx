@@ -1507,8 +1507,9 @@ function App() {
     const subdomainSlug = getTenantSlug();
     if (sess && subdomainSlug) {
       const sessionTenant = sess.tenant_slug || null;
+      // Clear if: session belongs to a different tenant, OR session has no tenant_slug
+      // (master admin) but we're on a tenant subdomain — master users can't access tenant apps
       if (sessionTenant !== subdomainSlug) {
-        // Stale session from a different tenant — clear it
         try { localStorage.removeItem('talentos_session'); } catch {}
         return null;
       }
