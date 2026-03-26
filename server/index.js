@@ -246,7 +246,7 @@ require('./routes/enterprise_settings').migrate();
 require('./routes/skills_intelligence').migrate();
 require('./routes/datasets').migrate();
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.5.0', build: 'tenant-isolation' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.5.1', build: 'tenant-isolation-strict' }));
 
 const PORT = process.env.PORT || 3001;
 

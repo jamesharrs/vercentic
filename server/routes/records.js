@@ -121,6 +121,13 @@ router.get('/', (req, res) => {
   const { object_id, environment_id, page=1, limit=50, search, sort_dir='desc', filter_key, filter_value, user_id } = req.query;
   if (!object_id||!environment_id) return res.status(400).json({error:'object_id and environment_id required'});
 
+  // Security: if a user ID was sent but user not found in current store context,
+  // the user belongs to a different tenant — deny access entirely.
+  const requestingUserId = req.headers['x-user-id'];
+  if (requestingUserId && !req.currentUser) {
+    return res.status(403).json({ error: 'Access denied — invalid session context' });
+  }
+
   // Environment scoping: non-admin users can only query their own environment
   if (req.currentUser) {
     const role = req.currentUser.role || findOne('roles', r => r.id === req.currentUser.role_id);
