@@ -1,0 +1,25 @@
+{
+  "name": "Vercentic Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "forwardPorts": [3000, 3001],
+  "portsAttributes": {
+    "3000": { "label": "Client (Vite)", "onAutoForward": "openBrowser" },
+    "3001": { "label": "Server (API)", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "cd server && npm install && cd ../client && npm install && cd ../portal-renderer && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "dsznajder.es7-react-js-snippets",
+        "bradlc.vscode-tailwindcss"
+      ],
+      "settings": {
+        "editor.formatOnSave": false,
+        "editor.tabSize": 2,
+        "files.autoSave": "onFocusChange"
+      }
+    }
+  }
+}
