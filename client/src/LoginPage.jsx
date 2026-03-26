@@ -36,13 +36,18 @@ export default function LoginPage({ onLogin }) {
     if (!email || !password) return;
     setLoading(true); setError("");
     try {
-      const tenantParam = new URLSearchParams(window.location.search).get('tenant');
-      const loginUrl = tenantParam ? `/api/users/login?tenant=${encodeURIComponent(tenantParam)}` : "/api/users/login";
+      // Detect tenant from subdomain (e.g. client.vercentic.com → 'client')
+      // or fall back to ?tenant= query param
+      const { getTenantSlug } = await import('./apiClient.js');
+      const tenantSlug = getTenantSlug();
+      const loginUrl = "/api/users/login";
       const data = await api.post(loginUrl, { email, password });
       const { role, permissions, tenant_slug, ...user } = data;
-      // Only keep tenant_slug if the login explicitly used a tenant param
-      // (don't inherit a stale ?tenant= from the URL for master admins)
-      const resolvedTenant = tenant_slug && tenant_slug !== 'master' ? tenant_slug : null;
+      // Use the slug we detected (subdomain takes priority over what server returns
+      // since the server login searches all stores and returns where the user was found)
+      const resolvedTenant = (tenant_slug && tenant_slug !== 'master') ? tenant_slug 
+                           : (tenantSlug && tenantSlug !== 'master') ? tenantSlug 
+                           : null;
       setSession({ user, role, permissions, tenant_slug: resolvedTenant });
       loadMyPermissions().catch(() => {});
       // Strip ?tenant= from URL after login so it doesn't persist
