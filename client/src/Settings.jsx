@@ -9,6 +9,7 @@ import FileTypesSettings from "./settings/FileTypesSettings.jsx";
 import DuplicatesSettings from "./settings/DuplicatesSettings.jsx";
 import GroupsSection from "./settings/GroupsSection.jsx";
 import AgentsSettings from "./settings/AgentsSettings.jsx";
+import DataImportSettings from "./settings/DataImportSettings.jsx";
 import AiGovernance from "./settings/AiGovernance.jsx";
 import QuestionBankSettings from "./settings/QuestionBankSettings.jsx";
 import AiMatchingSettings from "./settings/AiMatchingSettings.jsx";
@@ -1794,6 +1795,26 @@ const DataModelSection = () => {
   );
 };
 
+// ─── Import/Export Tabs Wrapper ──────────────────────────────────────────────
+const ImportExportTabs = ({ environment }) => {
+  const [ietab, setIetab] = useState("config");
+  return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {[{id:"config",label:"Platform Config"},{id:"data",label:"Data Import"}].map(t=>
+          <button key={t.id} onClick={()=>setIetab(t.id)} style={{
+            padding:"7px 16px",borderRadius:8,border:"none",fontSize:13,fontWeight:600,
+            cursor:"pointer",fontFamily:F,
+            background:ietab===t.id?C.accent:"transparent",
+            color:ietab===t.id?"white":C.text3,
+          }}>{t.label}</button>
+        )}
+      </div>
+      {ietab==="config" ? <ConfigSection environment={environment}/> : <DataImportSettings environment={environment}/>}
+    </div>
+  );
+};
+
 // ─── Config Import / Export Section ──────────────────────────────────────────
 const ConfigSection = ({ environment }) => {
   const [status,    setStatus]    = useState(null);
@@ -2638,7 +2659,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="sandbox"     && <SandboxManager environment={environment}/>}
         {activeSection==="brand_kits"  && <BrandKitSettings environment={environment}/>}
         {activeSection==="email_templates" && <EmailTemplateBuilder environment={environment}/>}
-        {activeSection==="config"      && <ConfigSection environment={environment}/>}
+        {activeSection==="config"      && <ImportExportTabs environment={environment}/>}
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
         {activeSection==="integration_hub" && <IntegrationHub environment={environment}/>}

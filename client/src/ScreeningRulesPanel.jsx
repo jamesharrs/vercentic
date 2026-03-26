@@ -60,7 +60,18 @@ const OPERATORS = [
 ];
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
-export default function ScreeningRulesPanel({ record, environment, candidateFields }) {
+export default function ScreeningRulesPanel({ record, environment, candidateFields: externalFields }) {
+  const [candidateFields, setCandidateFields] = useState(externalFields || []);
+
+  // Self-load People fields if not provided externally
+  useEffect(() => {
+    if (externalFields?.length) { setCandidateFields(externalFields); return; }
+    if (!environment?.id) return;
+    api.get(`/objects?environment_id=${environment.id}`).then(objs => {
+      const people = (Array.isArray(objs) ? objs : []).find(o => o.slug === 'people' || o.name?.toLowerCase() === 'person');
+      if (people) api.get(`/fields?object_id=${people.id}`).then(f => setCandidateFields(Array.isArray(f) ? f : []));
+    });
+  }, [environment?.id, externalFields]);
   const [rules, setRules] = useState([]);
   const [globalRules, setGlobalRules] = useState([]);
   const [loading, setLoading] = useState(true);

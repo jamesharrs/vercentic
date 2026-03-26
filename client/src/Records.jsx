@@ -18,6 +18,7 @@ import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 import api from './apiClient.js';
 import { authHeaders } from './apiClient.js';
 import TalentCardModal from './TalentCard.jsx';
+import ScreeningRulesPanel from './ScreeningRulesPanel.jsx';
 
 // Bare fetch wrapper that always includes X-Tenant-Slug + X-User-Id headers.
 // Use this instead of raw fetch() anywhere in this file.
@@ -1539,7 +1540,32 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   );
 }
 
-const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit, onCompare }) => {
+// ─── Double-Confirm Delete (type count to confirm, super_admin only) ─────────
+const DeleteConfirmInline = ({ count, session, onConfirm, onCancel }) => {
+  const [typed, setTyped] = useState("");
+  const isSuperAdmin = session?.role?.slug === "super_admin";
+  if (!isSuperAdmin) {
+    return (
+      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+        <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Only super administrators can bulk delete.</span>
+        <button onClick={onCancel} style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>OK</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+      <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Type <strong>{count}</strong> to confirm deletion:</span>
+      <input value={typed} onChange={e => setTyped(e.target.value)} autoFocus placeholder={String(count)}
+        style={{ width:80, padding:"4px 8px", borderRadius:6, border:"1px solid rgba(255,255,255,0.3)", background:"rgba(255,255,255,0.1)", color:"white", fontSize:12, fontFamily:F, textAlign:"center" }}/>
+      <button onClick={onConfirm} disabled={typed !== String(count)}
+        style={{ padding:"5px 12px", borderRadius:7, border:"none", background:typed===String(count)?"#ef4444":"#6b7280", color:"white", fontSize:12, fontWeight:700, cursor:typed===String(count)?"pointer":"not-allowed", fontFamily:F, opacity:typed===String(count)?1:0.5 }}>Delete {count} records</button>
+      <button onClick={onCancel} style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
+    </div>
+  );
+};
+
+const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete, onEdit, onCompare,
+  hasActiveFilters, totalFilteredCount, selectAllMatching, onSelectAllMatching, onClearSelectAll, session }) => {
   const [showEditPicker, setShowEditPicker] = useState(false);
   const [editFieldId,    setEditFieldId]    = useState("");
   const [editValue,      setEditValue]      = useState("");
@@ -1560,12 +1586,24 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", background:"#1e293b",
       borderRadius:10, marginBottom:10, flexWrap:"wrap" }}>
-      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>{count} selected</span>
+      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>{selectAllMatching ? `All ${totalFilteredCount}` : count} selected</span>
       <div style={{ display:"flex", gap:6, marginLeft:4 }}>
         <button onClick={onSelectAll}
           style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.1)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
           Select all {total}
         </button>
+        {hasActiveFilters && totalFilteredCount > total && !selectAllMatching && (
+          <button onClick={onSelectAllMatching}
+            style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(99,179,237,0.4)", background:"rgba(99,179,237,0.15)", color:"#93c5fd", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+            Select all {totalFilteredCount} matching filter
+          </button>
+        )}
+        {selectAllMatching && (
+          <span style={{ fontSize:12, fontWeight:600, color:"#93c5fd", display:"flex", alignItems:"center", gap:4 }}>
+            All {totalFilteredCount} matching records selected
+            <button onClick={onClearSelectAll} style={{ background:"none", border:"none", color:"#93c5fd", cursor:"pointer", fontSize:12, textDecoration:"underline", fontFamily:F }}>(undo)</button>
+          </span>
+        )}
         <button onClick={onClearAll}
           style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
           Clear
@@ -1626,13 +1664,12 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           <Ic n="trash" s={12} c="#fca5a5"/> Delete {count}
         </button>
       ) : (
-        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-          <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Sure?</span>
-          <button onClick={() => { onDelete(); setConfirming(false); }}
-            style={{ padding:"5px 12px", borderRadius:7, border:"none", background:"#ef4444", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F }}>Yes, delete</button>
-          <button onClick={() => setConfirming(false)}
-            style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>Cancel</button>
-        </div>
+        <DeleteConfirmInline
+          count={selectAllMatching ? totalFilteredCount : count}
+          session={session}
+          onConfirm={() => { onDelete(); setConfirming(false); }}
+          onCancel={() => setConfirming(false)}
+        />
       )}
     </div>
   );
@@ -3342,6 +3379,7 @@ export const PANEL_META = {
   user:         { icon:"user",          label:"Platform User",       defaultOpen:true  },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
   questions:    { icon:"help-circle",   label:"Interview Questions", defaultOpen:false },
+  screening:    { icon:"shield",        label:"Screening Rules",     defaultOpen:true  },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
@@ -3349,7 +3387,7 @@ export const getDefaultPanelOrder = (objectName) => {
   if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("scorecard");
-  if (objectName === "Job") base.push("questions");
+  if (objectName === "Job") { base.push("questions"); base.push("screening"); }
   return base;
 };
 
@@ -5199,6 +5237,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
+    if (id==="screening") return <ScreeningRulesPanel record={record} environment={environment}/>;
 
     if (id==="match") return (
       <StableMatchPanel
@@ -5975,6 +6014,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // ── Bulk warning confirmation ────────────────────────────────────────────────
   const [bulkConfirm, setBulkConfirm] = useState(null); // { action:'delete'|'edit', fieldId, value }
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [totalFilteredCount, setTotalFilteredCount] = useState(0);
+
+  // Fetch total matching count when filters are active (for "select all matching" feature)
+  useEffect(() => {
+    if (!activeFilters.length || !object?.id || !environment?.id) { setTotalFilteredCount(0); return; }
+    api.post('/records/bulk-count', { object_id: object.id, environment_id: environment.id, filters: activeFilters })
+      .then(d => setTotalFilteredCount(d?.count || 0))
+      .catch(() => setTotalFilteredCount(0));
+    setSelectAllMatching(false);
+  }, [activeFilters, object?.id, environment?.id]);
   const [showCompare, setShowCompare] = useState(false);
 
   const getBulkThreshold = () => {
@@ -6021,8 +6071,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   const handleBulkDelete = async () => {
-    await Promise.all([...selectedIds].map(id => api.del(`/records/${id}?environment_id=${environment.id}`)));
+    if (selectAllMatching) {
+      await api.post('/records/bulk-action', {
+        object_id: object.id, environment_id: environment.id,
+        filters: activeFilters, action: 'delete',
+        user_role: session?.role?.slug, user_id: session?.userId,
+      });
+    } else {
+      await Promise.all([...selectedIds].map(id => api.del(`/records/${id}?environment_id=${environment.id}`)));
+    }
     setSelectedIds(new Set());
+    setSelectAllMatching(false);
     load();
   };
 
@@ -6032,12 +6091,22 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     let coerced = value;
     if (field.field_type === "boolean")  coerced = value === "true";
     if (field.field_type === "number" || field.field_type === "currency") coerced = parseFloat(value) || 0;
-    await Promise.all([...selectedIds].map(id => {
-      const rec = records.find(r => r.id === id);
-      if (!rec) return;
-      return api.patch(`/records/${id}`, { data: { ...rec.data, [field.api_key]: coerced }, updated_by: "Admin" });
-    }));
+    if (selectAllMatching) {
+      await api.post('/records/bulk-action', {
+        object_id: object.id, environment_id: environment.id,
+        filters: activeFilters, action: 'edit',
+        payload: { field_api_key: field.api_key, value: coerced },
+        user_role: session?.role?.slug, user_id: session?.userId,
+      });
+    } else {
+      await Promise.all([...selectedIds].map(id => {
+        const rec = records.find(r => r.id === id);
+        if (!rec) return;
+        return api.patch(`/records/${id}`, { data: { ...rec.data, [field.api_key]: coerced }, updated_by: "Admin" });
+      }));
+    }
     setSelectedIds(new Set());
+    setSelectAllMatching(false);
     load();
   };
 
@@ -6320,10 +6389,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           total={displayedRecords.length}
           fields={fields}
           onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
-          onClearAll={() => setSelectedIds(new Set())}
+          onClearAll={() => { setSelectedIds(new Set()); setSelectAllMatching(false); }}
           onDelete={() => guardedBulkAction("delete")}
           onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
           onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
+          hasActiveFilters={activeFilters.length > 0}
+          totalFilteredCount={totalFilteredCount}
+          selectAllMatching={selectAllMatching}
+          onSelectAllMatching={() => setSelectAllMatching(true)}
+          onClearSelectAll={() => setSelectAllMatching(false)}
+          session={session}
         />
       )}
 
