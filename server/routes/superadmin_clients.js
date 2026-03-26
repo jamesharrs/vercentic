@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
-const { getStore, saveStore, provisionTenant, tenantStorage, loadTenantStore } = require('../db/init');
+const { getStore, saveStore, saveStoreNow, provisionTenant, tenantStorage, loadTenantStore } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
 
