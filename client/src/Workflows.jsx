@@ -1841,7 +1841,7 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
 // ─── LinkedRecordsPanel ───────────────────────────────────────────────────────
 // Shown on a Person record. Shows all objects this person is linked to across
 // all pipelines, with stage dropdown and ability to link to new records.
-export function LinkedRecordsPanel({ record, environment, onNavigate }) {
+export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobContext }) {
   const [links, setLinks]             = useState([]);
   const [allObjects, setAllObjects]   = useState([]);
   const [allRecords, setAllRecords]   = useState([]);       // for link-to-new modal
@@ -2015,7 +2015,9 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
           const currentStep = steps.find(s => s.id === link.stage_id);
           const objColor = link.target_object_color || C.accent;
           return (
-            <div key={link.id} style={{ background:C.surface, border:`1px solid ${C.border}`,
+            <div key={link.id} style={{
+              background: (activeJobContext && link.target_record_id === activeJobContext) ? C.accentLight : C.surface,
+              border: `1.5px solid ${(activeJobContext && link.target_record_id === activeJobContext) ? C.accent : C.border}`,
               borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:10 }}>
               {/* Object type colour dot */}
               <div style={{ width:36, height:36, borderRadius:10, background:`${objColor}18`,
@@ -2047,7 +2049,7 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
               )}
               {/* Navigate to target record */}
               {onNavigate && link.target_record_id && (
-                <button onClick={() => onNavigate(link.target_record_id, null)}
+                <button onClick={() => onNavigate(link.target_record_id, link.target_object_id || null)}
                   title={`Open ${link.target_object_name} record`}
                   style={{ background:"none", border:"none", cursor:"pointer", padding:4, flexShrink:0, opacity:0.5 }}
                   onMouseEnter={e=>e.currentTarget.style.opacity=1}

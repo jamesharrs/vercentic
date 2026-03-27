@@ -507,6 +507,7 @@ router.get('/people-links', (req, res) => {
     const wfSteps = wf ? query('workflow_steps', s => s.workflow_id === wf.id).sort((a,b)=>a.order-b.order) : [];
     return {
       ...l,
+      target_object_id: l.target_object_id || target?.object_id || null,
       person_data: person?.data || {},
       target_data: td,
       target_title: targetTitle,

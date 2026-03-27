@@ -300,11 +300,11 @@ export default function TalentCardModal({ record, fields, environment, onClose }
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.55)", zIndex:1200, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"24px 16px", overflowY:"auto" }}>
-      <div style={{ width:"100%", maxWidth:1080, display:"flex", gap:20, alignItems:"flex-start" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.55)", zIndex:1200, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"24px 16px", overflow:"auto" }}>
+      <div style={{ width:"100%", maxWidth:1080, display:"flex", flexWrap:"wrap", gap:20, alignItems:"flex-start" }}>
 
         {/* Card preview */}
-        <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ flex:1, minWidth:0, overflowX:"auto" }}>
           <div ref={cardRef}>
             <CardRenderer record={record} fields={fields} config={config} companyName={companyName}/>
           </div>

@@ -4402,7 +4402,7 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
           {MAPPABLE.length === 0 && (
             <div style={{ textAlign:'center', padding:'24px 0' }}>
               <div style={{ color:C.text3, fontSize:13, marginBottom:12 }}>
-                Claude didn't extract any field values from this CV. This usually means the file format couldn't be read — try uploading a PDF instead of DOCX.
+                Vercentic couldn't extract any field values from this CV. This usually means the file format couldn't be read — try uploading a PDF instead of DOCX.
               </div>
               {result && Object.keys(result).filter(k=>result[k]!==null&&!Array.isArray(result[k])).length > 0 && (
                 <div style={{ textAlign:'left', background:'#f8f9fc', borderRadius:8, padding:12, fontSize:11, color:C.text3 }}>
@@ -6018,7 +6018,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
           <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null}/>
         </div>;
-    if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate}/>;
+    if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
@@ -6427,7 +6427,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>
       )}
       {/* 2-col body */}
-      <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0, userSelect:draggingCol.current?"none":"auto" }}>
+      <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0, minHeight:0, userSelect:draggingCol.current?"none":"auto" }}>
 
         {/* LEFT COL — Fields as panel card */}
         <div style={{ width:`${leftPct}%`, flexShrink:0, background:"#F4F6FB", display:"flex", flexDirection:"column", overflowY:"auto", overflowX:"hidden", padding:"16px 0 24px 16px", minHeight:0 }}>

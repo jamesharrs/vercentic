@@ -213,7 +213,7 @@ const STEP_CATALOG = [
   { type:'create_record', label:'Create Record',      icon:'plus-circle', color:'#10B981', description:'Create a Vercentic record' },
   { type:'update_record', label:'Update Record',      icon:'edit',        color:'#F59E0B', description:'Update a Vercentic record' },
   { type:'notify',        label:'Send Notification',  icon:'bell',        color:'#4A154B', description:'Slack or Teams notification' },
-  { type:'ai_prompt',     label:'AI Prompt',          icon:'sparkles',    color:'#7C3AED', description:'Claude AI completion' },
+  { type:'ai_prompt',     label:'AI Prompt',          icon:'sparkles',    color:'#7C3AED', description:'Vercentic AI completion' },
   { type:'condition',     label:'Condition / Branch', icon:'git-branch',  color:'#F97316', description:'Branch on a condition' },
   { type:'delay',         label:'Delay',              icon:'clock',       color:'#6B7280', description:'Wait N seconds (max 60)' },
   { type:'set_variable',  label:'Set Variable',       icon:'code',        color:'#64748B', description:'Store computed values' },

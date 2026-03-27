@@ -79,7 +79,7 @@ function SkillsSection({environment}) {
 
   async function handleSeed(){setSeeding(true); const r=await api.post('/enterprise/skills/seed',{environment_id:envId}); setSeeding(false); if(r.error)window.__toast?.alert(r.error); else load();}
   async function handleSeedRels(){setSeedingRels(true); const r=await api.post('/skills-intel/seed-relationships',{environment_id:envId}); setSeedingRels(false); if(r.error)window.__toast?.alert(r.error); else window.__toast?.alert(`Seeded ${r.inserted} relationships`);}
-  async function handleGenEmb(){setGeneratingEmb(true); setEmbMsg('Generating embeddings via Claude…'); const r=await api.post('/skills-intel/generate-embeddings',{environment_id:envId}); setGeneratingEmb(false); setEmbMsg(r.error?`Error: ${r.error}`:`Done — ${r.done} embeddings generated`); load();}
+  async function handleGenEmb(){setGeneratingEmb(true); setEmbMsg('Generating embeddings via Vercentic AI…'); const r=await api.post('/skills-intel/generate-embeddings',{environment_id:envId}); setGeneratingEmb(false); setEmbMsg(r.error?`Error: ${r.error}`:`Done — ${r.done} embeddings generated`); load();}
   async function handleSave(form){setSaving(true); if(modal.mode==='edit') await api.patch(`/enterprise/skills/${modal.skill.id}`,{...form,environment_id:envId}); else await api.post('/enterprise/skills',{...form,environment_id:envId}); setSaving(false); setModal(null); load();}
   async function handleDelete(id){if(!confirm('Delete this skill?'))return; await api.delete(`/enterprise/skills/${id}`); load();}
 
@@ -225,14 +225,14 @@ function AiDiscoveryPanel({environment,onApplied}) {
     <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-start'}}>
       <div style={{flex:1,minWidth:260}}>
         <div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:F,marginBottom:4}}>AI Skill Discovery</div>
-        <div style={{fontSize:13,color:C.text3,fontFamily:F,lineHeight:1.5}}>Claude analyses your job descriptions and candidate records to find skills not in your taxonomy.</div>
+        <div style={{fontSize:13,color:C.text3,fontFamily:F,lineHeight:1.5}}>Vercentic analyses your job descriptions and candidate records to find skills not in your taxonomy.</div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',flexShrink:0}}>
         <Select value={source} onChange={setSource} options={[{value:'all',label:'Jobs + Candidates'},{value:'jobs',label:'Jobs only'},{value:'candidates',label:'Candidates only'}]} style={{width:160}}/>
         <Btn onClick={handleDiscover} disabled={running} variant="primary"><Ic n="zap" s={13} c="white"/>{running?'Analysing…':'Discover Skills'}</Btn>
       </div>
     </div>
-    {running&&<div style={{padding:20,background:C.accentLight,borderRadius:12,textAlign:'center',fontFamily:F}}><div style={{fontSize:13,color:C.accent,fontWeight:600,marginBottom:4}}>Claude is reading your records…</div><div style={{fontSize:12,color:C.text3}}>15–30 seconds depending on record count.</div></div>}
+    {running&&<div style={{padding:20,background:C.accentLight,borderRadius:12,textAlign:'center',fontFamily:F}}><div style={{fontSize:13,color:C.accent,fontWeight:600,marginBottom:4}}>Vercentic is reading your records…</div><div style={{fontSize:12,color:C.text3}}>15–30 seconds depending on record count.</div></div>}
     {result&&!running&&<div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         {[{label:'Analysed',val:result.analysed,c:C.accent},{label:'Suggestions',val:result.suggestions?.length||0,c:C.purple},{label:'Selected',val:selected.size,c:C.amber}].map(s=><div key={s.label} style={{padding:'10px 14px',background:'white',borderRadius:10,border:`1.5px solid ${C.border}`,textAlign:'center',minWidth:90}}><div style={{fontSize:20,fontWeight:800,color:s.c,fontFamily:F}}>{s.val}</div><div style={{fontSize:11,color:C.text3,fontFamily:F}}>{s.label}</div></div>)}

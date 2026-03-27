@@ -158,7 +158,7 @@ const FileTypeFormModal = ({fileType,allObjects,environment,onSave,onClose}) => 
           {tab==='mappings' && (
             <div>
               <div style={{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:10,padding:'12px 16px',marginBottom:16,fontSize:13,color:'#1E40AF'}}>
-                <b>Document Extraction</b> — Claude will analyse uploaded files of this type and extract data into the mapped fields. Works with images (ID photos, scans) and documents (PDF, DOCX).
+                <b>Document Extraction</b> — Vercentic will analyse uploaded files of this type and extract data into the mapped fields. Works with images (ID photos, scans) and documents (PDF, DOCX).
               </div>
               <div style={{marginBottom:14}}>
                 <label style={lblSt}>Extract data into object</label>
