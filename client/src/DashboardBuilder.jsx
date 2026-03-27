@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import apiClient from "./apiClient";
 
 const V = { bg:"var(--t-bg,#f5f5f7)", card:"var(--t-card,#fff)", accent:"var(--t-accent,#4f46e5)", text1:"var(--t-text1,#111827)", text2:"var(--t-text2,#374151)", text3:"var(--t-text3,#9ca3af)", border:"var(--t-border,#e5e7eb)", red:"#ef4444" };
 const F = "'DM Sans',-apple-system,sans-serif";
@@ -32,10 +33,10 @@ const PANEL_TYPES = [
 ];
 
 const api = {
-  get:    (u)   => fetch(u,{headers:{"Content-Type":"application/json"}}).then(r=>r.json()).catch(()=>({})),
-  post:   (u,b) => fetch(u,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (u,b) => fetch(u,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  delete: (u)   => fetch(u,{method:"DELETE",headers:{"Content-Type":"application/json"}}).then(r=>r.json()),
+  get:    (u)   => apiClient.get(u.replace(/^\/api/,"")),
+  post:   (u,b) => apiClient.post(u.replace(/^\/api/,""),b),
+  patch:  (u,b) => apiClient.patch(u.replace(/^\/api/,""),b),
+  delete: (u)   => apiClient.delete(u.replace(/^\/api/,"")),
 };
 
 function Inp({ val, onChange, placeholder, type="text", style={} }) {
@@ -168,6 +169,11 @@ function AccessEditor({ access={}, roles, users, onChange }) {
   </div>;
 }
 
+function MsgBar({ msg }) {
+  if (!msg) return null;
+  return <div style={{ marginBottom:12,padding:"10px 16px",borderRadius:10,background:msg.err?"#fef2f2":"#f0fdf4",border:`1px solid ${msg.err?"#fecaca":"#bbf7d0"}`,fontSize:13,color:msg.err?V.red:"#059669" }}>{msg.text}</div>;
+}
+
 async function aiGenerateDashboard(prompt, objects) {
   const systemCtx = `You are building a dashboard for a recruitment/HR platform called Vercentic.
 Available objects: ${objects.map(o=>o.plural_name||o.name).join(", ")}.
@@ -269,7 +275,7 @@ export default function DashboardBuilder({ environment, session, onBack }) {
     finally{setAiLoading(false);}
   };
 
-  const MsgBar = () => msg ? <div style={{ marginBottom:12,padding:"10px 16px",borderRadius:10,background:msg.err?"#fef2f2":"#f0fdf4",border:`1px solid ${msg.err?"#fecaca":"#bbf7d0"}`,fontSize:13,color:msg.err?V.red:"#059669" }}>{msg.text}</div> : null;
+  // MsgBar is a module-level component — see below
 
   // ── List view ──────────────────────────────────────────────────────────────
   if (view==="list") return (
@@ -281,7 +287,7 @@ export default function DashboardBuilder({ environment, session, onBack }) {
           <Ic n="plus" s={14} c="#fff"/> New Dashboard
         </button>
       </div>
-      <MsgBar/>
+      <MsgBar msg={msg}/>
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16 }}>
         {dashboards.map(d=>(
           <div key={d.id} style={{ background:V.card,borderRadius:14,border:`1.5px solid ${V.border}`,overflow:"hidden",cursor:"pointer",transition:"box-shadow 0.15s" }}
@@ -412,7 +418,7 @@ export default function DashboardBuilder({ environment, session, onBack }) {
       <div style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 20px",background:V.card,borderBottom:`1px solid ${V.border}` }}>
         <button onClick={()=>setView("builder")} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,border:`1px solid ${V.border}`,background:"transparent",fontSize:13,color:V.text2,cursor:"pointer",fontFamily:F }}>← Builder</button>
         <div style={{ flex:1,fontSize:15,fontWeight:700 }}>Access Settings — {editing.name}</div>
-        <MsgBar/>
+        <MsgBar msg={msg}/>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:32,maxWidth:560 }}>
         <AccessEditor access={editing.access} roles={roles} users={users} onChange={access=>handleSaveAccess(access)}/>

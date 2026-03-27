@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import apiClient from "./apiClient";
 
 const V = { bg:"var(--t-bg,#f5f5f7)",card:"var(--t-card,#fff)",accent:"var(--t-accent,#4f46e5)",text1:"var(--t-text1,#111827)",text2:"var(--t-text2,#374151)",text3:"var(--t-text3,#9ca3af)",border:"var(--t-border,#e5e7eb)",red:"#ef4444" };
 const F = "'DM Sans',-apple-system,sans-serif";
 const PALETTES = ["#4f46e5","#0891b2","#059669","#d97706","#dc2626","#7c3aed","#ec4899","#14b8a6","#f59e0b","#6366f1"];
-const api = { get:(u)=>fetch(u,{headers:{"Content-Type":"application/json"}}).then(r=>r.json()).catch(()=>null) };
+const api = { get:(u)=>apiClient.get(u.replace(/^\/api/,"")).catch(()=>null) };
 
 const PATHS = {
   refresh:"M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15",
@@ -108,7 +109,8 @@ function TextPanel({ panel, data }) {
 function DashboardSwitcher({ dashboards, current, onChange }) {
   const [open,setOpen]=useState(false); const ref=useRef(null);
   useEffect(()=>{ const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);}; document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h); },[]);
-  if(dashboards.length<=1)return null;
+  // No early return after hooks — use conditional render in JSX
+  if(dashboards.length<=1)return <span/>; 
   return <div ref={ref} style={{ position:"relative" }}>
     <button onClick={()=>setOpen(p=>!p)} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,border:`1.5px solid ${V.border}`,background:V.card,fontSize:12,color:V.text2,cursor:"pointer",fontFamily:F,fontWeight:600 }}>
       <div style={{ width:8,height:8,borderRadius:"50%",background:current?.color||V.accent }}/>{current?.name||"Select dashboard"}<Ic n="chevD" s={12} c={V.text3}/>
