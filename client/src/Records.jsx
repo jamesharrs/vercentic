@@ -2125,9 +2125,10 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   const [showNoteModal,    setShowNoteModal]    = useState(false);
   const [showLinkModal,    setShowLinkModal]    = useState(false);
   const [noteText,         setNoteText]         = useState("");
-  const [linkObjectId,     setLinkObjectId]     = useState("");
-  const [linkTargetId,     setLinkTargetId]     = useState("");
+  const [linkSearch,       setLinkSearch]       = useState("");
+  const [linkObjFilter,    setLinkObjFilter]    = useState("");
   const [linkTargets,      setLinkTargets]      = useState([]);
+  const [linkLoading,      setLinkLoading]      = useState(false);
   const commsRef = useRef(null);
   const isPeople = objectSlug === "people";
 
@@ -2139,12 +2140,28 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     return () => document.removeEventListener("mousedown", h);
   }, [showComms]);
 
-  // Load link targets when object changes
+  // Load all linkable records (only those with a Linked Person workflow) when modal opens
   useEffect(() => {
-    if (!linkObjectId || !environment?.id) return;
-    fetch(`/api/records?object_id=${linkObjectId}&environment_id=${environment.id}&limit=100`)
-      .then(r => r.json()).then(d => setLinkTargets(d.records || [])).catch(() => {});
-  }, [linkObjectId, environment?.id]);
+    if (!showLinkModal || !environment?.id) return;
+    setLinkLoading(true);
+    const nonPeople = (allObjects || []).filter(o => o.slug !== "people");
+    Promise.all(nonPeople.map(async o => {
+      const recs = await fetch(`/api/records?object_id=${o.id}&environment_id=${environment.id}&limit=200`)
+        .then(r => r.json()).catch(() => ({ records: [] }));
+      return (recs.records || []).map(r => ({ ...r, object_name: o.name, object_color: o.color, object_id_ref: o.id }));
+    })).then(async groups => {
+      const all = groups.flat();
+      // Filter to only records with a Linked Person workflow assigned
+      const checked = await Promise.all(all.map(async r => {
+        const asgn = await fetch(`/api/workflows/assignments?record_id=${r.id}`)
+          .then(x => x.json()).catch(() => []);
+        const pl = (Array.isArray(asgn) ? asgn : []).find(a => a.type === "people_link");
+        return (pl && (pl.workflow?.steps || []).length > 0) ? r : null;
+      }));
+      setLinkTargets(checked.filter(Boolean));
+      setLinkLoading(false);
+    });
+  }, [showLinkModal, environment?.id]);
 
   const editableFields = fields.filter(f => !["id"].includes(f.api_key));
   const chosenField    = editableFields.find(f => f.id === editFieldId);
@@ -2161,10 +2178,9 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     setNoteText(""); setShowNoteModal(false);
   };
 
-  const handleBulkLink = () => {
-    if (!linkObjectId || !linkTargetId) return;
-    onBulkAction?.("link", { objectId: linkObjectId, targetId: linkTargetId });
-    setLinkObjectId(""); setLinkTargetId(""); setShowLinkModal(false);
+  const handleBulkLink = (targetRecord) => {
+    onBulkAction?.("link", { objectId: targetRecord.object_id, targetId: targetRecord.id });
+    setShowLinkModal(false); setLinkSearch(""); setLinkObjFilter("");
   };
 
   const BtnDark = ({ children, onClick, style = {} }) => (
@@ -2334,40 +2350,88 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
 
       {/* ── Link To modal ── */}
       {showLinkModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => e.target === e.currentTarget && setShowLinkModal(false)}>
-          <div style={{ background:"white", borderRadius:14, padding:24, width:440, boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
-            <div style={{ fontSize:14, fontWeight:700, color:C.text1, marginBottom:16 }}>Link {count} people to…</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              <div>
-                <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:5, textTransform:"uppercase", letterSpacing:"0.05em" }}>Object type</div>
-                <select value={linkObjectId} onChange={e => { setLinkObjectId(e.target.value); setLinkTargetId(""); }}
-                  style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none" }}>
-                  <option value="">Select object…</option>
-                  {(allObjects || []).filter(o => o.slug !== "people").map(o => (
-                    <option key={o.id} value={o.id}>{o.plural_name}</option>
-                  ))}
-                </select>
-              </div>
-              {linkObjectId && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:5, textTransform:"uppercase", letterSpacing:"0.05em" }}>Select record</div>
-                  <select value={linkTargetId} onChange={e => setLinkTargetId(e.target.value)}
-                    style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none" }}>
-                    <option value="">Select record…</option>
-                    {linkTargets.map(r => {
-                      const label = r.data?.first_name ? `${r.data.first_name} ${r.data.last_name||""}`.trim() : r.data?.job_title || r.data?.name || r.id;
-                      return <option key={r.id} value={r.id}>{label}</option>;
-                    })}
-                  </select>
-                </div>
-              )}
+          <div style={{ background:"white", borderRadius:16, width:500, maxHeight:"75vh",
+            display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+              padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Link {count} {count===1?"person":"people"} to…</div>
+              <button onClick={() => setShowLinkModal(false)}
+                style={{ background:"none", border:"none", cursor:"pointer" }}>
+                <Ic n="x" s={16} c={C.text3}/>
+              </button>
             </div>
-            <div style={{ display:"flex", gap:8, marginTop:16 }}>
-              <button onClick={() => { setShowLinkModal(false); setLinkObjectId(""); setLinkTargetId(""); }}
-                style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
-              <button onClick={handleBulkLink} disabled={!linkObjectId || !linkTargetId}
-                style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:(!linkObjectId||!linkTargetId)?0.5:1 }}>Link</button>
+            {/* Helper note */}
+            <div style={{ padding:"10px 16px", background:"#fffbeb", borderBottom:`1px solid #fde68a`,
+              display:"flex", alignItems:"flex-start", gap:8 }}>
+              <Ic n="info" s={14} c="#92400e"/>
+              <span style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>
+                Only records with a <strong>Linked Person Workflow</strong> are shown.
+                If a job or record is missing, open it and assign a workflow in its Pipeline panel first.
+              </span>
+            </div>
+            {/* Search + type filter */}
+            <div style={{ display:"flex", gap:8, padding:"10px 14px", borderBottom:`1px solid ${C.border}` }}>
+              <input autoFocus value={linkSearch} onChange={e => setLinkSearch(e.target.value)}
+                placeholder="Search records…"
+                style={{ flex:1, padding:"7px 10px", border:`1.5px solid ${C.border}`,
+                  borderRadius:8, fontSize:13, fontFamily:F, outline:"none" }}/>
+              <select value={linkObjFilter} onChange={e => setLinkObjFilter(e.target.value)}
+                style={{ padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8,
+                  fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text2 }}>
+                <option value="">All types</option>
+                {[...new Set(linkTargets.map(r => r.object_name))].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+            {/* Results */}
+            <div style={{ flex:1, overflowY:"auto" }}>
+              {linkLoading
+                ? <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>
+                : (() => {
+                    const filtered = linkTargets.filter(r => {
+                      if (linkObjFilter && r.object_name !== linkObjFilter) return false;
+                      if (!linkSearch) return true;
+                      const d = r.data || {};
+                      const lbl = [d.job_title, d.pool_name, d.name, d.first_name].filter(Boolean).join(" ").toLowerCase();
+                      return lbl.includes(linkSearch.toLowerCase());
+                    });
+                    if (!filtered.length) return (
+                      <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>
+                        {linkTargets.length === 0
+                          ? "No records with a Linked Person Workflow found."
+                          : "No matching records."}
+                      </div>
+                    );
+                    return filtered.map((r, i) => {
+                      const d = r.data || {};
+                      const label = d.job_title || d.pool_name || d.name || d.first_name || r.id.slice(0,8);
+                      const col = r.object_color || C.accent;
+                      return (
+                        <div key={r.id} onClick={() => handleBulkLink(r)}
+                          style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px",
+                            cursor:"pointer", borderBottom: i < filtered.length-1 ? `1px solid ${C.border}` : "none" }}
+                          onMouseEnter={e => e.currentTarget.style.background = C.accentLight}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <div style={{ width:34, height:34, borderRadius:9, background:`${col}18`,
+                            border:`1.5px solid ${col}30`, display:"flex", alignItems:"center",
+                            justifyContent:"center", flexShrink:0 }}>
+                            <span style={{ fontSize:13, fontWeight:800, color:col }}>{label.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{label}</div>
+                            <div style={{ fontSize:11, color:C.text3 }}>{r.object_name}</div>
+                          </div>
+                          <span style={{ fontSize:11, color:C.accent, fontWeight:600 }}>+ Link</span>
+                        </div>
+                      );
+                    });
+                  })()
+              }
             </div>
           </div>
         </div>

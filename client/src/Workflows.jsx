@@ -1872,7 +1872,14 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
       const recs = await api.get(`/records?object_id=${obj.id}&environment_id=${environment.id}&limit=200`);
       (recs.records || []).forEach(r => results.push({ ...r, object_name: obj.name, object_color: obj.color }));
     }
-    setAllRecords(results);
+    // Only keep records that have a Linked Person workflow with at least one stage
+    const withWorkflow = [];
+    for (const r of results) {
+      const assignments = await api.get(`/workflows/assignments?record_id=${r.id}`);
+      const pl = (Array.isArray(assignments) ? assignments : []).find(a => a.type === "people_link");
+      if (pl && (pl.workflow?.steps || []).length > 0) withWorkflow.push(r);
+    }
+    setAllRecords(withWorkflow);
   };
 
   const openAddLink = async () => {
@@ -2065,6 +2072,14 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
             <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center" }}>
               <span style={{ fontWeight:800, fontSize:14, color:C.text1, flex:1 }}>Link to a Record</span>
               <button onClick={()=>setAddingLink(false)} style={{ background:"none", border:"none", cursor:"pointer" }}><Ic n="x" s={16} c={C.text3}/></button>
+            </div>
+            <div style={{ padding:"10px 16px", background:"#fffbeb", borderBottom:`1px solid #fde68a`,
+              display:"flex", alignItems:"flex-start", gap:8 }}>
+              <span style={{ fontSize:16, flexShrink:0 }}>💡</span>
+              <span style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>
+                Only records with a <strong>Linked Person Workflow</strong> assigned are shown.
+                If you can't find a job or record, open it and assign a workflow in its Pipeline panel first.
+              </span>
             </div>
             <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", gap:8 }}>
               <input autoFocus value={addSearch} onChange={e=>setAddSearch(e.target.value)}
