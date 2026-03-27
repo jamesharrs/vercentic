@@ -2212,6 +2212,194 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     setShowLinkModal(false); setLinkSearch(""); setLinkObjFilter("");
   };
 
+  const selSt = { width:"100%", padding:"6px 8px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text1, boxSizing:"border-box" };
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", background:"#1e293b",
+      borderRadius:10, marginBottom:10, flexWrap:"wrap", position:"relative" }}>
+      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>{selectAllMatching ? `All ${totalFilteredCount}` : count} selected</span>
+      <div style={{ display:"flex", gap:6, marginLeft:4 }}>
+        <button onClick={onSelectAll}
+          style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.1)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          Select all {total}
+        </button>
+        {hasActiveFilters && totalFilteredCount > total && !selectAllMatching && (
+          <button onClick={onSelectAllMatching}
+            style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(99,179,237,0.4)", background:"rgba(99,179,237,0.15)", color:"#93c5fd", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+            Select all {totalFilteredCount} matching filter
+          </button>
+        )}
+        {selectAllMatching && (
+          <span style={{ fontSize:12, fontWeight:600, color:"#93c5fd", display:"flex", alignItems:"center", gap:4 }}>
+            All {totalFilteredCount} matching records selected
+            <button onClick={onClearSelectAll} style={{ background:"none", border:"none", color:"#93c5fd", cursor:"pointer", fontSize:12, textDecoration:"underline", fontFamily:F }}>(undo)</button>
+          </span>
+        )}
+        <button onClick={onClearAll}
+          style={{ padding:"4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          Clear
+        </button>
+      </div>
+      <div style={{ flex:1 }}/>
+      {/* Bulk edit */}
+      <div>
+        <button ref={editBtnRef} onClick={() => { setEditPos(posAboveBtn(editBtnRef)); setShowEditPicker(s => !s); }}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.12)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="edit" s={12} c="white"/> Edit fields
+        </button>
+        {showEditPicker && editPos && ReactDOM.createPortal(
+          <div style={{ position:"fixed", bottom:editPos.bottom, left:editPos.left, zIndex:9700, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>Set field on {count} records</div>
+            <select value={editFieldId} onChange={e => { setEditFieldId(e.target.value); setEditValue(""); }} style={selSt}>
+              <option value="">Choose field…</option>
+              {editableFields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {chosenField && (
+              chosenField.field_type === "select" ? (
+                <select value={editValue} onChange={e => setEditValue(e.target.value)} style={selSt}>
+                  <option value="">— clear —</option>
+                  {(chosenField.options||[]).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : chosenField.field_type === "boolean" ? (
+                <select value={editValue} onChange={e => setEditValue(e.target.value)} style={selSt}>
+                  <option value="">— clear —</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              ) : (
+                <input value={editValue} onChange={e => setEditValue(e.target.value)}
+                  placeholder={`New value for ${chosenField.name}…`}
+                  style={{...selSt, width:"100%", boxSizing:"border-box"}}/>
+              )
+            )}
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => { setShowEditPicker(false); setEditFieldId(""); setEditValue(""); }}
+                style={{ flex:1, padding:"6px", borderRadius:7, border:`1px solid ${C.border}`, background:"transparent", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
+              <button onClick={handleBulkEdit} disabled={!editFieldId}
+                style={{ flex:2, padding:"6px", borderRadius:7, border:"none", background:C.accent, color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:!editFieldId?0.5:1 }}>Apply</button>
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+      {isPeople && <>
+        <div>
+          <BtnDark ref={commsBtnRef} onClick={() => { setCommsPos(posAboveBtn(commsBtnRef)); setShowComms(s => !s); }}>
+            <Ic n="mail" s={12} c="white"/> Communicate
+            <Ic n="chevD" s={10} c="rgba(255,255,255,0.6)"/>
+          </BtnDark>
+          {showComms && commsPos && ReactDOM.createPortal(
+            <div style={{ position:"fixed", bottom:commsPos.bottom, left:commsPos.left, zIndex:9700,
+              background:"white", border:`1px solid ${C.border}`, borderRadius:10,
+              boxShadow:"0 8px 24px rgba(0,0,0,.15)", overflow:"hidden", minWidth:170 }}>
+              {[
+                { type:"email", icon:"mail", label:"Send Email" },
+                { type:"sms", icon:"message", label:"Send SMS" },
+                { type:"whatsapp", icon:"phone", label:"WhatsApp" },
+              ].map(({ type, icon, label }) => (
+                <button key={type} onClick={() => { onBulkAction?.("communicate", { type }); setShowComms(false); }}
+                  style={{ width:"100%", display:"flex", alignItems:"center", gap:9, padding:"9px 14px",
+                    border:"none", background:"transparent", cursor:"pointer", fontFamily:F,
+                    fontSize:12, fontWeight:600, color:C.text1, textAlign:"left" }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.accentLight}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <Ic n={icon} s={13} c={C.accent}/>{label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )}
+        </div>
+        <BtnDark onClick={() => setShowNoteModal(true)}><Ic n="edit" s={12} c="white"/> Add note</BtnDark>
+        <BtnDark onClick={() => onBulkAction?.("interview", {})}><Ic n="calendar" s={12} c="white"/> Interview</BtnDark>
+        <BtnDark onClick={() => setShowLinkModal(true)}><Ic n="link" s={12} c="white"/> Link to</BtnDark>
+      </>}
+      {onCompare && count >= 2 && count <= 5 && (
+        <button onClick={onCompare}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.25)", background:"rgba(255,255,255,0.15)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="layers" s={12} c="white"/> Compare {count}
+        </button>
+      )}
+      {!confirming ? (
+        <button onClick={() => setConfirming(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.15)", color:"#fca5a5", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+          <Ic n="trash" s={12} c="#fca5a5"/> Delete {count}
+        </button>
+      ) : (
+        <DeleteConfirmInline count={selectAllMatching ? totalFilteredCount : count} session={session}
+          onConfirm={() => { onDelete(); setConfirming(false); }}
+          onCancel={() => setConfirming(false)}/>
+      )}
+      {showNoteModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => e.target === e.currentTarget && setShowNoteModal(false)}>
+          <div style={{ background:"white", borderRadius:14, padding:24, width:440, boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text1, marginBottom:12 }}>Add note to {count} people</div>
+            <textarea value={noteText} onChange={e => setNoteText(e.target.value)} autoFocus placeholder="Type your note…" rows={4}
+              style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, resize:"vertical", outline:"none", boxSizing:"border-box" }}/>
+            <div style={{ display:"flex", gap:8, marginTop:12 }}>
+              <button onClick={() => setShowNoteModal(false)} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F, color:C.text2 }}>Cancel</button>
+              <button onClick={handleBulkNote} disabled={!noteText.trim()} style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:!noteText.trim()?0.5:1 }}>Add Note</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showLinkModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => e.target === e.currentTarget && setShowLinkModal(false)}>
+          <div style={{ background:"white", borderRadius:16, width:500, maxHeight:"75vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Link {count} {count===1?"person":"people"} to…</div>
+              <button onClick={() => setShowLinkModal(false)} style={{ background:"none", border:"none", cursor:"pointer" }}><Ic n="x" s={16} c={C.text3}/></button>
+            </div>
+            <div style={{ padding:"10px 16px", background:"#fffbeb", borderBottom:`1px solid #fde68a`, display:"flex", alignItems:"flex-start", gap:8 }}>
+              <Ic n="info" s={14} c="#92400e"/>
+              <span style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Only records with a <strong>Linked Person Workflow</strong> are shown.</span>
+            </div>
+            <div style={{ display:"flex", gap:8, padding:"10px 14px", borderBottom:`1px solid ${C.border}` }}>
+              <input autoFocus value={linkSearch} onChange={e => setLinkSearch(e.target.value)} placeholder="Search records…"
+                style={{ flex:1, padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none" }}/>
+              <select value={linkObjFilter} onChange={e => setLinkObjFilter(e.target.value)}
+                style={{ padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text2 }}>
+                <option value="">All types</option>
+                {[...new Set(linkTargets.map(r => r.object_name))].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1, overflowY:"auto" }}>
+              {linkLoading ? <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>
+                : (() => {
+                    const filtered = linkTargets.filter(r => {
+                      if (linkObjFilter && r.object_name !== linkObjFilter) return false;
+                      if (!linkSearch) return true;
+                      const d = r.data || {};
+                      return [d.job_title,d.pool_name,d.name,d.first_name].filter(Boolean).join(" ").toLowerCase().includes(linkSearch.toLowerCase());
+                    });
+                    if (!filtered.length) return <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>{linkTargets.length===0?"No records with a Linked Person Workflow found.":"No matching records."}</div>;
+                    return filtered.map((r,i) => {
+                      const d = r.data||{}; const label = d.job_title||d.pool_name||d.name||d.first_name||r.id.slice(0,8); const col = r.object_color||C.accent;
+                      return (
+                        <div key={r.id} onClick={() => handleBulkLink(r)}
+                          style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", cursor:"pointer", borderBottom: i<filtered.length-1?`1px solid ${C.border}`:"none" }}
+                          onMouseEnter={e => e.currentTarget.style.background=C.accentLight}
+                          onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                          <div style={{ width:34, height:34, borderRadius:9, background:`${col}18`, border:`1.5px solid ${col}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <span style={{ fontSize:13, fontWeight:800, color:col }}>{label.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{label}</div>
+                            <div style={{ fontSize:11, color:C.text3 }}>{r.object_name}</div>
+                          </div>
+                          <span style={{ fontSize:11, color:C.accent, fontWeight:600 }}>+ Link</span>
+                        </div>
+                      );
+                    });
+                  })()}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 /* ─── Candidate Comparison Modal ─────────────────────────────────────────── */
