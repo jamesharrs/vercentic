@@ -729,15 +729,14 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
   // Fetch records this person is linked to (for context picker)
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
-    api.get(`/records/linked-jobs?record_id=${record.id}&environment_id=${environment.id}`)
+    api.get(`/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
       .then(d => {
         if (!Array.isArray(d)) return;
-        setLinkedRecords(d.map(r => {
-          const data = r.data || {};
-          const title = data.job_title || data.name || data.pool_name
-            || [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Untitled';
-          return { id: r.id, title, objectName: r.object_name || '' };
-        }));
+        setLinkedRecords(d.map(r => ({
+          id: r.id,
+          title: r.title || 'Untitled',
+          objectName: r.object_name || '',
+        })));
       });
   }, [record?.id, environment?.id]);
 

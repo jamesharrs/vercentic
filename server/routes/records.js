@@ -205,10 +205,12 @@ router.get('/linked-jobs', (req, res) => {
     const rec = (store.records || []).find(r => r.id === (l.record_id || l.target_record_id) && !r.deleted_at);
     if (!rec) return null;
     const d = rec.data || {};
+    const obj = (store.object_definitions || []).find(o => o.id === rec.object_id);
     return {
       id: rec.id,
       title: d.job_title || d.title || d.name || d.role_name || 'Untitled',
       object_id: rec.object_id,
+      object_name: obj?.name || obj?.plural_name || '',
       stage: l.stage || l.current_stage || null,
     };
   }).filter(Boolean);
