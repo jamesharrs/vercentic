@@ -39,8 +39,11 @@ export default function App() {
 
   // Read slug from URL: ?portal=SLUG or /portal/SLUG
   // Strip leading slashes so ?portal=/careers and ?portal=careers both work
-  const rawToken = new URLSearchParams(window.location.search).get('portal')
-    || window.location.pathname.split('/portal/')[1]
+  const _qs = new URLSearchParams(window.location.search).get('portal')
+  const _path = window.location.pathname
+  const rawToken = _qs
+    || _path.split('/portal/')[1]
+    || (_path !== '/' ? _path : null)
   const token = rawToken?.replace(/^\/+/, '') || ''
 
   useEffect(() => {
