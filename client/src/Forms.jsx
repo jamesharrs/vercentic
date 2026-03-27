@@ -182,7 +182,7 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
     sharing:        form?.sharing        || 'internal',
     confidential:   form?.confidential   || false,
     allow_multiple: form?.allow_multiple !== false,
-    show_in_record: form?.show_in_record !== false,
+    show_in_record: form?.show_in_record ?? false,
     searchable:     form?.searchable     !== false,
     parseable:      form?.parseable      !== false,
   });
@@ -587,149 +587,352 @@ const ResponseViewer = ({ response, form, onDelete }) => {
   );
 };
 
+
+// ── Form Renderer (renders all fields of a form) ─────────────────────────────
+const FormRenderer = ({ form, formData, setFormData }) => (
+  <div>
+    {(form.fields || []).map((field, i) => (
+      <FormField key={field.id || i} field={field}
+        value={formData[field.api_key]}
+        onChange={v => setFormData(prev => ({ ...prev, [field.api_key]: v }))}/>
+    ))}
+  </div>
+);
+
+// ── Link Form Picker Modal ────────────────────────────────────────────────────
+function LinkFormModal({ record, objectSlug, environment, currentUser, existingLinkIds, onLinked, onClose }) {
+  const [allForms, setAllForms]     = useState([]);
+  const [search, setSearch]         = useState('');
+  const [contextRecId, setContextRecId] = useState('');
+  const [contextTitle, setContextTitle] = useState('');
+  const [contextSearch, setContextSearch] = useState('');
+  const [contextResults, setContextResults] = useState([]);
+  const [saving, setSaving]         = useState(null); // form id being saved
+
+  useEffect(() => {
+    if (!environment?.id) return;
+    api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`)
+      .then(d => setAllForms(Array.isArray(d) ? d : []));
+  }, [environment?.id, objectSlug]);
+
+  // Search for context records (jobs, talent pools, etc.)
+  useEffect(() => {
+    if (!contextSearch.trim() || contextSearch.length < 2) { setContextResults([]); return; }
+    const t = setTimeout(async () => {
+      const d = await api.get(`/records/search?q=${encodeURIComponent(contextSearch)}&environment_id=${environment?.id}&limit=8`);
+      setContextResults(Array.isArray(d) ? d : []);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [contextSearch, environment?.id]);
+
+  const available = allForms.filter(f =>
+    !existingLinkIds.has(f.id) &&
+    (!search || f.name.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const handleLink = async (form) => {
+    setSaving(form.id);
+    await api.post('/forms/links', {
+      record_id: record.id,
+      form_id: form.id,
+      environment_id: environment?.id,
+      context_record_id: contextRecId || null,
+      context_record_title: contextTitle || null,
+      linked_by: currentUser?.name || currentUser?.email || null,
+    });
+    setSaving(null);
+    onLinked();
+  };
+
+  return createPortal(
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:9500,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <div style={{ background:C.surface, borderRadius:16, width:'100%', maxWidth:520,
+        maxHeight:'80vh', display:'flex', flexDirection:'column',
+        boxShadow:'0 24px 64px rgba(0,0,0,.2)', overflow:'hidden', fontFamily:F }}>
+
+        {/* Header */}
+        <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text1 }}>Link a form</div>
+            <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:18 }}>×</button>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search forms…" autoFocus
+            style={{ width:'100%', padding:'8px 12px', border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontFamily:F, color:C.text1, outline:'none', boxSizing:'border-box' }}/>
+        </div>
+
+        {/* Optional context record */}
+        <div style={{ padding:'10px 20px', borderBottom:`1px solid ${C.border}`, background:C.surface2 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>
+            Associate with a specific record (optional)
+          </div>
+          {contextRecId ? (
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px',
+              borderRadius:8, background:`${C.accent}10`, border:`1.5px solid ${C.accent}` }}>
+              <span style={{ flex:1, fontSize:12, fontWeight:600, color:C.accent }}>{contextTitle}</span>
+              <button onClick={()=>{ setContextRecId(''); setContextTitle(''); setContextSearch(''); }}
+                style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:14 }}>×</button>
+            </div>
+          ) : (
+            <div style={{ position:'relative' }}>
+              <input value={contextSearch} onChange={e=>setContextSearch(e.target.value)}
+                placeholder="Search jobs, talent pools…"
+                style={{ width:'100%', padding:'7px 12px', border:`1.5px solid ${C.border}`, borderRadius:8,
+                  fontSize:12, fontFamily:F, color:C.text1, outline:'none', boxSizing:'border-box' }}/>
+              {contextResults.length > 0 && (
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white',
+                  border:`1px solid ${C.border}`, borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,.1)',
+                  zIndex:100, maxHeight:160, overflowY:'auto', marginTop:4 }}>
+                  {contextResults.map(r => {
+                    const d = r.data || {};
+                    const title = d.job_title || d.first_name ? `${d.first_name||''} ${d.last_name||''}`.trim() : d.name || d.pool_name || 'Untitled';
+                    return (
+                      <div key={r.id} onClick={() => { setContextRecId(r.id); setContextTitle(title); setContextSearch(''); setContextResults([]); }}
+                        style={{ padding:'8px 12px', fontSize:12, cursor:'pointer', color:C.text1, borderBottom:`1px solid ${C.border}` }}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
+                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                        <span style={{ fontWeight:600 }}>{title}</span>
+                        {r.object_name && <span style={{ color:C.text3, marginLeft:6 }}>{r.object_name}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Form list */}
+        <div style={{ flex:1, overflowY:'auto', padding:'10px 12px' }}>
+          {available.length === 0 && (
+            <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>
+              {allForms.length === 0 ? 'No forms created yet. Go to Settings → Forms.' : 'No more forms to link.'}
+            </div>
+          )}
+          {available.map(form => {
+            const cat = CATEGORIES.find(c => c.id === form.category) || CATEGORIES[0];
+            return (
+              <div key={form.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                borderRadius:10, border:`1px solid ${C.border}`, marginBottom:6, background:C.surface }}>
+                <div style={{ width:32, height:32, borderRadius:8, background:`${cat.color}15`,
+                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <Ic n="form" s={14} c={cat.color}/>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{form.name}</div>
+                  <div style={{ fontSize:11, color:C.text3 }}>{cat.label} · {form.fields?.filter(f=>f.field_type!=='section').length||0} fields</div>
+                </div>
+                <button onClick={() => handleLink(form)} disabled={saving === form.id}
+                  style={{ background:C.accent, border:'none', borderRadius:7, cursor:'pointer',
+                    padding:'6px 14px', fontSize:12, fontWeight:700, color:'#fff', fontFamily:F,
+                    opacity: saving === form.id ? 0.6 : 1 }}>
+                  {saving === form.id ? '…' : 'Link'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── Record Form Panel ─────────────────────────────────────────────────────────
-// Embedded inside a record's panel — shows all applicable forms
+// Shows only forms explicitly linked to this record (not all forms automatically)
 export function RecordFormPanel({ record, objectSlug, environment, currentUser }) {
-  const [forms, setForms]         = useState([]);
-  const [activeForm, setActiveForm] = useState(null);
+  const [links, setLinks]           = useState([]); // { id, form, context_record_title }
+  const [activeLink, setActiveLink] = useState(null);
   const [responses, setResponses]   = useState({});
   const [formData, setFormData]     = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const [loading, setLoading]       = useState(true);
 
-  useEffect(()=>{
-    if (!environment?.id) return;
-    Promise.all([
-      api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`),
-    ]).then(([formsData])=>{
-      const f = Array.isArray(formsData)?formsData.filter(f=>f.show_in_record):[];
-      setForms(f);
-      setLoading(false);
-    });
-  },[environment?.id, objectSlug]);
+  const loadLinks = useCallback(async () => {
+    if (!record?.id || !environment?.id) return;
+    setLoading(true);
+    const d = await api.get(`/forms/links?record_id=${record.id}&environment_id=${environment.id}`);
+    setLinks(Array.isArray(d) ? d : []);
+    setLoading(false);
+  }, [record?.id, environment?.id]);
 
-  useEffect(()=>{
-    if (!activeForm||!record?.id) return;
-    api.get(`/forms/${activeForm.id}/responses?record_id=${record.id}`)
-      .then(d=>setResponses(prev=>({...prev,[activeForm.id]:Array.isArray(d)?d:[]})));
-  },[activeForm?.id, record?.id]);
+  useEffect(() => { loadLinks(); }, [loadLinks]);
 
-  const openForm = (form) => {
-    setActiveForm(form);
+  useEffect(() => {
+    if (!activeLink?.form?.id || !record?.id) return;
+    api.get(`/forms/${activeLink.form.id}/responses?record_id=${record.id}`)
+      .then(d => setResponses(prev => ({ ...prev, [activeLink.form.id]: Array.isArray(d) ? d : [] })));
+  }, [activeLink?.form?.id, record?.id]);
+
+  const openLink = (link) => {
+    setActiveLink(link);
     setFormData({});
     setSubmitted(false);
     setShowHistory(false);
   };
 
+  const handleUnlink = async (linkId) => {
+    if (!confirm('Remove this form from this record?')) return;
+    await api.delete(`/forms/links/${linkId}`);
+    setLinks(prev => prev.filter(l => l.id !== linkId));
+    if (activeLink?.id === linkId) setActiveLink(null);
+  };
+
   const handleSubmit = async () => {
-    const required = (activeForm.fields||[]).filter(f=>f.required&&f.field_type!=='section');
-    const missing  = required.filter(f=>!formData[f.api_key]&&formData[f.api_key]!==0);
-    if (missing.length) { window.__toast?.alert(`Please fill in: ${missing.map(f=>f.label).join(', ')}`); return; }
+    if (!activeLink) return;
+    const form = activeLink.form;
+    const required = (form.fields || []).filter(f => f.required && f.field_type !== 'section');
+    const missing  = required.filter(f => !formData[f.api_key] && formData[f.api_key] !== 0);
+    if (missing.length) { alert(`Please fill in: ${missing.map(f => f.label).join(', ')}`); return; }
     setSubmitting(true);
-    await api.post(`/api/forms/${activeForm.id}/responses`, {
+    await api.post(`/forms/${form.id}/responses`, {
       record_id: record.id, record_type: objectSlug,
       environment_id: environment?.id,
+      context_record_id: activeLink.context_record_id || null,
       data: formData,
       submitted_by: currentUser?.name || currentUser?.email || 'Admin',
     });
     setSubmitted(true); setSubmitting(false);
-    // Refresh responses
-    const d = await api.get(`/forms/${activeForm.id}/responses?record_id=${record.id}`);
-    setResponses(prev=>({...prev,[activeForm.id]:Array.isArray(d)?d:[]}));
+    const d = await api.get(`/forms/${form.id}/responses?record_id=${record.id}`);
+    setResponses(prev => ({ ...prev, [form.id]: Array.isArray(d) ? d : [] }));
   };
 
   const handleDeleteResponse = async (formId, responseId) => {
     if (!confirm('Delete this response?')) return;
-    await api.del(`/forms/${formId}/responses/${responseId}`);
+    await api.delete(`/forms/${formId}/responses/${responseId}`);
     const d = await api.get(`/forms/${formId}/responses?record_id=${record.id}`);
-    setResponses(prev=>({...prev,[formId]:Array.isArray(d)?d:[]}));
+    setResponses(prev => ({ ...prev, [formId]: Array.isArray(d) ? d : [] }));
   };
 
-  if (loading) return (
-    <div style={{color:"#d1d5db",fontSize:12,textAlign:'center',padding:'20px 0'}}>
-      No forms yet
-    </div>
-  );
-  if (!forms.length) return (
-    <div style={{color:"#9ca3af",fontSize:12,textAlign:'center',padding:'20px 0'}}>
-      No forms configured for this record type.<br/>
-      <span style={{fontSize:11}}>Go to Settings → Forms to create one.</span>
-    </div>
-  );
+  const existingLinkIds = new Set(links.map(l => l.form_id));
 
-  // Form list view
-  if (!activeForm) return (
+  // ── LOADING ──
+  if (loading) return <div style={{ color:C.text3, fontSize:12, textAlign:'center', padding:'20px 0' }}>Loading…</div>;
+
+  // ── NO ACTIVE FORM — show list ──
+  if (!activeLink) return (
     <div>
-      {forms.map(form=>{
-        const cat = CATEGORIES.find(c=>c.id===form.category)||CATEGORIES[0];
-        const resCount = (responses[form.id]||[]).length;
+      {links.length === 0 && (
+        <div style={{ textAlign:'center', padding:'24px 0', color:C.text3 }}>
+          <Ic n="form" s={28} c={C.border}/>
+          <div style={{ fontSize:12, marginTop:8, marginBottom:12 }}>No forms linked to this record yet</div>
+        </div>
+      )}
+      {links.map(link => {
+        const form = link.form;
+        const cat  = CATEGORIES.find(c => c.id === form.category) || CATEGORIES[0];
+        const resCount = (responses[form.id] || []).length;
         return (
-          <div key={form.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,cursor:'pointer',background:C.surface,transition:'all .12s'}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=cat.color;e.currentTarget.style.background=`${cat.color}05`;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;}}>
-            <div style={{width:32,height:32,borderRadius:8,background:`${cat.color}15`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <div key={link.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+            borderRadius:10, border:`1px solid ${C.border}`, marginBottom:8, background:C.surface }}>
+            <div style={{ width:32, height:32, borderRadius:8, background:`${cat.color}15`,
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
               <Ic n="form" s={14} c={cat.color}/>
             </div>
-            <div style={{flex:1}} onClick={()=>openForm(form)}>
-              <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{form.name}</div>
-              <div style={{fontSize:11,color:C.text3}}>{cat.label}{form.confidential?' · Confidential':''} · {form.fields?.filter(f=>f.field_type!=='section').length||0} fields{resCount?` · ${resCount} response${resCount!==1?'s':''}`:''}</div>
+            <div style={{ flex:1, cursor:'pointer' }} onClick={() => openLink(link)}>
+              <div style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{form.name}</div>
+              <div style={{ fontSize:11, color:C.text3 }}>
+                {cat.label}
+                {link.context_record_title && <span style={{ color:C.accent }}> · {link.context_record_title}</span>}
+                {resCount > 0 && ` · ${resCount} response${resCount !== 1 ? 's' : ''}`}
+              </div>
             </div>
-            <div style={{display:'flex',gap:4}}>
-              {resCount>0&&<button onClick={()=>{setActiveForm(form);setShowHistory(true);}} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,cursor:'pointer',padding:'4px 8px',fontSize:10,fontWeight:700,color:C.text3,fontFamily:F}}>{resCount}</button>}
-              <button onClick={()=>openForm(form)} style={{background:cat.color,border:'none',borderRadius:6,cursor:'pointer',padding:'5px 10px',fontSize:11,fontWeight:700,color:'#fff',fontFamily:F}}>Fill in</button>
+            <div style={{ display:'flex', gap:4 }}>
+              {resCount > 0 && (
+                <button onClick={() => { setActiveLink(link); setShowHistory(true); }}
+                  style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
+                    padding:'4px 8px', fontSize:10, fontWeight:700, color:C.text3, fontFamily:F }}>{resCount}</button>
+              )}
+              <button onClick={() => openLink(link)}
+                style={{ background:cat.color, border:'none', borderRadius:6, cursor:'pointer',
+                  padding:'5px 10px', fontSize:11, fontWeight:700, color:'#fff', fontFamily:F }}>Fill in</button>
+              <button onClick={() => handleUnlink(link.id)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
+                  padding:'5px 8px', fontSize:11, color:C.text3, fontFamily:F }}>×</button>
             </div>
           </div>
         );
       })}
+      <button onClick={() => setShowPicker(true)}
+        style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+          padding:'8px', borderRadius:10, border:`1.5px dashed ${C.border}`, background:'transparent',
+          fontSize:12, fontWeight:600, color:C.text3, cursor:'pointer', fontFamily:F, marginTop:4,
+          transition:'all .12s' }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text3;}}>
+        <Ic n="plus" s={13} c="currentColor"/> Link a form
+      </button>
+      {showPicker && (
+        <LinkFormModal
+          record={record}
+          objectSlug={objectSlug}
+          environment={environment}
+          currentUser={currentUser}
+          existingLinkIds={existingLinkIds}
+          onLinked={() => { loadLinks(); setShowPicker(false); }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </div>
   );
 
-  const cat = CATEGORIES.find(c=>c.id===activeForm.category)||CATEGORIES[0];
-  const existingResponses = responses[activeForm.id]||[];
+  // ── ACTIVE FORM — fill in or view history ──
+  const form = activeLink.form;
+  const cat  = CATEGORIES.find(c => c.id === form.category) || CATEGORIES[0];
+  const existingResponses = responses[form.id] || [];
 
   return (
     <div>
       {/* Form header */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-        <button onClick={()=>setActiveForm(null)} style={{background:'none',border:'none',cursor:'pointer',color:C.text3,fontSize:16}}>←</button>
-        <div style={{flex:1}}>
-          <div style={{fontSize:14,fontWeight:800,color:C.text1}}>{activeForm.name}</div>
-          {activeForm.description&&<div style={{fontSize:11,color:C.text3}}>{activeForm.description}</div>}
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+        <button onClick={() => setActiveLink(null)}
+          style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:16 }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:C.text1 }}>{form.name}</div>
+          {activeLink.context_record_title && (
+            <div style={{ fontSize:11, color:C.accent }}>Context: {activeLink.context_record_title}</div>
+          )}
         </div>
-        {existingResponses.length>0&&(
-          <button onClick={()=>setShowHistory(h=>!h)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,cursor:'pointer',padding:'4px 8px',fontSize:11,fontWeight:700,color:C.text2,fontFamily:F}}>
-            {showHistory?'Fill in':'History ('+existingResponses.length+')'}
+        {existingResponses.length > 0 && (
+          <button onClick={() => setShowHistory(h => !h)}
+            style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
+              padding:'4px 8px', fontSize:11, fontWeight:700, color:C.text2, fontFamily:F }}>
+            {showHistory ? 'Fill in' : `History (${existingResponses.length})`}
           </button>
         )}
       </div>
 
       {showHistory ? (
         <div>
-          {existingResponses.map(r=>(
-            <ResponseViewer key={r.id} response={r} form={activeForm} onDelete={id=>handleDeleteResponse(activeForm.id,id)}/>
+          {existingResponses.map(r => (
+            <ResponseViewer key={r.id} response={r} form={form}
+              onDelete={id => handleDeleteResponse(form.id, id)}/>
           ))}
         </div>
       ) : submitted ? (
-        <div style={{textAlign:'center',padding:'20px 0'}}>
-          <div style={{fontSize:22,marginBottom:8}}>✓</div>
-          <div style={{fontSize:14,fontWeight:700,color:C.green}}>Submitted</div>
-          <div style={{fontSize:12,color:C.text3,marginTop:4,marginBottom:12}}>Response saved successfully</div>
-          <div style={{display:'flex',gap:8,justifyContent:'center'}}>
-            {activeForm.allow_multiple&&<Btn v='secondary' sz='sm' onClick={()=>{setFormData({});setSubmitted(false);}}>Submit another</Btn>}
-            <Btn v='secondary' sz='sm' onClick={()=>setActiveForm(null)}>Back to forms</Btn>
+        <div style={{ textAlign:'center', padding:'20px 0' }}>
+          <div style={{ fontSize:22, marginBottom:8, color:C.green }}>✓</div>
+          <div style={{ fontSize:14, fontWeight:700, color:C.green }}>Submitted</div>
+          <div style={{ fontSize:12, color:C.text3, marginTop:4, marginBottom:12 }}>Response saved</div>
+          <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
+            {form.allow_multiple && <Btn v='secondary' sz='sm' onClick={() => { setFormData({}); setSubmitted(false); }}>Submit another</Btn>}
+            <Btn v='secondary' sz='sm' onClick={() => setActiveLink(null)}>Back</Btn>
           </div>
         </div>
       ) : (
         <div>
-          {(activeForm.fields||[]).map((field,i)=>(
-            <FormField key={field.id||i} field={field} value={formData[field.api_key]}
-              onChange={v=>setFormData(d=>({...d,[field.api_key]:v}))}/>
-          ))}
-          <div style={{display:'flex',gap:8,marginTop:8}}>
-            <Btn v='ghost' sz='sm' onClick={()=>setActiveForm(null)}>Cancel</Btn>
-            <Btn sz='sm' onClick={handleSubmit} disabled={submitting}>{submitting?'Submitting…':'Submit'}</Btn>
+          <FormRenderer form={form} formData={formData} setFormData={setFormData}/>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
+            <Btn v='ghost' sz='sm' onClick={() => setActiveLink(null)}>Cancel</Btn>
+            <Btn sz='sm' onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Saving…' : 'Submit'}
+            </Btn>
           </div>
         </div>
       )}
