@@ -941,6 +941,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
               { id: "screening",   label: "Screening",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"/></svg>, desc: "Candidates & AI review" },
               { id: "onboarding",  label: "Onboarding",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>, desc: "Pre & post start" },
               { id: "admin",       label: "Admin Stats", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, desc: "Platform stats" },
+              { id: "custom",      label: "My Dashboards", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="4"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="10" width="7" height="7"/></svg>, desc: "Custom dashboards" },
             ].map(item => {
               const active = activeDashTab === item.id || (!activeDashTab && item.id === "overview");
               return (
@@ -1587,7 +1588,7 @@ function App() {
     // Named pages (settings sub-pages use seg0 only — section handled inside Settings)
     const named = [
       'dashboard','dashboard_interviews','dashboard_offers','dashboard_agents',
-      'dashboard_screening','dashboard_onboarding','dashboard_admin',
+      'dashboard_screening','dashboard_onboarding','dashboard_admin','dashboard_custom',
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
@@ -1746,7 +1747,7 @@ function App() {
   const filteredNavSections = navSections.map(section => ({
     ...section,
     items: section.items.filter(item => {
-      if (['dashboard','dashboard_interviews','dashboard_offers','dashboard_agents','dashboard_admin','dashboard_screening','dashboard_onboarding'].includes(item.id))
+      if (['dashboard','dashboard_interviews','dashboard_offers','dashboard_agents','dashboard_admin','dashboard_screening','dashboard_onboarding','dashboard_custom'].includes(item.id))
         return canGlobal('access_dashboard');
       if (item.id === 'org_chart')  return canGlobal('access_org_chart');
       if (item.id === 'interviews') return canGlobal('access_interviews');
@@ -1773,6 +1774,7 @@ function App() {
       dashboard_interviews: { label: "Interviews",  objectName: "Dashboard",  objectColor: "#0891b2" },
       dashboard_offers:     { label: "Offers",      objectName: "Dashboard",  objectColor: "#059669" },
       dashboard_agents:     { label: "Agents",      objectName: "Dashboard",  objectColor: "#7c3aed" },
+      dashboard_custom:     { label: "Dashboards",  objectName: "Dashboard",  objectColor: "#4f46e5" },
       search:               { label: "Search",      objectName: "Search",     objectColor: "#7c3aed" },
       interviews:           { label: "Interviews",  objectName: "Scheduling", objectColor: "#0891b2" },
       offers:               { label: "Offers",      objectName: "Offers",     objectColor: "#059669" },
@@ -2043,7 +2045,7 @@ function App() {
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 4, height: navExpanded ? undefined : 0, overflow: "hidden", opacity: navExpanded ? 1 : 0, transition: "opacity 0.15s, height 0.15s" }}>{section.label}</div>
               {section.items.map(item => {
                 const isDashboard = item.id === "dashboard";
-                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding";
+                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom";
                 const isActive = isDashboard ? dashActive : (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`));
                 return (
                   <div key={item.id}>
@@ -2144,7 +2146,7 @@ function App() {
         <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: activeNav.startsWith("record_") ? "hidden" : "visible" }}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} onNavigate={openRecord} />
-        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" ? (
+        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" ? (
           <DashboardHub
             tab={activeNav === "dashboard" ? "overview" : activeNav.replace("dashboard_", "")}
             onTabChange={(tab) => setActiveNav(tab === "overview" ? "dashboard" : `dashboard_${tab}`)}

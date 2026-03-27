@@ -224,6 +224,7 @@ app.use('/api/duplicates',         require('./routes/duplicates'));
 app.use('/api/records', require('./routes/suggested_actions'));
 app.use('/api/duplicates',         require('./routes/duplicates'));
 app.use('/api/offers',             require('./routes/offers'));
+app.use('/api/dashboards',         require('./routes/dashboards'));
 const { router: flowsRouter, initScheduler } = require('./routes/flows');
 app.use('/api/flows', flowsRouter);
 app.use('/api/cases',              require('./routes/cases'));
