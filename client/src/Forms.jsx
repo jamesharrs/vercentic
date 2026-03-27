@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import api from './apiClient.js';
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
@@ -176,6 +177,7 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
     description:    form?.description    || '',
     category:       form?.category       || 'general',
     applies_to:     form?.applies_to     || ['people'],
+    context_trigger: form?.context_trigger || null, // null | 'job' | 'interview' | 'offer' | 'pipeline'
     fields:         form?.fields         || [],
     sharing:        form?.sharing        || 'internal',
     confidential:   form?.confidential   || false,
@@ -224,8 +226,8 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
   const TAB = id => ({ padding:'7px 14px',border:'none',borderRadius:7,fontFamily:F,fontSize:12,fontWeight:700,cursor:'pointer',background:tab===id?C.accent:'transparent',color:tab===id?'#fff':C.text2 });
   const cat = CATEGORIES.find(c=>c.id===f.category)||CATEGORIES[0];
 
-  return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+  return createPortal(
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9500,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
       <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:780,height:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,.2)',overflow:'hidden',fontFamily:F}}>
 
         {/* Header */}
@@ -328,6 +330,26 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
                   </div>
                 </div>
               ))}
+              {/* Context trigger */}
+              <div style={{gridColumn:'1/-1',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:C.surface}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:6}}>Contextual trigger</div>
+                <div style={{fontSize:11,color:C.text3,marginBottom:10}}>Automatically surface this form when a specific action or context is active — e.g. open an interview, link a job, or move a candidate to a pipeline stage.</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {[
+                    {id:null,       label:'None (always shown)'},
+                    {id:'job',       label:'Linked to job'},
+                    {id:'interview', label:'After interview'},
+                    {id:'offer',     label:'With offer'},
+                    {id:'pipeline',  label:'Pipeline stage change'},
+                    {id:'onboarding',label:'Onboarding'},
+                  ].map(opt=>(
+                    <button key={String(opt.id)} onClick={()=>set('context_trigger',opt.id)}
+                      style={{padding:'5px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F,border:`1.5px solid ${f.context_trigger===opt.id?C.purple:C.border}`,background:f.context_trigger===opt.id?`${C.purple}12`:C.surface,color:f.context_trigger===opt.id?C.purple:C.text2}}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -372,7 +394,7 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
         </div>
       </div>
     </div>
-  );
+  , document.body);
 };
 
 // ── Form List (Admin) ─────────────────────────────────────────────────────────
@@ -441,6 +463,7 @@ export function FormsList({ environment }) {
                   <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:`${cat.color}15`,color:cat.color}}>{cat.label}</span>
                   {form.confidential&&<span style={{fontSize:10,padding:'2px 6px',borderRadius:4,background:'#FEF2F2',color:C.red,fontWeight:700}}>Confidential</span>}
                   {form.sharing==='link'&&<span style={{fontSize:10,padding:'2px 6px',borderRadius:4,background:'#F0F4FF',color:C.accent,fontWeight:700}}>Link sharing</span>}
+                  {form.context_trigger&&<span style={{fontSize:10,padding:'2px 6px',borderRadius:4,background:`${C.purple}12`,color:C.purple,fontWeight:700}}>📍 {form.context_trigger}</span>}
                 </div>
                 <div style={{fontSize:11,color:C.text3}}>
                   {form.fields?.filter(f=>f.field_type!=='section').length||0} fields · 

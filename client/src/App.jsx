@@ -1841,6 +1841,11 @@ function App() {
       const nav = e.state?.nav || navFromPath(window.location.pathname, navObjects || []);
       setActiveNav(nav);
       setSelectedObject(null);
+      // Clear stale record context when navigating away from record pages
+      if (!nav.startsWith("record_")) {
+        setActiveRecord(null);
+        setActiveRecordObj(null);
+      }
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

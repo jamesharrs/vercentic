@@ -1371,7 +1371,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     // Update welcome message if only the initial greeting is showing (no real conversation started)
     if(messages.length<=1){
       setMessages([{role:"assistant",content:(()=>{
-        if(currentRecord&&currentObject){
+        if(currentRecord&&currentObject&&activeNav?.startsWith("record_")){
           const d=currentRecord.data||{};
           const name=(d.first_name?((d.first_name+' '+(d.last_name||'')).trim()):null)||d.job_title||d.pool_name||'this record';
           if(currentObject.slug==='people') return `Hi! I can see you're viewing **${name}**.\n\nI can:\n• Summarise their profile and background\n• Draft outreach or follow-up emails\n• Suggest suitable jobs for them\n• Answer any questions about this candidate\n\nWhat would you like?`;
@@ -2478,7 +2478,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
               <div style={{fontSize:15,fontWeight:700,color:"white",letterSpacing:"-0.2px"}}>Vercentic Copilot</div>
               <div style={{fontSize:11,color:"rgba(255,255,255,.65)",marginTop:1}}>
                 {(()=>{
-                  if(currentRecord&&currentObject){
+                  if(currentRecord&&currentObject&&activeNav?.startsWith("record_")){
                     const d=currentRecord.data||{};
                     const name=(d.first_name?`${d.first_name} ${d.last_name||""}`.trim():null)||d.job_title||d.pool_name||"Record";
                     return `Viewing ${currentObject.name}: ${name}`;
