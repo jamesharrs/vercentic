@@ -915,7 +915,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
   const OBJECT_COLORS = { people: "#3b5bdb", jobs: "#0ca678", "talent-pools": "#7c3aed" };
 
   return (
-    <div ref={ref} style={{ position: "sticky", top: 0, zIndex: 1000, background: "var(--t-surface)", borderBottom: "1px solid var(--t-border)", padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+    <div ref={ref} style={{ position: "relative", zIndex: 1000, flexShrink: 0, background: "var(--t-surface)", borderBottom: "1px solid var(--t-border)", padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
 
       {/* Dashboard dropdown */}
       <div ref={dashRef} style={{ position: "relative", flexShrink: 0 }}>
@@ -2112,7 +2112,7 @@ function App() {
                />
              } />
         {/* Page content */}
-        <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: "auto", minHeight: 0 }}>
+        <div style={{ flex: 1, padding: activeNav.startsWith("record_") ? 0 : "28px 32px", overflow: "auto", minHeight: 0, position: "relative", zIndex: 0 }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#9ca3af" }}>Loading…</div>
         ) : !selectedEnv ? (
