@@ -31,6 +31,53 @@ router.get('/', (req, res) => {
   res.json(forms);
 });
 
+// ── Form Links — MUST be before /:id wildcard ─────────────────────────────────
+router.get('/links', (req, res) => {
+  ensure();
+  const { record_id, environment_id } = req.query;
+  if (!record_id) return res.status(400).json({ error: 'record_id required' });
+  let links = (getStore().form_links || []).filter(l => !l.deleted_at && l.record_id === record_id);
+  if (environment_id) links = links.filter(l => l.environment_id === environment_id);
+  const forms = getStore().forms || [];
+  const hydrated = links.map(link => {
+    const form = forms.find(f => f.id === link.form_id && !f.deleted_at);
+    return form ? { ...link, form } : null;
+  }).filter(Boolean);
+  res.json(hydrated);
+});
+
+router.post('/links', (req, res) => {
+  ensure();
+  const { record_id, form_id, environment_id, context_record_id, context_record_title, linked_by } = req.body;
+  if (!record_id || !form_id) return res.status(400).json({ error: 'record_id and form_id required' });
+  const store = getStore();
+  const existing = (store.form_links || []).find(
+    l => !l.deleted_at && l.record_id === record_id && l.form_id === form_id
+      && (l.context_record_id || null) === (context_record_id || null)
+  );
+  if (existing) return res.json(existing);
+  const link = {
+    id: uuidv4(), record_id, form_id, environment_id: environment_id || null,
+    context_record_id: context_record_id || null,
+    context_record_title: context_record_title || null,
+    linked_by: linked_by || null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  };
+  store.form_links.push(link);
+  saveStore();
+  res.json(link);
+});
+
+router.delete('/links/:id', (req, res) => {
+  ensure();
+  const store = getStore();
+  const idx = (store.form_links || []).findIndex(l => l.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  store.form_links[idx] = { ...store.form_links[idx], deleted_at: new Date().toISOString() };
+  saveStore();
+  res.json({ ok: true });
+});
+
 // ── Get single form ───────────────────────────────────────────────────────────
 router.get('/:id', (req, res) => {
   ensure();
@@ -184,58 +231,6 @@ router.get('/search/responses', (req, res) => {
     );
   }
   res.json(responses);
-});
-
-// ── Form Links (explicitly pin a form to a record, with optional context) ────
-// GET  /forms/links?record_id=&environment_id=
-router.get('/links', (req, res) => {
-  ensure();
-  const { record_id, environment_id } = req.query;
-  if (!record_id) return res.status(400).json({ error: 'record_id required' });
-  let links = (getStore().form_links || []).filter(l => !l.deleted_at && l.record_id === record_id);
-  if (environment_id) links = links.filter(l => l.environment_id === environment_id);
-  // Hydrate each link with its form definition
-  const forms = getStore().forms || [];
-  const hydrated = links.map(link => {
-    const form = forms.find(f => f.id === link.form_id && !f.deleted_at);
-    return form ? { ...link, form } : null;
-  }).filter(Boolean);
-  res.json(hydrated);
-});
-
-// POST /forms/links — pin a form to a record
-router.post('/links', (req, res) => {
-  ensure();
-  const { record_id, form_id, environment_id, context_record_id, context_record_title, linked_by } = req.body;
-  if (!record_id || !form_id) return res.status(400).json({ error: 'record_id and form_id required' });
-  const store = getStore();
-  // Prevent duplicates (same form + context)
-  const existing = (store.form_links || []).find(
-    l => !l.deleted_at && l.record_id === record_id && l.form_id === form_id
-      && (l.context_record_id || null) === (context_record_id || null)
-  );
-  if (existing) return res.json(existing);
-  const link = {
-    id: uuidv4(), record_id, form_id, environment_id: environment_id || null,
-    context_record_id: context_record_id || null,
-    context_record_title: context_record_title || null,
-    linked_by: linked_by || null,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  };
-  store.form_links.push(link);
-  saveStore();
-  res.json(link);
-});
-
-// DELETE /forms/links/:id — unpin a form from a record
-router.delete('/links/:id', (req, res) => {
-  ensure();
-  const store = getStore();
-  const idx = (store.form_links || []).findIndex(l => l.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  store.form_links[idx] = { ...store.form_links[idx], deleted_at: new Date().toISOString() };
-  saveStore();
-  res.json({ ok: true });
 });
 
 module.exports = router;

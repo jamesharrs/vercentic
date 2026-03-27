@@ -600,30 +600,18 @@ const FormRenderer = ({ form, formData, setFormData }) => (
 );
 
 // ── Link Form Picker Modal ────────────────────────────────────────────────────
-function LinkFormModal({ record, objectSlug, environment, currentUser, existingLinkIds, onLinked, onClose }) {
-  const [allForms, setAllForms]     = useState([]);
-  const [search, setSearch]         = useState('');
-  const [contextRecId, setContextRecId] = useState('');
-  const [contextTitle, setContextTitle] = useState('');
-  const [contextSearch, setContextSearch] = useState('');
-  const [contextResults, setContextResults] = useState([]);
-  const [saving, setSaving]         = useState(null); // form id being saved
+// linkedRecords = array of { id, title, objectName } — records this person is linked to
+function LinkFormModal({ record, objectSlug, environment, currentUser, existingLinkIds, linkedRecords, onLinked, onClose }) {
+  const [allForms, setAllForms] = useState([]);
+  const [search, setSearch]     = useState('');
+  const [contextRec, setContextRec] = useState(null); // { id, title }
+  const [saving, setSaving]     = useState(null);
 
   useEffect(() => {
     if (!environment?.id) return;
     api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`)
       .then(d => setAllForms(Array.isArray(d) ? d : []));
   }, [environment?.id, objectSlug]);
-
-  // Search for context records (jobs, talent pools, etc.)
-  useEffect(() => {
-    if (!contextSearch.trim() || contextSearch.length < 2) { setContextResults([]); return; }
-    const t = setTimeout(async () => {
-      const d = await api.get(`/records/search?q=${encodeURIComponent(contextSearch)}&environment_id=${environment?.id}&limit=8`);
-      setContextResults(Array.isArray(d) ? d : []);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [contextSearch, environment?.id]);
 
   const available = allForms.filter(f =>
     !existingLinkIds.has(f.id) &&
@@ -636,8 +624,8 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
       record_id: record.id,
       form_id: form.id,
       environment_id: environment?.id,
-      context_record_id: contextRecId || null,
-      context_record_title: contextTitle || null,
+      context_record_id: contextRec?.id || null,
+      context_record_title: contextRec?.title || null,
       linked_by: currentUser?.name || currentUser?.email || null,
     });
     setSaving(null);
@@ -664,52 +652,35 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
               fontSize:13, fontFamily:F, color:C.text1, outline:'none', boxSizing:'border-box' }}/>
         </div>
 
-        {/* Optional context record */}
-        <div style={{ padding:'10px 20px', borderBottom:`1px solid ${C.border}`, background:C.surface2 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>
-            Associate with a specific record (optional)
+        {/* Context — only linked records */}
+        {linkedRecords?.length > 0 && (
+          <div style={{ padding:'10px 20px', borderBottom:`1px solid ${C.border}`, background:C.surface2 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>
+              Associate with (optional)
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {linkedRecords.map(lr => {
+                const active = contextRec?.id === lr.id;
+                return (
+                  <button key={lr.id} onClick={() => setContextRec(active ? null : lr)}
+                    style={{ padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:600,
+                      cursor:'pointer', fontFamily:F, border:`1.5px solid ${active ? C.accent : C.border}`,
+                      background: active ? C.accentLight : C.surface,
+                      color: active ? C.accent : C.text2 }}>
+                    {lr.title}
+                    {lr.objectName && <span style={{ color: active ? C.accent : C.text3, fontWeight:400, marginLeft:4 }}>({lr.objectName})</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          {contextRecId ? (
-            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px',
-              borderRadius:8, background:`${C.accent}10`, border:`1.5px solid ${C.accent}` }}>
-              <span style={{ flex:1, fontSize:12, fontWeight:600, color:C.accent }}>{contextTitle}</span>
-              <button onClick={()=>{ setContextRecId(''); setContextTitle(''); setContextSearch(''); }}
-                style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:14 }}>×</button>
-            </div>
-          ) : (
-            <div style={{ position:'relative' }}>
-              <input value={contextSearch} onChange={e=>setContextSearch(e.target.value)}
-                placeholder="Search jobs, talent pools…"
-                style={{ width:'100%', padding:'7px 12px', border:`1.5px solid ${C.border}`, borderRadius:8,
-                  fontSize:12, fontFamily:F, color:C.text1, outline:'none', boxSizing:'border-box' }}/>
-              {contextResults.length > 0 && (
-                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white',
-                  border:`1px solid ${C.border}`, borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,.1)',
-                  zIndex:100, maxHeight:160, overflowY:'auto', marginTop:4 }}>
-                  {contextResults.map(r => {
-                    const d = r.data || {};
-                    const title = d.job_title || d.first_name ? `${d.first_name||''} ${d.last_name||''}`.trim() : d.name || d.pool_name || 'Untitled';
-                    return (
-                      <div key={r.id} onClick={() => { setContextRecId(r.id); setContextTitle(title); setContextSearch(''); setContextResults([]); }}
-                        style={{ padding:'8px 12px', fontSize:12, cursor:'pointer', color:C.text1, borderBottom:`1px solid ${C.border}` }}
-                        onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
-                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                        <span style={{ fontWeight:600 }}>{title}</span>
-                        {r.object_name && <span style={{ color:C.text3, marginLeft:6 }}>{r.object_name}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Form list */}
         <div style={{ flex:1, overflowY:'auto', padding:'10px 12px' }}>
           {available.length === 0 && (
             <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>
-              {allForms.length === 0 ? 'No forms created yet. Go to Settings → Forms.' : 'No more forms to link.'}
+              {allForms.length === 0 ? 'No forms created yet. Go to Settings → Forms.' : 'All available forms are already linked.'}
             </div>
           )}
           {available.map(form => {
@@ -726,9 +697,9 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
                   <div style={{ fontSize:11, color:C.text3 }}>{cat.label} · {form.fields?.filter(f=>f.field_type!=='section').length||0} fields</div>
                 </div>
                 <button onClick={() => handleLink(form)} disabled={saving === form.id}
-                  style={{ background:C.accent, border:'none', borderRadius:7, cursor:'pointer',
-                    padding:'6px 14px', fontSize:12, fontWeight:700, color:'#fff', fontFamily:F,
-                    opacity: saving === form.id ? 0.6 : 1 }}>
+                  style={{ background: saving === form.id ? C.text3 : C.accent, border:'none', borderRadius:7,
+                    cursor: saving === form.id ? 'not-allowed' : 'pointer',
+                    padding:'6px 14px', fontSize:12, fontWeight:700, color:'#fff', fontFamily:F }}>
                   {saving === form.id ? '…' : 'Link'}
                 </button>
               </div>
@@ -753,6 +724,22 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
   const [showHistory, setShowHistory] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [loading, setLoading]       = useState(true);
+  const [linkedRecords, setLinkedRecords] = useState([]); // records this person is linked to
+
+  // Fetch records this person is linked to (for context picker)
+  useEffect(() => {
+    if (!record?.id || !environment?.id) return;
+    api.get(`/records/linked-jobs?record_id=${record.id}&environment_id=${environment.id}`)
+      .then(d => {
+        if (!Array.isArray(d)) return;
+        setLinkedRecords(d.map(r => {
+          const data = r.data || {};
+          const title = data.job_title || data.name || data.pool_name
+            || [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Untitled';
+          return { id: r.id, title, objectName: r.object_name || '' };
+        }));
+      });
+  }, [record?.id, environment?.id]);
 
   const loadLinks = useCallback(async () => {
     if (!record?.id || !environment?.id) return;
@@ -875,6 +862,7 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
           environment={environment}
           currentUser={currentUser}
           existingLinkIds={existingLinkIds}
+          linkedRecords={linkedRecords}
           onLinked={() => { loadLinks(); setShowPicker(false); }}
           onClose={() => setShowPicker(false)}
         />
