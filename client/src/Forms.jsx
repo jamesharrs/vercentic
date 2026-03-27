@@ -714,7 +714,7 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
 
 // ── Record Form Panel ─────────────────────────────────────────────────────────
 // Shows only forms explicitly linked to this record (not all forms automatically)
-export function RecordFormPanel({ record, objectSlug, environment, currentUser }) {
+export function RecordFormPanel({ record, objectSlug, environment, currentUser, activeJobContext }) {
   const [links, setLinks]           = useState([]); // { id, form, context_record_title }
   const [activeLink, setActiveLink] = useState(null);
   const [responses, setResponses]   = useState({});
@@ -798,19 +798,30 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser }
 
   const existingLinkIds = new Set(links.map(l => l.form_id));
 
+  // Filter links by active job context:
+  // - General (null) → show forms with no context OR forms for any context
+  // - Specific job   → show only forms linked to that job context
+  const visibleLinks = activeJobContext
+    ? links.filter(l => l.context_record_id === activeJobContext)
+    : links;
+
   // ── LOADING ──
   if (loading) return <div style={{ color:C.text3, fontSize:12, textAlign:'center', padding:'20px 0' }}>Loading…</div>;
 
   // ── NO ACTIVE FORM — show list ──
   if (!activeLink) return (
     <div>
-      {links.length === 0 && (
+      {visibleLinks.length === 0 && (
         <div style={{ textAlign:'center', padding:'24px 0', color:C.text3 }}>
           <Ic n="form" s={28} c={C.border}/>
-          <div style={{ fontSize:12, marginTop:8, marginBottom:12 }}>No forms linked to this record yet</div>
+          <div style={{ fontSize:12, marginTop:8, marginBottom:12 }}>
+            {activeJobContext
+              ? 'No forms linked for this context'
+              : 'No forms linked to this record yet'}
+          </div>
         </div>
       )}
-      {links.map(link => {
+      {visibleLinks.map(link => {
         const form = link.form;
         const cat  = CATEGORIES.find(c => c.id === form.category) || CATEGORIES[0];
         const resCount = (responses[form.id] || []).length;

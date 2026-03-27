@@ -6080,7 +6080,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               Add Form
             </button>
           </div>
-          <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null}/>
+          <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={activeJobContext}/>
         </div>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
