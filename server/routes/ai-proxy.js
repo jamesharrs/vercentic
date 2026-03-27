@@ -17,7 +17,7 @@ router.post('/chat', async (req, res) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: req.body.max_tokens || 4096,
         system: system || 'You are a helpful assistant.',
         messages,
