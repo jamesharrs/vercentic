@@ -156,8 +156,34 @@ function seedDefaultPermissions(store) {
   }
 
   // Seed other roles only if they have NO permissions at all
-  const hasRecordFlags = store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_send_email');
-  if (hasRecordFlags) return; // other roles already seeded
+  // Always patch any missing record flags for existing roles (idempotent, safe to run every boot)
+  const ROLE_RECORD_FLAGS = {
+    admin:          ALL_RECORD,
+    recruiter:      ALL_RECORD,
+    hiring_manager: ['record_view_comms','record_add_note','record_schedule_interview','record_move_stage'],
+    read_only:      ['record_view_comms'],
+  };
+  let patched = 0;
+  for (const [roleSlug, flags] of Object.entries(ROLE_RECORD_FLAGS)) {
+    const role = (store.roles || []).find(r => r.slug === roleSlug);
+    if (!role) continue;
+    for (const flag of flags) {
+      const existing = store.permissions.find(p => p.role_id === role.id && p.object_slug === '__global__' && p.action === flag);
+      if (!existing) {
+        store.permissions.push({ id: uuidv4(), role_id: role.id, object_slug: '__global__', action: flag, allowed: 1, created_at: now });
+        patched++;
+      } else if (!existing.allowed) {
+        existing.allowed = 1;
+        patched++;
+      }
+    }
+  }
+  if (patched > 0) console.log(`✅ Patched ${patched} missing record-level permissions`);
+
+  // Seed other roles only if they are missing record-level flags (check for newest flags)
+  const hasAllRecordFlags = store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_view_comms' && p.allowed)
+    && store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_create_offer' && p.allowed);
+  if (hasAllRecordFlags) return; // already fully seeded
 
   // Clear non-super-admin global perms and re-seed
   if (superAdminRole) {
