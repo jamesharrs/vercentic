@@ -1515,12 +1515,148 @@ const TYPE_OPS = {
 };
 const NO_VAL_OPS = ["is empty","is not empty","is true","is false"];
 
+// ── FilterRow — module-level so it is never recreated on parent re-render ─────
+// (defining inside AdvancedFilterPanel caused focus loss on every keystroke)
+const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) => {
+  const getOps = f => TYPE_OPS[f?.field_type] || TYPE_OPS.text;
+  const needsVal = op => !NO_VAL_OPS.includes(op);
+
+  const findField = () => {
+    if (filt.source === "linked" && filt.linkedObjectId) {
+      const grp = linkedGroups.find(g => g.objectId === filt.linkedObjectId);
+      return (grp?.fields || []).find(f => f.id === filt.fieldId);
+    }
+    return (ownGroup?.fields || []).find(f => f.id === filt.fieldId);
+  };
+
+  const field   = findField();
+  const ops     = getOps(field);
+  const showVal = needsVal(filt.op);
+  const opts    = field?.options
+    ? (Array.isArray(field.options) ? field.options : (field.options?.split?.(",") || []))
+    : [];
+
+  const sel = { padding:"7px 10px", borderRadius:8, border:`1.5px solid ${C.border}`,
+    fontSize:13, fontFamily:F, background:C.surface, color:C.text1, outline:"none",
+    transition:"border-color .15s" };
+
+  const handleFieldChange = e => {
+    const parts = e.target.value.split("|");
+    const src   = parts[0];
+    const objId = parts[1];
+    const fldId = parts[2];
+    const grp   = src === "linked"
+      ? linkedGroups.find(g => g.objectId === objId)
+      : ownGroup;
+    const f = (grp?.fields || []).find(x => x.id === fldId);
+    onUpdate(filt.id, {
+      source: src,
+      linkedObjectId:   src === "linked" ? objId : undefined,
+      linkedObjectSlug: src === "linked" ? grp?.objectSlug : undefined,
+      fieldId: fldId,
+      op:      getOps(f)[0],
+      value:   "",
+    });
+  };
+
+  const fieldValue = filt.source === "linked"
+    ? `linked|${filt.linkedObjectId}|${filt.fieldId}`
+    : `own||${filt.fieldId}`;
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0",
+      borderBottom:`1px solid ${C.border}44` }}>
+
+      {/* Row logic connector */}
+      <div style={{ width:44, flexShrink:0, textAlign:"center" }}>
+        {idx === 0
+          ? <span style={{ fontSize:11, fontWeight:700, color:C.text3,
+              textTransform:"uppercase", letterSpacing:"0.05em" }}>Where</span>
+          : <button
+              onClick={() => onUpdate(filt.id, { rowLogic: filt.rowLogic === "AND" ? "OR" : "AND" })}
+              title="Click to toggle AND / OR"
+              style={{ fontSize:11, fontWeight:800,
+                color:      filt.rowLogic === "OR" ? "#7c3aed" : C.accent,
+                background: filt.rowLogic === "OR" ? "#7c3aed18" : C.accentLight,
+                border:`1.5px solid ${filt.rowLogic === "OR" ? "#7c3aed44" : C.accent+"44"}`,
+                borderRadius:6, padding:"3px 8px", cursor:"pointer", fontFamily:F }}>
+              {filt.rowLogic || "AND"}
+            </button>
+        }
+      </div>
+
+      {/* Field picker — grouped */}
+      <select value={fieldValue} onChange={handleFieldChange}
+        style={{ ...sel, flex:"0 0 180px" }}
+        onFocus={e=>e.target.style.borderColor=C.accent}
+        onBlur={e=>e.target.style.borderColor=C.border}>
+        <optgroup label="This record">
+          {(ownGroup?.fields || []).map(f => (
+            <option key={f.id} value={`own||${f.id}`}>{f.name}</option>
+          ))}
+        </optgroup>
+        {linkedGroups.map(grp => (
+          <optgroup key={grp.objectId} label={`Linked ${grp.label}`}>
+            {grp.fields.map(f => (
+              <option key={f.id} value={`linked|${grp.objectId}|${f.id}`}>{f.name}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+
+      {/* Operator */}
+      <select value={filt.op} onChange={e => onUpdate(filt.id, { op: e.target.value, value: "" })}
+        style={{ ...sel, flex:"0 0 150px" }}
+        onFocus={e=>e.target.style.borderColor=C.accent}
+        onBlur={e=>e.target.style.borderColor=C.border}>
+        {ops.map(op => <option key={op} value={op}>{op}</option>)}
+      </select>
+
+      {/* Value */}
+      {showVal && (opts.length > 0
+        ? <select value={filt.value} onChange={e => onUpdate(filt.id, { value: e.target.value })}
+            style={{ ...sel, flex:1 }}
+            onFocus={e=>e.target.style.borderColor=C.accent}
+            onBlur={e=>e.target.style.borderColor=C.border}>
+            <option value="">Select…</option>
+            {opts.map(o => {
+              const v = typeof o === "object" ? o.value : o;
+              const l = typeof o === "object" ? o.label : o;
+              return <option key={v} value={v}>{l}</option>;
+            })}
+          </select>
+        : field?.field_type === "date"
+          ? <input type="date" value={filt.value}
+              onChange={e => onUpdate(filt.id, { value: e.target.value })}
+              style={{ ...sel, flex:1 }}/>
+          : (field?.field_type === "number" || field?.field_type === "currency" || field?.field_type === "rating")
+            ? <input type="number" value={filt.value} placeholder="Value"
+                onChange={e => onUpdate(filt.id, { value: e.target.value })}
+                style={{ ...sel, flex:1 }}/>
+            : <input value={filt.value} placeholder="Value…"
+                onChange={e => onUpdate(filt.id, { value: e.target.value })}
+                style={{ ...sel, flex:1 }}
+                onFocus={e=>e.target.style.borderColor=C.accent}
+                onBlur={e=>e.target.style.borderColor=C.border}/>
+      )}
+      {!showVal && <div style={{ flex:1 }}/>}
+
+      <button onClick={() => onRemove(filt.id)}
+        style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+          padding:"4px 6px", display:"flex", color:C.text3, borderRadius:6 }}
+        onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+        onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+        <Ic n="x" s={14}/>
+      </button>
+    </div>
+  );
+};
+
 const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicChange, onSave, onClose, open,
   allObjects = [], linkedObjectFields = {} }) => {
   if (!open) return null;
 
   const getOps = f => TYPE_OPS[f?.field_type] || TYPE_OPS.text;
-  const needsVal = op => !NO_VAL_OPS.includes(op);
 
   // Build field options grouped by object
   const ownGroup = { label: null, fields, objectId: null, objectSlug: null };
@@ -1528,8 +1664,6 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
     const obj = allObjects.find(o => o.id === objId);
     return { label: obj?.plural_name || "Linked", fields: flds, objectId: objId, objectSlug: obj?.slug };
   }).filter(g => g.fields?.length > 0);
-
-  const allFieldGroups = [ownGroup, ...linkedGroups];
 
   const findField = filt => {
     if (filt.source === "linked" && filt.linkedObjectId) {
@@ -1546,131 +1680,12 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
       fieldId: first?.id || "",
       op: first ? getOps(first)[0] : "contains",
       value: "",
-      rowLogic: filters.length > 0 ? "AND" : "AND",
+      rowLogic: "AND",
     }]);
   };
 
   const updateRow = (id, patch) => onFiltersChange(filters.map(f => f.id === id ? { ...f, ...patch } : f));
   const removeRow = id => onFiltersChange(filters.filter(f => f.id !== id));
-
-  const FilterRow = ({ filt, idx }) => {
-    const field = findField(filt);
-    const ops = getOps(field);
-    const showVal = needsVal(filt.op);
-    const opts = field?.options
-      ? (Array.isArray(field.options) ? field.options : (field.options?.split?.(",") || []))
-      : [];
-
-    const sel = { padding:"7px 10px", borderRadius:8, border:`1.5px solid ${C.border}`,
-      fontSize:13, fontFamily:F, background:C.surface, color:C.text1, outline:"none",
-      transition:"border-color .15s" };
-
-    const handleFieldChange = e => {
-      const [src, objId, fldId] = e.target.value.split("|");
-      const grp = src === "linked"
-        ? linkedGroups.find(g => g.objectId === objId)
-        : ownGroup;
-      const f = (grp?.fields || []).find(x => x.id === fldId);
-      updateRow(filt.id, {
-        source: src,
-        linkedObjectId: src === "linked" ? objId : undefined,
-        linkedObjectSlug: src === "linked" ? grp?.objectSlug : undefined,
-        fieldId: fldId,
-        op: getOps(f)[0],
-        value: "",
-      });
-    };
-
-    const fieldValue = filt.source === "linked"
-      ? `linked|${filt.linkedObjectId}|${filt.fieldId}`
-      : `own||${filt.fieldId}`;
-
-    return (
-      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0",
-        borderBottom:`1px solid ${C.border}44` }}>
-        {/* Row logic connector */}
-        <div style={{ width:44, flexShrink:0, textAlign:"center" }}>
-          {idx === 0
-            ? <span style={{ fontSize:11, fontWeight:700, color:C.text3,
-                textTransform:"uppercase", letterSpacing:"0.05em" }}>Where</span>
-            : <button
-                onClick={() => updateRow(filt.id, { rowLogic: filt.rowLogic === "AND" ? "OR" : "AND" })}
-                title="Click to toggle AND / OR"
-                style={{ fontSize:11, fontWeight:800, color: filt.rowLogic === "OR" ? "#7c3aed" : C.accent,
-                  background: filt.rowLogic === "OR" ? "#7c3aed18" : C.accentLight,
-                  border:`1.5px solid ${filt.rowLogic === "OR" ? "#7c3aed44" : C.accent+"44"}`,
-                  borderRadius:6, padding:"3px 8px", cursor:"pointer", fontFamily:F }}>
-                {filt.rowLogic}
-              </button>
-          }
-        </div>
-
-        {/* Field picker — grouped */}
-        <select value={fieldValue} onChange={handleFieldChange}
-          style={{ ...sel, flex:"0 0 180px" }}
-          onFocus={e=>e.target.style.borderColor=C.accent}
-          onBlur={e=>e.target.style.borderColor=C.border}>
-          <optgroup label="This record">
-            {ownGroup.fields.map(f => (
-              <option key={f.id} value={`own||${f.id}`}>{f.name}</option>
-            ))}
-          </optgroup>
-          {linkedGroups.map(grp => (
-            <optgroup key={grp.objectId} label={`Linked ${grp.label}`}>
-              {grp.fields.map(f => (
-                <option key={f.id} value={`linked|${grp.objectId}|${f.id}`}>
-                  {f.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-
-        {/* Operator */}
-        <select value={filt.op} onChange={e => updateRow(filt.id, { op: e.target.value, value: "" })}
-          style={{ ...sel, flex:"0 0 150px" }}
-          onFocus={e=>e.target.style.borderColor=C.accent}
-          onBlur={e=>e.target.style.borderColor=C.border}>
-          {ops.map(op => <option key={op} value={op}>{op}</option>)}
-        </select>
-
-        {/* Value */}
-        {showVal && (
-          opts.length > 0
-            ? <select value={filt.value} onChange={e => updateRow(filt.id, { value: e.target.value })}
-                style={{ ...sel, flex:1 }}
-                onFocus={e=>e.target.style.borderColor=C.accent}
-                onBlur={e=>e.target.style.borderColor=C.border}>
-                <option value="">Select…</option>
-                {opts.map(o => {
-                  const v = typeof o === "object" ? o.value : o;
-                  const l = typeof o === "object" ? o.label : o;
-                  return <option key={v} value={v}>{l}</option>;
-                })}
-              </select>
-            : field?.field_type === "date"
-              ? <input type="date" value={filt.value} onChange={e => updateRow(filt.id, { value: e.target.value })}
-                  style={{ ...sel, flex:1 }}/>
-              : (field?.field_type === "number" || field?.field_type === "currency" || field?.field_type === "rating")
-                ? <input type="number" value={filt.value} onChange={e => updateRow(filt.id, { value: e.target.value })}
-                    placeholder="Value" style={{ ...sel, flex:1 }}/>
-                : <input value={filt.value} onChange={e => updateRow(filt.id, { value: e.target.value })}
-                    placeholder="Value…" style={{ ...sel, flex:1 }}
-                    onFocus={e=>e.target.style.borderColor=C.accent}
-                    onBlur={e=>e.target.style.borderColor=C.border}/>
-        )}
-        {!showVal && <div style={{ flex:1 }}/>}
-
-        <button onClick={() => removeRow(filt.id)}
-          style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
-            padding:"4px 6px", display:"flex", color:C.text3, borderRadius:6 }}
-          onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
-          onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
-          <Ic n="x" s={14}/>
-        </button>
-      </div>
-    );
-  };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.5)",
@@ -1716,7 +1731,17 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
                 <div style={{ fontSize:14, fontWeight:600, color:C.text2, marginBottom:6 }}>No filters yet</div>
                 <div style={{ fontSize:13, color:C.text3 }}>Add a condition below to filter records</div>
               </div>
-            : filters.map((f, i) => <FilterRow key={f.id} filt={f} idx={i}/>)
+            : filters.map((f, i) => (
+            <FilterRow
+              key={f.id}
+              filt={f}
+              idx={i}
+              ownGroup={ownGroup}
+              linkedGroups={linkedGroups}
+              onUpdate={updateRow}
+              onRemove={removeRow}
+            />
+          ))
           }
         </div>
 
