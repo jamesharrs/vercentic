@@ -4705,8 +4705,11 @@ const NotesPanel = ({ record, notes, onNotesChange, canAdd=true, canDelete=true,
   const [noteContext, setNoteContext] = useState(null); // null=general, string=job record id
   const [filterCtx, setFilterCtx] = useState("all");   // "all" | "general" | <job id>
 
-  // When job context tab changes in parent, sync the note-context picker default
-  useEffect(() => { setNoteContext(activeJobContext); }, [activeJobContext]);
+  // When job context tab changes in parent, sync both the filter and the note-context picker
+  useEffect(() => {
+    setNoteContext(activeJobContext);
+    setFilterCtx(activeJobContext || "all");
+  }, [activeJobContext]);
 
   const handleAdd = async () => {
     if (!newNote.trim() || saving) return;
@@ -5420,7 +5423,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   useEffect(() => {
     if (objectName !== "Person") return;
     if (!record?.id || !environment?.id) return;
-    tFetch(`/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
+    tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
       .then(r => r.json())
       .then(d => setLinkedJobRecords(Array.isArray(d) ? d : []))
       .catch(() => {});
