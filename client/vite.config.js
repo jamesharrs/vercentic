@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+  },
   server: {
     port: 3000,
     proxy: {
@@ -19,20 +22,35 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'module-records':   ['./src/Records.jsx'],
-          'module-workflows': ['./src/Workflows.jsx'],
-          'module-orgchart':  ['./src/OrgChart.jsx'],
-          'module-settings':  ['./src/Settings.jsx'],
-          'module-ai':        ['./src/AI.jsx'],
-          'module-interviews':['./src/Interviews.jsx'],
-          'module-offers':    ['./src/Offers.jsx'],
+        manualChunks(id) {
+          // All React + scheduler code → single vendor chunk (no duplicates)
+          if (
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/react-is/') ||
+            id.includes('/node_modules/scheduler/') ||
+            id.includes('/node_modules/use-sync-external-store/')
+          ) {
+            return 'vendor-react';
+          }
+          // Recharts + D3 → own chunk
+          if (id.includes('/node_modules/recharts') || id.includes('/node_modules/d3-')) {
+            return 'vendor-charts';
+          }
+          // App module chunks (large files get their own chunk)
+          if (id.includes('/src/Records.jsx'))    return 'module-records';
+          if (id.includes('/src/Workflows.jsx'))  return 'module-workflows';
+          if (id.includes('/src/OrgChart.jsx'))   return 'module-orgchart';
+          if (id.includes('/src/Settings.jsx'))   return 'module-settings';
+          if (id.includes('/src/AI.jsx'))         return 'module-ai';
+          if (id.includes('/src/Interviews.jsx')) return 'module-interviews';
+          if (id.includes('/src/Offers.jsx'))     return 'module-offers';
+          if (
+            id.includes('/src/DashboardBuilder.jsx') ||
+            id.includes('/src/DashboardViewer.jsx')
+          ) return 'module-dashboard';
         }
       }
     }
   }
 })
-
-
-// cache-bust: 1774041996006
