@@ -5315,6 +5315,39 @@ const SuggestedActions = ({ record, environment, onAction }) => {
   );
 };
 
+// Module-level components used inside RecordDetail
+// MUST be here so FunctionalityBar (called as a function inside RecordDetail) can reference them
+
+const SlideOutHeader = ({ title, subtitle, objectColor, status, statusField, record, onToggleFullPage, onDelete, onClose, photoUrl }) => (
+  <div style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 24px", borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+    <Avatar name={title} color={objectColor} size={38} photoUrl={photoUrl}/>
+    <div style={{ flex:1, minWidth:0 }}>
+      <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:C.text1, fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.3px" }}>{title}</h2>
+      {subtitle && <div style={{ fontSize:12, color:C.text3, marginTop:1 }}>{subtitle}</div>}
+    </div>
+    {status && statusField && <Badge color={STATUS_COLORS[status]||C.accent} light>{status}</Badge>}
+    <div style={{ display:"flex", gap:6 }}>
+      <Btn v="ghost" sz="sm" icon="expand" onClick={onToggleFullPage}/>
+      <Btn v="danger" sz="sm" icon="trash" onClick={()=>onDelete(record.id)}/>
+      <Btn v="ghost" sz="sm" icon="x" onClick={onClose}/>
+    </div>
+  </div>
+);
+
+const ActionBtn = ({ icon, label, onClick, accent, danger }) => (
+  <button onClick={onClick}
+    style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 14px", borderRadius:20,
+      border:"none",
+      background: danger ? "#FEF2F2" : accent ? C.accentLight : "#F1F5F9",
+      color: danger ? "#DC2626" : accent ? C.accent : "#475569",
+      fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap",
+      transition:"all .15s", letterSpacing:"0.01em", boxShadow:"0 1px 2px rgba(0,0,0,0.06)" }}
+    onMouseEnter={e=>{ e.currentTarget.style.background=danger?"#FEE2E2":accent?`${C.accent}25`:"#E2E8F0"; e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.10)"; e.currentTarget.style.transform="translateY(-1px)"; }}
+    onMouseLeave={e=>{ e.currentTarget.style.background=danger?"#FEF2F2":accent?C.accentLight:"#F1F5F9"; e.currentTarget.style.boxShadow="0 1px 2px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="translateY(0)"; }}>
+    <Ic n={icon} s={12} c="currentColor"/> {label}
+  </button>
+);
+
 export const RecordDetail = ({ record, fields, allObjects, environment, objectName, objectColor, onClose, fullPage, onToggleFullPage, onUpdate, onDelete, onNavigate }) => {
   const _permCtx = usePermCtx();
   const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
