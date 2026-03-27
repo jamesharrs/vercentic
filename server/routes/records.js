@@ -205,7 +205,7 @@ router.get('/linked-jobs', (req, res) => {
     const rec = (store.records || []).find(r => r.id === (l.record_id || l.target_record_id) && !r.deleted_at);
     if (!rec) return null;
     const d = rec.data || {};
-    const obj = (store.object_definitions || []).find(o => o.id === rec.object_id);
+    const obj = (store.objects || store.object_definitions || []).find(o => o.id === rec.object_id);
     return {
       id: rec.id,
       title: d.job_title || d.title || d.name || d.role_name || 'Untitled',
