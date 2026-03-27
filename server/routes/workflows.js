@@ -438,11 +438,26 @@ router.get('/assignments', (req, res) => {
   const { record_id } = req.query;
   if (!record_id) return res.status(400).json({ error: 'record_id required' });
   const assignments = query('record_workflow_assignments', a => a.record_id === record_id);
-  // Hydrate with workflow + steps
   const result = assignments.map(a => {
     const wf = findOne('workflows', w => w.id === a.workflow_id);
     if (!wf) return null;
     const steps = query('workflow_steps', s => s.workflow_id === wf.id).sort((a,b) => a.order - b.order);
+    return { ...a, workflow: { ...wf, steps } };
+  }).filter(Boolean);
+  res.json(result);
+});
+
+// GET /api/workflows/assignments/all?environment_id= — all assignments for an environment (bulk)
+router.get('/assignments/all', (req, res) => {
+  ensureTables();
+  const { environment_id } = req.query;
+  const assignments = query('record_workflow_assignments', a =>
+    !environment_id || a.environment_id === environment_id
+  );
+  const result = assignments.map(a => {
+    const wf = findOne('workflows', w => w.id === a.workflow_id);
+    if (!wf) return null;
+    const steps = query('workflow_steps', s => s.workflow_id === wf.id);
     return { ...a, workflow: { ...wf, steps } };
   }).filter(Boolean);
   res.json(result);

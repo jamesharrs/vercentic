@@ -2129,43 +2129,57 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   const [linkObjFilter,    setLinkObjFilter]    = useState("");
   const [linkTargets,      setLinkTargets]      = useState([]);
   const [linkLoading,      setLinkLoading]      = useState(false);
-  const commsRef = useRef(null);
+  const commsRef   = useRef(null);
+  const commsBtnRef = useRef(null);
+  const editBtnRef  = useRef(null);
+  const [commsPos,  setCommsPos]  = useState(null);
+  const [editPos,   setEditPos]   = useState(null);
   const isPeople = objectSlug === "people";
 
-  // Close comms dropdown on outside click
+  // Position helpers — compute fixed coords above a button
+  const posAboveBtn = (btnRef) => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    return { bottom: window.innerHeight - r.top + 6, left: r.left };
+  };
+
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!showComms) return;
-    const h = e => { if (commsRef.current && !commsRef.current.contains(e.target)) setShowComms(false); };
+    if (!showComms && !showEditPicker) return;
+    const h = e => {
+      if (showComms && commsBtnRef.current && !commsBtnRef.current.contains(e.target)) setShowComms(false);
+      if (showEditPicker && editBtnRef.current && !editBtnRef.current.contains(e.target)) setShowEditPicker(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, [showComms]);
+  }, [showComms, showEditPicker]);
 
   // Load all linkable records (only those with a Linked Person workflow) when modal opens
   useEffect(() => {
     if (!showLinkModal || !environment?.id) return;
-    setLinkLoading(true);
-    const nonPeople = (allObjects || []).filter(o => o.slug !== "people");
-    Promise.all(nonPeople.map(async o => {
-      const recs = await fetch(`/api/records?object_id=${o.id}&environment_id=${environment.id}&limit=200`)
-        .then(r => r.json()).catch(() => ({ records: [] }));
-      return (recs.records || []).map(r => ({ ...r, object_name: o.name, object_color: o.color, object_id_ref: o.id }));
-    })).then(async groups => {
-      const all = groups.flat();
-      // Filter to only records that have a Linked Person workflow (type "people_link") with stages
-      const checked = await Promise.all(all.map(async r => {
-        try {
-          const asgn = await fetch(`/api/workflows/assignments?record_id=${r.id}`)
-            .then(x => x.json()).catch(() => []);
-          const list = Array.isArray(asgn) ? asgn : [];
-          // Accept either a people_link typed assignment OR any assignment with steps
-          const pl = list.find(a => a.type === "people_link" && (a.workflow?.steps || []).length > 0)
-                  || list.find(a => (a.workflow?.steps || []).length > 0);
-          return pl ? r : null;
-        } catch { return null; }
-      }));
-      setLinkTargets(checked.filter(Boolean));
+    (async () => {
+      setLinkLoading(true);
+      const nonPeople = (allObjects || []).filter(o => o.slug !== "people");
+      const [recordGroups, allAssignments] = await Promise.all([
+        Promise.all(nonPeople.map(async o => {
+          const recs = await fetch(`/api/records?object_id=${o.id}&environment_id=${environment.id}&limit=200`)
+            .then(r => r.json()).catch(() => ({ records: [] }));
+          return (recs.records || []).map(r => ({ ...r, object_name: o.name, object_color: o.color }));
+        })),
+        fetch(`/api/workflows/assignments/all?environment_id=${environment.id}`)
+          .then(r => r.json()).catch(() => []),
+      ]);
+      const allRecs = recordGroups.flat();
+      const assignmentMap = {};
+      (Array.isArray(allAssignments) ? allAssignments : []).forEach(a => {
+        if ((a.workflow?.steps || []).length > 0) assignmentMap[a.record_id] = true;
+      });
+      const withWorkflow = Object.keys(assignmentMap).length > 0
+        ? allRecs.filter(r => assignmentMap[r.id])
+        : allRecs;
+      setLinkTargets(withWorkflow);
       setLinkLoading(false);
-    });
+    })();
   }, [showLinkModal, environment?.id]);
 
   const editableFields = fields.filter(f => !["id"].includes(f.api_key));
@@ -2188,13 +2202,13 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     setShowLinkModal(false); setLinkSearch(""); setLinkObjFilter("");
   };
 
-  const BtnDark = ({ children, onClick, style = {} }) => (
-    <button onClick={onClick} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+  const BtnDark = React.forwardRef(({ children, onClick, style = {} }, ref) => (
+    <button ref={ref} onClick={onClick} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
       borderRadius:8, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.12)",
       color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, ...style }}>
       {children}
     </button>
-  );
+  ));
 
   const selSt = { padding:"5px 9px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:"white" };
 
@@ -2226,13 +2240,13 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
       </div>
       <div style={{ flex:1 }}/>
       {/* Bulk edit */}
-      <div style={{ position:"relative" }}>
-        <button onClick={() => setShowEditPicker(s => !s)}
+      <div>
+        <button ref={editBtnRef} onClick={() => { setEditPos(posAboveBtn(editBtnRef)); setShowEditPicker(s => !s); }}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.12)", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
           <Ic n="edit" s={12} c="white"/> Edit fields
         </button>
-        {showEditPicker && (
-          <div style={{ position:"absolute", bottom:"calc(100% + 6px)", right:0, zIndex:9700, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
+        {showEditPicker && editPos && ReactDOM.createPortal(
+          <div style={{ position:"fixed", bottom:editPos.bottom, left:editPos.left, zIndex:9700, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>Set field on {count} records</div>
             <select value={editFieldId} onChange={e => { setEditFieldId(e.target.value); setEditValue(""); }} style={selSt}>
               <option value="">Choose field…</option>
@@ -2262,19 +2276,20 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
               <button onClick={handleBulkEdit} disabled={!editFieldId}
                 style={{ flex:2, padding:"6px", borderRadius:7, border:"none", background:C.accent, color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:!editFieldId?0.5:1 }}>Apply</button>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
       {/* ── People-only bulk actions ── */}
       {isPeople && <>
         {/* Communicate dropdown */}
-        <div ref={commsRef} style={{ position:"relative" }}>
-          <BtnDark onClick={() => setShowComms(s => !s)}>
+        <div>
+          <BtnDark ref={commsBtnRef} onClick={() => { setCommsPos(posAboveBtn(commsBtnRef)); setShowComms(s => !s); }}>
             <Ic n="mail" s={12} c="white"/> Communicate
             <Ic n="chevD" s={10} c="rgba(255,255,255,0.6)"/>
           </BtnDark>
-          {showComms && (
-            <div style={{ position:"absolute", bottom:"calc(100% + 6px)", left:0, zIndex:9700,
+          {showComms && commsPos && ReactDOM.createPortal(
+            <div style={{ position:"fixed", bottom:commsPos.bottom, left:commsPos.left, zIndex:9700,
               background:"white", border:`1px solid ${C.border}`, borderRadius:10,
               boxShadow:"0 8px 24px rgba(0,0,0,.15)", overflow:"hidden", minWidth:170 }}>
               {[
@@ -2291,7 +2306,8 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
                   <Ic n={icon} s={13} c={C.accent}/>{label}
                 </button>
               ))}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
 

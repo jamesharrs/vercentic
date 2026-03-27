@@ -1867,22 +1867,24 @@ export function LinkedRecordsPanel({ record, environment, onNavigate }) {
 
   const loadRecordsForLinking = async () => {
     const nonPersonObjs = allObjects.filter(o => o.name !== "Person");
-    const results = [];
-    for (const obj of nonPersonObjs) {
-      const recs = await api.get(`/records?object_id=${obj.id}&environment_id=${environment.id}&limit=200`);
-      (recs.records || []).forEach(r => results.push({ ...r, object_name: obj.name, object_color: obj.color }));
-    }
-    // Only keep records that have any workflow assignment with at least one stage
-    const withWorkflow = [];
-    for (const r of results) {
-      try {
-        const assignments = await api.get(`/workflows/assignments?record_id=${r.id}`);
-        const list = Array.isArray(assignments) ? assignments : [];
-        const pl = list.find(a => a.type === "people_link" && (a.workflow?.steps || []).length > 0)
-                || list.find(a => (a.workflow?.steps || []).length > 0);
-        if (pl) withWorkflow.push(r);
-      } catch { /* skip */ }
-    }
+    // Fetch all records and all workflow assignments in parallel
+    const [recordGroups, allAssignments] = await Promise.all([
+      Promise.all(nonPersonObjs.map(async obj => {
+        const recs = await api.get(`/records?object_id=${obj.id}&environment_id=${environment.id}&limit=200`);
+        return (recs.records || []).map(r => ({ ...r, object_name: obj.name, object_color: obj.color }));
+      })),
+      api.get(`/workflows/assignments/all?environment_id=${environment.id}`).catch(() => []),
+    ]);
+    const allRecs = recordGroups.flat();
+    // Build a set of record IDs that have at least one workflow assignment with steps
+    const assignmentMap = {};
+    (Array.isArray(allAssignments) ? allAssignments : []).forEach(a => {
+      if ((a.workflow?.steps || []).length > 0) assignmentMap[a.record_id] = true;
+    });
+    // Fall back: if bulk endpoint not available, show all records
+    const withWorkflow = Object.keys(assignmentMap).length > 0
+      ? allRecs.filter(r => assignmentMap[r.id])
+      : allRecs;
     setAllRecords(withWorkflow);
   };
 
