@@ -2170,9 +2170,9 @@ function App() {
         : activeNav.startsWith("record_") ? (() => {
           const parts = activeNav.split("_"); const recordId = parts[1]; const objectId = parts[2];
           const obj = navObjects.find(o => o.id === objectId);
-          return <RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
+          return <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}><RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
             onRecordLoad={(rec, recObj) => { setActiveRecord(rec); setActiveRecordObj(recObj); }}
-          />;
+          /></div>;
         })() : activeNav === "search" ? (
           <SearchPage environment={selectedEnv} onNavigateToRecord={(record) => {
             openRecord(record.id, record.object_id);
