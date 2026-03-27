@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
 import { usePermissions as usePermCtx } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import RichTextEditor from "./RichTextEditor.jsx";
@@ -3231,6 +3231,33 @@ const REL_COLORS = {
   dotted_line_to:"#7C3AED", interim_manager_of:"#F79009",
 };
 
+const RelRow = ({ rel, dir, personName, personTitle, onDelete }) => {
+  const otherId = dir === "out" ? rel.to_record_id : rel.from_record_id;
+  const typeLabel = dir === "out"
+    ? REL_TYPES.find(t => t.value === rel.type)?.label || rel.type
+    : REL_TYPES.find(t => t.value === rel.type)?.label
+        ? (REL_TYPES.find(t => t.value === rel.type).inverse
+          ? REL_TYPES.find(t => t.value === REL_TYPES.find(x=>x.value===rel.type).inverse)?.label || rel.inverse_type
+          : REL_TYPES.find(t => t.value === rel.type)?.label)
+        : rel.type;
+  const color = REL_COLORS[rel.type] || "#4361EE";
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", borderBottom:`1px solid ${C.border}` }}>
+      <div style={{ width:28, height:28, borderRadius:8, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color, flexShrink:0 }}>
+        {personName(otherId).split(" ").map(w=>w[0]).join("").slice(0,2)}
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{personName(otherId)}</div>
+        <div style={{ fontSize:10, color:C.text3 }}>
+          {personTitle(otherId) && <span>{personTitle(otherId)} · </span>}
+          <span style={{ color }}>{typeLabel}</span>
+        </div>
+      </div>
+      <button onClick={() => onDelete(rel.id)} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, fontSize:16, padding:"2px 4px", borderRadius:4, lineHeight:1 }} title="Remove relationship">×</button>
+    </div>
+  );
+};
+
 function ReportingPanel({ record, environment }) {
   const [rels, setRels]         = useState([]);
   const [allPeople, setAllPeople] = useState([]);
@@ -3294,41 +3321,7 @@ function ReportingPanel({ record, environment }) {
     (p.data?.email||"").toLowerCase().includes(search.toLowerCase())
   ));
 
-  const RelRow = ({ rel, dir }) => {
-    const otherId = dir === "out" ? rel.to_record_id : rel.from_record_id;
-    const typeLabel = dir === "out"
-      ? REL_TYPES.find(t => t.value === rel.type)?.label || rel.type
-      : REL_TYPES.find(t => t.value === rel.type)?.label
-          ? (REL_TYPES.find(t => t.value === rel.type).inverse
-            ? REL_TYPES.find(t => t.value === REL_TYPES.find(x=>x.value===rel.type).inverse)?.label || rel.inverse_type
-            : REL_TYPES.find(t => t.value === rel.type)?.label)
-          : rel.type;
-    const color = REL_COLORS[rel.type] || "#4361EE";
-    return (
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px",
-        borderBottom:`1px solid ${C.border}` }}>
-        <div style={{ width:28, height:28, borderRadius:8, background:`${color}18`,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          fontSize:12, fontWeight:800, color, flexShrink:0 }}>
-          {personName(otherId).split(" ").map(w=>w[0]).join("").slice(0,2)}
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:C.text1,
-            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {personName(otherId)}
-          </div>
-          <div style={{ fontSize:10, color:C.text3 }}>
-            {personTitle(otherId) && <span>{personTitle(otherId)} · </span>}
-            <span style={{ color }}>{typeLabel}</span>
-          </div>
-        </div>
-        <button onClick={() => handleDelete(rel.id)}
-          style={{ background:"none", border:"none", cursor:"pointer", color:C.text3,
-            fontSize:16, padding:"2px 4px", borderRadius:4, lineHeight:1 }}
-          title="Remove relationship">×</button>
-      </div>
-    );
-  };
+  const RelRow = null; // defined at module level below — called via relRowRenderer
 
   const hasAny = outgoing.length > 0 || incoming.length > 0;
 
@@ -3341,8 +3334,8 @@ function ReportingPanel({ record, environment }) {
         </div>
       )}
       <div style={{ background:"#f8f9fc", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}` }}>
-        {outgoing.map(r => <RelRow key={r.id} rel={r} dir="out"/>)}
-        {incoming.map(r => <RelRow key={r.id} rel={r} dir="in"/>)}
+        {outgoing.map(r => <RelRow key={r.id} rel={r} dir="out" personName={personName} personTitle={personTitle} onDelete={handleDelete}/>)}
+        {incoming.map(r => <RelRow key={r.id} rel={r} dir="in" personName={personName} personTitle={personTitle} onDelete={handleDelete}/>)}
 
         {/* Add form */}
         {adding ? (
