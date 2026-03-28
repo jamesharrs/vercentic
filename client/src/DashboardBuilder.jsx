@@ -184,9 +184,13 @@ For list: include object_id, limit.
 Grid is 12 columns. w should be 3,4,6 or 12. h should be 3,4 or 5.
 Object IDs: ${objects.map(o=>`"${o.plural_name||o.name}":"${o.id}"`).join(", ")}.
 Respond ONLY with valid JSON: { name, description, panels:[{type,title,position:{x,y,w,h},config:{...}}] }`;
-  const resp = await fetch("/api/ai/chat",{ method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ messages:[{role:"user",content:prompt}],system:systemCtx,max_tokens:2000 })});
-  const data = await resp.json();
-  const text = (data.content||[]).find(b=>b.type==="text")?.text||"";
+  const data = await api.post("/api/ai/chat", { messages:[{role:"user",content:prompt}], system:systemCtx, max_tokens:2000 });
+  if (data.error) throw new Error(data.error);
+  // proxy returns { content: string } (already extracted text)
+  const text = typeof data.content === "string"
+    ? data.content
+    : (Array.isArray(data.content) ? (data.content.find(b=>b.type==="text")?.text||"") : "");
+  if (!text) throw new Error("Empty response from AI");
   const clean = text.replace(/```json|```/g,"").trim();
   return JSON.parse(clean);
 }
