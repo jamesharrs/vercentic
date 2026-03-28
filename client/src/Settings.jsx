@@ -1406,24 +1406,29 @@ function FieldModal({ field, selEnv, selObj, onSaved, onClose }) {
   const handleName = v => { set("name",v); if(autoKey) set("api_key", v.toLowerCase().replace(/[^a-z0-9]/g,"_").replace(/__+/g,"_").replace(/^_|_$/g,"")); };
 
   const handle = async () => {
+    if (!form.name || !selObj?.id || !selEnv?.id) return;
     setSaving(true);
-    const payload = {
-      ...form,
-      object_id: selObj.id,
-      environment_id: selEnv.id,
-      options: ["select","multi_select","status"].includes(form.field_type) ? form.options.split(",").map(s=>s.trim()).filter(Boolean) : undefined,
-      related_object_slug: form.field_type === "people" ? form.related_object_slug : undefined,
-      people_multi: form.field_type === "people" ? form.people_multi : undefined,
-      dataset_id: form.field_type === "dataset" ? form.dataset_id : undefined,
-      dataset_multi: form.field_type === "dataset" ? form.dataset_multi : undefined,
-      skills_multi: form.field_type === "skills" ? form.skills_multi : undefined,
-      skills_categories: form.field_type === "skills" ? form.skills_categories : undefined,
-    };
-    if (isEdit) await api.patch(`/fields/${field.id}`, payload);
-    else        await api.post("/fields", payload);
+    try {
+      const payload = {
+        ...form,
+        object_id: selObj.id,
+        environment_id: selEnv.id,
+        options: ["select","multi_select","status"].includes(form.field_type) ? form.options.split(",").map(s=>s.trim()).filter(Boolean) : undefined,
+        related_object_slug: form.field_type === "people" ? form.related_object_slug : undefined,
+        people_multi: form.field_type === "people" ? form.people_multi : undefined,
+        dataset_id: form.field_type === "dataset" ? form.dataset_id : undefined,
+        dataset_multi: form.field_type === "dataset" ? form.dataset_multi : undefined,
+        skills_multi: form.field_type === "skills" ? form.skills_multi : undefined,
+        skills_categories: form.field_type === "skills" ? form.skills_categories : undefined,
+      };
+      const result = isEdit ? await api.patch(`/fields/${field.id}`, payload) : await api.post("/fields", payload);
+      if (result?.error) { alert(`Could not save field: ${result.error}`); setSaving(false); return; }
+      onSaved();
+      onClose();
+    } catch(e) {
+      alert(`Could not save field: ${e.message}`);
+    }
     setSaving(false);
-    onSaved();
-    onClose();
   };
 
   return (

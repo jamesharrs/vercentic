@@ -5,7 +5,26 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove } = require('../db/init');
 
-const VALID = ['text','textarea','number','email','phone','url','date','datetime','boolean','select','multi_select','lookup','multi_lookup','file','rich_text','currency','rating'];
+const VALID = [
+  // Text
+  'text','textarea','rich_text',
+  // Number
+  'number','currency','percent','formula','progress','auto_number',
+  // Date
+  'date','datetime','date_range','duration',
+  // Choice
+  'select','multi_select','status','boolean','rating',
+  // Contact
+  'email','phone','phone_intl','url','social',
+  // Location
+  'country','address',
+  // Reference
+  'people','lookup','multi_lookup','rollup',
+  // File / Other
+  'file','image',
+  // System / Special
+  'section_separator','unique_id','dataset','skills',
+];
 
 router.get('/', (req, res) => {
   const { object_id } = req.query;
