@@ -7,8 +7,39 @@ const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 
 // ── Collections that are part of environment config ─────────────────────────
-const CONFIG_COLLECTIONS = ['objects','fields','workflows','email_templates','portals','saved_views','org_units','roles','forms','file_types','interview_types'];
+const CONFIG_COLLECTIONS = [
+  // Core schema
+  'objects', 'fields',
+  // Workflow config — workflow_steps must follow workflows so IDs are mapped
+  'workflows', 'workflow_steps',
+  // Communication & templates
+  'email_templates',
+  // Portals & branding
+  'portals', 'brand_kits',
+  // Lookup / reference data
+  'saved_views', 'org_units', 'roles',
+  // Forms & file types
+  'forms', 'file_types',
+  // Interviews
+  'interview_types',
+  // Datasets (field option lists)
+  'datasets', 'dataset_options',
+  // Automation flows
+  'flows',
+  // Skills library
+  'skills',
+  // Question bank
+  'question_bank_v2', 'question_templates',
+  // Company / RPO settings
+  'company_profiles', 'rpo_settings', 'company_documents',
+];
 const DATA_COLLECTIONS   = ['records','communications','relationships','interviews','offers','form_responses','activity_log','people_links','record_workflow_assignments'];
+
+// Collections linked via FK rather than environment_id — must clone AFTER their parent
+const LINKED_COLLECTIONS = {
+  'workflow_steps':  'workflow_id',
+  'dataset_options': 'dataset_id',
+};
 
 // ── Obfuscation helpers ──────────────────────────────────────────────────────
 const FIRST_NAMES = ['Alex','Jordan','Sam','Casey','Morgan','Taylor','Riley','Quinn','Avery','Blake'];
@@ -93,7 +124,7 @@ function cloneWithNewIds(items, envId, idMap = {}) {
 
 // Remap foreign key references (object_id, lookup_object_id, etc.)
 function remapReferences(items, idMap) {
-  const FK_KEYS = ['object_id','lookup_object_id','related_object_id','workflow_id','form_id','record_id','from_record_id','to_record_id','candidate_id','job_id','portal_id','parent_id'];
+  const FK_KEYS = ['object_id','lookup_object_id','related_object_id','workflow_id','form_id','record_id','from_record_id','to_record_id','candidate_id','job_id','portal_id','parent_id','dataset_id','flow_id','step_id','interview_type_id','brand_kit_id'];
   return items.map(item => {
     const patched = { ...item };
     FK_KEYS.forEach(fk => {
@@ -155,12 +186,20 @@ router.post('/clone', express.json(), async (req, res) => {
   if (!store.environments) store.environments = [];
   store.environments.push(sandboxEnv);
 
-  // Clone all config collections
+  // Clone all config collections (LINKED_COLLECTIONS handled by FK after parent cloned)
   const idMap = {};
   const clonedCounts = {};
 
   for (const col of CONFIG_COLLECTIONS) {
-    const sourceItems = (store[col] || []).filter(i => i.environment_id === source_env_id && !i.deleted_at);
+    const linkedBy = LINKED_COLLECTIONS[col];
+
+    let sourceItems;
+    if (linkedBy) {
+      // No environment_id — filter by whether the parent ID was already cloned
+      sourceItems = (store[col] || []).filter(i => !i.deleted_at && idMap[i[linkedBy]]);
+    } else {
+      sourceItems = (store[col] || []).filter(i => i.environment_id === source_env_id && !i.deleted_at);
+    }
     if (sourceItems.length === 0) continue;
 
     const cloned = cloneWithNewIds(sourceItems, sandboxEnvId, idMap);
@@ -277,8 +316,19 @@ router.post('/:id/promote', express.json(), (req, res) => {
 
   const results = {};
 
+  // Build reverse map: sandbox item id → production item id (for linked collections)
+  const promoteIdMap = {};
+
   for (const col of CONFIG_COLLECTIONS) {
-    const sandboxItems = (store[col] || []).filter(i => i.environment_id === sb.sandbox_env_id && !i.deleted_at);
+    const linkedBy = LINKED_COLLECTIONS[col];
+
+    let sandboxItems;
+    if (linkedBy) {
+      // No environment_id — filter by whether the parent was already promoted
+      sandboxItems = (store[col] || []).filter(i => !i.deleted_at && promoteIdMap[i[linkedBy]]);
+    } else {
+      sandboxItems = (store[col] || []).filter(i => i.environment_id === sb.sandbox_env_id && !i.deleted_at);
+    }
     if (sandboxItems.length === 0) continue;
 
     // Filter to selected changes if cherry-picking
@@ -300,16 +350,17 @@ router.post('/:id/promote', express.json(), (req, res) => {
       if (sourceId) {
         // Update existing item in production
         prodItem.id = sourceId;
+        promoteIdMap[sbItem.id] = sourceId; // track for linked collections
         const idx = (store[col] || []).findIndex(i => i.id === sourceId);
         if (idx !== -1) {
           store[col][idx] = { ...store[col][idx], ...prodItem, updated_at: now() };
         } else {
-          // Source was deleted in production — re-add
           store[col].push({ ...prodItem, updated_at: now() });
         }
       } else {
         // New item created in sandbox — add to production with new ID
         prodItem.id = uid();
+        promoteIdMap[sbItem.id] = prodItem.id; // track for linked collections
         if (!store[col]) store[col] = [];
         store[col].push(prodItem);
       }
