@@ -351,10 +351,109 @@ function DemoDataTab({ client, stats }) {
   );
 }
 
+// ── Create Client User Modal ──────────────────────────────────────────────────
+function CreateClientUserModal({ client, onClose, onCreated }) {
+  const [form, setForm] = useState({ first_name:'', last_name:'', email:'', role_id:'', environment_id:'', password:'' });
+  const [roles, setRoles] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [created, setCreated] = useState(null);
+  const inp = {padding:'9px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:'inherit',outline:'none',color:C.text1,background:'#1e2433',width:'100%',boxSizing:'border-box'};
+  const label = {fontSize:11,fontWeight:700,color:C.text3,marginBottom:4,display:'block',letterSpacing:'0.04em',textTransform:'uppercase'};
+
+  const environments = client?.environments || [];
+
+  useEffect(()=>{
+    // Load roles from the first available environment
+    const envId = environments[0]?.id;
+    if (!envId) return;
+    fetch(`/api/roles`,{headers:{'Content-Type':'application/json','X-User-Id':localStorage.getItem('sa_uid')||''}})
+      .then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setRoles(d); }).catch(()=>{});
+    setForm(f=>({...f, environment_id: envId}));
+  },[]);
+
+  const handleSave = async () => {
+    if (!form.first_name||!form.last_name||!form.email||!form.role_id||!form.environment_id) {
+      setError('All fields are required'); return;
+    }
+    setSaving(true); setError(null);
+    try {
+      const res = await fetch(`/api/superadmin/clients/${client.id}/users`,{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setSaving(false); return; }
+      setCreated(data);
+    } catch(e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:C.surface,borderRadius:16,padding:28,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.5)'}}>
+        {!created ? <>
+          <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:4}}>Add User</div>
+          <div style={{fontSize:12,color:C.text3,marginBottom:20}}>Create a new user for {client.name}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div><label style={label}>First Name</label><input style={inp} value={form.first_name} onChange={e=>setForm(f=>({...f,first_name:e.target.value}))} placeholder="First name"/></div>
+            <div><label style={label}>Last Name</label><input style={inp} value={form.last_name} onChange={e=>setForm(f=>({...f,last_name:e.target.value}))} placeholder="Last name"/></div>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Email</label><input style={inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="user@example.com"/></div>
+          <div style={{marginBottom:12}}><label style={label}>Environment</label>
+            <select style={inp} value={form.environment_id} onChange={e=>setForm(f=>({...f,environment_id:e.target.value}))}>
+              {environments.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}><label style={label}>Role</label>
+            <select style={inp} value={form.role_id} onChange={e=>setForm(f=>({...f,role_id:e.target.value}))}>
+              <option value="">Select role…</option>
+              {roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:20}}><label style={label}>Password (leave blank to auto-generate)</label><input style={inp} type="password" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="Auto-generate if empty"/></div>
+          {error && <div style={{padding:'8px 12px',borderRadius:8,background:'#450a0a',color:'#fca5a5',fontSize:12,marginBottom:12}}>{error}</div>}
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button onClick={onClose} style={{padding:'8px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{padding:'8px 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:saving?.6:1}}>
+              {saving?'Creating…':'Create User'}
+            </button>
+          </div>
+        </> : <>
+          <div style={{textAlign:'center',padding:'8px 0 20px'}}>
+            <div style={{width:48,height:48,borderRadius:'50%',background:'#0CAF7720',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0CAF77" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:4}}>User Created</div>
+            <div style={{fontSize:12,color:C.text3,marginBottom:20}}>Share these credentials with the user</div>
+            {[['Email',created.email],['Temp Password',created.temp_password],['Role',roles.find(r=>r.id===created.role_id)?.name||created.role_id]].map(([k,v])=>(
+              <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'8px 14px',borderRadius:8,background:'#ffffff08',marginBottom:6}}>
+                <span style={{fontSize:12,color:C.text3}}>{k}</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.text1,fontFamily:'monospace'}}>{v}</span>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:'#F59E0B',marginTop:12,marginBottom:20}}>⚠ The user will be prompted to change their password on first login</div>
+          </div>
+          <button onClick={()=>onCreated(created)} style={{width:'100%',padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Done</button>
+        </>}
+      </div>
+    </div>
+  );
+}
+
 export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
   const [client,setClient]=useState(null); const [stats,setStats]=useState(null);
   const [loading,setLoading]=useState(true); const [tab,setTab]=useState('overview');
   const [loadingTD,setLoadingTD]=useState(false); const [tdResults,setTdResults]=useState({});
+  const [showCreateUser,setShowCreateUser]=useState(false);
+
+  const onRefresh = () => {
+    fetch(`/api/superadmin/clients/${clientId}`,{headers:{'Content-Type':'application/json'}})
+      .then(r=>r.json()).then(d=>{ if(!d.error) setClient(d); }).catch(()=>{});
+    fetch(`/api/superadmin/clients/${clientId}/stats`,{headers:{'Content-Type':'application/json'}})
+      .then(r=>r.json()).then(d=>{ if(!d.error) setStats(d); }).catch(()=>{});
+  };
 
   const handleLoadTestData = async (envId) => {
     if (!confirm('Load standard test data? This adds 15 people, 8 jobs and 3 talent pools.')) return;
@@ -553,8 +652,16 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
 
       {tab==='users' && (
         <div style={cardSt}>
+          {/* Header with Create User button */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 18px',borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:13,fontWeight:700,color:C.text1}}>{(client.users||[]).length} user{(client.users||[]).length!==1?'s':''}</span>
+            <button onClick={()=>setShowCreateUser(true)}
+              style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+              + Add User
+            </button>
+          </div>
           {!(client.users||[]).length
-            ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No users yet.</div>
+            ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No users yet. Add the first user above.</div>
             : (client.users||[]).map(u=>(
               <div key={u.id} style={{display:'flex',alignItems:'center',padding:'12px 18px',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{width:32,height:32,borderRadius:'50%',background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginRight:12}}>
@@ -569,6 +676,18 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
             ))
           }
         </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateUser && (
+        <CreateClientUserModal
+          client={client}
+          onClose={()=>setShowCreateUser(false)}
+          onCreated={(newUser)=>{
+            setShowCreateUser(false);
+            if(onRefresh) onRefresh();
+          }}
+        />
       )}
 
       {tab==='demo' && (

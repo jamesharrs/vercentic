@@ -691,6 +691,66 @@ router.get('/:id', (req, res) => {
   res.json({ ...client, environments: envs, users, provision_log: log });
 });
 
+// ── POST /:id/users — create a user for a client ─────────────────────────────
+router.post('/:id/users', express.json(), async (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const { first_name, last_name, email, role_id, environment_id, password } = req.body;
+  if (!first_name || !last_name || !email || !role_id || !environment_id) {
+    return res.status(400).json({ error: 'first_name, last_name, email, role_id, environment_id required' });
+  }
+  if ((s.users||[]).find(u=>u.email===email&&!u.deleted_at)) {
+    return res.status(409).json({ error: 'Email already in use' });
+  }
+
+  const bcrypt = require('bcryptjs');
+  const rawPassword = password || `Welcome${Math.floor(Math.random()*9000+1000)}!`;
+  const hash = await bcrypt.hash(rawPassword, 10);
+  const uid = () => require('crypto').randomUUID();
+
+  if (!s.users) s.users = [];
+  const user = {
+    id: uid(), client_id: client.id, environment_id,
+    first_name, last_name, email,
+    role_id, status: 'active',
+    password_hash: hash,
+    auth_provider: 'local',
+    must_change_password: 1,
+    login_count: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  s.users.push(user);
+  saveStore();
+
+  // Log provision event
+  if (!s.provision_log) s.provision_log = [];
+  s.provision_log.push({
+    id: uid(), client_id: client.id, action: 'user_created',
+    details: { email, first_name, last_name, role_id },
+    created_at: new Date().toISOString(),
+  });
+  saveStore();
+
+  res.status(201).json({ ...user, password_hash: undefined, temp_password: rawPassword });
+});
+
+// ── PATCH /:id/users/:userId — update a client user ──────────────────────────
+router.patch('/:id/users/:userId', express.json(), (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const idx = (s.users||[]).findIndex(u=>u.id===req.params.userId&&u.client_id===req.params.id);
+  if (idx===-1) return res.status(404).json({ error: 'User not found' });
+  const allowed = ['first_name','last_name','role_id','status'];
+  allowed.forEach(k => { if (req.body[k]!==undefined) s.users[idx][k]=req.body[k]; });
+  s.users[idx].updated_at = new Date().toISOString();
+  saveStore();
+  res.json(s.users[idx]);
+});
+
 router.post('/provision', async (req, res) => {
   const { client, environment, admin_user, template } = req.body;
   if (!client?.name)      return res.status(400).json({ error: 'client.name required' });
