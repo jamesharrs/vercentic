@@ -761,8 +761,7 @@ const FieldVisibilityPanel = ({ role, environment }) => {
   useEffect(() => {
     if (!selObj || !role) return;
     Promise.all([
-      api.get(`/fields?object_id=${selObj.id}`),
-      api.get(`/field-visibility?role_id=${role.id}&object_id=${selObj.id}`),
+      api.get(`/fields?object_id=${selObj.id}&environment_id=${selEnv?.id}`),
     ]).then(([f, v]) => {
       setFields(Array.isArray(f) ? f : []);
       const r = {};
@@ -1602,15 +1601,15 @@ const DataModelSection = () => {
   useEffect(() => {
     if (!selObj) return;
     setLoading(true);
-    api.get(`/fields?object_id=${selObj.id}`).then(d => {
+    api.get(`/fields?object_id=${selObj.id}&environment_id=${selEnv?.id}`).then(d => {
       setFields(Array.isArray(d) ? d : []);
       setLoading(false);
     });
-  }, [selObj?.id]);
+  }, [selObj?.id, selEnv?.id]);
 
   const reloadFields = () => {
     if (!selObj?.id) return;
-    api.get(`/fields?object_id=${selObj.id}`).then(d => setFields(Array.isArray(d)?d:[]));
+    api.get(`/fields?object_id=${selObj.id}&environment_id=${selEnv?.id}`).then(d => setFields(Array.isArray(d)?d:[]));
   };
   const reloadObjects = () => {
     if (!selEnv?.id) return;

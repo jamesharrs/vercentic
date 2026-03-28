@@ -2109,8 +2109,23 @@ function App() {
 
       </div>
 
+      {/* Sandbox indicator — fixed orange outline + banner when in a sandbox env */}
+      {selectedEnv?.is_sandbox && (
+        <>
+          <div style={{ position:"fixed", inset:0, border:"3px solid #F59E0B", zIndex:9999, pointerEvents:"none" }} />
+          <div style={{ position:"fixed", top:0, left:NAV_W, right:0, zIndex:9998,
+            background:"#F59E0B", color:"#78350F", fontSize:11, fontWeight:700,
+            letterSpacing:"0.05em", textAlign:"center", padding:"3px 0",
+            fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center",
+            justifyContent:"center", gap:6,
+            transition:"left 0.2s cubic-bezier(0.4,0,0.2,1)" }}>
+            ⚠ SANDBOX — {selectedEnv.name} — Changes here will not affect production until promoted
+          </div>
+        </>
+      )}
+
       {/* Main content */}
-      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
+      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
         {/* Top bar */}
         <GlobalSearch data-tour="global-search" selectedEnv={selectedEnv} navObjects={navObjects}
              activeDashTab={activeNav === "dashboard" ? "overview" : activeNav.startsWith("dashboard_") ? activeNav.replace("dashboard_","") : null}

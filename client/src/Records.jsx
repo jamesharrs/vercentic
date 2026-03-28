@@ -6696,8 +6696,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const load = useCallback(async () => {
     setLoading(true);
     const [f, r] = await Promise.all([
-      api.get(`/fields?object_id=${object.id}`),
-      api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
+      api.get(`/fields?object_id=${object.id}&environment_id=${environment.id}`),
     ]);
     const loadedFields = Array.isArray(f) ? f : [];
     setFields(loadedFields);
@@ -7048,8 +7047,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     const otherObjs = allObjects.filter(o => o.id !== object.id && o.slug !== "people");
     Promise.all(otherObjs.map(async o => {
       const [flds, recs] = await Promise.all([
-        api.get(`/fields?object_id=${o.id}`),
-        api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&limit=500`),
+        api.get(`/fields?object_id=${o.id}&environment_id=${environment.id}`),
       ]);
       return { objId: o.id, fields: Array.isArray(flds) ? flds : [], records: (recs.records || []) };
     })).then(results => {
