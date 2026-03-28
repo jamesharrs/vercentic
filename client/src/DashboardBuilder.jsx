@@ -190,9 +190,19 @@ Respond ONLY with valid JSON: { name, description, panels:[{type,title,position:
   const text = typeof data.content === "string"
     ? data.content
     : (Array.isArray(data.content) ? (data.content.find(b=>b.type==="text")?.text||"") : "");
-  if (!text) throw new Error("Empty response from AI");
-  const clean = text.replace(/```json|```/g,"").trim();
-  return JSON.parse(clean);
+  if (!text) throw new Error("AI returned an empty response — check your Anthropic API key in Railway");
+  const clean = text.replace(/```json[\s\S]*?```|```[\s\S]*?```/g, m => {
+    // extract content from code fences
+    return m.replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+  }).trim();
+  // Find the JSON object in the response (in case AI adds prose around it)
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("AI did not return valid JSON — try again or be more specific");
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error("AI returned malformed JSON — try again");
+  }
 }
 
 export default function DashboardBuilder({ environment, session, onBack }) {
