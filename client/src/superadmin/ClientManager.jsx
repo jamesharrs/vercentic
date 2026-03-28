@@ -489,26 +489,64 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
         <div style={cardSt}>
           {!(client.environments||[]).length
             ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No environments. <span style={{color:C.accent,cursor:'pointer'}} onClick={onProvisionEnv}>Add one →</span></div>
-            : (client.environments||[]).map(e=>(
-              <div key={e.id} style={{display:'flex',alignItems:'center',padding:'14px 18px',borderBottom:`1px solid ${C.border}`}}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,color:C.text1}}>{e.name}</div>
-                  <div style={{fontSize:11,color:C.text3,marginTop:2}}>{e.id} · {e.locale?.toUpperCase()} · {e.timezone}</div>
-                  {tdResults[e.id] && (
-                    <div style={{fontSize:11,color:'#065f46',marginTop:4}}>
-                      ✓ Test data: {tdResults[e.id].people} people · {tdResults[e.id].jobs} jobs · {tdResults[e.id].pools} pools
+            : (client.environments||[]).map(e=>{
+              // Find sandboxes belonging to this environment
+              const envSandboxes = (stats.sandboxes||[]).filter(sb=>sb.production_env_id===e.id);
+              return (
+                <div key={e.id}>
+                  {/* Production environment row */}
+                  <div style={{display:'flex',alignItems:'center',padding:'14px 18px',borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,color:C.text1,display:'flex',alignItems:'center',gap:8}}>
+                        {e.name}
+                        {envSandboxes.length>0 && (
+                          <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:'#F59E0B20',color:'#92400E',border:'1px solid #F59E0B40'}}>
+                            {envSandboxes.length} sandbox{envSandboxes.length!==1?'es':''}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{fontSize:11,color:C.text3,marginTop:2}}>{e.id} · {e.locale?.toUpperCase()} · {e.timezone}</div>
+                      {tdResults[e.id] && (
+                        <div style={{fontSize:11,color:'#065f46',marginTop:4}}>
+                          ✓ Test data: {tdResults[e.id].people} people · {tdResults[e.id].jobs} jobs · {tdResults[e.id].pools} pools
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <StatusBadge status={e.type||'production'}/>
+                    <div style={{marginLeft:12}}><StatusBadge status={e.status||'active'}/></div>
+                    <button onClick={()=>handleLoadTestData(e.id)} disabled={loadingTD||!!tdResults[e.id]}
+                      title={tdResults[e.id]?'Test data already loaded':'Load standard test data'}
+                      style={{marginLeft:12,padding:'5px 10px',borderRadius:6,border:`1.5px dashed ${tdResults[e.id]?C.border:'#6366f1'}`,background:'transparent',color:tdResults[e.id]?C.text3:'#6366f1',fontSize:11,fontWeight:600,cursor:tdResults[e.id]?'default':'pointer',whiteSpace:'nowrap'}}>
+                      {tdResults[e.id]?'✓ Loaded':'⚡ Test Data'}
+                    </button>
+                  </div>
+
+                  {/* Sandbox rows — indented under parent env */}
+                  {envSandboxes.map(sb=>(
+                    <div key={sb.id} style={{display:'flex',alignItems:'center',padding:'10px 18px 10px 36px',borderBottom:`1px solid ${C.border}`,background:'#F59E0B08'}}>
+                      {/* Tree connector */}
+                      <div style={{width:16,height:16,borderLeft:`2px solid #F59E0B60`,borderBottom:`2px solid #F59E0B60`,borderRadius:'0 0 0 4px',marginRight:10,flexShrink:0,alignSelf:'flex-start',marginTop:2}}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600,color:C.text1,fontSize:13,display:'flex',alignItems:'center',gap:7}}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round"><path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9"/></svg>
+                          {sb.name}
+                        </div>
+                        <div style={{fontSize:10,color:C.text3,marginTop:1}}>
+                          {sb.sandbox_env_id?.slice(0,16)}… · Created {new Date(sb.created_at).toLocaleDateString()}
+                          {sb.promoted_at && ` · Promoted ${new Date(sb.promoted_at).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:99,
+                        background: sb.status==='promoted'?'#0CAF7720':sb.status==='active'?'#F59E0B20':'#6b728020',
+                        color: sb.status==='promoted'?'#065f46':sb.status==='active'?'#92400E':'#374151',
+                        border:`1px solid ${sb.status==='promoted'?'#0CAF7740':sb.status==='active'?'#F59E0B40':'#6b728040'}`}}>
+                        {sb.status}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <StatusBadge status={e.type||'production'}/>
-                <div style={{marginLeft:12}}><StatusBadge status={e.status||'active'}/></div>
-                <button onClick={()=>handleLoadTestData(e.id)} disabled={loadingTD||!!tdResults[e.id]}
-                  title={tdResults[e.id]?'Test data already loaded':'Load standard test data'}
-                  style={{marginLeft:12,padding:'5px 10px',borderRadius:6,border:`1.5px dashed ${tdResults[e.id]?C.border:'#6366f1'}`,background:'transparent',color:tdResults[e.id]?C.text3:'#6366f1',fontSize:11,fontWeight:600,cursor:tdResults[e.id]?'default':'pointer',whiteSpace:'nowrap'}}>
-                  {tdResults[e.id]?'✓ Loaded':'⚡ Test Data'}
-                </button>
-              </div>
-            ))
+              );
+            })
           }
         </div>
       )}

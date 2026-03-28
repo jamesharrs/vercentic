@@ -469,11 +469,29 @@ router.get('/:id/stats', (req, res) => {
   const byDay = {};
   records.filter(r=>new Date(r.created_at)>thirtyDaysAgo)
     .forEach(r=>{ const d=r.created_at.slice(0,10); byDay[d]=(byDay[d]||0)+1; });
+  // Sandboxes for this client's environments
+  const sandboxes = (ts.sandboxes||s.sandboxes||[])
+    .filter(sb => !sb.deleted_at && envIds.has(sb.production_env_id))
+    .map(sb => {
+      const sbEnv = (ts.environments||s.environments||[]).find(e=>e.id===sb.sandbox_env_id);
+      return {
+        id: sb.id,
+        name: sb.name,
+        status: sb.status,
+        production_env_id: sb.production_env_id,
+        sandbox_env_id: sb.sandbox_env_id,
+        sandbox_env_name: sbEnv?.name || sb.name,
+        created_at: sb.created_at,
+        promoted_at: sb.promoted_at,
+      };
+    });
+
   res.json({
     client_id: client.id, client_name: client.name,
     environment_count: envs.length, record_count: records.length,
     user_count: users.length, object_count: objects.length,
     environments: envs,
+    sandboxes,
     records_last_30d: byDay, provision_log: log,
   });
 });
