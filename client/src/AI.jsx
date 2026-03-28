@@ -31,6 +31,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     copy:"M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.912 4.895 3 6 3h8c1.105 0 2 .912 2 2.036v1.866m-6 .17h8c1.105 0 2 .91 2 2.035v10.857C20 21.088 19.105 22 18 22h-8c-1.105 0-2-.912-2-2.036V9.107c0-1.124.895-2.036 2-2.036z",
     loader:"M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
     "bar-chart-2":"M18 20V10M12 20V4M6 20v-6",
+    layout:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
     layers:"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
     plus:"M12 5v14M5 12h14",
     edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
@@ -742,6 +743,39 @@ FORM RULES:
 - applies_to is an array of object slugs: "people", "jobs", "talent_pools"
 
 
+DASHBOARD CREATION INSTRUCTIONS:
+When a user wants to create a dashboard, build it by outputting a <CREATE_DASHBOARD> block. NEVER just describe steps.
+
+CONVERSATION FLOW:
+- If the user gives enough context (role, team, what data): generate the block immediately.
+- If vague (e.g. "create a dashboard"): ask 2 quick questions: (1) Who is it for / what is its purpose? (2) What data matters most? Then generate in your NEXT response.
+- NEVER tell the user to click buttons — YOU build the dashboard.
+
+Available panel types: stat, chart, list, activity, text.
+- stat: KPI card. config needs: object_slug, label. Optionally: filter_field, filter_value, trend (true/false).
+- chart: Bar/line/pie chart. config needs: object_slug, group_by_field, chart_type (bar/line/pie), label.
+- list: Recent records table. config needs: object_slug, limit (number), label.
+- activity: Recent activity feed. No extra config needed.
+- text: Rich text / heading. config needs: content.
+
+Grid is 12 columns. Each panel has position: { x, y, w, h }. w should be 3, 4, 6, or 12. h should be 3, 4, or 5.
+Known objects and slugs will be provided in context. Use the actual slug values (e.g. "people", "jobs", "talent_pools").
+
+Step 4: Output EXACTLY this format:
+<CREATE_DASHBOARD>
+{
+  "name": "Recruitment Overview",
+  "description": "Key metrics for the recruiting team",
+  "panels": [
+    { "type": "stat",    "title": "Total Candidates", "position": {"x":0,"y":0,"w":3,"h":3}, "config": {"object_slug":"people","label":"Total Candidates"} },
+    { "type": "stat",    "title": "Open Jobs",        "position": {"x":3,"y":0,"w":3,"h":3}, "config": {"object_slug":"jobs","label":"Open Jobs","filter_field":"status","filter_value":"Open"} },
+    { "type": "chart",   "title": "Jobs by Dept",     "position": {"x":6,"y":0,"w":6,"h":4}, "config": {"object_slug":"jobs","group_by_field":"department","chart_type":"bar","label":"Jobs by Department"} },
+    { "type": "list",    "title": "Recent Candidates","position": {"x":0,"y":3,"w":6,"h":4}, "config": {"object_slug":"people","limit":5,"label":"Recent Candidates"} },
+    { "type": "activity","title": "Recent Activity",  "position": {"x":6,"y":4,"w":6,"h":4}, "config": {} }
+  ]
+}
+</CREATE_DASHBOARD>
+
 PORTAL CREATION INSTRUCTIONS:
 When a user wants to create a portal or career site, you MUST actually build it by outputting a <CREATE_PORTAL> block — NEVER just describe steps or give instructions.
 
@@ -1103,6 +1137,7 @@ function getContextActions(activeNav, settingsSection, navObjects, editorContext
     { id:"nf",   icon:"form",        label:"Create Form",         prompt:"I want to create a new form" },
     { id:"bp",   icon:"globe",       label:"Build Portal",        prompt:"I want to build a new portal — a branded external experience like a career site" },
     { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
+    { id:"nd",   icon:"layout",      label:"New Dashboard",       prompt:"I want to create a new dashboard" },
     { id:"iu",   icon:"user",        label:"Invite User",         prompt:"I want to invite a new user" },
     { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
     { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
@@ -1227,7 +1262,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [pendingInterview, setPendingInterview] = useState(null);
   const [pendingForm,      setPendingForm]      = useState(null);
   const [pendingReport,    setPendingReport]    = useState(null);
-  const [pendingPortal, setPendingPortal] = useState(null);
+  const [pendingPortal,    setPendingPortal]    = useState(null);
+  const [pendingDashboard, setPendingDashboard] = useState(null);
   const [parsedPerson,     setParsedPerson]     = useState(null);
   const [parsedJob,        setParsedJob]        = useState(null);
   const [proposedAction,   setProposedAction]   = useState(null);
@@ -1601,6 +1637,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  const parseCreateDashboard = (text) => {
+    const m = text.match(/<CREATE_DASHBOARD>([\s\S]*?)<\/CREATE_DASHBOARD>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
   const parseCreateReport = (text) => {
     const match = text.match(/<CREATE_REPORT>([\s\S]*?)<\/CREATE_REPORT>/);
     if (!match) return null;
@@ -1647,6 +1689,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<SCHEDULE_INTERVIEW>[\s\S]*?<\/SCHEDULE_INTERVIEW>/g,"")
     .replace(/<CREATE_FORM>[\s\S]*?<\/CREATE_FORM>/g,"")
     .replace(/<CREATE_PORTAL>[\s\S]*?<\/CREATE_PORTAL>/g,"")
+    .replace(/<CREATE_DASHBOARD>[\s\S]*?<\/CREATE_DASHBOARD>/g,"")
     .replace(/<CREATE_REPORT>[\s\S]*?<\/CREATE_REPORT>/g,"")
     .replace(/<PARSE_CV>[\s\S]*?<\/PARSE_CV>/g,"")
     .replace(/<PARSE_JD>[\s\S]*?<\/PARSE_JD>/g,"")
@@ -1837,6 +1880,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         adminUsers.length?`\n\nEXISTING USERS (${adminUsers.length} total):\n${adminUsers.map(u=>`- ${u.first_name} ${u.last_name} <${u.email}> role:${adminRoles.find(r=>r.id===u.role_id)?.name||u.role_id} status:${u.status}`).join("\n")}`:"",
         interviewTypes.length?`\n\nAVAILABLE INTERVIEW TYPES:\n${interviewTypes.map(t=>`- ${t.name} (id:${t.id}, duration:${t.duration}min, format:${t.format||t.interview_format||'Video Call'})`).join("\n")}`
           :"\n\nINTERVIEW TYPES: None configured yet — you can still schedule a custom interview.",
+        // Live objects context for dashboard/report creation
+        objects.length ? `\n\nLIVE OBJECTS (use these slugs and IDs for dashboard panels):\n${objects.map(o=>`- ${o.plural_name||o.name} | slug: ${o.slug} | id: ${o.id}`).join("\n")}` : "",
         // RBAC: inject user role so AI knows what actions are allowed
         _pcAI?.permissions?._roleSlug ? `\n\nUSER ROLE: ${_pcAI.permissions._roleSlug}${_pcAI.permissions._roleSlug==='super_admin'?' (full access)':_pcAI.permissions._roleSlug==='read_only'?' — READ ONLY, do NOT suggest any create/edit/delete actions':''}` : '',
       ].join("");
@@ -1904,6 +1949,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const interviewData = parseScheduleInterview(reply);
       const formData2     = parseCreateForm(reply);
       const portalData    = parseCreatePortal(reply);
+      const dashboardData = parseCreateDashboard(reply);
       const modifyReport  = parseModifyReport(reply);
       const reportData    = parseCreateReport(reply);
       const cvData        = parseParsedCV(reply);
@@ -1919,12 +1965,13 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         : interviewData  ? `I've prepared the interview for **${interviewData.candidate_name||'the candidate'}**:`
         : portalData     ? `I've designed the **${portalData.name}** portal:`
         : formData2      ? `I've designed the **${formData2.name}** form:`
+        : dashboardData  ? `I've designed the **${dashboardData.name}** dashboard:`
         : reportData     ? `I've built a **${reportData.title}** report — does this look right?`
         : "";
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
-      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasPortal:!!portalData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasSearch:searchHits.length>0,searchIndex:msgIndex,
-        interviewData, formData2, reportData, portalData}]);
+      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasSearch:searchHits.length>0,searchIndex:msgIndex,
+        interviewData, formData2, reportData, portalData, dashboardData}]);
       if(createData)    setPendingRecord(createData);
       if(workflowData)  setPendingWorkflow(workflowData);
       if(userData)      setPendingUser(userData);
@@ -1932,6 +1979,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(interviewData && canRecord('record_schedule_interview')) setPendingInterview(interviewData);
       if(formData2)     setPendingForm(formData2);
       if(portalData)    setPendingPortal(portalData);
+      if(dashboardData)  setPendingDashboard(dashboardData);
       if(modifyReport)  window.dispatchEvent(new CustomEvent("talentos:modify-report", { detail: modifyReport }));
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);
@@ -2438,6 +2486,57 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     window.dispatchEvent(new CustomEvent("talentos:open-report", { detail: cfg }));
     setMessages(m=>[...m,{role:"assistant",content:`Opening **${pendingReport.title}** in Reports — it's running now. Adjust filters or save it from there.`,ts:new Date()}]);
     setPendingReport(null);
+  };
+
+  const handleConfirmDashboard = async () => {
+    if (!pendingDashboard || !environment?.id) return;
+    setCreating(true);
+    try {
+      const panels = (pendingDashboard.panels || []).map((p, i) => ({
+        ...p,
+        id: `panel_${i}_${Date.now()}`,
+        // normalise: panel may use object_slug or object_id
+        config: {
+          ...p.config,
+          object_id: p.config?.object_id
+            || (p.config?.object_slug
+                ? objects.find(o => o.slug === p.config.object_slug)?.id
+                : undefined),
+        },
+      }));
+      const dash = await api.post("/dashboards", {
+        name:           pendingDashboard.name,
+        description:    pendingDashboard.description || "",
+        environment_id: environment.id,
+        is_shared:      false,
+        access_control: { type: "everyone" },
+        panels,
+      });
+      if (!dash?.id) throw new Error(dash?.error || "Dashboard creation failed");
+      setMessages(m => [...m, {
+        role: "assistant",
+        content: `✅ **${dash.name}** dashboard created with ${panels.length} panel${panels.length !== 1 ? "s" : ""}!`,
+        ts: new Date(),
+        createdNav: {
+          label: dash.name,
+          nav:   "dashboard_custom",
+          icon:  "bar-chart-2",
+          color: "#0ea5e9",
+          sub:   `${panels.length} panel${panels.length !== 1 ? "s" : ""}`,
+        },
+      }]);
+      setPendingDashboard(null);
+      // Navigate to My Dashboards so user can see it immediately
+      window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: "dashboard_custom" }));
+    } catch (err) {
+      setMessages(m => [...m, {
+        role: "assistant",
+        content: `Failed to create dashboard: ${err.message}`,
+        ts: new Date(),
+        error: true,
+      }]);
+    }
+    setCreating(false);
   };
 
   const copyMessage = (text,id) => { navigator.clipboard.writeText(text); setCopied(id); setTimeout(()=>setCopied(null),2000); };
@@ -3057,6 +3156,37 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                       <button onClick={()=>setPendingReport(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
                       <button onClick={handleConfirmReport} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#7F77DD",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                         <Ic n="bar-chart-2" s={12} c="white"/> Open in Reports
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {msg.role==="assistant"&&msg.hasDashboard&&msg.dashboardData&&i===messages.length-1&&(
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #0ea5e9",background:"rgba(14,165,233,0.05)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:"#0ea5e9",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Ic n="bar-chart-2" s={14} c="white"/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{msg.dashboardData.name}</div>
+                        <div style={{fontSize:11,color:"#0ea5e9",fontWeight:600}}>
+                          {(msg.dashboardData.panels||[]).length} panel{(msg.dashboardData.panels||[]).length!==1?"s":""}
+                          {msg.dashboardData.description?` · ${msg.dashboardData.description}`:""}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:12}}>
+                      {(msg.dashboardData.panels||[]).map((p,pi)=>(
+                        <div key={pi} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",background:"white",borderRadius:6,border:"1px solid rgba(14,165,233,0.2)",fontSize:12}}>
+                          <span style={{color:"#0ea5e9",fontWeight:700,width:52,flexShrink:0,textTransform:"capitalize"}}>{p.type}</span>
+                          <span style={{color:C.text1,flex:1}}>{p.title}</span>
+                          <span style={{color:C.text3,fontSize:10}}>{p.position?.w||6}×{p.position?.h||3}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingDashboard(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
+                      <button onClick={handleConfirmDashboard} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#0ea5e9",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        {creating?<><Ic n="loader" s={12} c="white"/> Creating…</>:<><Ic n="bar-chart-2" s={12} c="white"/> Create Dashboard</>}
                       </button>
                     </div>
                   </div>
