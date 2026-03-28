@@ -242,9 +242,12 @@ initDB().then(() => {
   // ── Migrations ──────────────────────────────────────────────────────────────
   const crypto = require('crypto');
   const hashPw = pw => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+  const DEFAULT_HASH = hashPw('Admin1234!');
   let pwFixed = 0;
   (store.users || []).forEach(u => {
-    if (!u.password_hash) { u.password_hash = hashPw('Admin1234!'); pwFixed++; }
+    // Fix missing hash OR a hash that isn't 64 hex chars (wrong algorithm/salt from old builds)
+    const hashLooksValid = u.password_hash && /^[0-9a-f]{64}$/.test(u.password_hash);
+    if (!hashLooksValid) { u.password_hash = DEFAULT_HASH; pwFixed++; }
   });
 
   let rolesFixed = 0;
