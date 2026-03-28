@@ -789,6 +789,8 @@ router.get('/:id/activity', (req, res) => {
   const offset = (Number(page)-1)*Number(limit);
   res.json({ items: logs.slice(offset,offset+Number(limit)), total, page:Number(page) });
 });
+
+router.post('/provision', express.json(), async (req, res) => {
   const { client, environment, admin_user, template } = req.body;
   if (!client?.name)      return res.status(400).json({ error: 'client.name required' });
   if (!admin_user?.email) return res.status(400).json({ error: 'admin_user.email required' });
