@@ -1069,28 +1069,38 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         )}
       </div>
 
-      {/* ── Right group: Calendar + Bell (Notifications & What's New) ── */}
+      {/* ── Right group: Calendar + Bell + History ── */}
       <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:"auto", flexShrink:0, borderLeft:"1px solid var(--t-border)", paddingLeft:10 }}>
 
-        {/* Calendar */}
+        {/* Calendar — pill style matching history */}
         <button onClick={() => onNavigateToCalendar?.()} title="Calendar"
-          style={{ width:34, height:34, borderRadius:9, border:"1px solid var(--t-border)", background:"var(--t-surface2)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background .12s" }}
-          onMouseEnter={e=>e.currentTarget.style.background="var(--t-accent-light,#eef2ff)"}
-          onMouseLeave={e=>e.currentTarget.style.background="var(--t-surface2)"}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--t-accent)" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          style={{ display:"flex", alignItems:"center", gap:5, height:34, borderRadius:8,
+            border:"1px solid var(--t-border)", padding:"0 10px 0 8px",
+            background:"var(--t-surface2)", color:"var(--t-text2)",
+            cursor:"pointer", transition:"all .12s", fontSize:12, fontWeight:600, fontFamily:"inherit", whiteSpace:"nowrap" }}
+          onMouseEnter={e=>{ e.currentTarget.style.background="var(--t-accent-light,#eef2ff)"; e.currentTarget.style.color="var(--t-accent)"; e.currentTarget.style.borderColor="var(--t-accent)"; }}
+          onMouseLeave={e=>{ e.currentTarget.style.background="var(--t-surface2)"; e.currentTarget.style.color="var(--t-text2)"; e.currentTarget.style.borderColor="var(--t-border)"; }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{flexShrink:0}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Calendar
         </button>
 
-        {/* What's New */}
+        {/* What's New — pill style */}
         <div ref={bellRef} style={{ position:"relative" }}>
           <button onClick={() => setBellOpen(o => !o)} title="Notifications & What's New"
-            style={{ width:34, height:34, borderRadius:9, border:"1px solid var(--t-border)", background: bellOpen ? "var(--t-accent-light,#eef2ff)" : "var(--t-surface2)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", position:"relative", transition:"background .12s" }}
-            onMouseEnter={e=>e.currentTarget.style.background="var(--t-accent-light,#eef2ff)"}
-            onMouseLeave={e=>{ if(!bellOpen) e.currentTarget.style.background="var(--t-surface2)"; }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--t-accent)" strokeWidth="2" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            style={{ display:"flex", alignItems:"center", gap:5, height:34, borderRadius:8,
+              border:`1px solid ${bellOpen ? "var(--t-accent)" : "var(--t-border)"}`,
+              padding:"0 10px 0 8px", position:"relative",
+              background: bellOpen ? "var(--t-accent-light,#eef2ff)" : "var(--t-surface2)",
+              color: bellOpen ? "var(--t-accent)" : "var(--t-text2)",
+              cursor:"pointer", transition:"all .12s", fontSize:12, fontWeight:600, fontFamily:"inherit", whiteSpace:"nowrap" }}
+            onMouseEnter={e=>{ if(!bellOpen){ e.currentTarget.style.background="var(--t-accent-light,#eef2ff)"; e.currentTarget.style.color="var(--t-accent)"; e.currentTarget.style.borderColor="var(--t-accent)"; } }}
+            onMouseLeave={e=>{ if(!bellOpen){ e.currentTarget.style.background="var(--t-surface2)"; e.currentTarget.style.color="var(--t-text2)"; e.currentTarget.style.borderColor="var(--t-border)"; } }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{flexShrink:0}}><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            Updates
+            {/* Dot indicator — only shows when there's something unread */}
             {(unread + releases.filter(r => new Date(r.published_at) > new Date(relLastSeen)).length) > 0 && (
-              <span style={{ position:"absolute", top:-4, right:-4, minWidth:17, height:17, borderRadius:99, background:"#ef4444", color:"white", fontSize:9, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px", border:"2px solid var(--t-surface)", lineHeight:1 }}>
-                {(() => { const t = unread + releases.filter(r => new Date(r.published_at) > new Date(relLastSeen)).length; return t > 9 ? "9+" : t; })()}
-              </span>
+              <span style={{ width:7, height:7, borderRadius:"50%", background:"#ef4444",
+                border:"1.5px solid var(--t-surface)", flexShrink:0 }} />
             )}
           </button>
 

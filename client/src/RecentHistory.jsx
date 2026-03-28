@@ -79,35 +79,34 @@ export function HistoryDropdown({
 
   return (
     <>
-      {/* ── Clock button (lives inside GlobalSearch sticky bar) ── */}
+      {/* ── History button — shows last visited item name as a pill ── */}
       <button
         onClick={onToggle}
-        title={isOpen ? "Close history" : "View history"}
+        title={isOpen ? "Close history" : "Recent pages"}
         style={{
           position: "relative",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          width: 34, height: 34, borderRadius: 8, border: "none",
-          background: isOpen ? "var(--t-accent-light, #eef1ff)" : "transparent",
-          color: isOpen ? "var(--t-accent, #4361EE)" : "var(--t-text3)",
+          display: "flex", alignItems: "center", gap: 5,
+          height: 34, borderRadius: 8, border: "1px solid var(--t-border)",
+          padding: "0 10px 0 8px",
+          background: isOpen ? "var(--t-accent-light, #eef1ff)" : "var(--t-surface2)",
+          color: isOpen ? "var(--t-accent, #4361EE)" : "var(--t-text2)",
           cursor: "pointer", transition: "all 0.12s", flexShrink: 0,
+          fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+          whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden",
         }}
-        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = "var(--t-surface2, #f1f5f9)"; e.currentTarget.style.color = "var(--t-text1)"; } }}
-        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--t-text3)"; } }}
+        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = "var(--t-accent-light, #eef1ff)"; e.currentTarget.style.color = "var(--t-accent, #4361EE)"; e.currentTarget.style.borderColor = "var(--t-accent, #4361EE)"; } }}
+        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = "var(--t-surface2)"; e.currentTarget.style.color = "var(--t-text2)"; e.currentTarget.style.borderColor = "var(--t-border)"; } }}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {/* Clock icon */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        {history.length > 0 && (
-          <span style={{
-            position: "absolute", top: 4, right: 4,
-            minWidth: 14, height: 14, borderRadius: 99,
-            background: "var(--t-accent, #4361EE)", color: "#fff",
-            fontSize: 8, fontWeight: 800, lineHeight: "14px",
-            textAlign: "center", padding: "0 3px", pointerEvents: "none",
-          }}>{history.length > 9 ? "9+" : history.length}</span>
-        )}
+        {/* Last visited label — truncated */}
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          {history.length > 0 ? history[0].label : "History"}
+        </span>
       </button>
 
       {/* ── Right-side slide-out drawer ── */}
