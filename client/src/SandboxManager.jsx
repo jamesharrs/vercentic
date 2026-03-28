@@ -629,7 +629,13 @@ export default function SandboxManager({ environment }) {
           <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:800,color:C.text1}}>Sandbox Manager</h2>
           <p style={{margin:0,fontSize:13,color:C.text3}}>Clone your environment for safe testing, then promote changes to production.</p>
         </div>
-        <Btn v="amber" icon="gitBranch" onClick={()=>setShowClone(true)}>Create Sandbox</Btn>
+        {environment?.is_sandbox
+          ? <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:9,background:`${C.amber}15`,border:`1.5px solid ${C.amber}`,fontSize:12,fontWeight:700,color:"#92400E"}}>
+              <Ic n="gitBranch" s={13} c="#92400E"/>
+              Sandboxes cannot be nested
+            </div>
+          : <Btn v="amber" icon="gitBranch" onClick={()=>setShowClone(true)}>Create Sandbox</Btn>
+        }
       </div>
 
       {/* How it works */}
@@ -655,7 +661,7 @@ export default function SandboxManager({ environment }) {
             </div>
           ))}
         </div>
-        <Btn v="amber" icon="gitBranch" onClick={()=>setShowClone(true)}>Create first sandbox</Btn>
+        {!environment?.is_sandbox && <Btn v="amber" icon="gitBranch" onClick={()=>setShowClone(true)}>Create first sandbox</Btn>}
       </div>}
 
       {loading&&<div style={{textAlign:"center",padding:"40px 0",color:C.text3}}>Loading sandboxes…</div>}
