@@ -2096,6 +2096,9 @@ function App() {
                   clearSession={clearSession}
                   setSession={setSession}
                   t={t}
+                  environments={environments}
+                  selectedEnv={selectedEnv}
+                  onSwitchEnv={(env) => { setSelectedEnv(env); setActiveNav("dashboard"); }}
                 />
               : <div style={{ display: "flex", justifyContent: "center", padding: "4px 0" }}>
                   <div
@@ -2304,8 +2307,9 @@ function App() {
 // ErrorBoundary: using the reporting version from ErrorBoundary.jsx (reports to /api/error-logs)
 
 // ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
-function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
+function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t, environments = [], selectedEnv, onSwitchEnv }) {
   const [open, setOpen] = useState(false);
+  const multiEnv = environments.length > 1;
   return (
     <div style={{ position: "relative" }}>
       {open && (
@@ -2315,6 +2319,50 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
             background: "var(--t-surface)", border: "1px solid var(--t-border)",
             borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
             zIndex: 201, overflow: "hidden", padding: "4px 0" }}>
+
+            {/* Environment switcher — only shown when multiple envs exist */}
+            {multiEnv && (
+              <>
+                <div style={{ padding: "6px 14px 4px", fontSize: 10, fontWeight: 700,
+                  color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  Environment
+                </div>
+                {environments.map(env => {
+                  const isSandbox = !!env.is_sandbox;
+                  const isSelected = selectedEnv?.id === env.id;
+                  const dot = env.color || (isSandbox ? "#F59E0B" : "#4f46e5");
+                  return (
+                    <button key={env.id}
+                      onClick={() => { if (onSwitchEnv) onSwitchEnv(env); setOpen(false); }}
+                      style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
+                        padding: "7px 14px", border: "none",
+                        background: isSelected ? "var(--t-accentLight)" : "transparent",
+                        cursor: "pointer", fontFamily: "inherit", fontSize: 12,
+                        fontWeight: isSelected ? 700 : 500,
+                        color: isSelected ? "var(--t-accent)" : "var(--t-text2)",
+                        textAlign: "left" }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--t-surface2)"; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%",
+                        background: dot, flexShrink: 0,
+                        boxShadow: isSelected ? `0 0 0 2px ${dot}40` : "none" }} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
+                        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{env.name}</span>
+                      {isSandbox && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px",
+                          borderRadius: 4, background: "#FEF3C7", color: "#92400E",
+                          flexShrink: 0 }}>SANDBOX</span>
+                      )}
+                      {isSelected && (
+                        <Icon name="check" size={12} color="var(--t-accent)" />
+                      )}
+                    </button>
+                  );
+                })}
+                <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
+              </>
+            )}
+
             {[
               { id: "settings", icon: "settings", label: t ? t("nav.settings") : "Settings" },
               { id: "help",     icon: "help-circle", label: "Help" },
@@ -2369,9 +2417,13 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
             lineHeight: "1.4", paddingBottom: 1 }}>
             {session.user.first_name} {session.user.last_name}
           </div>
-          <div style={{ fontSize: 10, color: "var(--t-text3)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "1.4" }}>
-            {session.role?.name || ""}
+          <div style={{ fontSize: 10, color: selectedEnv?.is_sandbox ? "#92400E" : "var(--t-text3)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "1.4",
+            display: "flex", alignItems: "center", gap: 3 }}>
+            {selectedEnv?.is_sandbox && (
+              <span style={{ display:"inline-block",width:5,height:5,borderRadius:"50%",background:"#F59E0B",flexShrink:0 }}/>
+            )}
+            {multiEnv ? (selectedEnv?.name || session.role?.name || "") : (session.role?.name || "")}
           </div>
         </div>
         <Icon name="chevron-up" size={12} color="var(--t-text3)"
