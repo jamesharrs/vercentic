@@ -72,31 +72,44 @@ export default function Reports({environment,initialReport}){
     });
   },[selObject]);
 
+  // Helper: apply a preset object and immediately run the report
+  const applyPreset = useCallback((preset, objList) => {
+    const src = objList || objects;
+    if (!preset || !src.length) return;
+    const slug = preset.objectSlug || preset.object || "";
+    const obj  = src.find(o =>
+      o.slug === slug ||
+      o.id   === (preset.objectId || "") ||
+      (slug && o.name?.toLowerCase().includes(slug.toLowerCase()))
+    );
+    if (!obj) return;
+    const presetGroupBy  = preset.groupBy  || preset.group_by  || "";
+    const presetFilters  = preset.filters  || [];
+    const presetFormulas = preset.formulas || [];
+    skipReset.current = true;
+    setSelObject(obj.id);
+    if (presetGroupBy)              setGroupBy(presetGroupBy);
+    if (preset.chartType || preset.chart_type) setChartType(preset.chartType || preset.chart_type || "bar");
+    if (presetFilters.length)       setFilters(presetFilters);
+    if (presetFormulas.length)      setFormulas(presetFormulas);
+    setPanel("build");
+    // Pass overrides directly so runReport doesn't use stale state closures
+    setTimeout(() => runReport(obj.id, presetGroupBy, presetFilters), 300);
+  }, [objects, runReport]);
+
+  // React to initialReport prop (first load / navigating from elsewhere)
   useEffect(()=>{
     if(!initialReport||!objects.length)return;
-    // preset may use objectSlug (from App.jsx handler) or object (legacy)
-    const slug = initialReport.objectSlug || initialReport.object || "";
-    const obj = objects.find(o =>
-      o.slug === slug ||
-      o.id   === (initialReport.objectId || "") ||
-      o.name?.toLowerCase().includes(slug.toLowerCase())
-    );
-    if(obj){
-      skipReset.current=true;
-      setSelObject(obj.id);
-      // support both camelCase (groupBy) and snake_case (group_by) from different callers
-      if(initialReport.groupBy||initialReport.group_by)   setGroupBy(initialReport.groupBy||initialReport.group_by);
-      if(initialReport.chartType||initialReport.chart_type) setChartType(initialReport.chartType||initialReport.chart_type||"bar");
-      if(initialReport.formulas)  setFormulas(initialReport.formulas);
-      if(initialReport.filters)   setFilters(initialReport.filters);
-      setPanel("build");
-      // pass preset values directly so runReport doesn't use stale state closures
-      const presetFilters  = initialReport.filters  || [];
-      const presetGroupBy  = initialReport.groupBy  || initialReport.group_by  || "";
-      const presetFormulas = initialReport.formulas || [];
-      setTimeout(()=>runReport(obj.id, presetGroupBy, presetFilters), 400);
-    }
+    applyPreset(initialReport, objects);
   },[initialReport,objects]);
+
+  // Also listen directly for talentos:open-report so updates while already on
+  // the Reports page work immediately (bypasses App state round-trip / stale closure)
+  useEffect(()=>{
+    const handler = (e) => { if(objects.length) applyPreset(e.detail, objects); };
+    window.addEventListener("talentos:open-report", handler);
+    return () => window.removeEventListener("talentos:open-report", handler);
+  }, [applyPreset, objects]);
 
   const runReport=useCallback(async(objectId,grpBy,overrideFilters)=>{
     const oid=objectId||selObject;if(!oid||!environment?.id)return;setRunning(true);

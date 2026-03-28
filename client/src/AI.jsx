@@ -1257,10 +1257,14 @@ function aiHeaders() {
 
 export const AICopilot = ({ environment, currentRecord, currentObject, onNavigateToRecord, activeNav, navObjects, pageContext }) => {
   const [open,         setOpen]         = useState(false);
+  const [docked,       setDocked]       = useState(false); // sidebar panel mode
   const [messages,     setMessages]     = useState([]);
   const [input,        setInput]        = useState("");
 
-  // Listen for external open requests (e.g. from Help page)
+  // Broadcast dock state so App.jsx can shrink the content area
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("talentos:copilot-dock", { detail: { docked: open && docked } }));
+  }, [open, docked]);
   useEffect(() => {
     const handler = (e) => {
       setOpen(true);
@@ -2622,17 +2626,32 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     <>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes popIn{from{opacity:0;transform:scale(.97) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}} @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}} @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} .copilot-action-btn:hover{background:rgba(124,58,237,0.1)!important;border-color:rgba(124,58,237,0.4)!important;color:#7c3aed!important;transform:translateY(-1px);}`}</style>
 
-      {/* Floating button */}
+      {/* Floating button — hidden when docked */}
+      {!docked&&(
       <button data-tour="copilot-button" onClick={()=>setOpen(o=>!o)}
         style={{position:"fixed",bottom:24,right:24,width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.ai},#3b5bdb)`,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(124,58,237,.4)",zIndex:800,transition:"transform .15s,box-shadow .15s"}}
         onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.08)";e.currentTarget.style.boxShadow="0 6px 28px rgba(124,58,237,.5)";}}
         onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 4px 20px rgba(124,58,237,.4)";}}>
         {open?<Ic n="x" s={20} c="white"/>:<svg width="22" height="22" viewBox="0 0 80 80" fill="none"><path d="M8 52 L40 36 L72 52 L40 68 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M8 52 L8 62 L40 78 L40 68 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M72 52 L72 62 L40 78 L40 68 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M20 34 L40 24 L60 34 L40 44 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M20 34 L20 42 L40 52 L40 44 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M60 34 L60 42 L40 52 L40 44 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.6"/><path d="M28 18 L40 12 L52 18 L40 24 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M28 18 L28 24 L40 30 L40 24 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none"/><path d="M52 18 L52 24 L40 30 L40 24 Z" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none" opacity="0.6"/></svg>}
       </button>
+      )}
 
-      {/* Chat panel */}
+      {/* Chat panel — float or docked sidebar */}
       {open&&(
-        <div style={{position:"fixed",bottom:88,right:24,width:440,height:620,background:"#fafbff",borderRadius:24,boxShadow:"0 32px 80px rgba(80,40,180,.22),0 4px 16px rgba(0,0,0,.08)",zIndex:800,display:"flex",flexDirection:"column",overflow:"hidden",border:"1px solid rgba(124,58,237,.15)",animation:"popIn .22s cubic-bezier(.175,.885,.32,1.275)"}}>
+        <div style={docked ? {
+          // Docked sidebar mode
+          position:"fixed",top:0,right:0,width:420,height:"100vh",
+          background:"#fafbff",borderLeft:"1px solid rgba(124,58,237,.15)",
+          boxShadow:"-8px 0 32px rgba(80,40,180,.12)",
+          zIndex:800,display:"flex",flexDirection:"column",overflow:"hidden",
+        } : {
+          // Floating popup mode
+          position:"fixed",bottom:88,right:24,width:440,height:620,
+          background:"#fafbff",borderRadius:24,
+          boxShadow:"0 32px 80px rgba(80,40,180,.22),0 4px 16px rgba(0,0,0,.08)",
+          zIndex:800,display:"flex",flexDirection:"column",overflow:"hidden",
+          border:"1px solid rgba(124,58,237,.15)",animation:"popIn .22s cubic-bezier(.175,.885,.32,1.275)"
+        }}>
 
           {/* Header */}
           <div style={{padding:"18px 20px 16px",background:"linear-gradient(135deg,#5b21b6 0%,#4338ca 60%,#3b5bdb 100%)",display:"flex",alignItems:"center",gap:12,flexShrink:0,position:"relative",overflow:"hidden"}}>
@@ -2663,6 +2682,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 })()}
               </div>
             </div>
+            {/* Dock / undock button */}
+            <button
+              onClick={()=>setDocked(d=>!d)}
+              title={docked ? "Pop out" : "Dock to sidebar"}
+              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.2)",cursor:"pointer",padding:7,borderRadius:10,display:"flex",transition:"background .15s",zIndex:1}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.25)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.15)"}>
+              {docked
+                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+              }
+            </button>
             <button onClick={()=>setOpen(false)} style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.2)",cursor:"pointer",padding:7,borderRadius:10,display:"flex",transition:"background .15s",zIndex:1}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.25)"}
               onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.15)"}>

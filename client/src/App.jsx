@@ -1636,6 +1636,7 @@ function App() {
   };
   const { history: navHistory, pinned, push: pushHistory, clear: clearHistory, togglePin, isPinned } = useHistory();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [copilotDocked, setCopilotDocked] = useState(false);
   const [dashBuilderMode, setDashBuilderMode] = useState(false);
   const [navObjects, setNavObjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1928,6 +1929,13 @@ function App() {
     return () => window.removeEventListener("talentos:filter-navigate", handler);
   }, []);
 
+  // Copilot dock state — shrink content area when docked as sidebar
+  useEffect(() => {
+    const handler = (e) => setCopilotDocked(e.detail?.docked ?? false);
+    window.addEventListener("talentos:copilot-dock", handler);
+    return () => window.removeEventListener("talentos:copilot-dock", handler);
+  }, []);
+
   // Bulk interview — navigate to Interviews and pre-fill candidates
   useEffect(() => {
     const handler = (e) => {
@@ -2105,7 +2113,7 @@ function App() {
       </div>
 
       {/* Main content */}
-      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: historyOpen ? 300 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
+      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
         {/* Top bar */}
         <GlobalSearch data-tour="global-search" selectedEnv={selectedEnv} navObjects={navObjects}
              activeDashTab={activeNav === "dashboard" ? "overview" : activeNav.startsWith("dashboard_") ? activeNav.replace("dashboard_","") : null}
