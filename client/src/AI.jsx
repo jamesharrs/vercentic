@@ -1267,7 +1267,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [parsedPerson,     setParsedPerson]     = useState(null);
   const [parsedJob,        setParsedJob]        = useState(null);
   const [proposedAction,   setProposedAction]   = useState(null);
-  const bottomRef  = useRef(null);
+  const bottomRef      = useRef(null);
+  const lastMsgTopRef  = useRef(null);  // points to top of newest message
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
   const prevNavRef = useRef(activeNav);   // track previous nav for change detection
@@ -1505,7 +1506,19 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open, activeNav, currentRecord?.id, currentObject?.id]);
 
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
+  useEffect(() => {
+    if (!messages.length) return;
+    const last = messages[messages.length - 1];
+    // For assistant messages: scroll to the TOP of the new message so you
+    // read from the beginning. For user messages: scroll to bottom as normal.
+    if (last.role === "assistant") {
+      setTimeout(() => {
+        lastMsgTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50); // slight delay so the DOM has painted the new message
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   // Fetch admin data (roles + users) when copilot opens
   useEffect(()=>{
@@ -2675,7 +2688,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           {/* Messages */}
           <div style={{flex:1,overflow:"auto",padding:"16px 16px",display:"flex",flexDirection:"column",gap:14,background:"linear-gradient(180deg,#f5f3ff 0%,#eef2ff 100%)"}}>
             {messages.map((msg,i)=>(
-              <div key={i}>
+              <div key={i} ref={i === messages.length - 1 && msg.role === "assistant" ? lastMsgTopRef : null}>
                 {/* ── Navigation change pill (UI only, not sent to API) ── */}
                 {msg.role==="system_notice"&&(
                   <div style={{display:"flex",justifyContent:"center",margin:"2px 0"}}>
