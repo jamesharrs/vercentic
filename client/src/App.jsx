@@ -1470,37 +1470,29 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
+  // ── ALL hooks must be called unconditionally before any early returns ────────
   const { TourPortal, startTour } = useTour();
-  // Super Admin route — completely separate from main app
-  // Portal routes: /portal/slug (legacy) OR /slug (clean URL e.g. /careers)
+  const { prefs, update } = useTheme();
+  const { t, isRTL } = useI18n();
+
+  // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
   const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record)(\/|$)/;
+
   // Legacy /portal/slug route
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
-  if (portalSlug) return <PortalApp slug={portalSlug}/>
+  if (portalSlug) return <PortalApp slug={portalSlug}/>;
   // Clean URL: any path that isn't a known app route and isn't root → try as portal
   if (_path !== '/' && !_appRoutes.test(_path)) {
     const cleanSlug = _path.replace(/^\//, '');
-    if (cleanSlug && !cleanSlug.includes('.')) return <PortalApp slug={cleanSlug}/>
+    if (cleanSlug && !cleanSlug.includes('.')) return <PortalApp slug={cleanSlug}/>;
   }
-
-  if (window.location.pathname === '/superadmin') {
-    return <SuperAdminConsole />;
-  }
-
-  // Availability picker — public route for interview coordination
-  if (window.location.pathname.startsWith('/availability/')) {
+  if (_path === '/superadmin') return <SuperAdminConsole />;
+  if (_path.startsWith('/availability/')) {
     return <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}><AvailabilityPickerPage/></Suspense>;
   }
-
-  // Bot interview route — public, no login required
-  const botToken = window.location.pathname.match(/^\/bot\/(.+)$/)?.[1];
-  if (botToken) {
-    return <BotInterview token={botToken} />;
-  }
-
-  const { prefs, update } = useTheme();
-  const { t, isRTL } = useI18n();
+  const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
+  if (botToken) return <BotInterview token={botToken} />;
 
   // If the subdomain doesn't match the stored session's tenant_slug,
   // clear the stale session so the user is prompted to log in fresh.
