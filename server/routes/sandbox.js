@@ -35,7 +35,21 @@ const CONFIG_COLLECTIONS = [
 ];
 const DATA_COLLECTIONS   = ['records','communications','relationships','interviews','offers','form_responses','activity_log','people_links','record_workflow_assignments'];
 
-// Collections linked via FK rather than environment_id — must clone AFTER their parent
+// FK keys that need remapping during promote (sandbox ID → production ID)
+const FK_KEYS = ['object_id','workflow_id','form_id','portal_id','dataset_id','lookup_object_id','related_object_id','parent_id'];
+
+// Remap all FK references in an item from sandbox IDs → production IDs
+function remapForProduction(item, reverseMap, promoteIdMap) {
+  const out = { ...item };
+  FK_KEYS.forEach(fk => {
+    if (out[fk]) {
+      // Check promoteIdMap first (items already promoted this run), then reverseMap (original clone map)
+      out[fk] = promoteIdMap[out[fk]] || reverseMap[out[fk]] || out[fk];
+    }
+  });
+  return out;
+}
+// Collections linked via FK rather than environment_id — must clone/promote AFTER their parent
 const LINKED_COLLECTIONS = {
   'workflow_steps':  'workflow_id',
   'dataset_options': 'dataset_id',
@@ -341,7 +355,11 @@ router.post('/:id/promote', express.json(), (req, res) => {
     let promoted = 0;
     toPromote.forEach(sbItem => {
       const sourceId = sbItem._source_id || reverseMap[sbItem.id];
-      const prodItem = { ...JSON.parse(JSON.stringify(sbItem)) };
+      // Remap FK references: sandbox object/workflow IDs → production IDs
+      let prodItem = remapForProduction(
+        { ...JSON.parse(JSON.stringify(sbItem)) },
+        reverseMap, promoteIdMap
+      );
 
       // Restore to production env
       prodItem.environment_id = sb.production_env_id;

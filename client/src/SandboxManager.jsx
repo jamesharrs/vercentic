@@ -588,7 +588,9 @@ const SandboxDetail = ({ sandbox, onBack, onRefresh }) => {
               <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{s.label}</div>
               <div style={{fontSize:10,color:C.text3}}>{new Date(s.created_at).toLocaleString()} · {(s.size/1024).toFixed(0)} KB</div>
             </div>
-            <Badge color={s.type==="baseline"?C.accent:s.type==="pre_promote"?C.green:C.amber} light>{s.type}</Badge>
+            <Badge color={s.type==="baseline"?C.accent:s.type==="pre_promote"?C.green:C.amber} light>
+              {s.type==="baseline" ? "baseline" : s.type==="pre_promote" ? "pre-promotion backup" : s.type}
+            </Badge>
           </div>
         ))}
       </div>}
