@@ -918,12 +918,34 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
 
           {/* Steps */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text2, marginBottom: 12 }}>Steps</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text2 }}>Steps</div>
+              {(name.trim() && objectId) && (
+                <button onClick={async () => {
+                  if (!workflow?.id) {
+                    if (!environment?.id) return;
+                    setSaving(true);
+                    try {
+                      const wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
+                      if (!wf?.id) throw new Error("No id returned");
+                      if (steps.length > 0) await api.put(`/workflows/${wf.id}/steps`, { steps: steps.map(migrateStep) });
+                      onSave({ ...wf, steps });
+                      window.__pendingCanvasWf = wf;
+                    } catch(err) { window.__toast?.alert("Save failed: " + err.message); return; } finally { setSaving(false); }
+                  }
+                  setViewMode("canvas");
+                }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: C.accentLight, color: C.accent, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><rect x={3} y={3} width={18} height={18} rx={3}/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+                  Open Visual Canvas
+                </button>
+              )}
+            </div>
             {steps.length === 0 && (
               <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 12, padding: "32px", textAlign: "center", color: C.text3 }}>
                 <Ic n="workflow" s={28} c={C.border}/>
                 <div style={{ fontSize: 13, marginTop: 10, fontWeight: 600 }}>No steps yet</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Add steps below to build your workflow</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>Add steps below or use the Visual Canvas builder above</div>
               </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
