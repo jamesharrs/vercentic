@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { matchCandidateToJob } from "./AI.jsx";
 import SharePicker from "./SharePicker.jsx";
 import api from './apiClient.js';
+import WorkflowCanvas from "./WorkflowCanvas.jsx";
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = {
@@ -701,6 +702,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
   const [triggerType, setTriggerType] = useState(workflow?.trigger_type || "manual");
   const [triggerConfig, setTriggerConfig] = useState(workflow?.trigger_config || {});
   const [steps, setSteps]     = useState(workflow?.steps || []);
+  const [viewMode, setViewMode] = useState("list"); // "list" | "canvas"
   const [saving, setSaving]   = useState(false);
   const [fields, setFields]   = useState([]);
   const [objects, setObjects] = useState(parentObjects || []);
@@ -756,6 +758,26 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
     }
   };
 
+  // Canvas mode — full-screen overlay
+  if (viewMode === "canvas" && workflow?.id) {
+    return (
+      <WorkflowCanvas
+        workflow={{ ...workflow, name, object_id: objectId }}
+        environment={environment}
+        steps={steps}
+        triggerType={triggerType}
+        triggerConfig={triggerConfig}
+        fields={fields}
+        onSave={(updated) => {
+          if (updated.steps) setSteps(updated.steps);
+          setViewMode("list");
+          onSave(updated);
+        }}
+        onClose={() => setViewMode("list")}
+      />
+    );
+  }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 1000, display: "flex", alignItems: "stretch", justifyContent: "flex-end" }}>
       <div style={{ width: 680, background: C.bg, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "-8px 0 40px rgba(0,0,0,.2)", animation: "slideIn .2s ease" }}>
@@ -770,6 +792,14 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
             <div style={{ fontSize: 16, fontWeight: 800, color: C.text1 }}>{workflow?.id ? "Edit Workflow" : "New Workflow"}</div>
             <div style={{ fontSize: 12, color: C.text3 }}>{steps.length} step{steps.length !== 1 ? "s" : ""}</div>
           </div>
+          {/* View mode toggle */}
+          {workflow?.id && (
+            <button onClick={() => setViewMode("canvas")} title="Open visual canvas"
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.accent}40`, background: C.accentLight, color: C.accent, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={3} y={3} width={18} height={18} rx={3}/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+              Visual Canvas
+            </button>
+          )}
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", borderRadius: 8 }}><Ic n="x" s={18} c={C.text3}/></button>
         </div>
 

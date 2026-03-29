@@ -360,9 +360,18 @@ router.post('/', (req, res) => {
 router.patch('/:id', (req, res) => {
   if (_checkGA(req, res, 'manage_workflows') === false) return;
   ensureTables();
+  // Allow flow_layout (nodes+edges) to be stored alongside regular fields
   const wf = update('workflows', w => w.id === req.params.id, req.body);
   if (!wf) return res.status(404).json({ error: 'Not found' });
   const steps = query('workflow_steps', s => s.workflow_id === wf.id).sort((a,b) => a.order - b.order);
+  // Sync to Postgres
+  try {
+    const pg = require('../db/postgres');
+    if (pg.isEnabled()) {
+      const { getCurrentTenant } = require('../db/init');
+      pg.saveCollection(getCurrentTenant()||'master', 'workflows', getStore().workflows).catch(()=>{});
+    }
+  } catch(e) {}
   res.json({ ...wf, steps });
 });
 
