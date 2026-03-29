@@ -193,7 +193,7 @@ function ActionNode({ data, selected }) {
           <Ic n={def.icon} s={14} c="white" />
         </div>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color }}{...{}}>{def.label}</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color }}>{def.label}</div>
           {data.summary && <div style={{ fontSize: 10, color: C.text3, marginTop: 2, lineHeight: 1.3 }}>{data.summary}</div>}
         </div>
       </div>
