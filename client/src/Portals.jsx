@@ -297,6 +297,8 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
 
     film:"M19.82 2H4.18A2.18 2.18 0 002 4.18v15.64A2.18 2.18 0 004.18 22h15.64A2.18 2.18 0 0022 19.82V4.18A2.18 2.18 0 0019.82 2zM7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5",
     bookmark:"M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z",
+    user:"M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8",
+    messageSquare:"M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
     sparkles:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM5 3l.6 1.8L7.4 5.4 5.6 6l-.6 1.8L4.4 6l-1.8-.6L4.4 4.8zM19 15l.6 1.8 1.8.6-1.8.6-.6 1.8-.6-1.8-1.8-.6 1.8-.6z",
     anchor:"M12 2a3 3 0 100 6 3 3 0 000-6zM12 8v14M5 10a7 7 0 0014 0",
     fileText:"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
@@ -586,7 +588,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           </button>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
-          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["feedback","Feedback"]].map(([id,l])=>(
+          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["feedback","Feedback"],["copilot","Copilot"]].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
           ))}
         </div>
@@ -666,6 +668,70 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={gdpr.bannerBg||"#0F1729"} onChange={e=>setG("bannerBg",e.target.value)} style={{width:34,height:28,padding:0,border:"none",cursor:"pointer",borderRadius:4}}/><input value={gdpr.bannerBg||""} onChange={e=>setG("bannerBg",e.target.value)} placeholder="#0F1729" style={{...inp,flex:1}}/></div>
         </>}
         {tab==="feedback"&&<FeedbackTab portal={portal} onChange={onChange} accent={C.accent} api={apiProp}/>}
+        {tab==="copilot"&&(()=>{
+          const cop = portal.copilot || {};
+          const setCop = (k,v) => onChange({ ...portal, copilot: { ...cop, [k]: v } });
+          const chipStyle = (active) => ({padding:"6px 12px",borderRadius:8,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accentLight:"transparent",color:active?C.accent:C.text2,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,transition:"all .15s"});
+          return (<>
+            {/* Enable toggle */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderRadius:12,border:`1.5px solid ${cop.enabled?C.accent:C.border}`,background:cop.enabled?C.accentLight:"transparent",transition:"all .15s"}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text1}}>Enable Copilot</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2}}>Show an AI assistant on this portal</div>
+              </div>
+              <button onClick={()=>setCop("enabled",!cop.enabled)} style={{width:44,height:24,borderRadius:12,border:"none",background:cop.enabled?C.accent:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s"}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:"white",position:"absolute",top:3,left:cop.enabled?23:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </button>
+            </div>
+            {cop.enabled&&<>
+              {/* Identity */}
+              <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="user" s={13} c={C.text3}/> Copilot Identity</div>
+                {lbl("Name")}<input value={cop.name||""} onChange={e=>setCop("name",e.target.value)} placeholder="e.g. Aria, Recruiter Bot, Career Guide" style={inp}/>
+                <div style={{height:10}}/>
+                {lbl("Subtitle")}<input value={cop.subtitle||""} onChange={e=>setCop("subtitle",e.target.value)} placeholder="Explore roles & apply" style={inp}/>
+                <div style={{height:10}}/>
+                {lbl("Avatar / logo URL")}<input value={cop.avatar_url||""} onChange={e=>setCop("avatar_url",e.target.value)} placeholder="https://…/avatar.png" style={inp}/>
+                {cop.avatar_url&&<img src={cop.avatar_url} alt="" style={{width:40,height:40,borderRadius:10,objectFit:"cover",marginTop:6,border:`1px solid ${C.border}`}} onError={e=>e.target.style.display="none"}/>}
+              </div>
+              {/* Messaging */}
+              <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="messageSquare" s={13} c={C.text3}/> Messaging</div>
+                {lbl("Welcome message")}<textarea value={cop.welcome_message||""} onChange={e=>setCop("welcome_message",e.target.value)} rows={3} placeholder="Hi! I can help you find roles and apply..." style={{...inp,resize:"vertical"}}/>
+                <div style={{height:10}}/>
+                {lbl("Company context (helps AI answer questions)")}<textarea value={cop.welcome_context||""} onChange={e=>setCop("welcome_context",e.target.value)} rows={3} placeholder="We are a global technology company with offices in 12 countries..." style={{...inp,resize:"vertical"}}/>
+                <div style={{height:10}}/>
+                {lbl("Input placeholder")}<input value={cop.input_placeholder||""} onChange={e=>setCop("input_placeholder",e.target.value)} placeholder="Ask about roles, or start applying..." style={inp}/>
+              </div>
+              {/* Quick actions */}
+              <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:6,display:"flex",alignItems:"center",gap:6}}><Ic n="zap" s={13} c={C.text3}/> Quick Action Buttons</div>
+                <div style={{fontSize:11,color:C.text3,marginBottom:10}}>Shown as chips below the welcome message. Leave empty for defaults.</div>
+                {(cop.quick_actions||[]).map((qa,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                    <input value={qa.label||""} onChange={e=>{const arr=[...(cop.quick_actions||[])];arr[i]={...arr[i],label:e.target.value};setCop("quick_actions",arr);}} placeholder="Button label" style={{...inp,flex:1}}/>
+                    <input value={qa.prompt||""} onChange={e=>{const arr=[...(cop.quick_actions||[])];arr[i]={...arr[i],prompt:e.target.value};setCop("quick_actions",arr);}} placeholder="What it sends" style={{...inp,flex:2}}/>
+                    <button onClick={()=>{const arr=[...(cop.quick_actions||[])];arr.splice(i,1);setCop("quick_actions",arr);}} style={{background:"none",border:"none",cursor:"pointer",padding:2,color:C.text3}}><Ic n="x" s={12}/></button>
+                  </div>
+                ))}
+                <button onClick={()=>setCop("quick_actions",[...(cop.quick_actions||[]),{label:"",prompt:""}])} style={{fontSize:11,fontWeight:700,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:"4px 0",fontFamily:F}}>+ Add quick action</button>
+              </div>
+              {/* Preview */}
+              <div style={{padding:"14px",borderRadius:12,background:`linear-gradient(135deg, ${br.primary_color||br.primary||C.accent}, ${br.secondary_color||br.secondary||br.primary_color||br.primary||C.accent}dd)`,color:"white"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,.18)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                    {cop.avatar_url?<img src={cop.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<Ic n="messageSquare" s={18} c="white"/>}
+                  </div>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:800}}>{cop.name||"Career Assistant"}</div>
+                    <div style={{fontSize:11,opacity:.8}}>{cop.subtitle||"Explore roles & apply"}</div>
+                  </div>
+                </div>
+                <div style={{marginTop:10,fontSize:11,opacity:.7}}>Preview — this is how the copilot header will look</div>
+              </div>
+            </>}
+          </>);
+        })()}
         </div>
       </div>
     </div>

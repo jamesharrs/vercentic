@@ -53,6 +53,7 @@ import DocumentBuilder from "./DocumentBuilder.jsx";
 import BotInterview from "./BotInterview.jsx";
 import ClientHub from "./ClientHub.jsx";
 import ClientCasePortal from "./ClientCasePortal.jsx";
+import SupportPortalPage from "./SupportPortalPage.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
 import { useHistory } from "./useHistory";
@@ -1503,6 +1504,7 @@ function App() {
     if (cleanSlug && !cleanSlug.includes('.')) return <PortalApp slug={cleanSlug}/>;
   }
   if (_path === '/superadmin') return <SuperAdminConsole />;
+  if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
   if (_path.startsWith('/availability/')) {
     return <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}><AvailabilityPickerPage/></Suspense>;
   }

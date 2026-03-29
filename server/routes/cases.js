@@ -58,13 +58,17 @@ router.get('/stats', (req, res) => {
 // ── GET /api/cases ─────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   try {
-    const { status, priority, type, assignee_id, client_id, search, page = 1, limit = 50 } = req.query;
+    const { status, priority, type, assignee_id, client_id, client_domain, search, page = 1, limit = 50 } = req.query;
     let cases = query('cases', () => true);
     if (status)      cases = cases.filter(c => c.status === status);
     if (priority)    cases = cases.filter(c => c.priority === priority);
     if (type)        cases = cases.filter(c => c.type === type);
     if (assignee_id) cases = cases.filter(c => c.assignee_id === assignee_id);
-    if (client_id)   cases = cases.filter(c => c.client_id === client_id);
+    if (client_id)     cases = cases.filter(c => c.client_id === client_id);
+    if (client_domain) cases = cases.filter(c =>
+      c.client_domain === client_domain ||
+      c.reporter_email?.endsWith('@' + client_domain)
+    );
     if (search) {
       const q = search.toLowerCase();
       cases = cases.filter(c =>
@@ -104,7 +108,7 @@ router.get('/:id', (req, res) => {
 // ── POST /api/cases ────────────────────────────────────────────────────────
 router.post('/', (req, res) => {
   try {
-    const { subject, type, priority, description, client_id, client_name, plan_tier,
+    const { subject, type, priority, description, client_id, client_name, client_domain, plan_tier,
             reporter_name, reporter_email, assignee_id, assignee_name, tags } = req.body;
     if (!subject || !type) return res.status(400).json({ error: 'subject and type required' });
     const existing   = query('cases', () => true);
