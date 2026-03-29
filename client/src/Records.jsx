@@ -6074,19 +6074,22 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           }
           <input ref={photoInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoUpload}/>
         </div>
-        {/* Name + subtitle + pills */}
+        {/* Name + subtitle */}
         <div style={{ minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
             <span style={{ fontSize:14, fontWeight:700, color:C.text1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:220, fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.3px" }}>{title}</span>
             {status && statusField && (
               <Badge color={STATUS_COLORS[status]||C.accent} light>{status}</Badge>
             )}
-            <span style={{ padding:"2px 8px", borderRadius:20, background:`rgba(${r},${g},${b},0.12)`, color:objectColor, fontWeight:700, fontSize:10, whiteSpace:"nowrap" }}>{objectName}</span>
-            <span style={{ padding:"2px 8px", borderRadius:20, background:"#f3f4f6", color:C.text3, fontWeight:500, fontSize:10, whiteSpace:"nowrap" }}>
-              Added {new Date(record.created_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
-            </span>
           </div>
-          {subtitle && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:340 }}>{subtitle}</div>}
+          {objectName === "Person" ? (() => {
+            const jobLine = record?.data?.current_title || record?.data?.job_title || "";
+            const company = record?.data?.current_company || "";
+            const combined = [jobLine, company].filter(Boolean).join(" · ");
+            return combined ? <div style={{ fontSize:12, color:C.text2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:340 }}>{combined}</div> : null;
+          })() : subtitle ? (
+            <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:340 }}>{subtitle}</div>
+          ) : null}
         </div>
       </div>
 
