@@ -261,7 +261,7 @@ function NewOfferModal({ environment, onClose, onCreated, prefillCandidate, pref
   const submit = async () => {
     setSaving(true);
     try {
-      const rec = await api.post("/api/offers", {
+      const rec = await api.post("/offers", {
         environment_id:  environment.id,
         candidate_id:    form.candidate_id,
         candidate_name:  form.candidate_name,

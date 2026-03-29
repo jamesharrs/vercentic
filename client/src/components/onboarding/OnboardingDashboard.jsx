@@ -94,9 +94,9 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
     setLoading(true);
     try {
       const [objRes, recRes, offerRes] = await Promise.all([
-        api.get(`/api/objects?environment_id=${environment.id}`),
-        api.get(`/api/records?environment_id=${environment.id}&limit=500`),
-        api.get(`/api/offers?environment_id=${environment.id}&limit=200`).catch(()=>({ offers:[] })),
+        api.get(`/objects?environment_id=${environment.id}`),
+        api.get(`/records?environment_id=${environment.id}&limit=500`),
+        api.get(`/offers?environment_id=${environment.id}&limit=200`).catch(()=>({ offers:[] })),
       ]);
       const objects = Array.isArray(objRes) ? objRes : (objRes.objects || []);
       const allRecords = Array.isArray(recRes) ? recRes : (recRes.records || []);

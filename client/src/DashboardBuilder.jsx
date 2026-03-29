@@ -106,7 +106,7 @@ function PanelPreview({ panel, liveData }) {
 function PanelConfigEditor({ panel, objects, savedReports, onChange }) {
   const { type, title, config={}, position={} } = panel;
   const [fields, setFields] = useState([]);
-  useEffect(()=>{ if(config.object_id) api.get(`/api/fields?object_id=${config.object_id}`).then(f=>setFields(Array.isArray(f)?f:[])); },[config.object_id]);
+  useEffect(()=>{ if(config.object_id) api.get(`/fields?object_id=${config.object_id}`).then(f=>setFields(Array.isArray(f)?f:[])); },[config.object_id]);
   const set = (k,v) => onChange({ ...panel, config:{ ...config,[k]:v }});
   const sizeOpts = { w:[1,2,3,4,6,8,12].map(n=>({value:n,label:`${n} cols`})), h:[2,3,4,5,6,8].map(n=>({value:n,label:`${n} rows`})) };
   return <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
@@ -184,7 +184,7 @@ For list: include object_id, limit.
 Grid is 12 columns. w should be 3,4,6 or 12. h should be 3,4 or 5.
 Object IDs: ${objects.map(o=>`"${o.plural_name||o.name}":"${o.id}"`).join(", ")}.
 Respond ONLY with valid JSON: { name, description, panels:[{type,title,position:{x,y,w,h},config:{...}}] }`;
-  const data = await api.post("/api/ai/chat", { messages:[{role:"user",content:prompt}], system:systemCtx, max_tokens:2000 });
+  const data = await api.post("/ai/chat", { messages:[{role:"user",content:prompt}], system:systemCtx, max_tokens:2000 });
   if (data.error) throw new Error(data.error);
   // proxy returns { content: string } (already extracted text)
   const text = typeof data.content === "string"
@@ -227,7 +227,7 @@ export default function DashboardBuilder({ environment, session, onBack }) {
 
   useEffect(()=>{
     if(!envId) return;
-    Promise.all([api.get(`/api/dashboards?environment_id=${envId}`),api.get(`/api/objects?environment_id=${envId}`),api.get("/api/roles"),api.get("/api/users"),api.get(`/api/saved-views?environment_id=${envId}`)]).then(([dbs,objs,rls,usrs,rpts])=>{
+    Promise.all([api.get(`/dashboards?environment_id=${envId}`),api.get(`/objects?environment_id=${envId}`),api.get("/roles"),api.get("/users"),api.get(`/saved-views?environment_id=${envId}`)]).then(([dbs,objs,rls,usrs,rpts])=>{
       setDashboards(Array.isArray(dbs)?dbs:[]);
       setObjects(Array.isArray(objs)?objs:[]);
       setRoles(Array.isArray(rls)?rls:[]);
@@ -239,49 +239,49 @@ export default function DashboardBuilder({ environment, session, onBack }) {
   useEffect(()=>{
     if(!editing) return;
     (editing.panels||[]).forEach(p=>{
-      api.get(`/api/dashboards/${editing.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>setLiveData(prev=>({...prev,[p.id]:d})));
+      api.get(`/dashboards/${editing.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>setLiveData(prev=>({...prev,[p.id]:d})));
     });
   },[editing?.id, editing?.panels?.length, envId]);
 
   const handleCreate = async () => {
     if (!newDash.name) return;
     setSaving(true);
-    const d = await api.post("/api/dashboards",{...newDash,environment_id:envId});
+    const d = await api.post("/dashboards",{...newDash,environment_id:envId});
     setSaving(false);
     if (d.id) { setDashboards(prev=>[d,...prev]); setCreateModal(false); setNewDash({name:"",description:"",color:"#4f46e5",icon:"layout"}); handleEdit({...d,panels:[]}); }
   };
-  const handleDelete = async id => { if(!window.confirm("Delete this dashboard?"))return; await api.delete(`/api/dashboards/${id}`); setDashboards(prev=>prev.filter(d=>d.id!==id)); };
-  const handleDuplicate = async dash => { const d=await api.post(`/api/dashboards/${dash.id}/duplicate`,{}); if(d.id){setDashboards(prev=>[d,...prev]);flash("Duplicated");} };
-  const handleSetDefault = async dash => { await api.patch(`/api/dashboards/${dash.id}`,{is_default:true}); setDashboards(prev=>prev.map(d=>({...d,is_default:d.id===dash.id}))); flash("Set as default"); };
-  const handleEdit = async dash => { const full=await api.get(`/api/dashboards/${dash.id}`); setEditing(full.id?full:{...dash,panels:[]}); setView("builder"); setSelPanel(null); };
+  const handleDelete = async id => { if(!window.confirm("Delete this dashboard?"))return; await api.delete(`/dashboards/${id}`); setDashboards(prev=>prev.filter(d=>d.id!==id)); };
+  const handleDuplicate = async dash => { const d=await api.post(`/dashboards/${dash.id}/duplicate`,{}); if(d.id){setDashboards(prev=>[d,...prev]);flash("Duplicated");} };
+  const handleSetDefault = async dash => { await api.patch(`/dashboards/${dash.id}`,{is_default:true}); setDashboards(prev=>prev.map(d=>({...d,is_default:d.id===dash.id}))); flash("Set as default"); };
+  const handleEdit = async dash => { const full=await api.get(`/dashboards/${dash.id}`); setEditing(full.id?full:{...dash,panels:[]}); setView("builder"); setSelPanel(null); };
   const handleSaveDashboard = async () => {
     if(!editing)return; setSaving(true);
-    await api.patch(`/api/dashboards/${editing.id}`,{name:editing.name,description:editing.description,icon:editing.icon,color:editing.color,is_default:editing.is_default});
+    await api.patch(`/dashboards/${editing.id}`,{name:editing.name,description:editing.description,icon:editing.icon,color:editing.color,is_default:editing.is_default});
     setSaving(false); flash("Saved"); setDashboards(prev=>prev.map(d=>d.id===editing.id?{...d,...editing}:d));
   };
   const handleAddPanel = async type => {
     const def=PANEL_TYPES.find(p=>p.type===type);
-    const panel=await api.post(`/api/dashboards/${editing.id}/panels`,{type,title:def?.label||type,position:{x:0,y:(editing.panels||[]).length*4,w:6,h:4},config:{}});
+    const panel=await api.post(`/dashboards/${editing.id}/panels`,{type,title:def?.label||type,position:{x:0,y:(editing.panels||[]).length*4,w:6,h:4},config:{}});
     if(panel.id){setEditing(prev=>({...prev,panels:[...(prev.panels||[]),panel]}));setSelPanel(panel.id);}
   };
   const handleUpdatePanel = async updated => {
     setEditing(prev=>({...prev,panels:(prev.panels||[]).map(p=>p.id===updated.id?updated:p)}));
-    await api.patch(`/api/dashboards/${editing.id}/panels/${updated.id}`,updated);
-    api.get(`/api/dashboards/${editing.id}/panels/${updated.id}/data?environment_id=${envId}`).then(d=>setLiveData(prev=>({...prev,[updated.id]:d})));
+    await api.patch(`/dashboards/${editing.id}/panels/${updated.id}`,updated);
+    api.get(`/dashboards/${editing.id}/panels/${updated.id}/data?environment_id=${envId}`).then(d=>setLiveData(prev=>({...prev,[updated.id]:d})));
   };
   const handleDeletePanel = async panelId => {
-    await api.delete(`/api/dashboards/${editing.id}/panels/${panelId}`);
+    await api.delete(`/dashboards/${editing.id}/panels/${panelId}`);
     setEditing(prev=>({...prev,panels:(prev.panels||[]).filter(p=>p.id!==panelId)}));
     if(selPanel===panelId) setSelPanel(null);
   };
-  const handleSaveAccess = async access => { await api.patch(`/api/dashboards/${editing.id}`,{access}); setEditing(prev=>({...prev,access})); flash("Access saved"); };
+  const handleSaveAccess = async access => { await api.patch(`/dashboards/${editing.id}`,{access}); setEditing(prev=>({...prev,access})); flash("Access saved"); };
   const handleAIGenerate = async () => {
     if(!aiPrompt)return; setAiLoading(true);
     try {
       const gen=await aiGenerateDashboard(aiPrompt,objects);
       if(gen.panels&&editing){
-        for(const p of gen.panels){const panel=await api.post(`/api/dashboards/${editing.id}/panels`,p);if(panel.id)setEditing(prev=>({...prev,panels:[...(prev.panels||[]),panel]}));}
-        if(gen.name&&!editing.name){await api.patch(`/api/dashboards/${editing.id}`,{name:gen.name,description:gen.description});setEditing(prev=>({...prev,name:gen.name||prev.name,description:gen.description||prev.description}));}
+        for(const p of gen.panels){const panel=await api.post(`/dashboards/${editing.id}/panels`,p);if(panel.id)setEditing(prev=>({...prev,panels:[...(prev.panels||[]),panel]}));}
+        if(gen.name&&!editing.name){await api.patch(`/dashboards/${editing.id}`,{name:gen.name,description:gen.description});setEditing(prev=>({...prev,name:gen.name||prev.name,description:gen.description||prev.description}));}
         flash(`Added ${gen.panels.length} panels`);
       }
       setShowAI(false); setAiPrompt("");

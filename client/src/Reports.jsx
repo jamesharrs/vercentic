@@ -257,7 +257,7 @@ function ScheduleModal({ savedView, environment, onClose }) {
     const recipients = emails.split(/[,\n]+/).map(e=>e.trim()).filter(Boolean);
     if (!recipients.length) return;
     setSaving(true);
-    await api.post("/api/scheduled-reports", {
+    await api.post("/scheduled-reports", {
       saved_view_id:savedView.id, name:savedView.name,
       environment_id:environment.id, frequency:freq, day_of_week:day, hour, recipients,
     });
@@ -361,14 +361,13 @@ export default function Reports({ environment, initialReport }) {
 
   useEffect(() => {
     if (!environment?.id) return;
-    api.get(`/api/objects?environment_id=${environment.id}`).then(d=>setObjects(Array.isArray(d)?d:[]));
-    api.get(`/api/saved-views?environment_id=${environment.id}`).then(d=>setSavedReports(Array.isArray(d)?d:[]));
-    api.get(`/api/forms?environment_id=${environment.id}`).then(d=>setForms(Array.isArray(d)?d:[]));
+    api.get(`/objects?environment_id=${environment.id}`).then(d=>setObjects(Array.isArray(d)?d:[]));
+    api.get(`/forms?environment_id=${environment.id}`).then(d=>setForms(Array.isArray(d)?d:[]));
   }, [environment?.id]);
 
   useEffect(() => {
     if (!selObject) return;
-    api.get(`/api/fields?object_id=${selObject}`).then(d => {
+    api.get(`/fields?object_id=${selObject}`).then(d => {
       const f = Array.isArray(d)?d:[];
       setFields(f);
       if (!skipReset.current) {
@@ -434,7 +433,7 @@ export default function Reports({ environment, initialReport }) {
       if (!selForm) return;
       setRunning(true);
       try {
-        const res = await api.get(`/api/forms/${selForm}/responses`);
+        const res = await api.get(`/forms/${selForm}/responses`);
         let rows  = (Array.isArray(res)?res:[]).map(r=>({_id:r.id,_createdAt:r.submitted_at,...r.data}));
         const af  = filters.filter(f=>f.field&&f.op);
         if (af.length) rows = rows.filter(row=>af.every(f=>applyFilter(row,f)));
@@ -450,15 +449,15 @@ export default function Reports({ environment, initialReport }) {
     if (!oid) return;
     setRunning(true);
     try {
-      const res = await api.get(`/api/records?object_id=${oid}&environment_id=${environment.id}&limit=500`);
+      const res = await api.get(`/records?object_id=${oid}&environment_id=${environment.id}&limit=500`);
       let rows  = (Array.isArray(res?.records)?res.records:[]).map(r=>({_id:r.id,_createdAt:r.created_at,...r.data}));
       // Cross-object join
       if (joinObject) {
         const jObj = objects.find(o=>o.id===joinObject);
         if (jObj) {
-          const jRes = await api.get(`/api/records?object_id=${joinObject}&environment_id=${environment.id}&limit=500`);
+          const jRes = await api.get(`/records?object_id=${joinObject}&environment_id=${environment.id}&limit=500`);
           const jMap = (Array.isArray(jRes?.records)?jRes.records:[]).reduce((acc,r)=>{acc[r.id]=r.data;return acc;},{});
-          const lRes = await api.get(`/api/people-links?object_id=${oid}&environment_id=${environment.id}`);
+          const lRes = await api.get(`/people-links?object_id=${oid}&environment_id=${environment.id}`);
           const links= Array.isArray(lRes)?lRes:[];
           rows = rows.map(row=>{
             const link = links.find(l=>l.record_id===row._id||l.person_id===row._id);
@@ -491,7 +490,7 @@ export default function Reports({ environment, initialReport }) {
   const saveReport = async () => {
     if (!reportName.trim()) return;
     setSavingReport(true);
-    const d = await api.post("/api/saved-views", {
+    const d = await api.post("/saved-views", {
       name:reportName.trim(), object_id:selObject,
       environment_id:environment.id, is_shared:reportShared,
       filters, columns:selCols, group_by:groupBy, sort_by:sortBy, sort_dir:sortDir,
@@ -518,12 +517,12 @@ export default function Reports({ environment, initialReport }) {
 
   const pinReport = async sv => {
     const next = !sv.pinned;
-    await api.patch(`/api/saved-views/${sv.id}`,{pinned:next});
+    await api.patch(`/saved-views/${sv.id}`,{pinned:next});
     setSavedReports(prev=>prev.map(r=>r.id===sv.id?{...r,pinned:next}:r));
   };
 
   const deleteReport = async id => {
-    await api.delete(`/api/saved-views/${id}`);
+    await api.delete(`/saved-views/${id}`);
     setSavedReports(p=>p.filter(s=>s.id!==id));
   };
 

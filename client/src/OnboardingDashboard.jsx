@@ -71,13 +71,13 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
     setLoading(true);
     setError(null);
     try {
-      const objRes = await api.get(`/api/objects?environment_id=${environment.id}`);
+      const objRes = await api.get(`/objects?environment_id=${environment.id}`);
       const objects = Array.isArray(objRes) ? objRes : (objRes?.objects || objRes?.data || []);
       const peopleObj = objects.find(o=>o.slug==='people'||o.name?.toLowerCase().includes('people')||o.name?.toLowerCase().includes('candidate'));
-      const allOffers = await api.get(`/api/offers?environment_id=${environment.id}&limit=200`).catch(()=>[]).then(r=>Array.isArray(r)?r:(r?.offers||r?.data||[]));
+      const allOffers = await api.get(`/offers?environment_id=${environment.id}&limit=200`).catch(()=>[]).then(r=>Array.isArray(r)?r:(r?.offers||r?.data||[]));
       let people = [];
       if (peopleObj) {
-        const recRes = await api.get(`/api/records?object_id=${peopleObj.id}&environment_id=${environment.id}&limit=200`);
+        const recRes = await api.get(`/records?object_id=${peopleObj.id}&environment_id=${environment.id}&limit=200`);
         people = Array.isArray(recRes) ? recRes : (recRes?.records || recRes?.data || []);
       }
 

@@ -133,25 +133,25 @@ export default function DashboardViewer({ environment, session, onNavigate, onOp
 
   const loadAllPanelData=useCallback(async(dash)=>{
     if(!dash?.panels?.length)return;
-    const fetches=dash.panels.map(p=>api.get(`/api/dashboards/${dash.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>({id:p.id,data:d})));
+    const fetches=dash.panels.map(p=>api.get(`/dashboards/${dash.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>({id:p.id,data:d})));
     const results=await Promise.all(fetches);
     const map={}; results.forEach(r=>{if(r)map[r.id]=r.data;}); setPanelData(map);
   },[envId]);
 
   const loadDashboard=useCallback(async id=>{
-    const dash=await api.get(`/api/dashboards/${id}`);
+    const dash=await api.get(`/dashboards/${id}`);
     if(dash?.id){setCurrent(dash);loadAllPanelData(dash);}
   },[loadAllPanelData]);
 
   useEffect(()=>{
     if(!envId)return;
     setLoading(true);
-    api.get(`/api/dashboards?environment_id=${envId}`).then(async dbs=>{
+    api.get(`/dashboards?environment_id=${envId}`).then(async dbs=>{
       const list=Array.isArray(dbs)?dbs:[];
       setDashboards(list);
       if(!list.length){setLoading(false);return;}
       const def=list.find(d=>d.is_default)||list[0];
-      const full=await api.get(`/api/dashboards/${def.id}`);
+      const full=await api.get(`/dashboards/${def.id}`);
       if(full?.id){setCurrent(full);loadAllPanelData(full);}
       setLoading(false);
     });

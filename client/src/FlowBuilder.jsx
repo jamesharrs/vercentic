@@ -210,7 +210,7 @@ function FlowEditor({flow,environment,onSave,onClose}) {
     if(!name.trim()){setError("Flow name is required");return;}
     setSaving(true); setError(null);
     const payload={name,description:desc,trigger,steps,enabled,environment_id:environment?.id};
-    const r = isNew ? await api.post("/api/flows",payload) : await api.patch(`/flows/${flow.id}`,payload);
+    const r = isNew ? await api.post("/flows",payload) : await api.patch(`/flows/${flow.id}`,payload);
     setSaving(false);
     if(r.error){setError(r.errors?r.errors.join(", "):r.error);return;}
     onSave(r);

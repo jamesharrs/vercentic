@@ -75,11 +75,11 @@ export default function ScreeningDashboard({ environment, onNavigate }) {
     setLoading(true);
     setError(null);
     try {
-      const objRes = await api.get(`/api/objects?environment_id=${environment.id}`);
+      const objRes = await api.get(`/objects?environment_id=${environment.id}`);
       const objects = Array.isArray(objRes) ? objRes : (objRes?.objects || objRes?.data || []);
       const peopleObj = objects.find(o=>o.slug==='people'||o.name?.toLowerCase().includes('people')||o.name?.toLowerCase().includes('candidate'));
       if (!peopleObj) { setData({ people:[], awaitingReview:[], aiApproved:[], aiRejected:[], aiPending:[], reviewed:[], bySource:[], funnel:[], recent:[], peopleObj:null }); return; }
-      const recRes = await api.get(`/api/records?object_id=${peopleObj.id}&environment_id=${environment.id}&limit=200`);
+      const recRes = await api.get(`/records?object_id=${peopleObj.id}&environment_id=${environment.id}&limit=200`);
       const allRecords = Array.isArray(recRes) ? recRes : (recRes?.records || recRes?.data || []);
       const people = allRecords;
 

@@ -82,8 +82,8 @@ export default function ScreeningDashboard({ environment, onNavigate }) {
     try {
       // Fetch people records + objects in parallel
       const [objRes, recRes] = await Promise.all([
-        api.get(`/api/objects?environment_id=${environment.id}`),
-        api.get(`/api/records?environment_id=${environment.id}&limit=500`),
+        api.get(`/objects?environment_id=${environment.id}`),
+        api.get(`/records?environment_id=${environment.id}&limit=500`),
       ]);
       const objects = Array.isArray(objRes) ? objRes : (objRes.objects || []);
       const peopleObj = objects.find(o => o.slug === 'people' || o.name?.toLowerCase().includes('people') || o.name?.toLowerCase().includes('person'));
