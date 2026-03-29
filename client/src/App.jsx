@@ -1493,7 +1493,10 @@ function App() {
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
-  const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+
+  // Client support portal — must be before the portal slug fallback
+  if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
 
   // Legacy /portal/slug route
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
@@ -1504,7 +1507,6 @@ function App() {
     if (cleanSlug && !cleanSlug.includes('.')) return <PortalApp slug={cleanSlug}/>;
   }
   if (_path === '/superadmin') return <SuperAdminConsole />;
-  if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
   if (_path.startsWith('/availability/')) {
     return <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}><AvailabilityPickerPage/></Suspense>;
   }
