@@ -4672,7 +4672,7 @@ const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, Pane
 
   const cardRef = useRef(null);
 
-  if (compact) return <div style={{ padding:"16px" }}>{PanelContent({id})}</div>;
+  if (compact) return <div style={{ padding:"16px" }}><PanelContent id={id}/></div>;
 
   const borderColor = zone === "middle" ? C.accent : C.border;
   const shadow = zone === "middle"
@@ -4741,7 +4741,7 @@ const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, Pane
           </span>
         </div>
       </div>
-      {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}>{PanelContent({id})}</div>}
+      {isOpen && <div style={{ padding:"16px", position:"relative", zIndex:2 }}><PanelContent id={id}/></div>}
     </div>
   );
 };
@@ -4975,7 +4975,7 @@ const GroupCard = ({ ids, overSlot, overZone, openPanels, setOpenPanels, openPan
       {/* Active tab content */}
       {isGroupOpen && (
         <div style={{ padding:"16px" }}>
-          {PanelContent({id:safeActive})}
+          <PanelContent id={safeActive}/>
         </div>
       )}
     </div>
@@ -5965,7 +5965,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>
         <div style={{ flex:1, overflow:"auto", padding:"24px" }}>
           {tab==="fields"  && fieldsPanelJSX}
-          {tab!=="fields"  && PanelContent({id:tab})}
+          {tab!=="fields"  && <PanelContent id={tab}/>}
         </div>
       </div>
     </>
@@ -6259,7 +6259,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   return (
     <div style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0, overflow:"hidden", background:"#F4F6FB" }}>
-      {FunctionalityBar()}
+      <FunctionalityBar/>
       <SuggestedActions record={record} environment={environment} objectName={objectName} objectColor={objectColor} onCompose={(type)=>setComposeType(type)}/>
       {/* Full-width Linked People widget — only shown on non-Person objects */}
       {objectName !== "Person" && (
