@@ -29,20 +29,42 @@ router.get('/', (req, res) => {
   res.json(views);
 });
 
+// GET /api/saved-views/pinned?environment_id=
+router.get('/pinned', (req, res) => {
+  ensureTable();
+  const { environment_id } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+  const pinned = query('saved_views', v => v.environment_id === environment_id && v.pinned === true)
+    .sort((a, b) => (a.dashboard_position ?? 99) - (b.dashboard_position ?? 99));
+  res.json(pinned);
+});
+
 // POST /api/saved-views
 router.post('/', (req, res) => {
   ensureTable();
-  const { name, object_id, environment_id, created_by, is_shared, filters, filter_chip, visible_field_ids, view_mode } = req.body;
+  const { name, object_id, environment_id, created_by, is_shared, filters, filter_chip,
+          visible_field_ids, view_mode, pinned, dashboard_position,
+          columns, group_by, sort_by, sort_dir, formulas, chart_type, chart_x, chart_y } = req.body;
   if (!name || !object_id || !environment_id) return res.status(400).json({ error: 'name, object_id, environment_id required' });
   const view = insert('saved_views', {
     id: uuidv4(), name, object_id, environment_id,
     created_by: created_by || 'unknown',
-    is_shared: !!is_shared, // legacy compat
+    is_shared: !!is_shared,
     sharing: req.body.sharing || { visibility: is_shared ? 'everyone' : 'private', user_ids: [], group_ids: [] },
     filters: filters || [],
     filter_chip: filter_chip || null,
     visible_field_ids: visible_field_ids || [],
     view_mode: view_mode || 'table',
+    pinned: !!pinned,
+    dashboard_position: dashboard_position ?? null,
+    columns: columns || [],
+    group_by: group_by || '',
+    sort_by: sort_by || '',
+    sort_dir: sort_dir || 'desc',
+    formulas: formulas || [],
+    chart_type: chart_type || 'bar',
+    chart_x: chart_x || '',
+    chart_y: chart_y || '',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -52,15 +74,14 @@ router.post('/', (req, res) => {
 // PATCH /api/saved-views/:id
 router.patch('/:id', (req, res) => {
   ensureTable();
-  const { name, is_shared, filters, visible_field_ids, view_mode } = req.body;
-  const updated = update('saved_views', v => v.id === req.params.id, {
-    ...(name !== undefined && { name }),
-    ...(is_shared !== undefined && { is_shared: !!is_shared }),
-    ...(filters !== undefined && { filters }),
-    ...(visible_field_ids !== undefined && { visible_field_ids }),
-    ...(view_mode !== undefined && { view_mode }),
-    updated_at: new Date().toISOString(),
-  });
+  const allowed = ['name','is_shared','filters','visible_field_ids','view_mode','sharing',
+                   'pinned','dashboard_position','columns','group_by','sort_by','sort_dir',
+                   'formulas','chart_type','chart_x','chart_y','filter_chip'];
+  const up = { updated_at: new Date().toISOString() };
+  allowed.forEach(k => { if (req.body[k] !== undefined) up[k] = req.body[k]; });
+  if (up.is_shared !== undefined) up.is_shared = !!up.is_shared;
+  if (up.pinned    !== undefined) up.pinned    = !!up.pinned;
+  const updated = update('saved_views', v => v.id === req.params.id, up);
   updated ? res.json(updated) : res.status(404).json({ error: 'Not found' });
 });
 

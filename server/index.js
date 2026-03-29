@@ -79,6 +79,7 @@ app.use('/api/relationships',     require('./routes/relationships'));
 app.use('/api/notes',             require('./routes/notes'));
 app.use('/api/attachments',       require('./routes/attachments'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
+app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));
 app.use('/api/groups',            require('./routes/groups'));
 
 // ── AI & intelligence ─────────────────────────────────────────────────────────

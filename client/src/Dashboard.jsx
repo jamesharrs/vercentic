@@ -245,6 +245,29 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
 
   useEffect(() => { isMounted.current = true; load(); return () => { isMounted.current = false; }; }, [load]);
 
+  // ── Pinned report widgets ─────────────────────────────────────────────────
+  const [pinnedReports, setPinnedReports] = useState([]);
+  const [pinnedData,    setPinnedData]    = useState({});
+
+  useEffect(() => {
+    if (!environment?.id) return;
+    fetch(`/api/saved-views/pinned?environment_id=${environment.id}`)
+      .then(r => r.json())
+      .then(pins => {
+        if (!Array.isArray(pins)) return;
+        setPinnedReports(pins);
+        pins.forEach(async pin => {
+          if (!pin.object_id) return;
+          try {
+            const res = await fetch(`/api/records?object_id=${pin.object_id}&environment_id=${environment.id}&limit=500`);
+            const d   = await res.json();
+            const raw = Array.isArray(d?.records) ? d.records : [];
+            setPinnedData(prev => ({ ...prev, [pin.id]: raw.map(r => ({...r.data, _id:r.id})) }));
+          } catch {}
+        });
+      }).catch(() => {});
+  }, [environment?.id]);
+
   const goTo = (slug, key, val) => window.dispatchEvent(new CustomEvent("talentos:filter-navigate", { detail: { objectSlug: slug, fieldKey: key, fieldValue: val } }));
   const openRpt = (cfg) => { if (onReport) onReport(cfg); else window.dispatchEvent(new CustomEvent("talentos:open-report", { detail: cfg })); };
 
@@ -417,6 +440,54 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           )}
         </Card>
       </div>
+
+      {/* ── Pinned Reports ── */}
+      {pinnedReports.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 12 }}>Pinned Reports</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 12 }}>
+            {pinnedReports.map(pin => {
+              const rows   = pinnedData[pin.id] || [];
+              const grpKey = pin.group_by;
+              const yKey   = pin.chart_y || "_count";
+              const xKey   = pin.chart_x || grpKey || "_group";
+              const ct     = pin.chart_type || "bar";
+              const PCOLS  = ["#7F77DD","#D4537E","#1D9E75","#EF9F27","#AFA9EC","#E87FAA"];
+              let chartData = [];
+              if (rows.length && grpKey) {
+                const counts = {};
+                rows.forEach(r => { const v = String(r[grpKey] || "Unknown"); counts[v] = (counts[v]||0)+1; });
+                chartData = Object.entries(counts).map(([name,value])=>({name,value,[xKey]:name,[yKey]:value})).sort((a,b)=>b.value-a.value).slice(0,8);
+              }
+              return (
+                <Card key={pin.id}>
+                  <CardTitle title={pin.name} sub={`${rows.length} records`}
+                    action={<button onClick={()=>openRpt({object:pin.object_id,groupBy:pin.group_by,chartType:ct})} style={{ fontSize:11,color:V.purple,background:"none",border:"none",cursor:"pointer",fontWeight:700,fontFamily:"inherit" }}>Open →</button>}/>
+                  {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={150}>
+                      {ct==="pie" ? (
+                        <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55}>
+                          {chartData.map((_,i)=><Cell key={i} fill={PCOLS[i%PCOLS.length]}/>)}
+                        </Pie><Tooltip formatter={v=>[v,"Count"]}/></PieChart>
+                      ) : (
+                        <BarChart data={chartData} margin={{top:4,right:4,bottom:0,left:-20}}>
+                          <XAxis dataKey="name" tick={{fontSize:9}} interval={0}/>
+                          <YAxis tick={{fontSize:9}}/><Tooltip/>
+                          <Bar dataKey="value" radius={[3,3,0,0]}>{chartData.map((_,i)=><Cell key={i} fill={PCOLS[i%PCOLS.length]}/>)}</Bar>
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  ) : (
+                    <div style={{ height:100,display:"flex",alignItems:"center",justifyContent:"center",color:V.gray,fontSize:12 }}>
+                      {rows.length ? "No group-by configured" : "No data yet"}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Bottom row: Candidate Pipeline + Open Reqs by Dept + Recent Activity ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginBottom: 16 }}>
