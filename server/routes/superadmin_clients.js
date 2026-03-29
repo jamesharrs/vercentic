@@ -1,3 +1,5 @@
+const path = require('path');
+const fs   = require('fs');
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -1036,6 +1038,53 @@ router.post('/:id/impersonate', (req, res) => {
 
   const appUrl = `https://${client.tenant_slug}.vercentic.com/?impersonate=${token}`;
   res.json({ token, app_url: appUrl, expires_at: expiresAt, user_email: adminUser.email });
+});
+
+
+// GET /:id/roles — fetch roles from the client's tenant store
+router.get('/:id/roles', (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c => c.id === req.params.id);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  
+  const tenantSlug = client.tenant_slug;
+  if (!tenantSlug) return res.json([]);
+  
+  // Read from the tenant store
+  const tenantFile = path.join(__dirname, '../../data', `tenant-${tenantSlug}.json`);
+  if (!fs.existsSync(tenantFile)) return res.json([]);
+  
+  try {
+    const tenantData = JSON.parse(fs.readFileSync(tenantFile, 'utf8'));
+    const roles = (tenantData.roles || []).filter(r => !r.deleted_at);
+    res.json(roles);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+// GET /:id/environments-with-roles — fetch environments from tenant store
+router.get('/:id/environments-with-roles', (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c => c.id === req.params.id);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  
+  const tenantSlug = client.tenant_slug;
+  if (!tenantSlug) return res.json({ environments: [], roles: [] });
+  
+  const tenantFile = path.join(__dirname, '../../data', `tenant-${tenantSlug}.json`);
+  if (!fs.existsSync(tenantFile)) return res.json({ environments: [], roles: [] });
+  
+  try {
+    const tenantData = JSON.parse(fs.readFileSync(tenantFile, 'utf8'));
+    const environments = (tenantData.environments || []).filter(e => !e.deleted_at);
+    const roles        = (tenantData.roles || []).filter(r => !r.deleted_at);
+    res.json({ environments, roles });
+  } catch (e) {
+    res.json({ environments: [], roles: [] });
+  }
 });
 
 module.exports = router;
