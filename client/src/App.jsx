@@ -1492,7 +1492,7 @@ function App() {
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
-  const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record)(\/|$)/;
+  const _appRoutes = /^\/(superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
 
   // Legacy /portal/slug route
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
