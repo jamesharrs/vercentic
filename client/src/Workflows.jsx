@@ -781,8 +781,8 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
     );
   }
 
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 1000, display: "flex", alignItems: "stretch", justifyContent: "flex-end" }}>
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 9000, display: "flex", alignItems: "stretch", justifyContent: "flex-end" }}>
       <div style={{ width: 680, background: C.bg, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "-8px 0 40px rgba(0,0,0,.2)", animation: "slideIn .2s ease" }}>
         <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
 
@@ -986,7 +986,8 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -1036,8 +1037,8 @@ const RunPanel = ({ workflow, environment, objects, onClose }) => {
   const statusColor = (s) => s === "done" ? C.green : s === "error" ? C.red : s === "skipped" ? C.text3 : C.orange;
   const statusBg    = (s) => s === "done" ? C.greenLight : s === "error" ? C.redLight : s === "skipped" ? "#f3f4f6" : C.orangeLight;
 
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ width: 700, maxHeight: "88vh", background: C.surface, borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,.2)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
@@ -1132,7 +1133,8 @@ const RunPanel = ({ workflow, environment, objects, onClose }) => {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
