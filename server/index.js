@@ -145,6 +145,8 @@ app.use('/api/webhooks',          require('./routes/webhooks'));
 app.use('/api/enterprise',        require('./routes/enterprise_settings'));
 app.use('/api/datasets',          require('./routes/datasets'));
 app.use('/api/company-documents', require('./routes/company_documents'));
+app.use('/api/chats',            require('./routes/candidate_chat'));
+app.use('/api/documents',        require('./routes/documents'));
 app.use('/api/rpo-clients',       require('./routes/rpo_clients'));
 
 // ── Flows ─────────────────────────────────────────────────────────────────────

@@ -48,6 +48,8 @@ import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx"
 import { useI18n } from "./i18n/I18nContext.jsx";
 import LoginPage from "./LoginPage.jsx";
 import CalendarModule from "./Calendar.jsx";
+import CandidateChat from "./CandidateChat.jsx";
+import DocumentBuilder from "./DocumentBuilder.jsx";
 import BotInterview from "./BotInterview.jsx";
 import ClientHub from "./ClientHub.jsx";
 import ClientCasePortal from "./ClientCasePortal.jsx";
@@ -1739,6 +1741,8 @@ function App() {
         { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
         { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        { id: "chat",        icon: "message-circle", label: "Chat" },
+        { id: "documents",   icon: "file-text",    label: "Documents" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
@@ -2267,6 +2271,14 @@ function App() {
         ) : activeNav === "integrations" ? (
           <div style={{ flex:1, overflow:"auto", padding:"32px" }}>
             <IntegrationsPage environment={selectedEnv} />
+          </div>
+        ) : activeNav === "chat" ? (
+          <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+            <CandidateChat environment={selectedEnv} session={session} onOpenRecord={openRecord}/>
+          </div>
+        ) : activeNav === "documents" ? (
+          <div style={{ flex:1, overflow:"auto" }}>
+            <DocumentBuilder environment={selectedEnv} session={session}/>
           </div>
         ) : activeNav === "client-hub" ? (
           <ClientHub environment={selectedEnv} onNavigate={openRecord} />
