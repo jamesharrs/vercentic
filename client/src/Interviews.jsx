@@ -55,6 +55,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     "check-circle":"M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3",
     "help-circle":"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
     list:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+    refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   };
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={P[n]||""}/></svg>;
 };
@@ -289,22 +290,207 @@ const SimplePeoplePicker = ({ value, onChange, envId, multi=true, placeholder="S
 };
 
 
+// ── Video platform options ─────────────────────────────────────────────────────
+const VIDEO_PLATFORMS = [
+  { value:"zoom",       label:"Zoom",              icon:"🎥" },
+  { value:"teams",      label:"Microsoft Teams",   icon:"💼" },
+  { value:"meet",       label:"Google Meet",       icon:"🎯" },
+  { value:"webex",      label:"Webex",             icon:"📡" },
+  { value:"custom",     label:"Custom Link",       icon:"🔗" },
+  { value:"in_person",  label:"In Person",         icon:"🏢" },
+];
+
+// ── AI Agent selector (interview-capable agents only) ─────────────────────────
+const AIAgentSelector = ({ value, onChange, envId }) => {
+  const [agents, setAgents] = useState([]);
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/agents?environment_id=${envId}`)
+      .then(d => setAgents((Array.isArray(d)?d:[]).filter(a =>
+        (a.actions||[]).some(ac => ac.action_type === "ai_interview") ||
+        a.agent_type === "ai_interview" || a.can_interview
+      )))
+      .catch(()=>{});
+  }, [envId]);
+  return (
+    <div>
+      {agents.length === 0 ? (
+        <div style={{padding:"12px 16px",borderRadius:10,border:`1.5px dashed ${C.border}`,background:"#fafafa",fontSize:12,color:C.text3,textAlign:"center"}}>
+          No AI interview agents configured yet.
+          <br/><a href="/agents" style={{color:C.accent,fontWeight:600}} target="_blank" rel="noreferrer">Create an AI Interview Agent →</a>
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {agents.map(a => (
+            <label key={a.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:10,
+              border:`1.5px solid ${value===a.id?C.accent:C.border}`,background:value===a.id?"#EEF2FF":"white",cursor:"pointer"}}>
+              <input type="radio" name="ai_agent" checked={value===a.id} onChange={()=>onChange(a.id)}
+                style={{marginTop:2,accentColor:C.accent}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{a.name}</div>
+                {a.description && <div style={{fontSize:11,color:C.text3,marginTop:2}}>{a.description}</div>}
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Question builder for the type modal ───────────────────────────────────────
+const QuestionBuilder = ({ value, onChange, envId, jobPeopleFields }) => {
+  const questions = Array.isArray(value) ? value : [];
+  const [newQ, setNewQ] = useState("");
+  const [newType, setNewType] = useState("open");
+  const QTYPES = [
+    { v:"open",       l:"Open-ended" },
+    { v:"rating",     l:"Rating (1–5)" },
+    { v:"yes_no",     l:"Yes / No" },
+    { v:"competency", l:"Competency" },
+  ];
+  const add = () => {
+    if (!newQ.trim()) return;
+    onChange([...questions,{id:Date.now().toString(),text:newQ.trim(),type:newType}]);
+    setNewQ(""); setNewType("open");
+  };
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {questions.map((q,i) => (
+        <div key={q.id||i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:"#fafbff"}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,color:C.text1,lineHeight:1.4}}>{q.text}</div>
+            <div style={{fontSize:10,color:C.text3,marginTop:3,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+              {QTYPES.find(t=>t.v===q.type)?.l||q.type}
+            </div>
+          </div>
+          <button onClick={()=>onChange(questions.filter((_,j)=>j!==i))}
+            style={{background:"none",border:"none",cursor:"pointer",color:C.red,padding:2,flexShrink:0}}>
+            <Ic n="x" s={14} c={C.red}/>
+          </button>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <textarea value={newQ} onChange={e=>setNewQ(e.target.value)} placeholder="Type a question…" rows={2}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();add();}}}
+            style={{width:"100%",padding:"8px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <select value={newType} onChange={e=>setNewType(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,color:C.text1,background:"white"}}>
+            {QTYPES.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+          </select>
+          <button onClick={add} disabled={!newQ.trim()}
+            style={{padding:"7px 12px",borderRadius:8,background:C.accent,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,opacity:newQ.trim()?1:0.4}}>
+            + Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Interviewer "from job" variable picker ────────────────────────────────────
+const JobInterviewerVars = ({ value, onChange, envId }) => {
+  const [jobFields, setJobFields] = useState([]);
+  useEffect(() => {
+    if (!envId) return;
+    // Load Job object fields of type "people" — these can be used as interviewer variables
+    api.get(`/objects?environment_id=${envId}`)
+      .then(objs => {
+        const job = (Array.isArray(objs)?objs:[]).find(o => (o.slug||o.name||"").toLowerCase().includes("job"));
+        if (!job) return;
+        return api.get(`/fields?object_id=${job.id}`);
+      })
+      .then(fields => {
+        if (!fields) return;
+        setJobFields((Array.isArray(fields)?fields:[]).filter(f => f.field_type === "people"));
+      })
+      .catch(()=>{});
+  }, [envId]);
+
+  const varList = Array.isArray(value) ? value : [];
+  const toggle = (field) => {
+    const varKey = `{{job.${field.api_key}}}`;
+    const exists = varList.some(v => v.var_key === varKey);
+    if (exists) onChange(varList.filter(v => v.var_key !== varKey));
+    else onChange([...varList, { var_key: varKey, label: field.name, field_id: field.id }]);
+  };
+
+  if (jobFields.length === 0) return (
+    <div style={{padding:"10px 14px",borderRadius:10,border:`1px dashed ${C.border}`,fontSize:12,color:C.text3,textAlign:"center"}}>
+      No People-type fields found on Job records.<br/>
+      <span style={{fontSize:11}}>Add a People field to Jobs in Settings → Data Model to use them here.</span>
+    </div>
+  );
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{fontSize:11,color:C.text3,marginBottom:4}}>
+        These fields are sourced from the linked Job record when scheduling. They'll be resolved to real people at runtime.
+      </div>
+      {jobFields.map(f => {
+        const varKey = `{{job.${f.api_key}}}`;
+        const checked = varList.some(v => v.var_key === varKey);
+        return (
+          <label key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:10,
+            border:`1.5px solid ${checked?C.accent:C.border}`,background:checked?"#EEF2FF":"white",cursor:"pointer"}}>
+            <input type="checkbox" checked={checked} onChange={()=>toggle(f)} style={{accentColor:C.accent}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{f.name}</div>
+              <div style={{fontSize:11,color:C.text3,marginTop:1,fontFamily:"monospace"}}>{varKey}</div>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+};
+
 // ── Type Form Modal ───────────────────────────────────────────────────────────
 const TypeFormModal = ({ type, envId, onSave, onClose }) => {
   const isEdit = !!type?.id;
   const [form, setForm] = useState({
-    name: type?.name||"", interview_format: type?.interview_format||"video",
-    duration: type?.duration||30, format: type?.format||"Video Call",
-    description: type?.description||"", location: type?.location||"",
-    buffer_before: type?.buffer_before||0, buffer_after: type?.buffer_after||0,
-    max_bookings_per_day: type?.max_bookings_per_day||0,
-    interviewers: type?.interviewers||[],
-    availability: type?.availability||{},
-    color: type?.color||"#4361EE",
+    name:                   type?.name||"",
+    interview_format:       type?.interview_format||"video",
+    duration:               type?.duration||30,
+    format:                 type?.format||"Video Call",
+    description:            type?.description||"",
+    location:               type?.location||"",
+    buffer_before:          type?.buffer_before||0,
+    buffer_after:           type?.buffer_after||0,
+    max_bookings_per_day:   type?.max_bookings_per_day||0,
+    color:                  type?.color||"#4361EE",
+    video_platform:         type?.video_platform||"meet",
+    interviewers:           type?.interviewers||[],
+    interviewer_vars:       type?.interviewer_vars||[],  // from-job variables
+    interviewer_assignment: type?.interviewer_assignment||"fixed", // "fixed"|"round_robin"
+    availability:           type?.availability||{},
+    // AI Agent
+    use_ai_agent:           type?.use_ai_agent||false,
+    ai_agent_id:            type?.ai_agent_id||"",
+    question_source:        type?.question_source||"manual", // "manual"|"job"|"both"
+    questions:              type?.questions||[],
+    // Automation
+    collect_availability:   type?.collect_availability||false,
+    availability_trigger:   type?.availability_trigger||"stage_changed",
+    auto_send_invite:       type?.auto_send_invite||true,
+    send_confirmation_email:type?.send_confirmation_email||true,
+    reminder_24h:           type?.reminder_24h||true,
+    reminder_1h:            type?.reminder_1h||false,
+    require_candidate_prep: type?.require_candidate_prep||false,
+    candidate_prep_text:    type?.candidate_prep_text||"",
+    scorecard_form_id:      type?.scorecard_form_id||"",
   });
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("details");
+  const [forms, setForms] = useState([]);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  useEffect(() => {
+    api.get(`/forms?environment_id=${envId}`).then(d => setForms(Array.isArray(d)?d:[])).catch(()=>{});
+  }, [envId]);
 
   const handle = async () => {
     if (!form.name.trim()) return;
@@ -313,28 +499,55 @@ const TypeFormModal = ({ type, envId, onSave, onClose }) => {
     setSaving(false);
   };
 
-  const inpSt = { width:"100%", padding:"8px 12px", borderRadius:9, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", boxSizing:"border-box", color:C.text1 };
+  const inpSt = { width:"100%", padding:"8px 12px", borderRadius:9, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", boxSizing:"border-box", color:C.text1, background:"white" };
   const labelSt = { fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:4 };
-  const TAB_ST = (active) => ({ padding:"7px 14px", borderRadius:8, border:"none", background: active?"#fff":"transparent", color:active?C.accent:C.text3, fontWeight:active?700:600, cursor:"pointer", fontFamily:F, fontSize:12, boxShadow:active?"0 1px 4px rgba(0,0,0,.08)":undefined });
+  const TAB_ST = (active) => ({ padding:"7px 13px", borderRadius:8, border:"none", background:active?"#fff":"transparent", color:active?C.accent:C.text3, fontWeight:active?700:600, cursor:"pointer", fontFamily:F, fontSize:12, boxShadow:active?"0 1px 4px rgba(0,0,0,.08)":undefined, whiteSpace:"nowrap" });
+  const Toggle = ({ val, onToggle, label, sub }) => (
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{label}</div>
+        {sub && <div style={{fontSize:11,color:C.text3,marginTop:2}}>{sub}</div>}
+      </div>
+      <button onClick={onToggle} style={{flexShrink:0,width:40,height:22,borderRadius:11,border:"none",cursor:"pointer",
+        background:val?C.accent:"#cbd5e1",transition:"background .15s",position:"relative",padding:0}}>
+        <div style={{width:16,height:16,borderRadius:8,background:"white",position:"absolute",top:3,
+          left:val?20:4,transition:"left .15s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+      </button>
+    </div>
+  );
+
+  const TABS = [
+    ["details","Details"],
+    ["ai_agent","AI Agent"],
+    ["interviewers","Interviewers"],
+    ["questions","Questions"],
+    ["automation","Automation"],
+  ];
 
   return (
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,23,41,.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{background:C.surface,borderRadius:20,width:"100%",maxWidth:620,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden"}}>
+      <div style={{background:C.surface,borderRadius:20,width:"100%",maxWidth:660,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden"}}>
         {/* Header */}
-        <div style={{padding:"20px 24px 0",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{padding:"20px 24px 0",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div style={{fontSize:17,fontWeight:800,color:C.text1}}>{isEdit?"Edit":"New"} Interview Type</div>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:20,lineHeight:1}}>×</button>
           </div>
-          <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4}}>
-            {[["details","Details"],["interviewers","Interviewers"],["availability","Availability"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setTab(id)} style={TAB_ST(tab===id)}>{label}</button>
+          <div style={{display:"flex",gap:2,background:"#f1f5f9",borderRadius:10,padding:3,overflowX:"auto"}}>
+            {TABS.map(([id,label])=>(
+              <button key={id} onClick={()=>setTab(id)} style={TAB_ST(tab===id)}>
+                {id==="ai_agent"&&form.use_ai_agent ? <span style={{color:C.purple}}>✦ </span>:null}
+                {label}
+                {id==="questions"&&form.questions.length>0 ? <span style={{marginLeft:4,background:C.accent,color:"white",borderRadius:10,fontSize:9,padding:"1px 5px"}}>{form.questions.length}</span>:null}
+              </button>
             ))}
           </div>
         </div>
 
         {/* Body */}
         <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+
+          {/* ── DETAILS TAB ── */}
           {tab==="details" && (
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               <div>
@@ -358,14 +571,14 @@ const TypeFormModal = ({ type, envId, onSave, onClose }) => {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   <label style={labelSt}>Duration</label>
-                  <select value={form.duration} onChange={e=>set("duration",Number(e.target.value))} style={{...inpSt,background:"white"}}>
+                  <select value={form.duration} onChange={e=>set("duration",Number(e.target.value))} style={inpSt}>
                     {DURATIONS.map(d=><option key={d} value={d}>{d} minutes</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelSt}>Format</label>
-                  <select value={form.format} onChange={e=>set("format",e.target.value)} style={{...inpSt,background:"white"}}>
-                    {FORMATS.map(f=><option key={f} value={f}>{f}</option>)}
+                  <label style={labelSt}>Video / Meeting Platform</label>
+                  <select value={form.video_platform} onChange={e=>set("video_platform",e.target.value)} style={inpSt}>
+                    {VIDEO_PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.icon} {p.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -391,26 +604,219 @@ const TypeFormModal = ({ type, envId, onSave, onClose }) => {
                   <input type="number" value={form.max_bookings_per_day} onChange={e=>set("max_bookings_per_day",Number(e.target.value))} min={0} style={inpSt}/>
                 </div>
               </div>
+              {/* Scorecard form */}
+              <div>
+                <label style={labelSt}>Scorecard Form</label>
+                <select value={form.scorecard_form_id} onChange={e=>set("scorecard_form_id",e.target.value)} style={inpSt}>
+                  <option value="">None — no scorecard</option>
+                  {forms.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <div style={{fontSize:11,color:C.text3,marginTop:4}}>The selected form will be sent to interviewers to complete after the interview.</div>
+              </div>
             </div>
           )}
+
+          {/* ── AI AGENT TAB ── */}
+          {tab==="ai_agent" && (
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <Toggle
+                val={form.use_ai_agent}
+                onToggle={()=>set("use_ai_agent",!form.use_ai_agent)}
+                label="Use AI Interview Agent"
+                sub="Replace or supplement human interviewers with an AI agent that conducts the interview autonomously."
+              />
+              {form.use_ai_agent && (
+                <>
+                  <div>
+                    <label style={labelSt}>Select AI Agent</label>
+                    <div style={{fontSize:11,color:C.text3,marginBottom:8}}>Only agents with AI Interview capability are shown below.</div>
+                    <AIAgentSelector value={form.ai_agent_id} onChange={v=>set("ai_agent_id",v)} envId={envId}/>
+                  </div>
+                  <div>
+                    <label style={labelSt}>Question Source</label>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {[
+                        ["job","Pull questions from the linked Job record's scorecard/criteria"],
+                        ["manual","Use the questions defined in the Questions tab"],
+                        ["both","Use job questions first, then add manual questions"],
+                      ].map(([v,desc])=>(
+                        <label key={v} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:10,
+                          border:`1.5px solid ${form.question_source===v?C.accent:C.border}`,background:form.question_source===v?"#EEF2FF":"white",cursor:"pointer"}}>
+                          <input type="radio" name="qsource" checked={form.question_source===v} onChange={()=>set("question_source",v)} style={{marginTop:2,accentColor:C.accent}}/>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:600,color:C.text1,textTransform:"capitalize"}}>{v==="both"?"Job + Manual":v.charAt(0).toUpperCase()+v.slice(1)}</div>
+                            <div style={{fontSize:11,color:C.text3,marginTop:2}}>{desc}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {(form.question_source==="manual"||form.question_source==="both") && (
+                    <div>
+                      <label style={labelSt}>Manual Questions</label>
+                      <div style={{fontSize:11,color:C.text3,marginBottom:8}}>These questions are passed to the AI agent. Add them in the Questions tab too for human review.</div>
+                      <button onClick={()=>setTab("questions")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:8,border:`1px solid ${C.accent}`,background:"#EEF2FF",color:C.accent,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>
+                        <Ic n="list" s={12} c={C.accent}/> Edit Questions ({form.questions.length})
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              {!form.use_ai_agent && (
+                <div style={{padding:"20px",textAlign:"center",borderRadius:14,border:`1.5px dashed ${C.border}`,background:"#fafbff"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>🤖</div>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text2,marginBottom:4}}>Enable AI Agent mode</div>
+                  <div style={{fontSize:12,color:C.text3}}>Toggle on above to let an AI agent conduct this interview autonomously using your configured questions and criteria.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── INTERVIEWERS TAB ── */}
           {tab==="interviewers" && (
-            <div>
-              <div style={{fontSize:13,color:C.text3,marginBottom:14}}>Select the people who conduct this interview. When scheduling, these will be pre-filled as the interview panel.</div>
-              <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add interviewers…"/>
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              {/* Assignment mode */}
+              <div>
+                <label style={labelSt}>Assignment Mode</label>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[
+                    ["fixed","Fixed Panel","The selected interviewers always conduct this interview.","users"],
+                    ["round_robin","Round-Robin","Each interview is assigned to the next available interviewer in rotation.","refresh"],
+                  ].map(([v,label,desc,icon])=>(
+                    <button key={v} onClick={()=>set("interviewer_assignment",v)}
+                      style={{padding:"12px 14px",borderRadius:12,border:`2px solid ${form.interviewer_assignment===v?C.accent:C.border}`,
+                        background:form.interviewer_assignment===v?"#EEF2FF":"white",cursor:"pointer",textAlign:"left",fontFamily:F,transition:"all .12s"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                        <Ic n={icon} s={13} c={form.interviewer_assignment===v?C.accent:C.text3}/>
+                        <div style={{fontSize:12,fontWeight:700,color:form.interviewer_assignment===v?C.accent:C.text1}}>{label}</div>
+                      </div>
+                      <div style={{fontSize:11,color:C.text3,lineHeight:1.3}}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* From Job section */}
+              <div>
+                <label style={{...labelSt,display:"flex",alignItems:"center",gap:6}}>
+                  From Job Record
+                  <span style={{background:"#EEF2FF",color:C.accent,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:6,textTransform:"none",letterSpacing:0}}>Variables</span>
+                </label>
+                <div style={{fontSize:12,color:C.text3,marginBottom:10}}>Select People-type fields from the Job record to use as interviewers dynamically. These resolve to real people when an interview is scheduled against a specific job.</div>
+                <JobInterviewerVars value={form.interviewer_vars} onChange={v=>set("interviewer_vars",v)} envId={envId}/>
+              </div>
+
+              {/* Manual interviewers */}
+              <div>
+                <label style={labelSt}>Manual Interviewers</label>
+                <div style={{fontSize:12,color:C.text3,marginBottom:10}}>Add specific people who always conduct this interview type, regardless of the job.</div>
+                <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Search and add interviewers…"/>
+              </div>
+
+              {/* Summary */}
+              {(form.interviewer_vars.length > 0 || form.interviewers.length > 0) && (
+                <div style={{padding:"10px 14px",borderRadius:10,background:"#f0fdf4",border:"1px solid #bbf7d0"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.green,marginBottom:6}}>INTERVIEW PANEL SUMMARY</div>
+                  {form.interviewer_vars.map(v=>(
+                    <div key={v.var_key} style={{fontSize:12,color:C.text2,display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{fontSize:9,background:"#dcfce7",color:C.green,fontWeight:700,padding:"1px 5px",borderRadius:4}}>VAR</span>
+                      {v.label} <span style={{color:C.text3,fontFamily:"monospace",fontSize:10}}>{v.var_key}</span>
+                    </div>
+                  ))}
+                  {form.interviewers.map((iv,i)=>(
+                    <div key={i} style={{fontSize:12,color:C.text2,display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{fontSize:9,background:"#dbeafe",color:C.accent,fontWeight:700,padding:"1px 5px",borderRadius:4}}>FIXED</span>
+                      {typeof iv==="object"?(iv.name||iv.label||iv.id):iv}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {tab==="availability" && (
-            <div>
-              <div style={{fontSize:13,color:C.text3,marginBottom:14}}>Set the general availability window for this interview type. Specific scheduling will respect these slots.</div>
+
+          {/* ── QUESTIONS TAB ── */}
+          {tab==="questions" && (
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div style={{padding:"12px 16px",borderRadius:10,background:"#EEF2FF",border:`1px solid ${C.accent}20`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:4}}>Structured Interview Questions</div>
+                <div style={{fontSize:12,color:C.text2,lineHeight:1.5}}>
+                  These questions appear on the interviewer's scorecard and can be sent to an AI agent. They ensure consistency across all interviews of this type.
+                </div>
+              </div>
+              <QuestionBuilder value={form.questions} onChange={v=>set("questions",v)} envId={envId}/>
+              {form.questions.length > 0 && (
+                <div style={{fontSize:12,color:C.text3,textAlign:"center"}}>
+                  {form.questions.length} question{form.questions.length!==1?"s":""} defined · {form.questions.filter(q=>q.type==="rating").length} rated · {form.questions.filter(q=>q.type==="competency").length} competency
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── AUTOMATION TAB ── */}
+          {tab==="automation" && (
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Availability Collection</div>
+              <Toggle
+                val={form.collect_availability}
+                onToggle={()=>set("collect_availability",!form.collect_availability)}
+                label="Collect Availability Automatically"
+                sub="When triggered, send availability collection links to the candidate and interviewers, then auto-schedule when a mutual slot is found."
+              />
+              {form.collect_availability && (
+                <div style={{margin:"8px 0 12px",padding:"12px 14px",borderRadius:10,background:"#f8faff",border:`1px solid ${C.border}`}}>
+                  <label style={labelSt}>Trigger</label>
+                  <select value={form.availability_trigger} onChange={e=>set("availability_trigger",e.target.value)}
+                    style={{width:"100%",padding:"8px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,color:C.text1,background:"white"}}>
+                    <option value="stage_changed">When candidate reaches a pipeline stage</option>
+                    <option value="manual">Manual (recruiter triggers it)</option>
+                    <option value="form_submitted">After a form is submitted</option>
+                    <option value="record_created">When candidate record is created</option>
+                  </select>
+                  <div style={{fontSize:11,color:C.text3,marginTop:8}}>
+                    Uses the Interview Coordinator agent to send a scheduling link to the candidate and resolve availability with interviewers automatically.
+                  </div>
+                </div>
+              )}
+
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:12,marginBottom:8}}>Notifications</div>
+              <Toggle val={form.auto_send_invite} onToggle={()=>set("auto_send_invite",!form.auto_send_invite)}
+                label="Auto-send Calendar Invite" sub="Automatically send a calendar invite to all participants when an interview is scheduled."/>
+              <Toggle val={form.send_confirmation_email} onToggle={()=>set("send_confirmation_email",!form.send_confirmation_email)}
+                label="Send Confirmation Email" sub="Email the candidate and interviewers a confirmation when the interview is booked."/>
+              <Toggle val={form.reminder_24h} onToggle={()=>set("reminder_24h",!form.reminder_24h)}
+                label="24-hour Reminder" sub="Send a reminder email 24 hours before the interview to all participants."/>
+              <Toggle val={form.reminder_1h} onToggle={()=>set("reminder_1h",!form.reminder_1h)}
+                label="1-hour Reminder" sub="Send a final reminder 1 hour before the interview starts."/>
+
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:12,marginBottom:8}}>Candidate Preparation</div>
+              <Toggle val={form.require_candidate_prep} onToggle={()=>set("require_candidate_prep",!form.require_candidate_prep)}
+                label="Include Preparation Instructions" sub="Send candidate-specific prep notes with the confirmation email."/>
+              {form.require_candidate_prep && (
+                <div style={{margin:"8px 0",padding:"12px 14px",borderRadius:10,background:"#f8faff",border:`1px solid ${C.border}`}}>
+                  <label style={labelSt}>Preparation Instructions</label>
+                  <textarea value={form.candidate_prep_text} onChange={e=>set("candidate_prep_text",e.target.value)}
+                    placeholder="e.g. Please prepare a 5-minute walk-through of a recent project. Have your portfolio ready…"
+                    rows={4} style={{width:"100%",padding:"8px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,resize:"vertical",boxSizing:"border-box",color:C.text1,background:"white"}}/>
+                </div>
+              )}
+
+              <div style={{fontSize:12,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:12,marginBottom:8}}>Availability Window</div>
+              <div style={{fontSize:12,color:C.text3,marginBottom:10}}>Define the default slots available for this interview type when auto-scheduling.</div>
               <AvailabilityGrid value={form.availability} onChange={v=>set("availability",v)}/>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{padding:"16px 24px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
-          <Btn v="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn v="primary" onClick={handle} disabled={saving||!form.name.trim()}>{saving?"Saving…":isEdit?"Save changes":"Create interview type"}</Btn>
+        <div style={{padding:"16px 24px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div style={{fontSize:11,color:C.text3}}>
+            {form.use_ai_agent && <span style={{color:C.purple,fontWeight:600}}>✦ AI Agent active</span>}
+            {form.collect_availability && <span style={{color:C.green,fontWeight:600,marginLeft:form.use_ai_agent?8:0}}>⚡ Auto-scheduling on</span>}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <Btn v="ghost" onClick={onClose}>Cancel</Btn>
+            <Btn v="primary" onClick={handle} disabled={saving||!form.name.trim()}>{saving?"Saving…":isEdit?"Save changes":"Create interview type"}</Btn>
+          </div>
         </div>
       </div>
     </div>
