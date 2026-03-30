@@ -46,7 +46,7 @@ const AUTH_EXEMPT = [
   '/health', '/environments',
   '/portals/public', '/portals/slug',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
-  '/superadmin', '/bot',
+  '/superadmin', '/bot', '/analytics',
   '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
   '/error-logs', '/ai', '/translate', '/linkedin-search',
 ];
@@ -56,6 +56,7 @@ app.use('/api', (req, res, next) => {
   if (req.method === 'GET' && (
     req.path.startsWith('/objects') || req.path.startsWith('/records') ||
     req.path.startsWith('/fields')  || req.path.startsWith('/saved-views') ||
+    req.path.startsWith('/analytics') ||
     req.path.startsWith('/company-documents/search') ||
     req.path.startsWith('/company-documents/meta')
   )) return next();
