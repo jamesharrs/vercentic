@@ -3920,8 +3920,8 @@ export const getDefaultPanelOrder = (objectName) => {
   if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("scorecard");
-  if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); base.push("screening"); 
-  if (objectName === "Job" || objectName === "Jobs") base.unshift("insights"); }
+  if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); base.push("screening"); }
+  if (objectName === "Job" || objectName === "Jobs") base.unshift("insights");
 
   return base;
 };

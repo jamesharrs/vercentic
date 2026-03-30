@@ -34,7 +34,7 @@ export default function InsightsPanel({ record, environment }) {
   if (error) return <div style={{ padding:24, textAlign:"center" }}><div style={{ color:C.red, fontSize:13, marginBottom:8 }}>Failed to load</div><button onClick={load} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", fontSize:12, cursor:"pointer", fontFamily:F }}>Retry</button></div>;
   if (!data) return null;
 
-  const tabs = [{ id:"overview", label:"Overview" }, { id:"pipeline", label:"Pipeline" }, { id:"risk", label:`Risk (${data.candidate_risk?.filter(c=>c.risk_level!=="low").length||0})` }, { id:"sources", label:"Sources" }];
+  const tabs = [{ id:"overview", label:"Overview" }, { id:"process", label:"Process" }, { id:"risk", label:`Risk (${data.candidate_risk?.filter(c=>c.risk_level!=="low").length||0})` }, { id:"sources", label:"Sources" }];
 
   return (
     <div style={{ fontFamily:F }}>
@@ -49,7 +49,7 @@ export default function InsightsPanel({ record, environment }) {
         </div>}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
           <StatCard icon="clock" iconColor={C.blue} iconBg={C.blueBg} label="Est. time to fill" value={data.time_to_fill?.estimated_days?`${data.time_to_fill.estimated_days}d`:"—"} sub={data.time_to_fill?.confidence!=="insufficient"?`${data.time_to_fill.sample_size} ${data.time_to_fill.basis==="similar_roles"?"similar ":""}roles`:"Not enough data"}/>
-          <StatCard icon="users" iconColor={C.purple} iconBg={C.purpleBg} label="In pipeline" value={data.pipeline?.total_candidates??0} sub={data.pipeline?.bottlenecks?.length>0?`${data.pipeline.bottlenecks.length} bottleneck${data.pipeline.bottlenecks.length>1?"s":""}`:"No bottlenecks"}/>
+          <StatCard icon="users" iconColor={C.purple} iconBg={C.purpleBg} label="In process" value={data.process?.total_candidates??0} sub={data.process?.bottlenecks?.length>0?`${data.process.bottlenecks.length} bottleneck${data.process.bottlenecks.length>1?"s":""}`:"No bottlenecks"}/>
           <StatCard icon="target" iconColor={data.time_to_fill?.on_track==="overdue"?C.red:C.green} iconBg={data.time_to_fill?.on_track==="overdue"?C.redBg:C.greenBg} label="Days open" value={data.time_to_fill?.days_open??"—"}/>
           <StatCard icon="dollar" iconColor={C.amber} iconBg={C.amberBg} label="Offers" value={data.offers?.total??0} sub={data.offers?.acceptance_rate!=null?`${data.offers.acceptance_rate}% accepted`:"No offers yet"}/>
         </div>
@@ -70,21 +70,22 @@ export default function InsightsPanel({ record, environment }) {
         </div>}
       </div>}
 
-      {activeTab==="pipeline" && <div>
-        {data.pipeline?.stages?.length>0 ? <>
-          {data.pipeline.stages.map((stage,i) => <div key={stage.name} style={{ marginBottom:2 }}>
+      {activeTab==="process" && <div>
+        {data.process?.stages?.length>0 ? <>
+          {data.process?.workflow_name && <div style={{ fontSize:11, fontWeight:600, color:C.purple, marginBottom:10, padding:"4px 10px", background:C.purpleBg, borderRadius:6, display:"inline-block" }}>{data.process.workflow_name}</div>}
+          {data.process.stages.map((stage,i) => <div key={stage.name} style={{ marginBottom:2 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, background:stage.health==="bottleneck"?C.redBg:stage.health==="slow"?C.amberBg:stage.health==="fast"?C.greenBg:"white", border:`1px solid ${stage.health==="bottleneck"?"#FCA5A5":stage.health==="slow"?"#FCD34D":C.border}` }}>
               <HealthDot health={stage.health}/>
               <div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{stage.name}</div><div style={{ fontSize:11, color:C.text3 }}>{stage.count} candidate{stage.count!==1?"s":""}{stage.avg_days!=null&&` · avg ${stage.avg_days}d`}{stage.env_avg_days!=null&&` (norm: ${stage.env_avg_days}d)`}</div></div>
               <div style={{ fontSize:18, fontWeight:800, color:C.text1, width:30, textAlign:"center" }}>{stage.count}</div>
             </div>
-            {i<data.pipeline.stages.length-1&&data.pipeline.conversion_rates[i]&&<div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"2px 0", color:C.text3, fontSize:10 }}>↓ {data.pipeline.conversion_rates[i].rate!=null?`${data.pipeline.conversion_rates[i].rate}%`:"—"}</div>}
+            {i<data.process.stages.length-1&&data.process.conversion_rates[i]&&<div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"2px 0", color:C.text3, fontSize:10 }}>↓ {data.process.conversion_rates[i].rate!=null?`${data.process.conversion_rates[i].rate}%`:"—"}</div>}
           </div>)}
-          {data.pipeline.bottlenecks?.length>0&&<div style={{ background:C.amberBg, border:"1px solid #FCD34D", borderRadius:10, padding:"12px 14px", marginTop:8 }}>
+          {data.process.bottlenecks?.length>0&&<div style={{ background:C.amberBg, border:"1px solid #FCD34D", borderRadius:10, padding:"12px 14px", marginTop:8 }}>
             <div style={{ fontSize:12, fontWeight:700, color:C.amber, marginBottom:6, display:"flex", alignItems:"center", gap:6 }}><Ic n="alert" s={13} c={C.amber}/> Bottlenecks detected</div>
-            {data.pipeline.bottlenecks.map((b,i)=><div key={i} style={{ fontSize:12, color:C.text2, marginBottom:4 }}>{b.message}</div>)}
+            {data.process.bottlenecks.map((b,i)=><div key={i} style={{ fontSize:12, color:C.text2, marginBottom:4 }}>{b.message}</div>)}
           </div>}
-        </> : <div style={{ textAlign:"center", padding:32, color:C.text3, fontSize:13 }}>No pipeline workflow assigned yet.</div>}
+        </> : <div style={{ textAlign:"center", padding:32, color:C.text3, fontSize:13 }}>No Linked Person workflow assigned yet. Assign one to see process analytics.</div>}
       </div>}
 
       {activeTab==="risk" && <div>
@@ -95,7 +96,7 @@ export default function InsightsPanel({ record, environment }) {
             <div style={{ fontSize:11, color:C.text3, marginBottom:4 }}>Stage: {c.stage}{c.days_in_stage!=null&&` · ${c.days_in_stage}d`}{c.days_since_contact!=null&&` · Last contact ${c.days_since_contact}d ago`}</div>
             {c.factors.length>0&&<div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>{c.factors.map((f,fi)=><span key={fi} style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:c.risk_level==="high"?"#FEE2E2":"#FEF3C7", color:c.risk_level==="high"?C.red:C.amber }}>{f}</span>)}</div>}
           </div>
-        </div>) : <div style={{ textAlign:"center", padding:32, color:C.text3, fontSize:13 }}>No candidates in pipeline.</div>}
+        </div>) : <div style={{ textAlign:"center", padding:32, color:C.text3, fontSize:13 }}>No candidates linked to this role.</div>}
       </div>}
 
       {activeTab==="sources" && <div>

@@ -25,6 +25,7 @@ router.get('/job-insights', (req, res) => {
     const records = store.records || [];
     const peopleLinks = store.people_links || [];
     const workflows = store.workflows || [];
+    const workflowSteps = store.workflow_steps || [];
     const wfAssignments = store.record_workflow_assignments || [];
     const comms = store.communications || [];
     const offers = store.offers || [];
@@ -56,49 +57,87 @@ router.get('/job-insights', (req, res) => {
     if (estDays && daysOpen) { const r = daysOpen / estDays; onTrack = r <= 0.7 ? 'ahead' : r <= 1.0 ? 'on_track' : r <= 1.3 ? 'at_risk' : 'overdue'; }
     const timeToFill = { estimated_days: estDays, p25: percentile(useDays, 25), p75: percentile(useDays, 75), sample_size: useDays.length, basis: similarTtfDays.length >= 3 ? 'similar_roles' : 'all_roles', confidence: useDays.length >= 10 ? 'high' : useDays.length >= 5 ? 'medium' : useDays.length >= 3 ? 'low' : 'insufficient', days_open: daysOpen, on_track: onTrack };
 
-    // ── 2. Pipeline Velocity ────────────────────────────────────────
-    const jobLinks = peopleLinks.filter(l => l.record_id === job_id);
-    const wfA = wfAssignments.find(a => a.record_id === job_id && a.workflow_type === 'linked_person');
+    // ── 2. Linked Person Process (candidates moving through stages) ──
+    // Find people linked to this job via people_links
+    const jobLinks = peopleLinks.filter(l => l.target_record_id === job_id);
+
+    // Find the linked-person workflow assignment for this job
+    // Assignment type is 'people_link' (not 'pipeline' which is for record status)
+    const wfA = wfAssignments.find(a => a.record_id === job_id && a.type === 'people_link');
     const wf = wfA ? workflows.find(w => w.id === wfA.workflow_id) : null;
-    const steps = wf?.steps || [];
+
+    // Steps are in the workflow_steps table, not inline on the workflow
+    const steps = wf ? workflowSteps.filter(s => s.workflow_id === wf.id).sort((a,b) => a.order - b.order) : [];
+
     const stageCounts = {}, stageDurations = {};
     steps.forEach(s => { stageCounts[s.name] = 0; stageDurations[s.name] = []; });
-    const allEnvLinks = peopleLinks.filter(l => { const rec = records.find(r => r.id === l.record_id); return rec && rec.environment_id === envId; });
-    const envStageDurations = {};
-    allEnvLinks.forEach(link => { const st = link.current_step; if (!st) return; const e = link.stage_updated_at || link.linked_at || link.created_at; if (e) { if (!envStageDurations[st]) envStageDurations[st] = []; envStageDurations[st].push(daysBetween(e, new Date().toISOString())); } });
+
     jobLinks.forEach(link => {
-      const stage = link.current_step || steps[0]?.name || 'Unknown';
+      // People links use stage_name (not current_step)
+      const stage = link.stage_name || steps[0]?.name || 'Unknown';
       if (stageCounts[stage] !== undefined) stageCounts[stage]++;
-      const entered = link.stage_updated_at || link.linked_at || link.created_at;
+      // Use updated_at as proxy for when they entered this stage
+      const entered = link.updated_at || link.created_at;
       if (entered && stageDurations[stage]) stageDurations[stage].push(daysBetween(entered, new Date().toISOString()));
     });
-    const pipeStages = steps.map(s => {
-      const count = stageCounts[s.name] || 0, durs = stageDurations[s.name] || [], envDurs = envStageDurations[s.name] || [];
+
+    // Environment-wide stage duration averages for comparison
+    const allEnvLinks = peopleLinks.filter(l => {
+      const rec = records.find(r => r.id === l.target_record_id);
+      return rec && rec.environment_id === envId;
+    });
+    const envStageDurations = {};
+    allEnvLinks.forEach(link => {
+      const stage = link.stage_name;
+      if (!stage) return;
+      const entered = link.updated_at || link.created_at;
+      if (entered) {
+        if (!envStageDurations[stage]) envStageDurations[stage] = [];
+        envStageDurations[stage].push(daysBetween(entered, new Date().toISOString()));
+      }
+    });
+
+    const processStages = steps.map(s => {
+      const count = stageCounts[s.name] || 0;
+      const durs = stageDurations[s.name] || [];
+      const envDurs = envStageDurations[s.name] || [];
       const avgD = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
       const envAvgD = envDurs.length >= 3 ? Math.round(envDurs.reduce((a,b)=>a+b,0)/envDurs.length) : null;
       let health = 'normal';
       if (avgD && envAvgD) { if (avgD > envAvgD * 2) health = 'bottleneck'; else if (avgD > envAvgD * 1.5) health = 'slow'; else if (avgD < envAvgD * 0.5) health = 'fast'; }
       return { name: s.name, count, avg_days: avgD, env_avg_days: envAvgD, health };
     });
+
+    // Conversion rates between stages
     const convRates = [];
-    for (let i = 0; i < pipeStages.length - 1; i++) {
-      const atOrPast = jobLinks.filter(l => { const si = steps.findIndex(s => s.name === (l.current_step || steps[0]?.name)); return si >= i; }).length;
-      const pastTo = jobLinks.filter(l => { const si = steps.findIndex(s => s.name === (l.current_step || steps[0]?.name)); return si >= i+1; }).length;
-      convRates.push({ from: pipeStages[i].name, to: pipeStages[i+1].name, rate: atOrPast > 0 ? Math.round((pastTo/atOrPast)*100) : null });
+    for (let i = 0; i < processStages.length - 1; i++) {
+      const atOrPast = jobLinks.filter(l => {
+        const si = steps.findIndex(s => s.name === (l.stage_name || steps[0]?.name));
+        return si >= i;
+      }).length;
+      const pastTo = jobLinks.filter(l => {
+        const si = steps.findIndex(s => s.name === (l.stage_name || steps[0]?.name));
+        return si >= i + 1;
+      }).length;
+      convRates.push({ from: processStages[i].name, to: processStages[i+1].name, rate: atOrPast > 0 ? Math.round((pastTo/atOrPast)*100) : null });
     }
-    const bottlenecks = pipeStages.filter(s => s.health==='bottleneck'||s.health==='slow').map(s => ({ stage: s.name, severity: s.health, avg_days: s.avg_days, env_avg_days: s.env_avg_days, message: `${s.name} averaging ${s.avg_days}d vs ${s.env_avg_days}d norm` }));
-    const pipeline = { total_candidates: jobLinks.length, stages: pipeStages, conversion_rates: convRates, bottlenecks };
+    const bottlenecks = processStages.filter(s => s.health==='bottleneck'||s.health==='slow').map(s => ({
+      stage: s.name, severity: s.health, avg_days: s.avg_days, env_avg_days: s.env_avg_days,
+      message: `${s.name} averaging ${s.avg_days}d vs ${s.env_avg_days}d norm`
+    }));
+    const process_flow = { total_candidates: jobLinks.length, workflow_name: wf?.name || null, stages: processStages, conversion_rates: convRates, bottlenecks };
 
     // ── 3. Candidate Drop-off Risk ──────────────────────────────────
     const candidateRisk = jobLinks.map(link => {
-      const person = records.find(r => r.id === link.person_id); if (!person) return null;
+      const person = records.find(r => r.id === link.person_record_id);
+      if (!person) return null;
       const pData = person.data || {};
       const name = [pData.first_name, pData.last_name].filter(Boolean).join(' ') || pData.email || 'Unknown';
-      const lastComm = comms.filter(c => c.record_id === link.person_id).sort((a,b) => new Date(b.created_at)-new Date(a.created_at))[0];
+      const lastComm = comms.filter(c => c.record_id === link.person_record_id).sort((a,b) => new Date(b.created_at)-new Date(a.created_at))[0];
       const daysSinceComm = lastComm ? daysBetween(lastComm.created_at, new Date().toISOString()) : 999;
-      const entered = link.stage_updated_at || link.linked_at || link.created_at;
+      const entered = link.updated_at || link.created_at;
       const daysInStage = entered ? daysBetween(entered, new Date().toISOString()) : 0;
-      const curStage = link.current_step || steps[0]?.name || 'Unknown';
+      const curStage = link.stage_name || steps[0]?.name || 'Unknown';
       const envAvg = envStageDurations[curStage] ? median(envStageDurations[curStage]) : null;
       let rs = 0; const factors = [];
       if (daysSinceComm > 14) { rs += 35; factors.push('No contact for ' + daysSinceComm + ' days'); }
@@ -106,9 +145,9 @@ router.get('/job-insights', (req, res) => {
       if (envAvg && daysInStage > envAvg * 2) { rs += 30; factors.push(`${daysInStage}d in ${curStage} (avg ${Math.round(envAvg)}d)`); }
       else if (envAvg && daysInStage > envAvg * 1.5) { rs += 15; factors.push(`Slightly long in ${curStage}`); }
       if (!lastComm) { rs += 20; factors.push('No communications recorded'); }
-      const inb = comms.filter(c => c.record_id === link.person_id && c.direction === 'inbound');
+      const inb = comms.filter(c => c.record_id === link.person_record_id && c.direction === 'inbound');
       if (inb.length === 0 && daysSinceComm < 999) { rs += 10; factors.push('No inbound responses'); }
-      return { person_id: link.person_id, name, stage: curStage, risk_score: Math.min(100, rs), risk_level: rs >= 60 ? 'high' : rs >= 30 ? 'medium' : 'low', factors, days_in_stage: daysInStage, days_since_contact: daysSinceComm === 999 ? null : daysSinceComm };
+      return { person_id: link.person_record_id, name, stage: curStage, risk_score: Math.min(100, rs), risk_level: rs >= 60 ? 'high' : rs >= 30 ? 'medium' : 'low', factors, days_in_stage: daysInStage, days_since_contact: daysSinceComm === 999 ? null : daysSinceComm };
     }).filter(Boolean).sort((a, b) => b.risk_score - a.risk_score);
 
     // ── 4. Source Effectiveness ──────────────────────────────────────
@@ -118,11 +157,11 @@ router.get('/job-insights', (req, res) => {
         const src = p.data?.source || 'Unknown';
         if (!sourceStats[src]) sourceStats[src] = { source: src, total: 0, linked: 0, interviewed: 0, hired: 0 };
         sourceStats[src].total++;
-        if (peopleLinks.some(l => l.person_id === p.id)) sourceStats[src].linked++;
-        peopleLinks.filter(l => l.person_id === p.id).forEach(l => {
-          const si = steps.findIndex(s => s.name === l.current_step);
+        if (peopleLinks.some(l => l.person_record_id === p.id)) sourceStats[src].linked++;
+        peopleLinks.filter(l => l.person_record_id === p.id).forEach(l => {
+          const si = steps.findIndex(s => s.name === l.stage_name);
           if (si >= 2) sourceStats[src].interviewed++;
-          if (l.current_step === 'Hired' || l.current_step === 'Placed') sourceStats[src].hired++;
+          if (l.stage_name === 'Hired' || l.stage_name === 'Placed') sourceStats[src].hired++;
         });
       });
     }
@@ -136,12 +175,26 @@ router.get('/job-insights', (req, res) => {
     const summaryPoints = [];
     if (onTrack === 'overdue') summaryPoints.push(`This role has been open for ${daysOpen} days — ${Math.round((daysOpen/estDays-1)*100)}% longer than typical.`);
     else if (onTrack === 'ahead') summaryPoints.push(`Progressing well — ${daysOpen} days open vs estimated ${estDays} days.`);
+    else if (onTrack === 'on_track' && estDays) summaryPoints.push(`On track — ${daysOpen} of estimated ${estDays} days.`);
     if (bottlenecks.length > 0) summaryPoints.push(`Bottleneck: ${bottlenecks[0].message}.`);
     const highRisk = candidateRisk.filter(c => c.risk_level === 'high');
     if (highRisk.length > 0) summaryPoints.push(`${highRisk.length} candidate${highRisk.length>1?'s':''} at high drop-off risk.`);
-    if (pipeline.total_candidates === 0) summaryPoints.push('No candidates currently in the pipeline.');
+    if (process_flow.total_candidates === 0) summaryPoints.push('No candidates currently linked to this role.');
+    else summaryPoints.push(`${process_flow.total_candidates} candidate${process_flow.total_candidates>1?'s':''} in the ${wf?.name || 'hiring'} process.`);
 
-    res.json({ job_id, job_title: jobData.job_title||'Untitled', department: jobData.department, status: jobData.status, time_to_fill: timeToFill, pipeline, candidate_risk: candidateRisk, source_effectiveness: sourceEffectiveness, offers: offerInsights, summary: summaryPoints, generated_at: new Date().toISOString() });
+    res.json({
+      job_id,
+      job_title: jobData.job_title || 'Untitled',
+      department: jobData.department,
+      status: jobData.status,
+      time_to_fill: timeToFill,
+      process: process_flow,
+      candidate_risk: candidateRisk,
+      source_effectiveness: sourceEffectiveness,
+      offers: offerInsights,
+      summary: summaryPoints,
+      generated_at: new Date().toISOString(),
+    });
   } catch (err) { console.error('[analytics]', err); res.status(500).json({ error: err.message }); }
 });
 
