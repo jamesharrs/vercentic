@@ -497,7 +497,7 @@ You are always given the current page and record via "CURRENT PAGE CONTEXT:" in 
       "addFilter":    { "field": "source", "op": "is not", "value": "Unknown" },
       "removeFilter": { "field": "source" },
       "setGroupBy":   "department",
-      "setChartType": "bar",
+      "setChartType": "funnel",
       "setSortBy":    "count"
     }
     </MODIFY_REPORT>
@@ -925,12 +925,28 @@ When a user asks to "create a report", "show me data", "build me a chart", "how 
 
 Available objects (use slug): people, jobs, talent-pools, and any custom objects.
 
+Advanced features:
+- Cross-object join: you can add "join_object" to merge two objects via pipeline links
+  e.g. join people + jobs to report on salary vs candidate status
+- Form responses: set "data_source": "forms" and "form_name" to report on interview
+  scorecard data, surveys, or any custom form
+- Formulas: add "formulas" array with {name, expression} entries using functions like
+  SUM({field}), AVG({field}), DIFF({a},{b}), ROUND({f},N), COUNT(), IF({f}=v,a,b)
+  Field refs use {api_key} curly-brace syntax
+
 Common groupable fields:
 - people: status, source, department, location, person_type
 - jobs: status, department, location, work_type, employment_type
 - talent-pools: category, status
 
-Chart types: bar (comparisons), area (trends over time), pie (proportions)
+Chart types:
+- bar       — comparisons between categories (most common)
+- stacked   — breakdown of a category by a second dimension (e.g. status per department)
+- funnel    — pipeline stage conversion, shows drop-off between stages
+- scatter   — two-variable correlation (e.g. salary vs experience)
+- line      — trends over time
+- area      — trends over time with fill
+- pie       — proportional breakdown
 
 Output a <CREATE_REPORT> JSON block then a brief confirmation message. The user sees a card before anything opens.
 
@@ -948,12 +964,27 @@ Example:
 }
 </CREATE_REPORT>
 
+Funnel chart example (best for pipeline stages):
+<CREATE_REPORT>
+{
+  "title": "Candidate Pipeline Funnel",
+  "object": "people",
+  "group_by": "status",
+  "chart_type": "funnel",
+  "sort_by": "_count",
+  "sort_dir": "desc",
+  "filters": [],
+  "description": "Funnel showing candidate drop-off through pipeline stages"
+}
+</CREATE_REPORT>
+
 Rules:
 - If the user is vague, ask ONE clarifying question (which object?) before outputting the block
 - "object" must be a slug (people, jobs, talent-pools)
 - "group_by" must be a snake_case field api_key
 - Filter values should be lowercase unless a proper noun
-- Always suggest a sensible chart_type for the data shape`;
+- Choose chart_type intelligently: funnel for pipeline/stages, stacked for two-dimension breakdown, scatter for two numeric fields, bar for most other comparisons
+- For pipeline/stage/funnel requests — ALWAYS use chart_type "funnel" (it is natively supported)`;
 
 
 // Record-specific actions shown when viewing a record — keyed by object slug
@@ -1190,10 +1221,14 @@ const SUGGESTED_ACTIONS = {
     { label: "Schedule interview",    prompt: "Schedule an interview for this role" },
   ],
   reports: [
-    { label: "Filter by status",   prompt: "Add a filter to show only active records" },
-    { label: "Group differently",  prompt: "Change the grouping of this report" },
-    { label: "Change chart type",  prompt: "Change this to a pie chart" },
-    { label: "Save this report",   prompt: "Save this report with a name" },
+    { label: "Pipeline funnel",    prompt: "Create a funnel chart of candidates by pipeline status" },
+    { label: "Time-to-fill report",prompt: "Build a report showing jobs by time open — group by department" },
+    { label: "Source breakdown",   prompt: "Show a pie chart of candidates by source" },
+    { label: "Filter active only", prompt: "Add a filter to exclude rejected and withdrawn candidates" },
+    { label: "Change chart type",  prompt: "Change this to a funnel chart" },
+    { label: "Add a formula",      prompt: "Add a formula column to calculate something from my data" },
+    { label: "Pin to dashboard",   prompt: "Save and pin this report to the dashboard" },
+    { label: "Schedule this",      prompt: "Schedule this report to email me weekly" },
   ],
   settings: [
     { label: "Create a field",     prompt: "I want to create a new field" },
