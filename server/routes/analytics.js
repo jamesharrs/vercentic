@@ -198,4 +198,149 @@ router.get('/job-insights', (req, res) => {
   } catch (err) { console.error('[analytics]', err); res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/analytics/global?environment_id=xxx
+// Aggregates insights across all jobs for the main dashboard
+router.get('/global', (req, res) => {
+  try {
+    const { environment_id } = req.query;
+    if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+    const store = getStore();
+    const records = store.records || [];
+    const peopleLinks = store.people_links || [];
+    const workflows = store.workflows || [];
+    const workflowSteps = store.workflow_steps || [];
+    const wfAssignments = store.record_workflow_assignments || [];
+    const comms = store.communications || [];
+    const offers = store.offers || [];
+    const objects = store.object_definitions || store.objects || [];
+
+    const jobsObj = objects.find(o => o.slug === 'jobs' && o.environment_id === environment_id);
+    const peopleObj = objects.find(o => o.slug === 'people' && o.environment_id === environment_id);
+    if (!jobsObj) return res.json({ empty: true });
+
+    const allJobs = records.filter(r => r.object_id === jobsObj.id && r.environment_id === environment_id && !r.deleted_at);
+    const openJobs = allJobs.filter(j => j.data?.status === 'Open');
+    const completedJobs = allJobs.filter(j => ['Filled','Closed'].includes(j.data?.status));
+
+    // ── 1. Time to Fill ─────────────────────────────────────────────
+    const ttfDays = completedJobs.map(j => daysBetween(j.data?.open_date || j.created_at, j.updated_at || j.created_at)).filter(d => d > 0 && d < 365);
+    const avgTtf = ttfDays.length > 0 ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
+    const medTtf = median(ttfDays);
+
+    const ttfByDept = {};
+    completedJobs.forEach(j => {
+      const dept = j.data?.department || 'Unknown';
+      const d = daysBetween(j.data?.open_date || j.created_at, j.updated_at || j.created_at);
+      if (d > 0 && d < 365) { if (!ttfByDept[dept]) ttfByDept[dept] = []; ttfByDept[dept].push(d); }
+    });
+    const deptTtf = Object.entries(ttfByDept).map(([dept, days]) => ({
+      department: dept, avg_days: Math.round(days.reduce((a,b)=>a+b,0)/days.length), median_days: median(days), count: days.length,
+    })).sort((a,b) => b.avg_days - a.avg_days);
+
+    // ── 2. Global Process Funnel ────────────────────────────────────
+    const globalStageCounts = {}, globalStageDurations = {};
+    let totalLinked = 0;
+    allJobs.forEach(job => {
+      const wfA = wfAssignments.find(a => a.record_id === job.id && a.type === 'people_link');
+      if (!wfA) return;
+      const wf = workflows.find(w => w.id === wfA.workflow_id);
+      if (!wf) return;
+      const steps = workflowSteps.filter(s => s.workflow_id === wf.id).sort((a,b) => a.order - b.order);
+      const links = peopleLinks.filter(l => l.target_record_id === job.id);
+      totalLinked += links.length;
+      links.forEach(link => {
+        const stage = link.stage_name || steps[0]?.name || 'Unknown';
+        if (!globalStageCounts[stage]) globalStageCounts[stage] = 0;
+        if (!globalStageDurations[stage]) globalStageDurations[stage] = [];
+        globalStageCounts[stage]++;
+        const entered = link.updated_at || link.created_at;
+        if (entered) globalStageDurations[stage].push(daysBetween(entered, new Date().toISOString()));
+      });
+    });
+
+    // Build ordered funnel from most-used workflow
+    const wfUsage = {};
+    wfAssignments.filter(a => a.type === 'people_link').forEach(a => { wfUsage[a.workflow_id] = (wfUsage[a.workflow_id]||0)+1; });
+    const mostUsedWfId = Object.entries(wfUsage).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const funnelSteps = mostUsedWfId ? workflowSteps.filter(s => s.workflow_id === mostUsedWfId).sort((a,b)=>a.order-b.order) : [];
+
+    const allDurations = Object.values(globalStageDurations).flat();
+    const overallMedian = median(allDurations);
+    const processFunnel = funnelSteps.map(s => {
+      const count = globalStageCounts[s.name] || 0;
+      const durs = globalStageDurations[s.name] || [];
+      const avgD = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
+      return { name: s.name, count, avg_days: avgD };
+    });
+
+    const bottlenecks = processFunnel.filter(s => s.avg_days && overallMedian && s.avg_days > overallMedian * 1.5).map(s => ({
+      stage: s.name, avg_days: s.avg_days, overall_median: Math.round(overallMedian),
+      severity: s.avg_days > overallMedian * 2 ? 'critical' : 'warning',
+      message: `${s.name} averages ${s.avg_days}d — ${Math.round((s.avg_days/overallMedian-1)*100)}% above median`,
+    }));
+
+    // ── 3. At-Risk Candidates ───────────────────────────────────────
+    let highRisk = 0, mediumRisk = 0, lowRisk = 0;
+    peopleLinks.forEach(link => {
+      const rec = records.find(r => r.id === link.target_record_id);
+      if (!rec || rec.environment_id !== environment_id) return;
+      const lastComm = comms.filter(c => c.record_id === link.person_record_id).sort((a,b) => new Date(b.created_at)-new Date(a.created_at))[0];
+      const daysSince = lastComm ? daysBetween(lastComm.created_at, new Date().toISOString()) : 999;
+      const daysIn = link.updated_at ? daysBetween(link.updated_at, new Date().toISOString()) : 0;
+      const envAvg = globalStageDurations[link.stage_name] ? median(globalStageDurations[link.stage_name]) : null;
+      let rs = 0;
+      if (daysSince > 14) rs += 35; else if (daysSince > 7) rs += 20;
+      if (envAvg && daysIn > envAvg * 2) rs += 30; else if (envAvg && daysIn > envAvg * 1.5) rs += 15;
+      if (!lastComm) rs += 20;
+      if (rs >= 60) highRisk++; else if (rs >= 30) mediumRisk++; else lowRisk++;
+    });
+
+    // ── 4. Sources ──────────────────────────────────────────────────
+    const sourceStats = {};
+    if (peopleObj) {
+      records.filter(r => r.object_id === peopleObj.id && r.environment_id === environment_id && !r.deleted_at).forEach(p => {
+        const src = p.data?.source || 'Unknown';
+        if (!sourceStats[src]) sourceStats[src] = { source: src, total: 0, linked: 0, hired: 0 };
+        sourceStats[src].total++;
+        if (peopleLinks.some(l => l.person_record_id === p.id)) sourceStats[src].linked++;
+        peopleLinks.filter(l => l.person_record_id === p.id).forEach(l => {
+          if (l.stage_name === 'Hired' || l.stage_name === 'Placed') sourceStats[src].hired++;
+        });
+      });
+    }
+    const topSources = Object.values(sourceStats).map(s => ({ ...s, hire_rate: s.linked > 0 ? Math.round((s.hired/s.linked)*100) : 0 })).sort((a,b) => b.total - a.total).slice(0, 8);
+
+    // ── 5. Offers ───────────────────────────────────────────────────
+    const envOffers = offers.filter(o => { const job = records.find(r => r.id === o.job_id); return job && job.environment_id === environment_id; });
+    const offerStats = { total: envOffers.length, accepted: envOffers.filter(o=>o.status==='accepted').length, declined: envOffers.filter(o=>o.status==='declined').length, pending: envOffers.filter(o=>['draft','pending_approval','sent'].includes(o.status)).length, acceptance_rate: envOffers.length > 0 ? Math.round((envOffers.filter(o=>o.status==='accepted').length/envOffers.length)*100) : null };
+
+    // ── 6. Jobs at Risk ─────────────────────────────────────────────
+    const jobsAtRisk = openJobs.filter(j => {
+      const d = j.data?.open_date ? daysBetween(j.data.open_date, new Date().toISOString()) : daysBetween(j.created_at, new Date().toISOString());
+      return medTtf && d > medTtf * 1.3;
+    }).map(j => ({
+      id: j.id, title: j.data?.job_title || 'Untitled', department: j.data?.department,
+      days_open: j.data?.open_date ? daysBetween(j.data.open_date, new Date().toISOString()) : daysBetween(j.created_at, new Date().toISOString()),
+      candidates: peopleLinks.filter(l => l.target_record_id === j.id).length,
+    })).sort((a,b) => b.days_open - a.days_open);
+
+    // ── 7. Summary ──────────────────────────────────────────────────
+    const summary = [];
+    if (avgTtf) summary.push(`Average time to fill: ${avgTtf} days across ${ttfDays.length} completed roles.`);
+    if (bottlenecks.length > 0) summary.push(`${bottlenecks.length} process bottleneck${bottlenecks.length>1?'s':''}: ${bottlenecks[0].message}.`);
+    if (highRisk > 0) summary.push(`${highRisk} candidate${highRisk>1?'s':''} at high drop-off risk.`);
+    if (jobsAtRisk.length > 0) summary.push(`${jobsAtRisk.length} overdue role${jobsAtRisk.length>1?'s':''} — longest: ${jobsAtRisk[0].title} at ${jobsAtRisk[0].days_open} days.`);
+    if (offerStats.acceptance_rate !== null) summary.push(`Offer acceptance rate: ${offerStats.acceptance_rate}%.`);
+    if (totalLinked > 0) summary.push(`${totalLinked} candidates in active hiring processes.`);
+
+    res.json({
+      time_to_fill: { avg: avgTtf, median: medTtf, sample_size: ttfDays.length, by_department: deptTtf },
+      process_funnel: processFunnel, total_in_process: totalLinked, bottlenecks,
+      candidate_risk: { high: highRisk, medium: mediumRisk, low: lowRisk, total: highRisk+mediumRisk+lowRisk },
+      sources: topSources, offers: offerStats, jobs_at_risk: jobsAtRisk, summary,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) { console.error('[analytics] global error:', err); res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

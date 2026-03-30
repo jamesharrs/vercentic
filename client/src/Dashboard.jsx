@@ -4,6 +4,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
+import DashboardInsights from "./DashboardInsights.jsx";
 
 // ── Vercentic brand palette ───────────────────────────────────────────────
 const V = {
@@ -591,6 +592,11 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           )}
         </Card>
       </div>
+
+      {/* ── Hiring Insights (global analytics) ── */}
+      <DashboardInsights environment={environment} onNavigate={(id) => {
+        window.dispatchEvent(new CustomEvent("talentos:openRecord", { detail: { recordId: id } }));
+      }} />
 
       {/* ── Bottom action bar ── */}
       <div style={{ display: "flex", gap: 10 }}>
