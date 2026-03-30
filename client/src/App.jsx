@@ -1925,10 +1925,11 @@ function App() {
   filterNavRef.current = { activeNav, navObjects, setFilterPreset, setActiveNav };
   useEffect(() => {
     const handler = (e) => {
-      const { fieldKey, fieldLabel, fieldValue, objectSlug } = e.detail || {};
+      const { fieldKey, fieldLabel, fieldValue, fieldDisplay, objectSlug } = e.detail || {};
       if (!fieldKey || fieldValue === undefined) return;
       const { activeNav: nav, navObjects: objs, setFilterPreset: sfp, setActiveNav: sna } = filterNavRef.current;
-      sfp({ fieldKey, fieldLabel, fieldValue });
+      sfp({ fieldKey, fieldLabel, fieldValue, fieldDisplay });
+      // If objectSlug provided (e.g. from dashboard), navigate to that object
       if (objectSlug) {
         const obj = objs.find(o => o.slug === objectSlug);
         if (obj) { sna(`obj_${obj.id}`); return; }

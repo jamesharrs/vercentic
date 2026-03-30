@@ -6733,19 +6733,25 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     }
     const loaded = r.records||[];
     // Apply active filter chip client-side
-    const filtered = filterChip
-      ? (() => {
-          if (filterChip.fieldKey === '__ids__') {
-            const ids = filterChip.fieldValue.split(',').map(s => s.trim()).filter(Boolean);
-            return loaded.filter(rec => ids.includes(rec.id));
-          }
-          return loaded.filter(rec => {
-            const v = rec.data?.[filterChip.fieldKey];
-            if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === filterChip.fieldValue.toLowerCase());
-            return String(v || "").toLowerCase() === filterChip.fieldValue.toLowerCase();
-          });
-        })()
-      : loaded;
+    let filtered;
+    if (filterChip?.fieldKey === "_linked_record_id") {
+      // Special filter: show people linked to a specific record via people-links table
+      const allRecs = await api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&limit=500`);
+      const links = await api.get(`/workflows/people-links?target_record_id=${filterChip.fieldValue}`);
+      const linkedIds = new Set((Array.isArray(links) ? links : []).map(l => l.person_record_id));
+      filtered = (allRecs.records || []).filter(rec => linkedIds.has(rec.id));
+    } else if (filterChip?.fieldKey === '__ids__') {
+      const ids = filterChip.fieldValue.split(',').map(s => s.trim()).filter(Boolean);
+      filtered = loaded.filter(rec => ids.includes(rec.id));
+    } else if (filterChip) {
+      filtered = loaded.filter(rec => {
+        const v = rec.data?.[filterChip.fieldKey];
+        if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === filterChip.fieldValue.toLowerCase());
+        return String(v || "").toLowerCase() === filterChip.fieldValue.toLowerCase();
+      });
+    } else {
+      filtered = loaded;
+    }
     setRecords(filtered);
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
     setLoading(false);
@@ -7128,7 +7134,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             <Ic n="filter" s={11} c={C.accent}/>
             {filterChip.fieldKey === '__ids__'
               ? filterChip.label || `${filterChip.fieldValue.split(',').length} people`
-              : <>{filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldValue}</span></>
+              : <>{filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldDisplay ?? filterChip.fieldValue}</span></>
             }
             <button onClick={()=>{setFilterChip(null);setActiveListName(null);setPage(1);}}
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}

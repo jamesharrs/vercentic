@@ -2278,21 +2278,42 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
           const steps = link.workflow_steps || [];
           const currentStep = steps.find(s => s.id === link.stage_id);
           const objColor = link.target_object_color || C.accent;
+          // Non-person linked records can activate the context filter on the People list
+          const isFilterable = link.target_object_name && link.target_object_name !== "Person";
+          const handleFilterContext = () => {
+            window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+              detail: {
+                fieldKey: "_linked_record_id",
+                fieldLabel: link.target_object_name || "Record",
+                fieldValue: link.target_record_id,
+                fieldDisplay: link.target_title,
+                objectSlug: "people",
+              }
+            }));
+          };
           return (
             <div key={link.id} style={{
               background: (activeJobContext && link.target_record_id === activeJobContext) ? C.accentLight : C.surface,
               border: `1.5px solid ${(activeJobContext && link.target_record_id === activeJobContext) ? C.accent : C.border}`,
               borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:10 }}>
-              {/* Object type colour dot */}
-              <div style={{ width:36, height:36, borderRadius:10, background:`${objColor}18`,
-                border:`1.5px solid ${objColor}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <span style={{ fontSize:14, fontWeight:800, color:objColor }}>{link.target_object_name?.charAt(0)||"?"}</span>
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {link.target_title || "Record"}
+              {/* Object type colour dot + title — clickable to filter people by this linked record */}
+              <div
+                onClick={isFilterable ? handleFilterContext : undefined}
+                title={isFilterable ? `Filter people linked to this ${link.target_object_name}` : undefined}
+                style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
+                  cursor: isFilterable ? "pointer" : "default" }}
+                onMouseEnter={e=>{ if(isFilterable) e.currentTarget.style.opacity="0.75"; }}
+                onMouseLeave={e=>{ if(isFilterable) e.currentTarget.style.opacity="1"; }}>
+                <div style={{ width:36, height:36, borderRadius:10, background:`${objColor}18`,
+                  border:`1.5px solid ${objColor}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontSize:14, fontWeight:800, color:objColor }}>{link.target_object_name?.charAt(0)||"?"}</span>
                 </div>
-                <div style={{ fontSize:11, color:C.text3 }}>{link.target_object_name}</div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {link.target_title || "Record"}
+                  </div>
+                  <div style={{ fontSize:11, color:C.text3 }}>{link.target_object_name}</div>
+                </div>
               </div>
               {/* Stage dropdown */}
               {steps.length > 0 ? (
