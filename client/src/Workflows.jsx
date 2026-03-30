@@ -2105,7 +2105,7 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
 // ─── LinkedRecordsPanel ───────────────────────────────────────────────────────
 // Shown on a Person record. Shows all objects this person is linked to across
 // all pipelines, with stage dropdown and ability to link to new records.
-export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobContext }) {
+export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobContext, onSetJobContext }) {
   const [links, setLinks]             = useState([]);
   const [allObjects, setAllObjects]   = useState([]);
   const [allRecords, setAllRecords]   = useState([]);       // for link-to-new modal
@@ -2240,6 +2240,25 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
         </button>
       </div>
 
+      {/* Active context prompt */}
+      {activeJobContext && (() => {
+        const activeLnk = links.find(l => l.target_record_id === activeJobContext);
+        return activeLnk ? (
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px",
+            background:`${C.accent}10`, border:`1px solid ${C.accent}30`, borderRadius:8, marginTop:-4 }}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2.5} strokeLinecap="round">
+              <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>
+            </svg>
+            <span style={{ fontSize:11, fontWeight:600, color:C.accent, flex:1 }}>
+              Filtering activity by <b>{activeLnk.target_title || "this record"}</b> — click the record name to clear
+            </span>
+            <button onClick={() => onSetJobContext?.(null)}
+              style={{ background:"none", border:"none", cursor:"pointer", color:C.accent,
+                padding:"0 2px", fontSize:16, lineHeight:1, fontWeight:700 }}>×</button>
+          </div>
+        ) : null;
+      })()}
+
       {/* Object type filter pills */}
       {linkedObjectTypes.length > 1 && (
         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -2278,18 +2297,10 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
           const steps = link.workflow_steps || [];
           const currentStep = steps.find(s => s.id === link.stage_id);
           const objColor = link.target_object_color || C.accent;
-          // Non-person linked records can activate the context filter on the People list
-          const isFilterable = link.target_object_name && link.target_object_name !== "Person";
+          // Clicking the record title toggles activity context filter for this person
+          const isActiveContext = activeJobContext === link.target_record_id;
           const handleFilterContext = () => {
-            window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
-              detail: {
-                fieldKey: "_linked_record_id",
-                fieldLabel: link.target_object_name || "Record",
-                fieldValue: link.target_record_id,
-                fieldDisplay: link.target_title,
-                objectSlug: "people",
-              }
-            }));
+            onSetJobContext?.(isActiveContext ? null : link.target_record_id);
           };
           return (
             <div key={link.id} style={{
@@ -2298,19 +2309,22 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
               borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:10 }}>
               {/* Object type colour dot + title — clickable to filter people by this linked record */}
               <div
-                onClick={isFilterable ? handleFilterContext : undefined}
-                title={isFilterable ? `Filter people linked to this ${link.target_object_name}` : undefined}
-                style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
-                  cursor: isFilterable ? "pointer" : "default" }}
-                onMouseEnter={e=>{ if(isFilterable) e.currentTarget.style.opacity="0.75"; }}
-                onMouseLeave={e=>{ if(isFilterable) e.currentTarget.style.opacity="1"; }}>
+                onClick={handleFilterContext}
+                title={isActiveContext ? "Click to clear activity filter" : `Filter activity by ${link.target_title || "this record"}`}
+                style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0, cursor:"pointer" }}
+                onMouseEnter={e=>{ e.currentTarget.style.opacity="0.75"; }}
+                onMouseLeave={e=>{ e.currentTarget.style.opacity="1"; }}>
                 <div style={{ width:36, height:36, borderRadius:10, background:`${objColor}18`,
                   border:`1.5px solid ${objColor}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <span style={{ fontSize:14, fontWeight:800, color:objColor }}>{link.target_object_name?.charAt(0)||"?"}</span>
                 </div>
                 <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  <div style={{ fontSize:13, fontWeight: isActiveContext ? 700 : 600,
+                    color: isActiveContext ? C.accent : C.text1,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {link.target_title || "Record"}
+                    {isActiveContext && <span style={{ marginLeft:6, fontSize:9, background:C.accent, color:"#fff",
+                      borderRadius:4, padding:"1px 5px", fontWeight:700, verticalAlign:"middle" }}>filtering</span>}
                   </div>
                   <div style={{ fontSize:11, color:C.text3 }}>{link.target_object_name}</div>
                 </div>

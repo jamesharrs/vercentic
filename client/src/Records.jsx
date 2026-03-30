@@ -5928,7 +5928,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
           <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={activeJobContext}/>
         </div>;
-    if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext}/>;
+    if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
@@ -6300,46 +6300,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <PeoplePipelineWidget record={record} objectId={record.object_id} environment={environment} onNavigate={onNavigate}/>
         </div>
       )}
-      {/* Job context switcher — Person records with linked jobs */}
-      {objectName === "Person" && linkedJobRecords.length > 0 && (
-        <div style={{ flexShrink:0, borderBottom:`1px solid ${C.border}`, background:C.surface,
-          display:"flex", alignItems:"center", gap:6, padding:"8px 16px", overflowX:"auto" }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase",
-            letterSpacing:"0.06em", whiteSpace:"nowrap", marginRight:2 }}>Context</span>
-          {/* General tab */}
-          <button onClick={() => setActiveJobContext(null)}
-            style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 12px",
-              borderRadius:99, border:"none", fontFamily:F, fontSize:12, fontWeight:600,
-              whiteSpace:"nowrap", flexShrink:0, cursor:"pointer", transition:"all .15s",
-              background: !activeJobContext ? C.accent : C.bg,
-              color: !activeJobContext ? "white" : C.text2,
-              boxShadow: !activeJobContext ? "0 1px 4px rgba(0,0,0,.15)" : "none" }}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
-            </svg>
-            General
-          </button>
-          {/* One tab per linked job */}
-          {linkedJobRecords.map(job => {
-            const isActive = activeJobContext === job.id;
-            const title = job.title || job.data?.job_title || job.data?.name || "Untitled";
-            return (
-              <button key={job.id} onClick={() => setActiveJobContext(job.id)} title={title}
-                style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 12px",
-                  borderRadius:99, border:"none", fontFamily:F, fontSize:12, fontWeight:600,
-                  whiteSpace:"nowrap", flexShrink:0, cursor:"pointer", maxWidth:180, transition:"all .15s",
-                  background: isActive ? C.accent : C.bg,
-                  color: isActive ? "white" : C.text2,
-                  boxShadow: isActive ? "0 1px 4px rgba(0,0,0,.15)" : "none" }}>
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>
-                </svg>
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{title}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+
       {/* 2-col body */}
       <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0, userSelect:draggingCol.current?"none":"auto" }}>
 
