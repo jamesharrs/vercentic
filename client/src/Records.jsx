@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
 import { usePermissions as usePermCtx } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import RichTextEditor from "./RichTextEditor.jsx";
@@ -20,7 +20,7 @@ import { authHeaders } from './apiClient.js';
 import TalentCardModal from './TalentCard.jsx';
 import ScreeningRulesPanel from './ScreeningRulesPanel.jsx';
 import LinkedInFinderButton from './LinkedInFinder.jsx';
-import { InterviewPlanPanel } from './InterviewPlanPanel.jsx';
+const InterviewPlanPanelLazy = lazy(() => import('./InterviewPlanPanel.jsx').then(m => ({ default: m.InterviewPlanPanel })));
 
 // Bare fetch wrapper that always includes X-Tenant-Slug + X-User-Id headers.
 // Use this instead of raw fetch() anywhere in this file.
@@ -5915,7 +5915,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="screening") return <ScreeningRulesPanel record={record} environment={environment}/>;
-    if (id==="interview_plan") return <InterviewPlanPanel record={record} environment={environment} onNavigate={onNavigate}/>;
+    if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
 
     if (id==="match") return (
       <StableMatchPanel
