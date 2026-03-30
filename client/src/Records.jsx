@@ -397,7 +397,7 @@ const AddressInput = ({ field, value, onChange }) => {
   </div>;
 };
 
-const FieldEditor = ({ field, value, onChange, autoFocus }) => {
+const FieldEditor = ({ field, value, onChange, autoFocus, environment }) => {
   switch(field.field_type) {
     case "textarea":
       return <Inp multiline value={value} onChange={onChange} placeholder={field.placeholder||field.name} autoFocus={autoFocus}/>;
@@ -455,8 +455,7 @@ const FieldEditor = ({ field, value, onChange, autoFocus }) => {
     case "dataset":
       return <DatasetPicker field={field} value={value} onChange={onChange}/>;
     case "skills":
-      return <SkillsPicker field={field} value={value} onChange={onChange}/>;
-    case "url":
+      return <SkillsPicker field={field} value={value} onChange={onChange} environment={environment}/>;
       return <Inp type="url" value={value} onChange={onChange} placeholder="https://…" autoFocus={autoFocus}/>;
     case "phone":
       return <PhoneInput value={value} onChange={onChange} autoFocus={autoFocus}/>;
@@ -999,7 +998,7 @@ const AvatarWithDupBadge = ({ name, color, size = 32, photoUrl, dupInfo }) => {
 };
 
 /* ─── Create / Edit Record Modal ───────────────────────────────────────────── */
-const RecordFormModal = ({ fields, record, objectName, onSave, onClose }) => {
+const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environment }) => {
   const [data, setData] = useState(record?.data || {});
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setData(d=>({...d,[k]:v}));
@@ -1036,7 +1035,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose }) => {
                       <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:6 }}>
                         {field.name}{!!field.is_required&&<span style={{color:"#ef4444",marginLeft:2}}>*</span>}
                       </label>
-                      <FieldEditor field={field} value={data[key]} onChange={v=>set(key,v)}/>
+                      <FieldEditor field={field} value={data[key]} onChange={v=>set(key,v)} environment={environment}/>
                     </div>
                   );
                 })}
@@ -5742,7 +5741,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                         {isPickerField
                           ? <PeoplePicker field={field} value={originalVal} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)}/>
                           : isEditing
-                          ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)} autoFocus={!isClickSave}/>
+                          ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)} autoFocus={!isClickSave} environment={environment}/>
                           : <div onClick={()=>!isReadonly&&setEditing(e=>({...e,[field.api_key]:originalVal}))} style={{ cursor:isReadonly?"default":"text", minHeight:22 }}>
                               <FieldValue field={field} value={val} allFieldValues={record?.data}/>
                             </div>
@@ -7401,12 +7400,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
       {/* Create form */}
       {showForm && (
-        <RecordFormModal fields={fields} objectName={object.name} onSave={handleCreate} onClose={()=>setShowForm(false)}/>
+        <RecordFormModal fields={fields} objectName={object.name} onSave={handleCreate} onClose={()=>setShowForm(false)} environment={environment}/>
       )}
 
       {/* Edit form */}
       {editRecord && (
-        <RecordFormModal fields={fields} record={editRecord} objectName={object.name} onSave={handleUpdate} onClose={()=>setEditRecord(null)}/>
+        <RecordFormModal fields={fields} record={editRecord} objectName={object.name} onSave={handleUpdate} onClose={()=>setEditRecord(null)} environment={environment}/>
       )}
 
       {/* CSV Import */}
