@@ -4178,6 +4178,7 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
     { key:'notice_period',    label:'Notice Period'     },
     { key:'nationality',      label:'Nationality'       },
     { key:'years_experience', label:'Years Experience'  },
+    { key:'skills',           label:'Skills'            },
   ];
 
   // Show fields where Claude returned a non-empty value
@@ -4241,7 +4242,16 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
                 style={{ width:15, height:15, accentColor:C.accent, flexShrink:0, cursor:'pointer' }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em' }}>{m.label}</div>
-                <div style={{ fontSize:13, color:C.text1, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(result[m.key])}</div>
+                {m.key === 'skills' && Array.isArray(result[m.key]) ? (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4 }}>
+                    {result[m.key].slice(0, 12).map(s => (
+                      <span key={s} style={{ padding:'2px 8px', borderRadius:99, background:'#F59F0018', border:'1px solid #F59F0028', fontSize:11, fontWeight:600, color:'#F59F00' }}>⚡ {s}</span>
+                    ))}
+                    {result[m.key].length > 12 && <span style={{ fontSize:11, color:C.text3 }}>+{result[m.key].length - 12} more</span>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:13, color:C.text1, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(result[m.key])}</div>
+                )}
               </div>
               {record.data?.[m.key] && (
                 <div style={{ fontSize:11, color:C.text3, textAlign:'right', flexShrink:0 }}>
@@ -4253,10 +4263,9 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
           ))}
 
           {/* Extra parsed info (read-only) */}
-          {(result.skills?.length || result.work_history?.length || result.education?.length) && (
+          {(result.work_history?.length || result.education?.length) && (
             <div style={{ marginTop:12, padding:'12px 14px', borderRadius:10, background:'#f8f9fc', border:`1px solid ${C.border}` }}>
               <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:8 }}>ALSO EXTRACTED (not applied to fields)</div>
-              {result.skills?.length > 0 && <div style={{ fontSize:12, color:C.text2, marginBottom:4 }}><b>Skills:</b> {result.skills.slice(0,8).join(', ')}{result.skills.length>8?' …':''}</div>}
               {result.years_experience && <div style={{ fontSize:12, color:C.text2, marginBottom:4 }}><b>Experience:</b> {result.years_experience} years</div>}
               {result.education?.length > 0 && <div style={{ fontSize:12, color:C.text2, marginBottom:4 }}><b>Education:</b> {result.education[0]?.degree} — {result.education[0]?.institution}</div>}
               {result.work_history?.length > 0 && <div style={{ fontSize:12, color:C.text2 }}><b>Last role:</b> {result.work_history[0]?.title} @ {result.work_history[0]?.company}</div>}

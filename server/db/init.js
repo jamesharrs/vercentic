@@ -296,7 +296,7 @@ async function seedEnvironmentAndObjects() {
       { name:'Status', ak:'status', type:'select', list:1, o:9, opts:['Active','Passive','Not Looking','Placed','Archived'] },
       { name:'Source', ak:'source', type:'select', list:1, o:10, opts:['LinkedIn','Referral','Job Board','Direct Apply','Agency','Event','Other'] },
       { name:'LinkedIn URL', ak:'linkedin_url', type:'url', list:0, o:11 },
-      { name:'Skills', ak:'skills', type:'multi_select', list:0, o:12, opts:[] },
+      { name:'Skills', ak:'skills', type:'skills', list:0, o:12, opts:[] },
       { name:'Years Experience', ak:'years_experience', type:'number', list:1, o:13 },
       { name:'Rating', ak:'rating', type:'rating', list:1, o:14 },
       { name:'Job Title', ak:'job_title', type:'text', list:1, o:15, cond_field:'person_type', cond_val:'Employee' },
@@ -381,3 +381,22 @@ async function seedUsersAndRoles(tenantKey) {
 }
 
 module.exports = { getStore, saveStore, saveStoreNow, query, findOne, insert, update, remove, initDB, tenantStorage, getCurrentTenant, provisionTenant, reloadTenantStore, loadTenantStore, listTenants, tenantDbPath, storeCache };
+
+// ── Migration: fix Skills field type multi_select → skills ───────────────────
+// Called on server startup so all tenants get patched automatically.
+function migrateSkillsFieldType() {
+  let changed = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    const fields = store.fields || [];
+    fields.forEach(f => {
+      if (f.api_key === 'skills' && f.field_type === 'multi_select') {
+        f.field_type = 'skills';
+        f.updated_at = new Date().toISOString();
+        changed++;
+      }
+    });
+    if (changed > 0) saveStore(key);
+  }
+  if (changed > 0) console.log(`✅ Migrated ${changed} skills field(s) from multi_select → skills`);
+}
+migrateSkillsFieldType();
