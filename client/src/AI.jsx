@@ -2309,6 +2309,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: { ...rec.data, [payload.field]: payload.value } }),
         });
+        // Notify the open record page to reload
+        window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: payload.record_id } }));
         resultMsg = `✅ **${payload.field}** updated to **${payload.value}**`;
 
       // ── Legacy: status_change (alias for update_field) ──────────────────────
@@ -2319,6 +2321,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: { ...rec.data, [payload.field]: payload.value } }),
         });
+        // Notify the open record page to reload
+        window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: payload.record_id } }));
         resultMsg = `✅ Status updated to **${payload.value}**`;
 
       // ── Log a communication (call / email / sms) ────────────────────────────

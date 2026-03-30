@@ -1428,39 +1428,45 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
   const [state, setState] = useState(null); // { record, fields, object }
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!recordId || !objectId) return;
-    setLoading(true);
-    const load = async () => {
-      let obj = allObjects?.find(o => o.id === objectId);
-      if (!obj) {
-        const objs = await api.get(`/objects?environment_id=${environment?.id}`);
-        obj = Array.isArray(objs) ? objs.find(o => o.id === objectId) : null;
-      }
-      if (!obj) { setLoading(false); return; }
-      const [recResp, fields] = await Promise.all([
-        api.get(`/records/${recordId}`),
-        api.get(`/fields?object_id=${objectId}&environment_id=${environment?.id}`),
-      ]);
-      const record = recResp?.id ? recResp : null;
-      if (!record) { setLoading(false); return; }
-      setState({ record, fields: Array.isArray(fields) ? fields : [], object: obj });
-      setLoading(false);
-      // Broadcast to parent (for copilot context)
-      if (onRecordLoad) onRecordLoad(record, obj);
-      // Update history with real display name
-      if (onHistoryUpdate) {
-        const d = record.data || {};
-        const label = [d.first_name, d.last_name].filter(Boolean).join(" ")
-          || d.job_title || d.name || d.pool_name || "Untitled";
-        const subtitle = d.current_title || d.department || d.category || "";
-        onHistoryUpdate({ id: recordId, nav: `record_${recordId}_${objectId}`,
-          label, subtitle, type: "record",
-          objectName: obj.plural_name || obj.name, objectColor: obj.color || "#4361EE" });
-      }
-    };
-    load();
+    let obj = allObjects?.find(o => o.id === objectId);
+    if (!obj) {
+      const objs = await api.get(`/objects?environment_id=${environment?.id}`);
+      obj = Array.isArray(objs) ? objs.find(o => o.id === objectId) : null;
+    }
+    if (!obj) { setLoading(false); return; }
+    const [recResp, fields] = await Promise.all([
+      api.get(`/records/${recordId}`),
+      api.get(`/fields?object_id=${objectId}&environment_id=${environment?.id}`),
+    ]);
+    const record = recResp?.id ? recResp : null;
+    if (!record) { setLoading(false); return; }
+    setState({ record, fields: Array.isArray(fields) ? fields : [], object: obj });
+    setLoading(false);
+    if (onRecordLoad) onRecordLoad(record, obj);
+    if (onHistoryUpdate) {
+      const d = record.data || {};
+      const label = [d.first_name, d.last_name].filter(Boolean).join(" ")
+        || d.job_title || d.name || d.pool_name || "Untitled";
+      const subtitle = d.current_title || d.department || d.category || "";
+      onHistoryUpdate({ id: recordId, nav: `record_${recordId}_${objectId}`,
+        label, subtitle, type: "record",
+        objectName: obj.plural_name || obj.name, objectColor: obj.color || "#4361EE" });
+    }
   }, [recordId, objectId, environment?.id]);
+
+  // Initial load
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  // Reload when Copilot updates this record
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.recordId === recordId) load();
+    };
+    window.addEventListener('talentos:recordUpdated', handler);
+    return () => window.removeEventListener('talentos:recordUpdated', handler);
+  }, [recordId, load]);
 
   if (loading) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af" }}>Loading…</div>;
   if (!state) return <div style={{ padding:40, color:"#9ca3af" }}>Record not found.</div>;
