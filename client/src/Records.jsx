@@ -2222,51 +2222,192 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
 
 /* ─── Candidate Comparison Modal ─────────────────────────────────────────── */
 const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
-  const [pinned, setPinned] = useState(null); // record id pinned as "favourite"
+  const [pinned, setPinned]             = useState(null);
+  const [aiSummary, setAiSummary]       = useState("");
+  const [aiLoading, setAiLoading]       = useState(false);
+  const [showFieldPicker, setShowFieldPicker] = useState(false);
+  const fieldPickerRef = useRef(null);
+
   const accent = objectColor || C.accent;
 
-  // Fields to show in compare — skip system/auto fields, show top 20
-  const compareFields = fields.filter(f =>
+  const eligibleFields = fields.filter(f =>
     !["formula","auto_number","unique_id","lookup","rollup"].includes(f.field_type)
-  ).slice(0, 20);
+  );
+
+  const [selectedFieldIds, setSelectedFieldIds] = useState(
+    () => new Set(eligibleFields.map(f => f.id))
+  );
+
+  const compareFields = eligibleFields.filter(f => selectedFieldIds.has(f.id));
+
+  const toggleField = (id) => {
+    setSelectedFieldIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { if (next.size > 1) next.delete(id); }
+      else next.add(id);
+      return next;
+    });
+    setAiSummary("");
+  };
+  const selectAll  = () => { setSelectedFieldIds(new Set(eligibleFields.map(f=>f.id))); setAiSummary(""); };
+  const selectDiff = () => {
+    const diffIds = new Set(eligibleFields.filter(f => {
+      const vals = records.map(r => JSON.stringify(r.data?.[f.api_key] ?? ""));
+      return new Set(vals).size > 1;
+    }).map(f => f.id));
+    if (diffIds.size > 0) { setSelectedFieldIds(diffIds); setAiSummary(""); }
+  };
+
+  useEffect(() => {
+    if (!showFieldPicker) return;
+    const handler = (e) => {
+      if (fieldPickerRef.current && !fieldPickerRef.current.contains(e.target)) setShowFieldPicker(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showFieldPicker]);
 
   const score = (rec) => {
     let s = 0;
-    if (rec.data?.rating)          s += Number(rec.data.rating) * 10;
-    if (rec.data?.skills?.length)  s += Math.min(rec.data.skills.length * 5, 30);
+    if (rec.data?.rating)           s += Number(rec.data.rating) * 10;
+    if (rec.data?.skills?.length)   s += Math.min(rec.data.skills.length * 5, 30);
     if (rec.data?.years_experience) s += Math.min(Number(rec.data.years_experience) * 2, 20);
-    if (rec.data?.email)           s += 5;
-    if (rec.data?.phone)           s += 5;
+    if (rec.data?.email)            s += 5;
+    if (rec.data?.phone)            s += 5;
     return Math.min(s, 100);
   };
 
   const name = (r) => `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.job_title || r.data?.name || "Record";
 
-  // Highlight cells that differ across records
   const isDiff = (fieldKey) => {
     const vals = records.map(r => JSON.stringify(r.data?.[fieldKey] ?? ""));
     return new Set(vals).size > 1;
   };
 
+  const generateSummary = async () => {
+    setAiLoading(true);
+    setAiSummary("");
+    try {
+      const profileLines = records.map(r => {
+        const n = name(r);
+        const fieldData = compareFields.map(f => {
+          const val = r.data?.[f.api_key];
+          if (val === null || val === undefined || val === "") return null;
+          const display = Array.isArray(val) ? val.map(v=>v?.name||v).join(", ") : String(val);
+          return `  ${f.name}: ${display}`;
+        }).filter(Boolean).join("\n");
+        return `${n}:\n${fieldData}`;
+      }).join("\n\n");
+
+      const prompt = `You are comparing ${records.length} candidates. Provide a concise 3-5 sentence summary highlighting the key differences and similarities between them. Focus on what matters most for a hiring decision. Be specific about standout strengths and notable gaps. End with a one-sentence recommendation if a clear preference exists.\n\nCandidates:\n${profileLines}`;
+
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt, context: "" }),
+      });
+      const data = await res.json();
+      setAiSummary(data.response || data.message || "Unable to generate summary.");
+    } catch {
+      setAiSummary("Unable to generate summary — check your AI configuration.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,41,.55)", zIndex:9600, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"20px 16px", overflowY:"auto" }}>
-      <div style={{ background:C.bg, borderRadius:18, width:"100%", maxWidth:1100, boxShadow:"0 32px 80px rgba(0,0,0,.25)", overflow:"hidden" }}>
+      <div style={{ background:C.bg, borderRadius:18, width:"100%", maxWidth:1160, boxShadow:"0 32px 80px rgba(0,0,0,.25)", overflow:"hidden" }}>
 
         {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 24px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", background:C.surface, borderBottom:`1px solid ${C.border}`, gap:12 }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>Compare {records.length} records</div>
-            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>Differences are highlighted. Click any record to open it.</div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text1 }}>Compare {records.length} records</div>
+            <div style={{ fontSize:11, color:C.text3, marginTop:1 }}>Differences are highlighted. Click any record to open it.</div>
           </div>
-          <button onClick={onClose} style={{ padding:"7px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Close</button>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginLeft:"auto" }}>
+
+            {/* AI Summary button */}
+            <button
+              onClick={generateSummary}
+              disabled={aiLoading}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 13px", borderRadius:8, border:"none", background: aiSummary ? `${accent}18` : accent, color: aiSummary ? accent : "white", fontSize:12, fontWeight:700, cursor: aiLoading ? "wait" : "pointer", fontFamily:F, opacity: aiLoading ? 0.7 : 1, transition:"all .15s" }}>
+              {aiLoading
+                ? <><svg width="12" height="12" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg> Analysing...</>
+                : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"/></svg> {aiSummary ? "Re-analyse" : "AI Summary"}</>}
+            </button>
+
+            {/* Field picker */}
+            <div style={{ position:"relative" }} ref={fieldPickerRef}>
+              <button
+                onClick={() => setShowFieldPicker(v => !v)}
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 13px", borderRadius:8, border:`1.5px solid ${showFieldPicker ? accent : C.border}`, background: showFieldPicker ? `${accent}08` : C.bg, color: showFieldPicker ? accent : C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+                Fields <span style={{ fontSize:10, padding:"1px 5px", borderRadius:99, background:accent, color:"white", fontWeight:700 }}>{selectedFieldIds.size}</span>
+              </button>
+
+              {showFieldPicker && (
+                <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, background:C.bg, border:`1px solid ${C.border}`, borderRadius:12, boxShadow:"0 12px 32px rgba(0,0,0,.18)", zIndex:10, width:240, overflow:"hidden" }}>
+                  <div style={{ padding:"9px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:C.text2, textTransform:"uppercase", letterSpacing:".05em" }}>Show fields</span>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={selectAll} style={{ fontSize:10, fontWeight:600, color:accent, background:`${accent}12`, border:"none", borderRadius:6, padding:"2px 7px", cursor:"pointer", fontFamily:F }}>All</button>
+                      <button onClick={selectDiff} style={{ fontSize:10, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"none", borderRadius:6, padding:"2px 7px", cursor:"pointer", fontFamily:F }}>Diffs only</button>
+                    </div>
+                  </div>
+                  <div style={{ maxHeight:260, overflowY:"auto", padding:"4px 0" }}>
+                    {eligibleFields.map(f => {
+                      const checked = selectedFieldIds.has(f.id);
+                      const hasDiff = (() => { const vals = records.map(r => JSON.stringify(r.data?.[f.api_key] ?? "")); return new Set(vals).size > 1; })();
+                      return (
+                        <label key={f.id} style={{ display:"flex", alignItems:"center", gap:9, padding:"6px 13px", cursor:"pointer", background:"transparent", transition:"background .1s" }}
+                          onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <input type="checkbox" checked={checked} onChange={()=>toggleField(f.id)}
+                            style={{ accentColor:accent, width:13, height:13, flexShrink:0, cursor:"pointer" }}/>
+                          <span style={{ fontSize:12, color: checked ? C.text1 : C.text3, flex:1 }}>{f.name}</span>
+                          {hasDiff && <span style={{ width:6, height:6, borderRadius:"50%", background:accent, flexShrink:0 }}/>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={onClose} style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>Close</button>
+          </div>
         </div>
+
+        {/* AI Summary panel */}
+        {(aiSummary || aiLoading) && (
+          <div style={{ padding:"14px 20px", background:`${accent}07`, borderBottom:`1px solid ${accent}20`, display:"flex", gap:12, alignItems:"flex-start" }}>
+            <div style={{ width:28, height:28, borderRadius:8, background:accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"/></svg>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:accent, textTransform:"uppercase", letterSpacing:".06em", marginBottom:5 }}>Vercentic AI Summary</div>
+              {aiLoading
+                ? <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                    {[0,1,2].map(i => <div key={i} style={{ width:6, height:6, borderRadius:"50%", background:accent, opacity:0.4, animation:`pulse 1.2s ${i*0.2}s ease-in-out infinite` }}/>)}
+                    <span style={{ fontSize:12, color:C.text3, marginLeft:4 }}>Analysing candidates...</span>
+                  </div>
+                : <p style={{ margin:0, fontSize:13, color:C.text1, lineHeight:1.6 }}>{aiSummary}</p>}
+            </div>
+            {aiSummary && !aiLoading && (
+              <button onClick={()=>setAiSummary("")} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, fontSize:18, padding:2, lineHeight:1, flexShrink:0 }}>×</button>
+            )}
+          </div>
+        )}
 
         {/* Table */}
         <div style={{ overflowX:"auto" }}>
           <table style={{ minWidth:"100%", width:"max-content", borderCollapse:"collapse", fontFamily:F }}>
             <thead>
               <tr style={{ background:C.surface, borderBottom:`2px solid ${C.border}` }}>
-                <th style={{ width:160, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>Field</th>
+                <th style={{ width:160, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>
+                  Field <span style={{ marginLeft:4, fontSize:10, fontWeight:500, color:C.border }}>({compareFields.length})</span>
+                </th>
                 {records.map(r => {
                   const isPinned = pinned === r.id;
                   const sc = score(r);
@@ -2286,7 +2427,6 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
                           {isPinned ? "★" : "☆"}
                         </button>
                       </div>
-                      {/* Score bar */}
                       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                         <div style={{ flex:1, height:4, borderRadius:99, background:C.border, overflow:"hidden" }}>
                           <div style={{ width:`${sc}%`, height:"100%", borderRadius:99, background: sc>=70?C.green:sc>=40?C.amber:C.red, transition:"width .3s" }}/>
@@ -2299,7 +2439,9 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
               </tr>
             </thead>
             <tbody>
-              {compareFields.map((field, fi) => {
+              {compareFields.length === 0 ? (
+                <tr><td colSpan={records.length + 1} style={{ padding:"32px", textAlign:"center", color:C.text3, fontSize:13 }}>No fields selected. Use the Fields picker above.</td></tr>
+              ) : compareFields.map((field, fi) => {
                 const diff = isDiff(field.api_key);
                 return (
                   <tr key={field.id} style={{ background: fi%2===0 ? C.surface : C.bg, borderBottom:`1px solid ${C.border}` }}>
@@ -2337,12 +2479,13 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:"12px 24px", background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
-          <div style={{ width:8, height:8, borderRadius:"50%", background:accent, flexShrink:0 }}/>
-          <span style={{ fontSize:12, color:C.text3 }}>Highlighted dots indicate fields where values differ between candidates</span>
-          {pinned && <span style={{ marginLeft:"auto", fontSize:12, color:"#f59f00", fontWeight:600 }}>★ {name(records.find(r=>r.id===pinned)||{})} pinned as preferred</span>}
+        <div style={{ padding:"10px 20px", background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:7, height:7, borderRadius:"50%", background:accent, flexShrink:0 }}/>
+          <span style={{ fontSize:11, color:C.text3 }}>Coloured dots mark fields where values differ</span>
+          {pinned && <span style={{ marginLeft:"auto", fontSize:11, color:"#f59f00", fontWeight:600 }}>★ {name(records.find(r=>r.id===pinned)||{})} pinned as preferred</span>}
         </div>
       </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}`}</style>
     </div>
   );
 };
