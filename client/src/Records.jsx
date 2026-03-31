@@ -3188,7 +3188,31 @@ const FilePreviewModal = ({ att, onClose }) => {
   const isImage = ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
   const isPdf   = ext === 'pdf';
   const isText  = ['txt','csv','md','log'].includes(ext);
-  const fileUrl = att.url || '#';
+  const rawUrl  = att.url || '#';
+
+  // Fetch the file with auth headers and create a blob URL so iframes/imgs work
+  const [blobUrl, setBlobUrl]   = useState(null);
+  const [loadErr, setLoadErr]   = useState(false);
+
+  useEffect(() => {
+    let url = null;
+    if (rawUrl && rawUrl !== '#') {
+      const headers = authHeaders();
+      fetch(rawUrl, { headers })
+        .then(r => {
+          if (!r.ok) throw new Error('auth');
+          return r.blob();
+        })
+        .then(blob => {
+          url = URL.createObjectURL(blob);
+          setBlobUrl(url);
+        })
+        .catch(() => setLoadErr(true));
+    }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [rawUrl]);
+
+  const fileUrl = blobUrl || rawUrl;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -3226,28 +3250,42 @@ const FilePreviewModal = ({ att, onClose }) => {
 
         {/* Content */}
         <div style={{ flex:1, overflow:'hidden', background:'#f4f5f8', display:'flex', alignItems:'stretch', justifyContent:'center', minHeight:0 }}>
-          {isPdf && (
+          {/* Loading state */}
+          {!blobUrl && !loadErr && rawUrl !== '#' && (
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'#9ca3af' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" style={{animation:'spin 1s linear infinite'}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="#3b5bdb" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg>
+              <span style={{ fontSize:13, color:'#6b7280' }}>Loading file…</span>
+            </div>
+          )}
+          {loadErr && (
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, color:'#9ca3af' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Could not load file</div>
+              <a href={rawUrl} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'#3b5bdb', fontWeight:600 }}>Open in new tab</a>
+            </div>
+          )}
+          {blobUrl && isPdf && (
             <iframe
-              src={fileUrl + '#toolbar=1&navpanes=1&scrollbar=1&view=FitH'}
+              src={blobUrl}
               title={att.name}
               style={{ width:'100%', border:'none', minHeight:'78vh' }}
             />
           )}
-          {isImage && (
+          {blobUrl && isImage && (
             <div style={{ overflow:'auto', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-              <img src={fileUrl} alt={att.name}
+              <img src={blobUrl} alt={att.name}
                 style={{ maxWidth:'100%', maxHeight:'78vh', objectFit:'contain', borderRadius:8, boxShadow:'0 4px 24px rgba(0,0,0,.15)' }}/>
             </div>
           )}
-          {isText && (
-            <iframe src={fileUrl} title={att.name}
+          {blobUrl && isText && (
+            <iframe src={blobUrl} title={att.name}
               style={{ width:'100%', border:'none', minHeight:'78vh', background:'white' }}/>
           )}
-          {!isPdf && !isImage && !isText && (
+          {blobUrl && !isPdf && !isImage && !isText && (
             <div style={{ textAlign:'center', padding:48, color:'#6b7280', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1 }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom:12 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 }}>Preview not available for .{ext} files</div>
-              <a href={fileUrl} download={att.name} style={{ fontSize:12, color:'#3b5bdb', fontWeight:600, textDecoration:'none' }}>Download to view</a>
+              <a href={blobUrl} download={att.name} style={{ fontSize:12, color:'#3b5bdb', fontWeight:600, textDecoration:'none' }}>Download to view</a>
             </div>
           )}
         </div>
