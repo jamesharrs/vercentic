@@ -30,10 +30,11 @@ export default function DashboardInsights({ environment, onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
-    if (!environment?.id) return;
+    if (!environment?.id) { console.log('[DashboardInsights] no environment id'); return; }
+    console.log('[DashboardInsights] loading for env:', environment.id);
     setLoading(true);
-    try { const d = await api.get(`/analytics/global?environment_id=${environment.id}`); if (!d.empty) setData(d); }
-    catch (e) { console.error('[insights]', e); }
+    try { const d = await api.get(`/analytics/global?environment_id=${environment.id}`); console.log('[DashboardInsights] data:', d?.empty, Object.keys(d||{})); if (!d.empty) setData(d); }
+    catch (e) { console.error('[DashboardInsights] error:', e); }
     finally { setLoading(false); }
   }, [environment?.id]);
   useEffect(() => { load(); }, [load]);

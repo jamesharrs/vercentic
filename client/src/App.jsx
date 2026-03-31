@@ -58,6 +58,7 @@ import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
 import { useHistory } from "./useHistory";
 import { HistoryDropdown } from "./RecentHistory";
+import DashboardInsights from "./DashboardInsights.jsx";
 
 // ─── AccessDenied fallback ───────────────────────────────────────────────────
 const AccessDenied = ({ feature = 'this feature' }) => (
@@ -1499,7 +1500,7 @@ function App() {
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
-  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|people|jobs|talent-pools|search|interviews|offers|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
 
   // Client support portal — must be before the portal slug fallback
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
@@ -1758,6 +1759,7 @@ function App() {
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
         { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
+        { id: "insights",    icon: "activity",     label: "Insights" },
         { id: "search",      icon: "search",       label: t("nav.search") },
       ]
     },
@@ -2247,6 +2249,10 @@ function App() {
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <ReportsPage environment={selectedEnv} initialReport={reportPreset} />
           </Suspense>
+        ) : activeNav === "insights" ? (
+          <DashboardInsights environment={selectedEnv} onNavigate={(id) => {
+            window.dispatchEvent(new CustomEvent("talentos:openRecord", { detail: { recordId: id } }));
+          }} />
         ) : activeNav === "help" ? (
           <Suspense fallback={null}>
             <HelpPage onOpenCopilot={(msg) => {
