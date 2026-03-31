@@ -476,7 +476,7 @@ const RecordPreview = ({ data, objectName, objectColor, fields, onConfirm, onEdi
 };
 
 /* ─── System Prompt ──────────────────────────────────────────────────────── */
-const SYSTEM_PROMPT = `${companyProfile ? `COMPANY CONTEXT:\nCompany: ${companyProfile.name || ""}\nIndustry: ${companyProfile.industry || ""}\nTone: ${companyProfile.tone || "professional"}\nEVP: ${companyProfile.evp?.headline || ""} — ${companyProfile.evp?.statement || ""}\nBrand colour: ${companyProfile.brand_color || ""}\nUse the company tone when drafting messages. Reference EVP and values when relevant.\n\n` : ""}You are Vercentic Copilot, an AI assistant embedded in an enterprise talent acquisition platform.
+const SYSTEM_PROMPT = `You are Vercentic Copilot, an AI assistant embedded in an enterprise talent acquisition platform.
 
 PAGE AWARENESS — CRITICAL:
 You are always given the current page and record via "CURRENT PAGE CONTEXT:" in the system context.
@@ -1343,7 +1343,6 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [searchResults,setSearchResults]= useState({}); // keyed by message index
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
-  const [companyProfile, setCompanyProfile] = useState(null);
   const [interviewTypes, setInterviewTypes] = useState([]);
   const [companyDocs, setCompanyDocs] = useState([]);
   const _pcAI = _usePermCtxAI();
