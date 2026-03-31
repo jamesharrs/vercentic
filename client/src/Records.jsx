@@ -5652,7 +5652,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       formData.append('file_type_name', ft?.name || 'Other');
       formData.append('uploaded_by',    'Admin');
       formData.append('environment_id', currentObject.environment_id || environment?.id || '');
-      const res = await tFetch('/attachments/upload', { method:'POST', body: formData });
+      const res = await tFetch('/api/attachments/upload', { method:'POST', body: formData });
       const att = await res.json();
       if (res.ok) {
         load();
@@ -5705,7 +5705,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     setDocExtractAtt(att); setDocExtractMappings(ft.mappings);
     setDocExtracting(true); setDocExtractResult(null);
     try {
-      const res = await tFetch('/doc-extract', {
+      const res = await tFetch('/api/doc-extract', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attachment_id: att.id, file_type_id: att.file_type_id, mappings: ft.mappings }),
       });
