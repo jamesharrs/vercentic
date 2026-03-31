@@ -83,6 +83,7 @@ app.use('/api/file-types',        require('./routes/file_types'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
 app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));
 app.use('/api/groups',            require('./routes/groups'));
+app.use('/api/notification-preferences', require('./routes/notification_preferences'));
 
 // ── AI & intelligence ─────────────────────────────────────────────────────────
 app.use('/api/ai',                require('./routes/ai-proxy'));
