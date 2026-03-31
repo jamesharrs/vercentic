@@ -2402,17 +2402,17 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
 
         {/* Table */}
         <div style={{ overflowX:"auto" }}>
-          <table style={{ minWidth:"100%", width:"max-content", borderCollapse:"collapse", fontFamily:F }}>
+          <table style={{ tableLayout:"fixed", minWidth: `${170 + 220 * 5}px`, borderCollapse:"collapse", fontFamily:F }}>
             <thead>
               <tr style={{ background:C.surface, borderBottom:`2px solid ${C.border}` }}>
-                <th style={{ width:160, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>
+                <th style={{ width:170, minWidth:170, maxWidth:170, padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", position:"sticky", left:0, background:C.surface, zIndex:2 }}>
                   Field <span style={{ marginLeft:4, fontSize:10, fontWeight:500, color:C.border }}>({compareFields.length})</span>
                 </th>
                 {records.map(r => {
                   const isPinned = pinned === r.id;
                   const sc = score(r);
                   return (
-                    <th key={r.id} style={{ minWidth:200, padding:"10px 14px", textAlign:"left", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}08` : C.surface }}>
+                    <th key={r.id} style={{ width:220, minWidth:220, maxWidth:220, padding:"10px 14px", textAlign:"left", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}08` : C.surface, overflow:"hidden" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <div style={{ width:32, height:32, borderRadius:"50%", background:`${accent}18`, color:accent, fontSize:12, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                           {name(r).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
@@ -2445,7 +2445,7 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
                 const diff = isDiff(field.api_key);
                 return (
                   <tr key={field.id} style={{ background: fi%2===0 ? C.surface : C.bg, borderBottom:`1px solid ${C.border}` }}>
-                    <td style={{ padding:"9px 16px", fontSize:12, fontWeight:600, color:C.text2, position:"sticky", left:0, background: fi%2===0 ? C.surface : C.bg, zIndex:1, whiteSpace:"nowrap" }}>
+                    <td style={{ padding:"9px 16px", fontSize:12, fontWeight:600, color:C.text2, position:"sticky", left:0, background: fi%2===0 ? C.surface : C.bg, zIndex:1, whiteSpace:"nowrap", width:170, minWidth:170, maxWidth:170, overflow:"hidden", textOverflow:"ellipsis" }}>
                       {diff && <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:accent, marginRight:6, verticalAlign:"middle" }}/>}
                       {field.name}
                     </td>
@@ -2454,7 +2454,7 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
                       const isPinned = pinned === r.id;
                       const empty = val === null || val === undefined || val === "" || (Array.isArray(val) && !val.length);
                       return (
-                        <td key={r.id} style={{ padding:"9px 14px", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}06` : diff ? `${accent}04` : "transparent", minWidth:200 }}>
+                        <td key={r.id} style={{ padding:"9px 14px", borderLeft:`1px solid ${C.border}`, background: isPinned ? `${accent}06` : diff ? `${accent}04` : "transparent", width:220, maxWidth:220, overflow:"hidden" }}>
                           {empty ? (
                             <span style={{ color:C.border, fontSize:12 }}>—</span>
                           ) : field.field_type === "rating" ? (
@@ -2466,7 +2466,7 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
                               {val.map((v,i) => <span key={i} style={{ fontSize:11, padding:"2px 7px", borderRadius:99, background:`${accent}14`, color:accent, fontWeight:600 }}>{String(v?.name||v)}</span>)}
                             </div>
                           ) : (
-                            <span style={{ fontSize:12, color:C.text1 }}>{String(val)}</span>
+                            <span style={{ fontSize:12, color:C.text1, display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:196 }} title={String(val)}>{String(val)}</span>
                           )}
                         </td>
                       );
