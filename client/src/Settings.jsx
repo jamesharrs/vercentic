@@ -1144,6 +1144,7 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
   const [pSearch, setPSearch] = useState("");
   const [linkedFields, setLinkedFields] = useState([]);
   const [fieldValues, setFieldValues] = useState({});
+  const [savedLists, setSavedLists] = useState([]);
 
   // Load people records when mode is "specific"
   useEffect(() => {
@@ -1199,6 +1200,10 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
           Object.entries(vals).forEach(([k, s]) => { result[k] = [...s].sort(); });
           setFieldValues(result);
         });
+        // Load saved lists for the linked object
+        tFetch(`/api/saved-views?object_id=${obj.id}&environment_id=${selEnv.id}`).then(r => r.json())
+          .then(lists => setSavedLists(Array.isArray(lists) ? lists : []))
+          .catch(() => {});
       }).catch(() => {});
   }, [selEnv?.id, form.related_object_slug]);
 
@@ -1215,6 +1220,7 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
     { v: "all", l: "Show all", desc: "Everyone from the linked object" },
     { v: "filter", l: "Filter by criteria", desc: "Match a field value" },
     { v: "specific", l: "Select people", desc: "Hand-pick who appears" },
+    { v: "saved_list", l: "From saved list", desc: "Use a saved list" },
   ];
 
   return (
@@ -1340,6 +1346,47 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Saved list mode */}
+        {form.people_selection_mode === "saved_list" && (
+          <div style={{background:"white",borderRadius:8,border:"1px solid #e8eaed",padding:"10px"}}>
+            <label style={{fontSize:10,fontWeight:600,color:"#6b7280",display:"block",marginBottom:4}}>SELECT A SAVED LIST</label>
+            {savedLists.length === 0 ? (
+              <div style={{padding:"10px",textAlign:"center",color:"#9ca3af",fontSize:12}}>
+                No saved lists found. Create one from the records page first.
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {savedLists.map(list => {
+                  const isSel = form.people_saved_list_id === list.id;
+                  const fc = (list.filters||[]).length;
+                  return (
+                    <div key={list.id} onClick={()=>set("people_saved_list_id",isSel?"":list.id)}
+                      style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,cursor:"pointer",
+                        border:`2px solid ${isSel?"#3b5bdb":"#e8eaed"}`,background:isSel?"#eef2ff":"white",transition:"all .15s"}}
+                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="#f9fafb"}}
+                      onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="white"}}>
+                      <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${isSel?"#3b5bdb":"#d1d5db"}`,
+                        background:isSel?"#3b5bdb":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {isSel && <div style={{width:6,height:6,borderRadius:"50%",background:"white"}}/>}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:isSel?700:500,color:"#1a1a2e"}}>{list.name}</div>
+                        <div style={{fontSize:10,color:"#9ca3af"}}>{fc} filter{fc!==1?"s":""} · {list.is_shared?"Shared":"Private"}</div>
+                      </div>
+                      {isSel && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b5bdb" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {form.people_saved_list_id && (
+              <div style={{marginTop:6,padding:"5px 8px",background:"#eef2ff",borderRadius:6,fontSize:11,color:"#3b5bdb",fontWeight:500}}>
+                People matching "{savedLists.find(l=>l.id===form.people_saved_list_id)?.name}" will appear
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1613,6 +1660,7 @@ function FieldModal({ field, selEnv, selObj, onSaved, onClose }) {
     people_filter_value: field?.people_filter_value || "",
     people_selection_mode: field?.people_selection_mode || "all",
     people_allowed_ids: field?.people_allowed_ids || [],
+    people_saved_list_id: field?.people_saved_list_id || "",
     dataset_id: field?.dataset_id||"",
     dataset_multi: field?.dataset_multi!==undefined ? !!field.dataset_multi : false,
     skills_multi: field?.skills_multi!==undefined ? !!field.skills_multi : true,
@@ -1648,6 +1696,7 @@ function FieldModal({ field, selEnv, selObj, onSaved, onClose }) {
         people_filter_value: form.field_type === "people" ? form.people_filter_value : undefined,
         people_selection_mode: form.field_type === "people" ? form.people_selection_mode : undefined,
         people_allowed_ids: form.field_type === "people" ? form.people_allowed_ids : undefined,
+        people_saved_list_id: form.field_type === "people" ? form.people_saved_list_id : undefined,
         dataset_id: form.field_type === "dataset" ? form.dataset_id : undefined,
         dataset_multi: form.field_type === "dataset" ? form.dataset_multi : undefined,
         skills_multi: form.field_type === "skills" ? form.skills_multi : undefined,

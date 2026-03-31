@@ -39,6 +39,14 @@ router.get('/pinned', (req, res) => {
   res.json(pinned);
 });
 
+// GET /api/saved-views/:id
+router.get('/:id', (req, res) => {
+  ensureTable();
+  const view = query('saved_views', v => v.id === req.params.id)[0];
+  if (!view) return res.status(404).json({ error: 'View not found' });
+  res.json(view);
+});
+
 // POST /api/saved-views
 router.post('/', (req, res) => {
   ensureTable();

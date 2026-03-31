@@ -556,6 +556,8 @@ const PeoplePicker = ({ field, value, onChange }) => {
     if (!open || !_currentEnvId) return;
     const filterSuffix = field.people_selection_mode === "specific"
       ? `_specific_${(field.people_allowed_ids||[]).length}`
+      : field.people_selection_mode === "saved_list"
+      ? `_list_${field.people_saved_list_id||''}`
       : field.people_filter_field ? `_${field.people_filter_field}_${field.people_filter_value}` : '';
     const cacheKey = `${field.lookup_object_id||field.related_object_slug||'people'}_${_currentEnvId}${filterSuffix}`;
     if (_pickerCache[cacheKey]) { setOptions(_pickerCache[cacheKey]); setLoaded(true); return; }
@@ -563,16 +565,42 @@ const PeoplePicker = ({ field, value, onChange }) => {
 
     const fetchRecords = (objectId) =>
       api.get(`/records?object_id=${objectId}&environment_id=${_currentEnvId}&limit=200`)
-        .then(res => {
+        .then(async (res) => {
           const recs = Array.isArray(res) ? res : (res.records || []);
           // Apply people selection mode filters
           let filteredRecs = recs;
           if (field.people_selection_mode === "specific" && Array.isArray(field.people_allowed_ids) && field.people_allowed_ids.length > 0) {
-            // Only show hand-picked people
             const allowedSet = new Set(field.people_allowed_ids);
             filteredRecs = recs.filter(r => allowedSet.has(r.id));
+          } else if (field.people_selection_mode === "saved_list" && field.people_saved_list_id) {
+            // Fetch the saved list's filters and apply them
+            try {
+              const listData = await api.get(`/saved-views/${field.people_saved_list_id}`);
+              if (listData && Array.isArray(listData.filters) && listData.filters.length > 0) {
+                const flds = await api.get(`/fields?object_id=${objectId}`);
+                const fieldsList = Array.isArray(flds) ? flds : [];
+                filteredRecs = recs.filter(r => {
+                  return listData.filters.every(f => {
+                    const fld = fieldsList.find(fl => fl.id === (f.fieldId || f.field_id));
+                    if (!fld) return true;
+                    const val = r.data?.[fld.api_key];
+                    const sv = String(val || "").toLowerCase();
+                    const fv = String(f.value || "").toLowerCase();
+                    switch (f.op || f.operator) {
+                      case "is": return sv === fv;
+                      case "is not": return sv !== fv;
+                      case "contains": return sv.includes(fv);
+                      case "starts with": return sv.startsWith(fv);
+                      case "includes": return Array.isArray(val) && val.some(v => String(v).toLowerCase() === fv);
+                      case "is empty": return !val || val === "";
+                      case "is not empty": return val && val !== "";
+                      default: return sv === fv;
+                    }
+                  });
+                });
+              }
+            } catch(e) { /* saved list not found — show all */ }
           } else if (field.people_filter_field && field.people_filter_value) {
-            // Filter by criteria (person_type = Employee etc.)
             const fk = field.people_filter_field;
             const fv = field.people_filter_value.toLowerCase();
             filteredRecs = recs.filter(r => {
@@ -1462,7 +1490,7 @@ const getOpsForField = (f) => {
   return FILTER_OPS.text;
 };
 
-const applyFilters = (records, filters, fields, _legacyLogic = "AND", linkedRecords = {}, peopleLinks = []) => {
+const applyFilters = (records, filters, fields, _legacyLogic = "AND", linkedRecords = {}, peopleLinks = [], linkedFieldsMap = {}) => {
   if (!filters.length) return records;
   return records.filter(record => {
     let result = null; // null = not yet evaluated
@@ -1477,7 +1505,7 @@ const applyFilters = (records, filters, fields, _legacyLogic = "AND", linkedReco
         const linkedRecs = (linkedRecords[filt.linkedObjectId] || [])
           .filter(r => personLinks.some(l => l.record_id === r.id));
         const linkedFields = []; // passed via closure from RecordsView
-        matches = linkedRecs.some(lr => testFilter(filt, linkedRecords[`__fields__${filt.linkedObjectId}`] || [], lr));
+        matches = linkedRecs.some(lr => testFilter(filt, linkedFieldsMap[filt.linkedObjectId] || [], lr));
       } else {
         matches = testFilter(filt, fields, record);
       }
@@ -1683,10 +1711,12 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
 
   // Build field options grouped by object
   const ownGroup = { label: null, fields, objectId: null, objectSlug: null };
-  const linkedGroups = Object.entries(linkedObjectFields).map(([objId, flds]) => {
+  const linkedGroups = Object.entries(linkedObjectFields)
+    .filter(([key]) => !key.startsWith('__'))
+    .map(([objId, flds]) => {
     const obj = allObjects.find(o => o.id === objId);
-    return { label: obj?.plural_name || "Linked", fields: flds, objectId: objId, objectSlug: obj?.slug };
-  }).filter(g => g.fields?.length > 0);
+    return { label: obj?.plural_name || obj?.name || "Linked", fields: flds, objectId: objId, objectSlug: obj?.slug };
+  }).filter((g, i, arr) => g.fields?.length > 0 && arr.findIndex(x => x.objectId === g.objectId) === i);
 
   const findField = filt => {
     if (filt.source === "linked" && filt.linkedObjectId) {
@@ -7292,7 +7322,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setSelectedIds(new Set());
   };
   const displayedRecords = useMemo(() => {
-    let recs = applyFilters(records, activeFilters, fields, filterLogic, linkedObjectRecords, peopleLinksData);
+    let recs = applyFilters(records, activeFilters, fields, filterLogic, linkedObjectRecords, peopleLinksData, linkedObjectFields);
     if (sortBy) {
       recs = [...recs].sort((a, b) => {
         let av, bv;
@@ -7426,7 +7456,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       const fldMap = {}; const recMap = {};
       results.forEach(({ objId, fields: flds, records: recs }) => {
         fldMap[objId] = flds;
-        fldMap[`__fields__${objId}`] = flds; // for applyFilters lookup
         recMap[objId] = recs;
       });
       setLinkedObjectFields(fldMap);
