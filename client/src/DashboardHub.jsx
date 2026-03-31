@@ -9,6 +9,7 @@ const AdminDashboard      = lazy(() => import("./AdminDashboard.jsx"));
 const AgentDashboard      = lazy(() => import("./AgentDashboard.jsx"));
 const ScreeningDashboard  = lazy(() => import("./ScreeningDashboard.jsx"));
 const OnboardingDashboard = lazy(() => import("./OnboardingDashboard.jsx"));
+const DashboardInsights   = lazy(() => import("./DashboardInsights.jsx"));
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const Loader = () => (
@@ -41,6 +42,11 @@ export default function DashboardHub({ tab = "overview", onTabChange, environmen
       )}
       {tab === "onboarding" && (
         <OnboardingDashboard environment={environment} onNavigate={onNavigate}/>
+      )}
+      {tab === "insights" && (
+        <DashboardInsights environment={environment} onNavigate={(id) => {
+          window.dispatchEvent(new CustomEvent("talentos:openRecord", { detail: { recordId: id } }));
+        }}/>
       )}
       {tab === "custom" && !builderMode && (
         <DashboardViewer environment={environment} session={session}
