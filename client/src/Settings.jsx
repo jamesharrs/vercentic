@@ -1142,6 +1142,8 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
   const [peopleRecords, setPeopleRecords] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [pSearch, setPSearch] = useState("");
+  const [linkedFields, setLinkedFields] = useState([]);
+  const [fieldValues, setFieldValues] = useState({});
 
   // Load people records when mode is "specific"
   useEffect(() => {
@@ -1167,6 +1169,38 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
       })
       .catch(() => setLoadingPeople(false));
   }, [form.people_selection_mode, selEnv?.id, form.related_object_slug]);
+
+  // Load fields + distinct values from the linked object for filter mode
+  useEffect(() => {
+    if (!selEnv?.id) return;
+    const slug = form.related_object_slug || "people";
+    tFetch(`/api/objects?environment_id=${selEnv.id}`).then(r => r.json())
+      .then(objs => {
+        const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+        if (!obj) return;
+        // Load fields
+        tFetch(`/api/fields?object_id=${obj.id}`).then(r => r.json()).then(fields => {
+          const flds = Array.isArray(fields) ? fields : [];
+          setLinkedFields(flds);
+        });
+        // Load records to extract distinct values per field
+        tFetch(`/api/records?object_id=${obj.id}&environment_id=${selEnv.id}&limit=500`).then(r => r.json()).then(res => {
+          const recs = Array.isArray(res) ? res : (res.records || []);
+          const vals = {};
+          recs.forEach(r => {
+            Object.entries(r.data || {}).forEach(([k, v]) => {
+              if (!vals[k]) vals[k] = new Set();
+              if (Array.isArray(v)) v.forEach(item => vals[k].add(String(item)));
+              else if (v !== null && v !== undefined && v !== "") vals[k].add(String(v));
+            });
+          });
+          // Convert sets to sorted arrays
+          const result = {};
+          Object.entries(vals).forEach(([k, s]) => { result[k] = [...s].sort(); });
+          setFieldValues(result);
+        });
+      }).catch(() => {});
+  }, [selEnv?.id, form.related_object_slug]);
 
   const allowedSet = new Set(form.people_allowed_ids || []);
   const togglePerson = (id) => {
@@ -1223,26 +1257,39 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:"#6b7280",display:"block",marginBottom:3}}>WHERE FIELD</label>
-                <select value={form.people_filter_field} onChange={e=>set("people_filter_field",e.target.value)}
+                <select value={form.people_filter_field} onChange={e=>{set("people_filter_field",e.target.value);set("people_filter_value","");}}
                   style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"1px solid #e8eaed",fontSize:12,fontFamily:F,background:"white",color:"#1a1a2e"}}>
                   <option value="">Select field…</option>
-                  <option value="person_type">Person Type</option>
-                  <option value="department">Department</option>
-                  <option value="status">Status</option>
-                  <option value="location">Location</option>
-                  <option value="entity">Entity / Company</option>
-                  <option value="employment_type">Employment Type</option>
+                  {linkedFields.filter(f=>["select","multi_select","status","text","email"].includes(f.field_type)).map(f=>(
+                    <option key={f.id} value={f.api_key}>{f.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:"#6b7280",display:"block",marginBottom:3}}>EQUALS</label>
-                <Inp value={form.people_filter_value} onChange={v=>set("people_filter_value",v)}
-                  placeholder={form.people_filter_field ? "e.g. Employee" : "Select a field first"}/>
+                {(() => {
+                  const selField = linkedFields.find(f => f.api_key === form.people_filter_field);
+                  const hasOptions = selField && Array.isArray(selField.options) && selField.options.length > 0;
+                  const distinctVals = fieldValues[form.people_filter_field] || [];
+                  // Use field.options for select/status fields, or distinct values from records
+                  const opts = hasOptions ? selField.options : distinctVals;
+                  if (opts.length > 0) {
+                    return (
+                      <select value={form.people_filter_value} onChange={e=>set("people_filter_value",e.target.value)}
+                        style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"1px solid #e8eaed",fontSize:12,fontFamily:F,background:"white",color:"#1a1a2e"}}>
+                        <option value="">Select value…</option>
+                        {opts.map(o=><option key={o} value={o}>{o}</option>)}
+                      </select>
+                    );
+                  }
+                  return <Inp value={form.people_filter_value} onChange={v=>set("people_filter_value",v)}
+                    placeholder={form.people_filter_field ? "Type a value…" : "Select a field first"}/>;
+                })()}
               </div>
             </div>
             {form.people_filter_field && form.people_filter_value && (
               <div style={{marginTop:6,padding:"5px 8px",background:"#eef2ff",borderRadius:6,fontSize:11,color:"#3b5bdb",fontWeight:500}}>
-                Only people where <strong>{form.people_filter_field}</strong> = <strong>{form.people_filter_value}</strong>
+                Only people where <strong>{linkedFields.find(f=>f.api_key===form.people_filter_field)?.name||form.people_filter_field}</strong> = <strong>{form.people_filter_value}</strong>
               </div>
             )}
           </div>
