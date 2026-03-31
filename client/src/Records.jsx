@@ -554,7 +554,9 @@ const PeoplePicker = ({ field, value, onChange }) => {
   // Load options once — use module-level cache keyed by objectId+envId
   useEffect(() => {
     if (!open || !_currentEnvId) return;
-    const filterSuffix = field.people_filter_field ? `_${field.people_filter_field}_${field.people_filter_value}` : '';
+    const filterSuffix = field.people_selection_mode === "specific"
+      ? `_specific_${(field.people_allowed_ids||[]).length}`
+      : field.people_filter_field ? `_${field.people_filter_field}_${field.people_filter_value}` : '';
     const cacheKey = `${field.lookup_object_id||field.related_object_slug||'people'}_${_currentEnvId}${filterSuffix}`;
     if (_pickerCache[cacheKey]) { setOptions(_pickerCache[cacheKey]); setLoaded(true); return; }
     if (loaded) return;
@@ -563,9 +565,14 @@ const PeoplePicker = ({ field, value, onChange }) => {
       api.get(`/records?object_id=${objectId}&environment_id=${_currentEnvId}&limit=200`)
         .then(res => {
           const recs = Array.isArray(res) ? res : (res.records || []);
-          // Apply people_filter if configured on this field
+          // Apply people selection mode filters
           let filteredRecs = recs;
-          if (field.people_filter_field && field.people_filter_value) {
+          if (field.people_selection_mode === "specific" && Array.isArray(field.people_allowed_ids) && field.people_allowed_ids.length > 0) {
+            // Only show hand-picked people
+            const allowedSet = new Set(field.people_allowed_ids);
+            filteredRecs = recs.filter(r => allowedSet.has(r.id));
+          } else if (field.people_filter_field && field.people_filter_value) {
+            // Filter by criteria (person_type = Employee etc.)
             const fk = field.people_filter_field;
             const fv = field.people_filter_value.toLowerCase();
             filteredRecs = recs.filter(r => {

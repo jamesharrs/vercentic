@@ -1137,6 +1137,169 @@ const SessionsSection = () => {
 };
 
 // ── Data Model Section ────────────────────────────────────────────────────────
+// ── PeopleFieldConfig — configure who appears in a People field picker ─────────
+const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
+  const [peopleRecords, setPeopleRecords] = useState([]);
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [pSearch, setPSearch] = useState("");
+
+  // Load people records when mode is "specific"
+  useEffect(() => {
+    if (form.people_selection_mode !== "specific" || !selEnv?.id) return;
+    if (peopleRecords.length > 0) return;
+    setLoadingPeople(true);
+    const slug = form.related_object_slug || "people";
+    tFetch(`/api/objects?environment_id=${selEnv.id}`).then(r => r.json())
+      .then(objs => {
+        const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+        if (!obj) { setLoadingPeople(false); return; }
+        return tFetch(`/api/records?object_id=${obj.id}&environment_id=${selEnv.id}&limit=500`).then(r => r.json());
+      })
+      .then(res => {
+        if (!res) return;
+        const recs = Array.isArray(res) ? res : (res.records || []);
+        setPeopleRecords(recs.map(r => ({
+          id: r.id,
+          name: [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.name || r.data?.email || r.id,
+          subtitle: [r.data?.job_title, r.data?.department, r.data?.person_type].filter(Boolean).join(" · "),
+        })));
+        setLoadingPeople(false);
+      })
+      .catch(() => setLoadingPeople(false));
+  }, [form.people_selection_mode, selEnv?.id, form.related_object_slug]);
+
+  const allowedSet = new Set(form.people_allowed_ids || []);
+  const togglePerson = (id) => {
+    const next = allowedSet.has(id)
+      ? (form.people_allowed_ids || []).filter(i => i !== id)
+      : [...(form.people_allowed_ids || []), id];
+    set("people_allowed_ids", next);
+  };
+  const filtered = peopleRecords.filter(p => p.name.toLowerCase().includes(pSearch.toLowerCase()) || (p.subtitle||"").toLowerCase().includes(pSearch.toLowerCase()));
+
+  const MODES = [
+    { v: "all", l: "Show all", desc: "Everyone from the linked object" },
+    { v: "filter", l: "Filter by criteria", desc: "Match a field value" },
+    { v: "specific", l: "Select people", desc: "Hand-pick who appears" },
+  ];
+
+  return (
+    <div style={{marginBottom:12,padding:"12px",background:"#f8f9fc",borderRadius:10,border:"1px solid #e8eaed"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}}>People Field Settings</div>
+
+      {/* Object to link */}
+      <div style={{marginBottom:8}}>
+        <label style={{fontSize:11,fontWeight:600,color:"#6b7280",display:"block",marginBottom:4}}>OBJECT TO LINK</label>
+        <Inp value={form.related_object_slug} onChange={v=>set("related_object_slug",v)} placeholder="people"/>
+      </div>
+
+      {/* Single / Multi */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {[{v:false,l:"Single select"},{v:true,l:"Multi select"}].map(({v,l})=>(
+          <button key={String(v)} onClick={()=>set("people_multi",v)}
+            style={{flex:1,padding:"6px",borderRadius:8,border:`2px solid ${form.people_multi===v?"#3b5bdb":"#e8eaed"}`,background:form.people_multi===v?"#3b5bdb":"#fff",color:form.people_multi===v?"#fff":"#6b7280",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:F}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Selection mode */}
+      <div style={{borderTop:"1px solid #e8eaed",paddingTop:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#6b7280",marginBottom:6}}>WHO APPEARS IN THE PICKER</div>
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          {MODES.map(m=>(
+            <button key={m.v} onClick={()=>set("people_selection_mode",m.v)}
+              style={{flex:1,padding:"6px 4px",borderRadius:8,border:`2px solid ${form.people_selection_mode===m.v?"#3b5bdb":"#e8eaed"}`,
+                background:form.people_selection_mode===m.v?"#3b5bdb":"#fff",color:form.people_selection_mode===m.v?"#fff":"#6b7280",
+                cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:F,textAlign:"center"}}>
+              {m.l}
+            </button>
+          ))}
+        </div>
+
+        {/* Filter mode */}
+        {form.people_selection_mode === "filter" && (
+          <div style={{padding:"8px 10px",background:"white",borderRadius:8,border:"1px solid #e8eaed"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <label style={{fontSize:10,fontWeight:600,color:"#6b7280",display:"block",marginBottom:3}}>WHERE FIELD</label>
+                <select value={form.people_filter_field} onChange={e=>set("people_filter_field",e.target.value)}
+                  style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"1px solid #e8eaed",fontSize:12,fontFamily:F,background:"white",color:"#1a1a2e"}}>
+                  <option value="">Select field…</option>
+                  <option value="person_type">Person Type</option>
+                  <option value="department">Department</option>
+                  <option value="status">Status</option>
+                  <option value="location">Location</option>
+                  <option value="entity">Entity / Company</option>
+                  <option value="employment_type">Employment Type</option>
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:600,color:"#6b7280",display:"block",marginBottom:3}}>EQUALS</label>
+                <Inp value={form.people_filter_value} onChange={v=>set("people_filter_value",v)}
+                  placeholder={form.people_filter_field ? "e.g. Employee" : "Select a field first"}/>
+              </div>
+            </div>
+            {form.people_filter_field && form.people_filter_value && (
+              <div style={{marginTop:6,padding:"5px 8px",background:"#eef2ff",borderRadius:6,fontSize:11,color:"#3b5bdb",fontWeight:500}}>
+                Only people where <strong>{form.people_filter_field}</strong> = <strong>{form.people_filter_value}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Specific people mode */}
+        {form.people_selection_mode === "specific" && (
+          <div style={{background:"white",borderRadius:8,border:"1px solid #e8eaed",overflow:"hidden"}}>
+            {/* Search */}
+            <div style={{padding:"6px 8px",borderBottom:"1px solid #f0f0f0"}}>
+              <input value={pSearch} onChange={e=>setPSearch(e.target.value)} placeholder="Search people…"
+                style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #e8eaed",fontSize:12,fontFamily:F,outline:"none"}}/>
+            </div>
+            {/* Selected count */}
+            <div style={{padding:"4px 10px",fontSize:11,color:"#3b5bdb",fontWeight:600,background:"#eef2ff",borderBottom:"1px solid #e8eaed"}}>
+              {allowedSet.size} people selected
+              {allowedSet.size > 0 && <button onClick={()=>set("people_allowed_ids",[])} style={{marginLeft:8,background:"none",border:"none",color:"#ef4444",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>Clear all</button>}
+            </div>
+            {/* People list */}
+            <div style={{maxHeight:200,overflowY:"auto"}}>
+              {loadingPeople ? (
+                <div style={{padding:12,color:"#9ca3af",fontSize:12,textAlign:"center"}}>Loading…</div>
+              ) : filtered.length === 0 ? (
+                <div style={{padding:12,color:"#9ca3af",fontSize:12,textAlign:"center"}}>{pSearch?"No matches":"No records found"}</div>
+              ) : filtered.map(p => {
+                const checked = allowedSet.has(p.id);
+                return (
+                  <div key={p.id} onClick={()=>togglePerson(p.id)}
+                    style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",cursor:"pointer",
+                      borderBottom:"1px solid #f8f8f8",background:checked?"#eef2ff":"transparent",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!checked)e.currentTarget.style.background="#f9fafb"}}
+                    onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="transparent"}}>
+                    {/* Checkbox */}
+                    <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${checked?"#3b5bdb":"#d1d5db"}`,
+                      background:checked?"#3b5bdb":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                    {/* Avatar */}
+                    <div style={{width:24,height:24,borderRadius:"50%",background:checked?"#3b5bdb":"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{color:"white",fontSize:9,fontWeight:700}}>{(p.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</span>
+                    </div>
+                    {/* Name */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:checked?700:500,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                      {p.subtitle && <div style={{fontSize:10,color:"#9ca3af",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.subtitle}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const FIELD_TYPES_DM = [
   // Layout
   {value:"section_separator", label:"Section",      icon:"━",  group:"Layout"},
