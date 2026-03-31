@@ -7,7 +7,10 @@ const { v4: uuidv4 } = require('uuid');
 const { query, insert, remove, getStore, saveStore } = require('../db/init');
 
 // ── Upload directory ──────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '../uploads');
+// Use persistent volume on Railway (/data), fall back to local uploads/
+const UPLOAD_DIR = process.env.DATA_PATH
+  ? path.join(process.env.DATA_PATH, 'uploads')
+  : path.join(__dirname, '../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
