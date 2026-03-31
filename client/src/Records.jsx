@@ -3190,29 +3190,26 @@ const FilePreviewModal = ({ att, onClose }) => {
   const isText  = ['txt','csv','md','log'].includes(ext);
   const rawUrl  = att.url || '#';
 
-  // Fetch the file with auth headers and create a blob URL so iframes/imgs work
-  const [blobUrl, setBlobUrl]   = useState(null);
-  const [loadErr, setLoadErr]   = useState(false);
+  // Fetch blob with auth so iframe/img has no CORS/auth issues
+  const [blobUrl,  setBlobUrl]  = useState(null);
+  const [blobData, setBlobData] = useState(null); // ArrayBuffer for PDF.js
+  const [loadErr,  setLoadErr]  = useState(false);
 
   useEffect(() => {
     let url = null;
     if (rawUrl && rawUrl !== '#') {
-      const headers = authHeaders();
-      fetch(rawUrl, { headers })
-        .then(r => {
-          if (!r.ok) throw new Error('auth');
-          return r.blob();
-        })
-        .then(blob => {
+      fetch(rawUrl, { headers: authHeaders() })
+        .then(r => { if (!r.ok) throw new Error('auth'); return r.arrayBuffer(); })
+        .then(buf => {
+          const blob = new Blob([buf], { type: isPdf ? 'application/pdf' : 'application/octet-stream' });
           url = URL.createObjectURL(blob);
           setBlobUrl(url);
+          if (isPdf) setBlobData(buf);
         })
         .catch(() => setLoadErr(true));
     }
     return () => { if (url) URL.revokeObjectURL(url); };
   }, [rawUrl]);
-
-  const fileUrl = blobUrl || rawUrl;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -3222,9 +3219,9 @@ const FilePreviewModal = ({ att, onClose }) => {
 
   return (
     <div onClick={onClose}
-      style={{ position:'fixed', inset:0, background:'rgba(10,14,30,.75)', zIndex:9700, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      style={{ position:'fixed', inset:0, background:'rgba(10,14,30,.78)', zIndex:9700, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:940, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,.4)' }}>
+        style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:960, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,.4)' }}>
 
         {/* Header */}
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderBottom:'1px solid #e8eaed', flexShrink:0 }}>
@@ -3236,11 +3233,13 @@ const FilePreviewModal = ({ att, onClose }) => {
             </div>
           </div>
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-            <a href={fileUrl} download={att.name}
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', color:'#374151', fontSize:12, fontWeight:600, textDecoration:'none' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-              Download
-            </a>
+            {blobUrl && (
+              <a href={blobUrl} download={att.name}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', color:'#374151', fontSize:12, fontWeight:600, textDecoration:'none' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Download
+              </a>
+            )}
             <button onClick={onClose}
               style={{ width:30, height:30, borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', cursor:'pointer', color:'#6b7280', fontSize:18, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
               ×
@@ -3249,46 +3248,122 @@ const FilePreviewModal = ({ att, onClose }) => {
         </div>
 
         {/* Content */}
-        <div style={{ flex:1, overflow:'hidden', background:'#f4f5f8', display:'flex', alignItems:'stretch', justifyContent:'center', minHeight:0 }}>
-          {/* Loading state */}
-          {!blobUrl && !loadErr && rawUrl !== '#' && (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'#9ca3af' }}>
+        <div style={{ flex:1, overflow:'auto', background:'#f0f2f5', display:'flex', flexDirection:'column', alignItems:'center', minHeight:0 }}>
+          {/* Loading */}
+          {!blobUrl && !loadErr && (
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, padding:48 }}>
               <svg width="24" height="24" viewBox="0 0 24 24" style={{animation:'spin 1s linear infinite'}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="#3b5bdb" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg>
               <span style={{ fontSize:13, color:'#6b7280' }}>Loading file…</span>
             </div>
           )}
+          {/* Error */}
           {loadErr && (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, color:'#9ca3af' }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, padding:48 }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Could not load file</div>
-              <a href={rawUrl} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'#3b5bdb', fontWeight:600 }}>Open in new tab</a>
             </div>
           )}
-          {blobUrl && isPdf && (
-            <iframe
-              src={blobUrl}
-              title={att.name}
-              style={{ width:'100%', border:'none', minHeight:'78vh' }}
-            />
-          )}
+          {/* PDF — rendered by PDF.js */}
+          {blobData && isPdf && <PdfViewer data={blobData}/>}
+          {/* Image */}
           {blobUrl && isImage && (
-            <div style={{ overflow:'auto', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-              <img src={blobUrl} alt={att.name}
-                style={{ maxWidth:'100%', maxHeight:'78vh', objectFit:'contain', borderRadius:8, boxShadow:'0 4px 24px rgba(0,0,0,.15)' }}/>
+            <div style={{ padding:24, display:'flex', alignItems:'center', justifyContent:'center', flex:1 }}>
+              <img src={blobUrl} alt={att.name} style={{ maxWidth:'100%', maxHeight:'78vh', objectFit:'contain', borderRadius:8, boxShadow:'0 4px 24px rgba(0,0,0,.15)' }}/>
             </div>
           )}
+          {/* Text */}
           {blobUrl && isText && (
-            <iframe src={blobUrl} title={att.name}
-              style={{ width:'100%', border:'none', minHeight:'78vh', background:'white' }}/>
+            <iframe src={blobUrl} title={att.name} style={{ width:'100%', border:'none', minHeight:'78vh', background:'white', flex:1 }}/>
           )}
+          {/* Unsupported */}
           {blobUrl && !isPdf && !isImage && !isText && (
-            <div style={{ textAlign:'center', padding:48, color:'#6b7280', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1 }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom:12 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <div style={{ fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 }}>Preview not available for .{ext} files</div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, padding:48, textAlign:'center' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Preview not available for .{ext} files</div>
               <a href={blobUrl} download={att.name} style={{ fontSize:12, color:'#3b5bdb', fontWeight:600, textDecoration:'none' }}>Download to view</a>
             </div>
           )}
         </div>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+};
+
+/* ─── PDF.js canvas renderer ─────────────────────────────────────────────── */
+const PdfViewer = ({ data }) => {
+  const [pages,      setPages]      = useState([]);
+  const [totalPages, setTotalPages] = useState(0);
+  const [scale,      setScale]      = useState(1.4);
+  const [pdfDoc,     setPdfDoc]     = useState(null);
+  const canvasRefs = useRef({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        // Point worker to the bundled worker via CDN to avoid Vite worker complexities
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+        const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
+        const pdf = await loadingTask.promise;
+        if (cancelled) return;
+        setPdfDoc(pdf);
+        setTotalPages(pdf.numPages);
+        setPages(Array.from({ length: pdf.numPages }, (_, i) => i + 1));
+      } catch(e) { console.error('PDF.js load error:', e); }
+    })();
+    return () => { cancelled = true; };
+  }, [data]);
+
+  useEffect(() => {
+    if (!pdfDoc) return;
+    pages.forEach(async (pageNum) => {
+      const canvas = canvasRefs.current[pageNum];
+      if (!canvas) return;
+      try {
+        const page    = await pdfDoc.getPage(pageNum);
+        const vp      = page.getViewport({ scale });
+        canvas.width  = vp.width;
+        canvas.height = vp.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      } catch(e) { console.error('Page render error:', e); }
+    });
+  }, [pdfDoc, pages, scale]);
+
+  const ZOOM_STEPS = [0.75, 1.0, 1.25, 1.4, 1.6, 2.0, 2.5];
+  const zoomIdx    = ZOOM_STEPS.findIndex(s => s >= scale - 0.01);
+  const zoomOut    = () => { const i = ZOOM_STEPS.findIndex(s => s >= scale - 0.01); if (i > 0) setScale(ZOOM_STEPS[i-1]); };
+  const zoomIn     = () => { const i = ZOOM_STEPS.findIndex(s => s >= scale - 0.01); if (i < ZOOM_STEPS.length-1) setScale(ZOOM_STEPS[i+1]); };
+
+  if (!pdfDoc) return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:10, padding:48 }}>
+      <svg width="22" height="22" viewBox="0 0 24 24" style={{animation:'spin 1s linear infinite'}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="#3b5bdb" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg>
+      <span style={{ fontSize:12, color:'#6b7280' }}>Rendering PDF…</span>
+    </div>
+  );
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', width:'100%' }}>
+      {/* PDF toolbar */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, padding:'8px 16px', background:'#fff', borderBottom:'1px solid #e8eaed', flexShrink:0, position:'sticky', top:0, zIndex:2 }}>
+        <span style={{ fontSize:12, color:'#6b7280' }}>{totalPages} page{totalPages!==1?'s':''}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:4, marginLeft:'auto' }}>
+          <button onClick={zoomOut} disabled={zoomIdx<=0}
+            style={{ width:28, height:28, borderRadius:6, border:'1px solid #e8eaed', background:'#f8f9fc', cursor:zoomIdx<=0?'default':'pointer', color:'#374151', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', opacity:zoomIdx<=0?.4:1 }}>−</button>
+          <span style={{ fontSize:11, fontWeight:600, color:'#374151', minWidth:40, textAlign:'center' }}>{Math.round(scale*100)}%</span>
+          <button onClick={zoomIn} disabled={zoomIdx>=ZOOM_STEPS.length-1}
+            style={{ width:28, height:28, borderRadius:6, border:'1px solid #e8eaed', background:'#f8f9fc', cursor:zoomIdx>=ZOOM_STEPS.length-1?'default':'pointer', color:'#374151', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', opacity:zoomIdx>=ZOOM_STEPS.length-1?.4:1 }}>+</button>
+        </div>
+      </div>
+      {/* Pages */}
+      <div style={{ padding:'16px 0', display:'flex', flexDirection:'column', alignItems:'center', gap:12, overflowY:'auto' }}>
+        {pages.map(pageNum => (
+          <div key={pageNum} style={{ position:'relative', boxShadow:'0 2px 12px rgba(0,0,0,.15)', borderRadius:4, overflow:'hidden', background:'white' }}>
+            <canvas ref={el => { if (el) canvasRefs.current[pageNum] = el; }} style={{ display:'block' }}/>
+            <div style={{ position:'absolute', bottom:4, right:8, fontSize:10, color:'rgba(0,0,0,.35)', fontFamily:'inherit' }}>{pageNum} / {totalPages}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
