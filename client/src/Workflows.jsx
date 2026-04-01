@@ -1675,9 +1675,50 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   }, [peopleLinks, record]);
 
   const visiblePeople = useMemo(() => {
-    const base = selectedStage === "__all__" ? peopleLinks : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage) : [];
+    let base;
+    if (selectedStage === "__all__") {
+      base = peopleLinks;
+    } else if (selectedStage === "__cat__") {
+      // All people in the currently expanded category
+      const group = expandedCat ? (() => {
+        const KEYWORDS = {
+          'New':['new','applied','application','received','submitted','sourced','register','enquir'],
+          'Screening':['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
+          'Assessment':['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
+          'Interviewing':['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
+          'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
+          'Offer':['offer','package','salary','negotiate','verbal','written','contract'],
+          'Pre-boarding':['preboard','pre-board','onboard','joining','paperwork','contract signed'],
+          'Placed':['placed','hired','hire','accepted','started','joined','won'],
+          'Not Suitable':['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
+          'Withdrawn':['withdrawn','withdrew','not interested'],
+          'Offer Declined':['offer declined','declined offer'],
+          'Talent Pool':['talent pool','pool','future','keep warm','nurture'],
+          'On Hold':['hold','pause','paused','defer','frozen'],
+        };
+        const guessCategory = (stepName) => {
+          const lower = (stepName || '').toLowerCase();
+          for (const [catName, kws] of Object.entries(KEYWORDS)) {
+            if (kws.some(kw => lower.includes(kw))) return catName;
+          }
+          return null;
+        };
+        const stepToCatId = {};
+        plSteps.forEach(s => {
+          if (s.category_id) { stepToCatId[s.id] = s.category_id; }
+          else { const g = guessCategory(s.name); if (g) { const c = categories.find(x => x.name === g); if (c) stepToCatId[s.id] = c.id; } }
+        });
+        const catStepIds = new Set(plSteps.filter(s => stepToCatId[s.id] === expandedCat).map(s => s.id));
+        return peopleLinks.filter(l => catStepIds.has(l.stage_id));
+      })() : [];
+      base = group;
+    } else if (selectedStage) {
+      base = peopleLinks.filter(l => l.stage_id === selectedStage);
+    } else {
+      base = [];
+    }
     return [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
-  }, [selectedStage, peopleLinks, matchScores]);
+  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, categories]);
   const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
   const filteredPersons = personRecords.filter(r => {
     if (linkedIds.has(r.id)) return false;
@@ -1771,8 +1812,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                 return (
                   <button key={cat.id} onClick={() => {
                     setExpandedCat(isExpanded ? null : cat.id);
-                    // If collapsing, also clear stage selection
-                    if (isExpanded) setSelectedStage(null);
+                    // Show all people in this category immediately; clear when collapsing
+                    if (isExpanded) { setSelectedStage(null); } else { setSelectedStage("__cat__"); }
                   }}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                       padding:"6px 16px 8px", border:`1.5px solid ${isExpanded ? cat.color : C.border}`,
@@ -1802,7 +1843,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       const isActive = selectedStage === step.id;
                       return (
                         <button key={step.id}
-                          onClick={() => setSelectedStage(isActive ? null : step.id)}
+                          onClick={() => setSelectedStage(isActive ? "__cat__" : step.id)}
                           style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px",
                             borderRadius:99, border:`1.5px solid ${isActive ? group.cat.color : C.border}`,
                             background: isActive ? group.cat.color : "white",
@@ -1994,7 +2035,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
       )}
 
       {/* Expanded people list */}
-      {hasStages && selectedStage && (
+      {hasStages && (selectedStage === "__cat__" || selectedStage === "__all__" || selectedStage) && selectedStage !== null && (
         <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8, background:"white", borderTop:`1px solid #f3f0ff` }}>
               {/* Section header with bulk controls and view toggle */}
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -2010,7 +2051,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     ? `${selectedLinks.length} selected`
                     : selectedStage === "__all__"
                       ? `All — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
-                      : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
+                      : selectedStage === "__cat__"
+                        ? `${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
+                        : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
                 </span>
                 {/* Bulk move */}
                 {selectedLinks.length > 0 && (
@@ -2109,7 +2152,34 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               )}
 
               {/* Card view */}
-              {pipelineView === "card" && visiblePeople.map(link => (
+              {pipelineView === "card" && selectedStage === "__cat__" ? (() => {
+                // Grouped by stage within this category
+                const group = expandedCat ? allGroups?.find(g => g.cat.id === expandedCat) : null;
+                const catSteps = group?.steps || plSteps;
+                return catSteps.map(step => {
+                  const stepPeople = visiblePeople.filter(l => l.stage_id === step.id);
+                  if (stepPeople.length === 0) return null;
+                  return (
+                    <div key={step.id} style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed", textTransform:"uppercase",
+                        letterSpacing:".06em", padding:"4px 2px 6px", display:"flex", alignItems:"center", gap:6 }}>
+                        {step.name}
+                        <span style={{ background:"#ede9fe", color:"#7c3aed", borderRadius:99,
+                          padding:"0 6px", fontSize:10, fontWeight:800 }}>{stepPeople.length}</span>
+                      </div>
+                      {stepPeople.map(link => (
+                        <PipelinePersonRow key={link.id} link={link} steps={plSteps}
+                          label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
+                          matchScore={matchScores[link.id]}
+                          personData={link.person_data}
+                          selected={selectedLinks.includes(link.id)}
+                          onSelect={id=>setSelectedLinks(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
+                          onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
+                      ))}
+                    </div>
+                  );
+                });
+              })() : pipelineView === "card" && visiblePeople.map(link => (
                 <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
                   matchScore={matchScores[link.id]}
