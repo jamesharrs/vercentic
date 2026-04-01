@@ -1818,6 +1818,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             const gradId = 'funnelGrad';
 
             return (
+              <div>
               {/* Box-per-segment layout */}
               <div style={{ display:"flex", width:"100%", gap:4, padding:"4px 0" }}>
                 {allGroups.map(({ cat }, i) => {
@@ -1849,6 +1850,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   );
                 })}
               </div>
+            </div>
             );
           })()}
 
