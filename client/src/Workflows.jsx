@@ -1825,8 +1825,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         );
       })()}
 
-      {/* Single header row — label + workflow picker + pills + Add Person */}
-      <div style={{ padding:"10px 16px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", borderBottom:`1px solid #f3f0ff` }}>
+      {/* Header row — only shown when category bar is NOT rendering (no stages, or no workflow) */}
+      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:8, borderBottom: hasStages ? "none" : `1px solid #f3f0ff` }}>
 
         {/* Label */}
         <span style={{ fontSize:12, fontWeight:700, color:"#7c3aed", display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
@@ -1834,16 +1834,30 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
           Linked People
         </span>
 
-        {/* Workflow selector */}
+        {/* Workflow selector — compact, inline */}
         <select value={peopleLinkWf?.id||""} onChange={e=>assignWorkflow(e.target.value)} disabled={saving}
-          style={{ padding:"4px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
-            fontFamily:F, outline:"none", background:"white", color:C.text2, maxWidth:180, flexShrink:0 }}>
+          style={{ padding:"3px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
+            fontFamily:F, outline:"none", background:"white", color:C.text2, maxWidth:200, flexShrink:0 }}>
           <option value="">— Select workflow —</option>
           {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
 
-        {/* Thin separator */}
-        {hasStages && <div style={{ width:1, height:20, background:"#e5e7eb", flexShrink:0 }}/>}
+        <div style={{ flex:1 }}/>
+
+        {/* Add Person button — always accessible in header */}
+        {canRecord('record_add_to_pipeline') && hasStages && (
+          <button onClick={openAddPerson}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 12px", borderRadius:99,
+              border:`1.5px solid #7c3aed`, background:"#7c3aed", color:"white",
+              fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap", flexShrink:0 }}>
+            + Add Person
+          </button>
+        )}
+      </div>
+
+      {/* Flat pills — only shown when there are stages but NO category bar (categories not loaded yet) */}
+      {hasStages && categories.length === 0 && (
+      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:0, borderBottom:`1px solid #f3f0ff`, overflowX:"auto" }}>
 
         {/* Pills inline */}
         {hasStages && (
@@ -1908,18 +1922,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             </div>
           </div>
         )}
-
-        {/* Add Person — gated on record_add_to_pipeline */}
-        {canRecord('record_add_to_pipeline') && <button onClick={openAddPerson} disabled={!hasStages}
-          title={hasStages?"Add a person":"Assign a workflow with stages first"}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:99,
-            border:`1.5px solid ${hasStages?"#7c3aed":C.border}`,
-            background:hasStages?"#7c3aed":"#f9fafb", color:hasStages?"white":C.text3,
-            fontSize:12, fontWeight:700, cursor:hasStages?"pointer":"not-allowed",
-            fontFamily:F, whiteSpace:"nowrap", flexShrink:0, marginLeft:"auto" }}>
-          + Add Person
-        </button>}
-      </div>
+      </div>)}
 
       {/* No workflow assigned */}
       {!peopleLinkWf && (
