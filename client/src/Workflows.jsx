@@ -1818,9 +1818,30 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             const gradId = 'funnelGrad';
 
             return (
-              <div>
-              {/* Box-per-segment layout */}
-              <div style={{ display:"flex", width:"100%", gap:4, padding:"4px 0" }}>
+              <div style={{ position:"relative" }}>
+              {/* Funnel SVG — purely decorative background */}
+              <svg viewBox={`0 0 ${totalW} ${H}`} preserveAspectRatio="none"
+                style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none", zIndex:0 }}>
+                <defs>
+                  <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#93C5FD" stopOpacity="0.18"/>
+                    <stop offset="100%" stopColor="#BAE6FD" stopOpacity="0.10"/>
+                  </linearGradient>
+                  <linearGradient id={gradId+"g"} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#93C5FD" stopOpacity="0.20"/>
+                    <stop offset="100%" stopColor="#BAE6FD" stopOpacity="0.10"/>
+                  </linearGradient>
+                  <filter id={gradId+"blur"} x="-20%" y="-50%" width="140%" height="200%">
+                    <feGaussianBlur stdDeviation="6"/>
+                  </filter>
+                </defs>
+                <g transform={`translate(${totalW * -0.03}, ${H * -0.08}) scale(1.06, 1.16)`}>
+                  <path d={fullPath} fill={`url(#${gradId}g)`} filter={`url(#${gradId}blur)`}/>
+                </g>
+                <path d={fullPath} fill={`url(#${gradId})`}/>
+              </svg>
+              {/* Box-per-segment layout — sits on top of funnel */}
+              <div style={{ position:"relative", zIndex:1, display:"flex", width:"100%", gap:4, padding:"4px" }}>
                 {allGroups.map(({ cat }, i) => {
                   const count = counts[i];
                   const isExpanded = expandedCat === cat.id;
