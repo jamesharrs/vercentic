@@ -1804,30 +1804,106 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
         return (
           <div style={{ borderBottom:`1px solid #f3f0ff` }}>
-            {/* Category segment bar */}
-            <div style={{ display:"flex", gap:0, padding:"0 16px", paddingTop:8, overflowX:"auto" }}>
-              {allGroups.map(({ cat, steps }, idx) => {
-                const count = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
-                const isExpanded = expandedCat === cat.id;
-                return (
-                  <button key={cat.id} onClick={() => {
-                    setExpandedCat(isExpanded ? null : cat.id);
-                    // Show all people in this category immediately; clear when collapsing
-                    if (isExpanded) { setSelectedStage(null); } else { setSelectedStage("__cat__"); }
-                  }}
-                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
-                      padding:"6px 16px 8px", border:`1.5px solid ${isExpanded ? cat.color : C.border}`,
-                      borderBottom: isExpanded ? `1.5px solid ${cat.color}` : `1.5px solid ${C.border}`,
-                      marginBottom: -2, borderRadius: idx === 0 ? "8px 0 0 0" : idx === allGroups.length-1 ? "0 8px 0 0" : "0",
-                      background: isExpanded ? cat.color : "transparent",
-                      color: isExpanded ? "white" : C.text2,
-                      cursor:"pointer", fontFamily:F, flexShrink:0, transition:"all .15s",
-                      minWidth:70 }}>
-                    <span style={{ fontSize:18, fontWeight:800, color: isExpanded ? "white" : cat.color, lineHeight:1 }}>{count}</span>
-                    <span style={{ fontSize:10, fontWeight:600, whiteSpace:"nowrap" }}>{cat.name}</span>
+            {/* ── Category bar — single unified row ── */}
+            <div style={{ display:"flex", alignItems:"stretch", borderBottom:`1px solid ${C.border}` }}>
+
+              {/* Category pills — left side */}
+              <div style={{ display:"flex", flex:1, overflowX:"auto", minWidth:0 }}>
+                {allGroups.map(({ cat, steps }, idx) => {
+                  const count = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
+                  const isExpanded = expandedCat === cat.id;
+                  return (
+                    <button key={cat.id} onClick={() => {
+                      setExpandedCat(isExpanded ? null : cat.id);
+                      if (isExpanded) { setSelectedStage(null); } else { setSelectedStage("__cat__"); }
+                    }}
+                      style={{ display:"flex", alignItems:"center", gap:8,
+                        padding:"10px 18px", flexShrink:0,
+                        borderRight:`1px solid ${C.border}`,
+                        borderBottom: isExpanded ? `3px solid ${cat.color}` : "3px solid transparent",
+                        background: isExpanded ? `${cat.color}0f` : "white",
+                        border:"none", borderBottom: isExpanded ? `3px solid ${cat.color}` : "3px solid transparent",
+                        cursor:"pointer", fontFamily:F, transition:"all .15s", position:"relative" }}>
+                      {/* Count badge */}
+                      <span style={{
+                        fontSize:20, fontWeight:900, lineHeight:1,
+                        color: isExpanded ? cat.color : count > 0 ? cat.color : "#d1d5db",
+                      }}>{count}</span>
+                      {/* Label */}
+                      <span style={{
+                        fontSize:12, fontWeight:600, color: isExpanded ? cat.color : count > 0 ? C.text2 : "#9ca3af",
+                        whiteSpace:"nowrap"
+                      }}>{cat.name}</span>
+                      {/* Active underline indicator */}
+                      {isExpanded && (
+                        <span style={{ position:"absolute", bottom:0, left:"15%", right:"15%",
+                          height:3, borderRadius:"3px 3px 0 0", background:cat.color }}/>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right side — Linked People label + workflow name + add button */}
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 14px",
+                borderLeft:`1px solid ${C.border}`, flexShrink:0 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                {peopleLinkWf ? (
+                  <span style={{ fontSize:11, color:C.text3, whiteSpace:"nowrap" }}>{peopleLinkWf.name}</span>
+                ) : (
+                  <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
+                    style={{ padding:"2px 6px", border:`1px solid ${C.border}`, borderRadius:6, fontSize:11,
+                      fontFamily:F, outline:"none", background:"white", color:C.text3 }}>
+                    <option value="">Assign…</option>
+                    {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                )}
+                {/* Gear to change workflow if no people linked */}
+                {peopleLinkWf && peopleLinks.length === 0 && (
+                  <div style={{ position:"relative" }} data-wfpicker="1">
+                    <button onClick={() => setShowWfPicker(p => !p)}
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:"2px", display:"flex",
+                        alignItems:"center", color:C.text3 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                      </svg>
+                    </button>
+                    {showWfPicker && (
+                      <div style={{ position:"absolute", top:"100%", right:0, zIndex:200, background:"white",
+                        border:`1px solid ${C.border}`, borderRadius:9, boxShadow:"0 4px 16px rgba(0,0,0,.1)",
+                        minWidth:170, padding:6, marginTop:4 }}>
+                        {peopleLinkOptions.map(w => (
+                          <button key={w.id} onClick={() => { assignWorkflow(w.id); setShowWfPicker(false); }}
+                            style={{ display:"block", width:"100%", padding:"7px 10px", borderRadius:6, border:"none",
+                              background: w.id === peopleLinkWf.id ? "#f5f3ff" : "transparent",
+                              color: w.id === peopleLinkWf.id ? "#7c3aed" : C.text1,
+                              fontSize:12, fontWeight: w.id === peopleLinkWf.id ? 700 : 400,
+                              cursor:"pointer", fontFamily:F, textAlign:"left" }}>
+                            {w.name}
+                          </button>
+                        ))}
+                        <div style={{ borderTop:`1px solid ${C.border}`, margin:"4px 0 2px" }}/>
+                        <button onClick={() => { assignWorkflow(""); setShowWfPicker(false); }}
+                          style={{ display:"block", width:"100%", padding:"6px 10px", borderRadius:6, border:"none",
+                            background:"transparent", color:"#ef4444", fontSize:11, cursor:"pointer",
+                            fontFamily:F, textAlign:"left" }}>Remove</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Add person */}
+                {canRecord('record_add_to_pipeline') && hasStages && (
+                  <button onClick={openAddPerson}
+                    style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 11px", borderRadius:99,
+                      border:`1.5px solid #7c3aed`, background:"#7c3aed", color:"white",
+                      fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
+                    + Add
                   </button>
-                );
-              })}
+                )}
+              </div>
             </div>
 
             {/* Expanded category: sub-stages */}
@@ -1875,81 +1951,26 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         );
       })()}
 
-      {/* Header row */}
-      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:8, borderBottom: hasStages ? "none" : `1px solid #f3f0ff` }}>
-
-        {/* Label */}
+      {/* Header row — only shown when NO category bar */}
+      {!hasStages && (
+      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:8, borderBottom:`1px solid #f3f0ff` }}>
         <span style={{ fontSize:12, fontWeight:700, color:"#7c3aed", display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Linked People
         </span>
-
-        {/* Workflow name — locked if people exist, gear icon to change if empty */}
         {peopleLinkWf ? (
-          <span style={{ fontSize:12, color:C.text3, display:"flex", alignItems:"center", gap:5 }}>
-            {peopleLinkWf.name}
-            {/* Only allow changing the workflow if no people are linked yet */}
-            {peopleLinks.length === 0 && (
-              <div style={{ position:"relative" }} data-wfpicker="1">
-                <button
-                  onClick={() => setShowWfPicker(p => !p)}
-                  title="Change workflow"
-                  style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", display:"flex",
-                    alignItems:"center", color:C.text3, borderRadius:4 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-                  </svg>
-                </button>
-                {showWfPicker && (
-                  <div style={{ position:"absolute", top:"100%", left:0, zIndex:200, background:"white",
-                    border:`1px solid ${C.border}`, borderRadius:9, boxShadow:"0 4px 16px rgba(0,0,0,.1)",
-                    minWidth:180, padding:6, marginTop:4 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase",
-                      letterSpacing:".06em", padding:"4px 8px 6px" }}>Change workflow</div>
-                    {peopleLinkOptions.map(w => (
-                      <button key={w.id} onClick={() => { assignWorkflow(w.id); setShowWfPicker(false); }}
-                        style={{ display:"block", width:"100%", padding:"7px 10px", borderRadius:6, border:"none",
-                          background: w.id === peopleLinkWf.id ? "#f5f3ff" : "transparent",
-                          color: w.id === peopleLinkWf.id ? "#7c3aed" : C.text1,
-                          fontSize:13, fontWeight: w.id === peopleLinkWf.id ? 700 : 400,
-                          cursor:"pointer", fontFamily:F, textAlign:"left" }}>
-                        {w.name}
-                      </button>
-                    ))}
-                    <div style={{ borderTop:`1px solid ${C.border}`, margin:"6px 0 2px" }}/>
-                    <button onClick={() => { assignWorkflow(""); setShowWfPicker(false); }}
-                      style={{ display:"block", width:"100%", padding:"6px 10px", borderRadius:6, border:"none",
-                        background:"transparent", color:"#ef4444", fontSize:12, cursor:"pointer",
-                        fontFamily:F, textAlign:"left" }}>
-                      Remove workflow
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </span>
+          <span style={{ fontSize:12, color:C.text3 }}>{peopleLinkWf.name}</span>
         ) : (
-          /* No workflow assigned yet — show compact selector */
           <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }} disabled={saving}
             style={{ padding:"3px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
-              fontFamily:F, outline:"none", background:"white", color:C.text3, maxWidth:200, flexShrink:0 }}>
+              fontFamily:F, outline:"none", background:"white", color:C.text3, maxWidth:200 }}>
             <option value="">— Assign workflow —</option>
             {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         )}
-
         <div style={{ flex:1 }}/>
-
-        {/* Add Person button */}
-        {canRecord('record_add_to_pipeline') && hasStages && (
-          <button onClick={openAddPerson}
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 12px", borderRadius:99,
-              border:`1.5px solid #7c3aed`, background:"#7c3aed", color:"white",
-              fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap", flexShrink:0 }}>
-            + Add Person
-          </button>
-        )}
       </div>
+      )}
 
       {/* Flat pills — only shown when there are stages but NO category bar (categories not loaded yet) */}
       {hasStages && categories.length === 0 && (
