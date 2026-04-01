@@ -382,8 +382,13 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
       api.get(`/interview-types?environment_id=${envId}`).then(d => setInterviewTypes(Array.isArray(d)?d:[])).catch(()=>{});
     if (actionTypes.includes("run_agent") || actionTypes.includes("ai_interview"))
       api.get(`/agents?environment_id=${envId}`).then(d => setAgents(Array.isArray(d)?d.filter(a=>a.is_active):[])).catch(()=>{});
-    api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
   }, [actionTypes, envId]);
+
+  // Load categories separately — needed even when no actions defined
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
+  }, [envId]);
 
   const setName = (name) => onChange({ ...step, name });
   const setCategory = (category_id) => onChange({ ...step, category_id: category_id || null });
@@ -1679,46 +1684,16 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     if (selectedStage === "__all__") {
       base = peopleLinks;
     } else if (selectedStage === "__cat__") {
-      // All people in the currently expanded category
-      const group = expandedCat ? (() => {
-        const KEYWORDS = {
-          'New':['new','applied','application','received','submitted','sourced','register','enquir'],
-          'Screening':['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
-          'Assessment':['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
-          'Interviewing':['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
-          'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
-          'Offer':['offer','package','salary','negotiate','verbal','written','contract'],
-          'Pre-boarding':['preboard','pre-board','onboard','joining','paperwork','contract signed'],
-          'Placed':['placed','hired','hire','accepted','started','joined','won'],
-          'Not Suitable':['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
-          'Withdrawn':['withdrawn','withdrew','not interested'],
-          'Offer Declined':['offer declined','declined offer'],
-          'Talent Pool':['talent pool','pool','future','keep warm','nurture'],
-          'On Hold':['hold','pause','paused','defer','frozen'],
-        };
-        const guessCategory = (stepName) => {
-          const lower = (stepName || '').toLowerCase();
-          for (const [catName, kws] of Object.entries(KEYWORDS)) {
-            if (kws.some(kw => lower.includes(kw))) return catName;
-          }
-          return null;
-        };
-        const stepToCatId = {};
-        plSteps.forEach(s => {
-          if (s.category_id) { stepToCatId[s.id] = s.category_id; }
-          else { const g = guessCategory(s.name); if (g) { const c = categories.find(x => x.name === g); if (c) stepToCatId[s.id] = c.id; } }
-        });
-        const catStepIds = new Set(plSteps.filter(s => stepToCatId[s.id] === expandedCat).map(s => s.id));
-        return peopleLinks.filter(l => catStepIds.has(l.stage_id));
-      })() : [];
-      base = group;
+      // All people in the currently expanded category — use shared stepToCatId
+      const catStepIds = new Set(plSteps.filter(s => stepToCatId[s.id] === expandedCat).map(s => s.id));
+      base = peopleLinks.filter(l => catStepIds.has(l.stage_id));
     } else if (selectedStage) {
       base = peopleLinks.filter(l => l.stage_id === selectedStage);
     } else {
       base = [];
     }
     return [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
-  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, categories]);
+  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, stepToCatId]);
   const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
   const filteredPersons = personRecords.filter(r => {
     if (linkedIds.has(r.id)) return false;
@@ -1728,6 +1703,53 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   });
 
   const peopleLinkOptions = allWorkflows.filter(w => w.workflow_type === "people_link" && w.object_id === objectId && !w.deleted_at);
+
+  // ── Shared category mapping ── lifted out so all render sections share it ──
+  const CAT_KEYWORDS = {
+    'New':            ['new','applied','application','received','submitted','sourced','register','enquir'],
+    'Screening':      ['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
+    'Assessment':     ['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
+    'Interviewing':   ['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
+    'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
+    'Offer':          ['offer','package','salary','negotiate','verbal','written','contract'],
+    'Pre-boarding':   ['preboard','pre-board','onboard','joining','paperwork','contract signed'],
+    'Placed':         ['placed','hired','hire','accepted','started','joined','won'],
+    'Not Suitable':   ['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
+    'Withdrawn':      ['withdrawn','withdrew','not interested'],
+    'Offer Declined': ['offer declined','declined offer'],
+    'Talent Pool':    ['talent pool','pool','future','keep warm','nurture'],
+    'On Hold':        ['hold','pause','paused','defer','frozen'],
+  };
+  const guessCategory = (stepName) => {
+    const lower = (stepName || '').toLowerCase();
+    for (const [catName, kws] of Object.entries(CAT_KEYWORDS)) {
+      if (kws.some(kw => lower.includes(kw))) return catName;
+    }
+    return null;
+  };
+  const stepToCatId = useMemo(() => {
+    const map = {};
+    plSteps.forEach(s => {
+      if (s.category_id) { map[s.id] = s.category_id; }
+      else {
+        const g = guessCategory(s.name);
+        if (g) { const c = categories.find(x => x.name === g); if (c) map[s.id] = c.id; }
+      }
+    });
+    return map;
+  }, [plSteps, categories]);
+
+  const allGroups = useMemo(() => {
+    if (!categories.length) return [];
+    const catGroups = categories
+      .map(cat => ({ cat, steps: plSteps.filter(s => stepToCatId[s.id] === cat.id) }))
+      .filter(g => g.steps.length > 0);
+    const uncatSteps = plSteps.filter(s => !stepToCatId[s.id]);
+    return [
+      ...catGroups,
+      ...(uncatSteps.length > 0 ? [{ cat: { id:'__uncat__', name:'Other', color:'#94A3B8' }, steps: uncatSteps }] : []),
+    ];
+  }, [plSteps, categories, stepToCatId]);
 
   // Don't render anything if no Linked Person workflows exist for this object type
   if (!loading && peopleLinkOptions.length === 0) return null;
@@ -1743,64 +1765,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
       {/* ── Category bar ──────────────────────────────────────────────────── */}
       {(() => {
-        if (!hasStages || categories.length === 0) return null;
-
-        // Auto-map steps to categories:
-        // 1. Use explicit category_id if set
-        // 2. Fall back to keyword matching on stage name
-        const KEYWORDS = {
-          'New':            ['new','applied','application','received','submitted','sourced','register','enquir'],
-          'Screening':      ['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
-          'Assessment':     ['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
-          'Interviewing':   ['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
-          'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
-          'Offer':          ['offer','package','salary','negotiate','verbal','written','contract'],
-          'Pre-boarding':   ['preboard','pre-board','onboard','joining','paperwork','contract signed'],
-          'Placed':         ['placed','hired','hire','accepted','started','joined','won'],
-          'Not Suitable':   ['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
-          'Withdrawn':      ['withdrawn','withdrew','not interested'],
-          'Offer Declined': ['offer declined','declined offer'],
-          'Talent Pool':    ['talent pool','pool','future','keep warm','nurture'],
-          'On Hold':        ['hold','pause','paused','defer','frozen'],
-        };
-        const guessCategory = (stepName) => {
-          const lower = (stepName || '').toLowerCase();
-          for (const [catName, kws] of Object.entries(KEYWORDS)) {
-            if (kws.some(kw => lower.includes(kw))) return catName;
-          }
-          return null;
-        };
-
-        const stepToCatId = {};
-        plSteps.forEach(s => {
-          if (s.category_id) {
-            stepToCatId[s.id] = s.category_id;
-          } else {
-            const guessed = guessCategory(s.name);
-            if (guessed) {
-              const cat = categories.find(c => c.name === guessed);
-              if (cat) stepToCatId[s.id] = cat.id;
-            }
-          }
-        });
-
-        // Group steps by category (only categories that have steps)
-        const catGroups = categories
-          .map(cat => ({
-            cat,
-            steps: plSteps.filter(s => stepToCatId[s.id] === cat.id),
-          }))
-          .filter(g => g.steps.length > 0);
-
-        const uncatSteps = plSteps.filter(s => !stepToCatId[s.id]);
-
-        if (catGroups.length === 0 && uncatSteps.length === 0) return null;
-
-        // Add uncategorised group at the end if any
-        const allGroups = [
-          ...catGroups,
-          ...(uncatSteps.length > 0 ? [{ cat: { id: '__uncat__', name: 'Other', color: '#94A3B8' }, steps: uncatSteps }] : []),
-        ];
+        if (!hasStages || allGroups.length === 0) return null;
 
         return (
           <div style={{ borderBottom:`1px solid #f3f0ff` }}>
@@ -1819,10 +1784,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     }}
                       style={{ display:"flex", alignItems:"center", gap:8,
                         padding:"10px 18px", flexShrink:0,
-                        borderRight:`1px solid ${C.border}`,
                         borderBottom: isExpanded ? `3px solid ${cat.color}` : "3px solid transparent",
                         background: isExpanded ? `${cat.color}0f` : "white",
-                        border:"none", borderBottom: isExpanded ? `3px solid ${cat.color}` : "3px solid transparent",
+                        border:"none",
                         cursor:"pointer", fontFamily:F, transition:"all .15s", position:"relative" }}>
                       {/* Count badge */}
                       <span style={{
