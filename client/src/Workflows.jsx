@@ -1773,8 +1773,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             const total = counts.reduce((a,b)=>a+b,0);
             const maxCount = Math.max(...counts, 1);
             const W = 100; // viewBox width per segment
-            const H = 60;  // viewBox height
-            const PAD = 10; // vertical padding
+            const H = 70;  // viewBox height
+            const PAD = 8; // vertical padding
             const n = allGroups.length;
             const totalW = n * W;
 
@@ -1819,24 +1819,25 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             return (
               <div style={{ position:"relative", width:"100%", cursor:"pointer" }}>
                 <svg viewBox={`0 0 ${totalW} ${H}`} preserveAspectRatio="none"
-                  style={{ width:"100%", height:56, display:"block" }}>
+                  style={{ width:"100%", height:64, display:"block" }}>
                   <defs>
                     <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
                       {allGroups.map(({ cat }, i) => (
-                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.7"/>
+                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.35"/>
                       ))}
                     </linearGradient>
-                    {/* Glow layers */}
+                    {/* Outer glow layer */}
                     <linearGradient id={gradId+"2"} x1="0%" y1="0%" x2="100%" y2="0%">
                       {allGroups.map(({ cat }, i) => (
-                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.25"/>
+                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.12"/>
                       ))}
                     </linearGradient>
-                    <filter id="blur1"><feGaussianBlur stdDeviation="3"/></filter>
+                    <filter id="blur1"><feGaussianBlur stdDeviation="5"/></filter>
                   </defs>
-                  {/* Outer glow (blurred wider path) */}
-                  <path d={fullPath} fill={`url(#${gradId}2)`} filter="url(#blur1)"
-                    transform={`scale(1.0) translate(0,0)`}/>
+                  {/* Outer soft glow (blurred, scaled slightly larger) */}
+                  <g transform={`translate(${totalW * -0.03}, ${H * -0.08}) scale(1.06, 1.16)`}>
+                    <path d={fullPath} fill={`url(#${gradId}2)`} filter="url(#blur1)"/>
+                  </g>
                   {/* Main funnel */}
                   <path d={fullPath} fill={`url(#${gradId})`}/>
                   {/* Separator lines between segments */}
@@ -1848,14 +1849,16 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     return <line key={i} x1={x} y1={topY} x2={x} y2={botY}
                       stroke="white" strokeWidth="1" strokeOpacity="0.4"/>;
                   })}
-                  {/* Count labels */}
+                  {/* Count labels — only show when count > 0 */}
                   {allGroups.map(({ cat }, i) => {
                     const cx = i * W + W/2;
                     const count = counts[i];
+                    if (!count) return null;
                     return (
-                      <text key={i} x={cx} y={H/2+5} textAnchor="middle"
-                        fontSize={count > 9 ? 13 : 15} fontWeight="800"
-                        fill="white" style={{ fontFamily:"inherit" }}>
+                      <text key={i} x={cx} y={H/2 + 5} textAnchor="middle"
+                        fontSize="12" fontWeight="700"
+                        fill={cat.color} fillOpacity="0.9"
+                        style={{ fontFamily:"inherit" }}>
                         {count}
                       </text>
                     );
