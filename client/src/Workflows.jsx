@@ -1552,6 +1552,30 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
 // Displays the Linked Person workflow stage track with counts; clicking a stage
 // expands an inline list of people in that stage. Workflow selector shown if
 // multiple Linked Person workflows are available for this object.
+// ── Module-level category keyword map — shared across all components ──────────
+const CAT_KEYWORDS = {
+  'New':            ['new','applied','application','received','submitted','sourced','register','enquir'],
+  'Screening':      ['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
+  'Assessment':     ['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
+  'Interviewing':   ['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
+  'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
+  'Offer':          ['offer','package','salary','negotiate','verbal','written','contract'],
+  'Pre-boarding':   ['preboard','pre-board','onboard','joining','paperwork','contract signed'],
+  'Placed':         ['placed','hired','hire','accepted','started','joined','won'],
+  'Not Suitable':   ['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
+  'Withdrawn':      ['withdrawn','withdrew','not interested'],
+  'Offer Declined': ['offer declined','declined offer'],
+  'Talent Pool':    ['talent pool','pool','future','keep warm','nurture'],
+  'On Hold':        ['hold','pause','paused','defer','frozen'],
+};
+const guessCategory = (stepName) => {
+  const lower = (stepName || '').toLowerCase();
+  for (const [catName, kws] of Object.entries(CAT_KEYWORDS)) {
+    if (kws.some(kw => lower.includes(kw))) return catName;
+  }
+  return null;
+};
+
 export function PeoplePipelineWidget({ record, objectId, environment, onNavigate }) {
   const _pc_ppw = _usePermCtx();
   const canRecord = (flag) => _pc_ppw ? _pc_ppw.canGlobal(flag) : true;
@@ -1704,29 +1728,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   const peopleLinkOptions = allWorkflows.filter(w => w.workflow_type === "people_link" && w.object_id === objectId && !w.deleted_at);
 
-  // ── Shared category mapping ── lifted out so all render sections share it ──
-  const CAT_KEYWORDS = {
-    'New':            ['new','applied','application','received','submitted','sourced','register','enquir'],
-    'Screening':      ['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
-    'Assessment':     ['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
-    'Interviewing':   ['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
-    'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
-    'Offer':          ['offer','package','salary','negotiate','verbal','written','contract'],
-    'Pre-boarding':   ['preboard','pre-board','onboard','joining','paperwork','contract signed'],
-    'Placed':         ['placed','hired','hire','accepted','started','joined','won'],
-    'Not Suitable':   ['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
-    'Withdrawn':      ['withdrawn','withdrew','not interested'],
-    'Offer Declined': ['offer declined','declined offer'],
-    'Talent Pool':    ['talent pool','pool','future','keep warm','nurture'],
-    'On Hold':        ['hold','pause','paused','defer','frozen'],
-  };
-  const guessCategory = (stepName) => {
-    const lower = (stepName || '').toLowerCase();
-    for (const [catName, kws] of Object.entries(CAT_KEYWORDS)) {
-      if (kws.some(kw => lower.includes(kw))) return catName;
-    }
-    return null;
-  };
+  // ── Shared category mapping (uses module-level CAT_KEYWORDS/guessCategory) ──
   const stepToCatId = useMemo(() => {
     const map = {};
     plSteps.forEach(s => {
