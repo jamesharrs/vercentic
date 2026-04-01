@@ -82,6 +82,22 @@ function checkGlobal(req, res, action) {
 }
 
 // Cross-object quick search — used by the global search bar
+
+// GET /avatars?ids=id1,id2,id3 — batch fetch person avatars for calendar/UI
+router.get('/avatars', (req, res) => {
+  const { ids } = req.query;
+  if (!ids) return res.json([]);
+  const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+  const results = idList.map(id => {
+    const rec = query('records', r => r.id === id)[0];
+    if (!rec) return { id, name: null, photo_url: null };
+    const d = rec.data || {};
+    const name = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.name || d.full_name || null;
+    return { id, name, photo_url: d.photo_url || d.profile_photo || null };
+  });
+  res.json(results);
+});
+
 router.get('/search', (req, res) => {
   const { q, environment_id, limit=6 } = req.query;
   if (!q || !environment_id) return res.json([]);

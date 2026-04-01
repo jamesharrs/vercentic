@@ -213,18 +213,21 @@ const EventPopup = ({ event, color, rect, onClose, onEdit, onDelete }) => {
           {event.interviewers?.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: C.text2 }}>
               <Ic n="users" s={13} c={C.text3}/>
-              <div style={{ display: "flex", gap: -4, alignItems: "center" }}>
-                {event.interviewers.slice(0, 4).map((name, i) => (
-                  <div key={i} title={typeof name === "string" ? name : name?.name} style={{
-                    width: 22, height: 22, borderRadius: "50%", background: EVENT_COLORS[i % EVENT_COLORS.length].bg,
-                    border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 9, fontWeight: 700, color: EVENT_COLORS[i % EVENT_COLORS.length].text,
-                    marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i,
-                  }}>
-                    {(typeof name === "string" ? name : name?.name || "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                  </div>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {event.interviewers.slice(0, 4).map((person, i) => (
+                  <InterviewerAvatar key={i} person={person} cache={avatarCache}
+                    size={24} border="#fff"
+                    offset={i > 0 ? -8 : 0} zIndex={4 - i}
+                    colorScheme={EVENT_COLORS[i % EVENT_COLORS.length]}
+                  />
                 ))}
-                {event.interviewers.length > 4 && <span style={{ fontSize: 10, color: C.text3, marginLeft: 4 }}>+{event.interviewers.length - 4}</span>}
+                {event.interviewers.length > 4 && (
+                  <span style={{ fontSize: 10, color: C.text3, marginLeft: 4 }}>+{event.interviewers.length - 4}</span>
+                )}
+                <span style={{ fontSize: 11, color: C.text2, marginLeft: 8 }}>
+                  {event.interviewers.slice(0, 2).map(p => typeof p === 'string' ? p : p?.name).join(', ')}
+                  {event.interviewers.length > 2 ? ` +${event.interviewers.length - 2} more` : ''}
+                </span>
               </div>
             </div>
           )}
@@ -252,7 +255,7 @@ const EventPopup = ({ event, color, rect, onClose, onEdit, onDelete }) => {
 const HOUR_HEIGHT = 64; // px per hour
 const HEADER_HEIGHT = 72;
 
-const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent }) => {
+const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarCache = {} }) => {
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const gridRef = useRef(null);
@@ -429,14 +432,12 @@ const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent }) => {
                       )}
                       {heightPx > 56 && ev.interviewers?.length > 0 && (
                         <div style={{ display: "flex", gap: 0, marginTop: 4 }}>
-                          {ev.interviewers.slice(0, 3).map((name, ii) => (
-                            <div key={ii} style={{
-                              width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                              border: `1.5px solid ${color.border}`, display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 7, fontWeight: 800, color: color.text, marginLeft: ii > 0 ? -5 : 0,
-                            }}>
-                              {(typeof name === "string" ? name : name?.name || "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                            </div>
+                          {ev.interviewers.slice(0, 3).map((person, ii) => (
+                            <InterviewerAvatar key={ii} person={person} cache={avatarCache}
+                              size={18} border={color.bg}
+                              offset={ii > 0 ? -5 : 0} zIndex={3 - ii}
+                              colorScheme={{ bg: '#fff', text: color.text }}
+                            />
                           ))}
                         </div>
                       )}
@@ -453,7 +454,7 @@ const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent }) => {
 };
 
 // ── Day View ──────────────────────────────────────────────────────────────────
-const DayGrid = ({ date, interviews, onSelectEvent, selectedEvent }) => {
+const DayGrid = ({ date, interviews, onSelectEvent, selectedEvent, avatarCache = {} }) => {
   const gridRef = useRef(null);
   const today = new Date();
   const isToday = isSameDay(date, today);
@@ -655,6 +656,36 @@ const CategoryFilters = ({ types, activeTypes, onToggle }) => (
   </div>
 );
 
+// ── Interviewer Avatar ──────────────────────────────────────────────────────────
+function InterviewerAvatar({ person, cache = {}, size = 22, border = '#fff', offset = 0, zIndex = 1, colorScheme }) {
+  const name = typeof person === 'string' ? person : (person?.name || '?');
+  const id   = person?.id;
+  const cached = id ? cache[id] : null;
+  const photo  = cached?.photo_url || null;
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const bg  = colorScheme?.bg  || '#EDE9FE';
+  const col = colorScheme?.text || '#5B21B6';
+  return (
+    <div title={name} style={{
+      width: size, height: size, borderRadius: '50%',
+      border: `2px solid ${border}`,
+      marginLeft: offset, zIndex, overflow: 'hidden', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: photo ? 'transparent' : bg,
+      fontSize: size * 0.38, fontWeight: 800, color: col, position: 'relative',
+    }}>
+      {photo
+        ? <img src={photo} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+          />
+        : null}
+      <span style={{ display: photo ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+        {initials}
+      </span>
+    </div>
+  );
+}
+
 // ── Main CalendarView Export ──────────────────────────────────────────────────
 export default function CalendarView({ interviews: interviewsProp, interviewTypes: typesProp, onEdit, onDelete, onSchedule, environment }) {
   const [viewMode, setViewMode] = useState("week");   // month | week | day
@@ -663,6 +694,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
   const [popupRect, setPopupRect] = useState(null);
   const [popupColor, setPopupColor] = useState(EVENT_COLORS[0]);
   const [activeTypes, setActiveTypes] = useState([]);
+  const [avatarCache, setAvatarCache] = useState({}); // {personId: {name, photo_url}}
   // Self-loading when used standalone (environment prop provided)
   const [ownInterviews, setOwnInterviews] = useState([]);
   const [ownTypes, setOwnTypes] = useState([]);
@@ -679,6 +711,25 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
       setOwnTypes(Array.isArray(d) ? d : []);
     }).catch(() => {});
   }, [environment?.id]);
+
+  // Prefetch avatars for all interviewers that have person IDs
+  useEffect(() => {
+    if (!interviews?.length) return;
+    const ids = new Set();
+    interviews.forEach(iv => {
+      (iv.interviewers || []).forEach(p => { if (p?.id) ids.add(p.id); });
+    });
+    if (!ids.size) return;
+    const missing = [...ids].filter(id => !avatarCache[id]);
+    if (!missing.length) return;
+    api.get(`/records/avatars?ids=${missing.join(',')}`).then(results => {
+      setAvatarCache(prev => {
+        const next = { ...prev };
+        results.forEach(r => { next[r.id] = r; });
+        return next;
+      });
+    }).catch(() => {});
+  }, [interviews]);
 
   // Init active types
   useEffect(() => {
