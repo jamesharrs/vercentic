@@ -3,6 +3,15 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert } = require('../db/init');
 
+// Allow CORS from any origin for chrome extension content scripts
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-Slug, X-User-Id');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 // POST /api/chrome-import/extract
 router.post('/extract', async (req, res) => {
   const { page_text, page_url, page_title, environment_id } = req.body;

@@ -24,6 +24,14 @@ if (process.env.PORTAL_URL)  allowedOrigins.push(process.env.PORTAL_URL);
 if (process.env.ALLOWED_ORIGINS) {
   process.env.ALLOWED_ORIGINS.split(',').forEach(o => allowedOrigins.push(o.trim()));
 }
+// Chrome extension routes need permissive CORS (any origin)
+app.use('/api/chrome-import', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-Slug, X-User-Id');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
