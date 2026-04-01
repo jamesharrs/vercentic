@@ -695,6 +695,8 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
   const [popupColor, setPopupColor] = useState(EVENT_COLORS[0]);
   const [activeTypes, setActiveTypes] = useState([]);
   const [avatarCache, setAvatarCache] = useState({}); // {personId: {name, photo_url}}
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ candidate_name:'', date:'', time:'09:00', duration:45, format:'Video Call', notes:'' });
   // Self-loading when used standalone (environment prop provided)
   const [ownInterviews, setOwnInterviews] = useState([]);
   const [ownTypes, setOwnTypes] = useState([]);
@@ -805,7 +807,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
         )}
 
         {/* Schedule button */}
-        <button onClick={onSchedule} style={{
+        <button onClick={() => { if (onSchedule) { onSchedule(); } else { setShowScheduleModal(true); } }} style={{
           width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
           background: C.accent, color: "#fff", fontSize: 12, fontWeight: 700,
           cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
@@ -856,10 +858,10 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
 
         {/* Calendar grid */}
         {viewMode === "week" && (
-          <WeekGrid weekStart={weekStart} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent}/>
+          <WeekGrid weekStart={weekStart} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache}/>
         )}
         {viewMode === "day" && (
-          <DayGrid date={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent}/>
+          <DayGrid date={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache}/>
         )}
         {viewMode === "month" && (
           <MonthGrid currentDate={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} onDayClick={(d) => { setCurrentDate(d); setViewMode("day"); }}/>
@@ -873,10 +875,73 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
           color={popupColor}
           rect={popupRect}
           onClose={() => setSelectedEvent(null)}
-          onEdit={() => { onEdit(selectedEvent); setSelectedEvent(null); }}
-          onDelete={() => { onDelete(selectedEvent.id); setSelectedEvent(null); }}
+          onEdit={() => { onEdit?.(selectedEvent); setSelectedEvent(null); }}
+          onDelete={() => { onDelete?.(selectedEvent.id); setSelectedEvent(null); }}
         />
       )}
+      
+      {/* Quick Schedule Modal */}
+      {showScheduleModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={() => setShowScheduleModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:20, padding:28, width:440, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:FONT }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+              <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:'#1a1a2e' }}>Schedule Interview</h3>
+              <button onClick={() => setShowScheduleModal(false)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#9ca3af' }}>×</button>
+            </div>
+            {[
+              { label:'Candidate name', key:'candidate_name', type:'text', placeholder:'e.g. Ahmed Al-Rashidi' },
+              { label:'Date', key:'date', type:'date' },
+              { label:'Time', key:'time', type:'time' },
+              { label:'Duration (min)', key:'duration', type:'number' },
+              { label:'Format', key:'format', type:'select', opts:['Video Call','Phone','In-Person','Panel'] },
+              { label:'Notes', key:'notes', type:'textarea' },
+            ].map(({ label, key, type, placeholder, opts }) => (
+              <div key={key} style={{ marginBottom:14 }}>
+                <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#6b7280', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</label>
+                {type === 'select' ? (
+                  <select value={scheduleForm[key]} onChange={e => setScheduleForm(f => ({...f, [key]: e.target.value}))}
+                    style={{ width:'100%', padding:'9px 12px', borderRadius:9, border:'1.5px solid #e5e7eb', fontSize:13, fontFamily:FONT, outline:'none' }}>
+                    {opts.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                ) : type === 'textarea' ? (
+                  <textarea value={scheduleForm[key]} onChange={e => setScheduleForm(f => ({...f, [key]: e.target.value}))}
+                    placeholder={placeholder} rows={3}
+                    style={{ width:'100%', padding:'9px 12px', borderRadius:9, border:'1.5px solid #e5e7eb', fontSize:13, fontFamily:FONT, outline:'none', resize:'vertical', boxSizing:'border-box' }}/>
+                ) : (
+                  <input type={type} value={scheduleForm[key]} onChange={e => setScheduleForm(f => ({...f, [key]: e.target.value}))}
+                    placeholder={placeholder}
+                    style={{ width:'100%', padding:'9px 12px', borderRadius:9, border:'1.5px solid #e5e7eb', fontSize:13, fontFamily:FONT, outline:'none', boxSizing:'border-box' }}/>
+                )}
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button onClick={() => setShowScheduleModal(false)}
+                style={{ flex:1, padding:'11px', borderRadius:10, border:'1.5px solid #e5e7eb', background:'transparent', color:'#374151', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT }}>
+                Cancel
+              </button>
+              <button onClick={async () => {
+                  if (!scheduleForm.candidate_name || !scheduleForm.date) return;
+                  try {
+                    await api.post('/interviews', { ...scheduleForm, environment_id: environment?.id, status:'pending' });
+                    setShowScheduleModal(false);
+                    setScheduleForm({ candidate_name:'', date:'', time:'09:00', duration:45, format:'Video Call', notes:'' });
+                    // Reload interviews
+                    if (environment?.id) {
+                      api.get(`/interviews?environment_id=${environment.id}&limit=200`).then(d => {
+                        setOwnInterviews(Array.isArray(d) ? d : d?.interviews ?? []);
+                      });
+                    }
+                  } catch(e) { alert('Failed to save interview'); }
+                }}
+                style={{ flex:2, padding:'11px', borderRadius:10, border:'none', background:'#7C5CFC', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT }}>
+                ✓ Schedule Interview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
