@@ -382,13 +382,8 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
       api.get(`/interview-types?environment_id=${envId}`).then(d => setInterviewTypes(Array.isArray(d)?d:[])).catch(()=>{});
     if (actionTypes.includes("run_agent") || actionTypes.includes("ai_interview"))
       api.get(`/agents?environment_id=${envId}`).then(d => setAgents(Array.isArray(d)?d.filter(a=>a.is_active):[])).catch(()=>{});
-  }, [actionTypes, envId]);
-
-  // Load categories separately — needed even when no actions defined
-  useEffect(() => {
-    if (!envId) return;
     api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
-  }, [envId]);
+  }, [actionTypes, envId]);
 
   const setName = (name) => onChange({ ...step, name });
   const setCategory = (category_id) => onChange({ ...step, category_id: category_id || null });
@@ -1552,30 +1547,6 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
 // Displays the Linked Person workflow stage track with counts; clicking a stage
 // expands an inline list of people in that stage. Workflow selector shown if
 // multiple Linked Person workflows are available for this object.
-// ── Module-level category keyword map — shared across all components ──────────
-const CAT_KEYWORDS = {
-  'New':            ['new','applied','application','received','submitted','sourced','register','enquir'],
-  'Screening':      ['screen','review','cv','resume','phone','call','pre','qualify','longlist','shortlist','initial'],
-  'Assessment':     ['assess','test','exercise','task','psychometric','aptitude','technical test','homework'],
-  'Interviewing':   ['interview','meet','panel','video','zoom','teams','onsite','visit','second','third','final'],
-  'Reference Check':['reference','background','check','verify','compliance','right to work','rtw'],
-  'Offer':          ['offer','package','salary','negotiate','verbal','written','contract'],
-  'Pre-boarding':   ['preboard','pre-board','onboard','joining','paperwork','contract signed'],
-  'Placed':         ['placed','hired','hire','accepted','started','joined','won'],
-  'Not Suitable':   ['reject','declined','failed','unsuccessful','not suitable','drop','remove'],
-  'Withdrawn':      ['withdrawn','withdrew','not interested'],
-  'Offer Declined': ['offer declined','declined offer'],
-  'Talent Pool':    ['talent pool','pool','future','keep warm','nurture'],
-  'On Hold':        ['hold','pause','paused','defer','frozen'],
-};
-const guessCategory = (stepName) => {
-  const lower = (stepName || '').toLowerCase();
-  for (const [catName, kws] of Object.entries(CAT_KEYWORDS)) {
-    if (kws.some(kw => lower.includes(kw))) return catName;
-  }
-  return null;
-};
-
 export function PeoplePipelineWidget({ record, objectId, environment, onNavigate }) {
   const _pc_ppw = _usePermCtx();
   const canRecord = (flag) => _pc_ppw ? _pc_ppw.canGlobal(flag) : true;
@@ -1592,7 +1563,6 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [saving, setSaving]               = useState(false);
   const [categories, setCategories]       = useState([]);
   const [expandedCat, setExpandedCat]     = useState(null);
-  const [showWfPicker, setShowWfPicker]   = useState(false);
 
   const peopleLinkWf = assignments.find(a => a.type === "people_link")?.workflow;
   const plSteps      = peopleLinkWf?.steps || [];
@@ -1615,14 +1585,6 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   };
 
   useEffect(() => { load(); }, [record?.id, environment?.id]);
-
-  // Close workflow picker on outside click
-  useEffect(() => {
-    if (!showWfPicker) return;
-    const handler = (e) => { if (!e.target.closest('[data-wfpicker]')) setShowWfPicker(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showWfPicker]);
 
   const assignWorkflow = async (workflow_id) => {
     setSaving(true);
@@ -1704,20 +1666,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   }, [peopleLinks, record]);
 
   const visiblePeople = useMemo(() => {
-    let base;
-    if (selectedStage === "__all__") {
-      base = peopleLinks;
-    } else if (selectedStage === "__cat__") {
-      // All people in the currently expanded category — use shared stepToCatId
-      const catStepIds = new Set(plSteps.filter(s => stepToCatId[s.id] === expandedCat).map(s => s.id));
-      base = peopleLinks.filter(l => catStepIds.has(l.stage_id));
-    } else if (selectedStage) {
-      base = peopleLinks.filter(l => l.stage_id === selectedStage);
-    } else {
-      base = [];
-    }
+    const base = selectedStage === "__all__" ? peopleLinks : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage) : [];
     return [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
-  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, stepToCatId]);
+  }, [selectedStage, peopleLinks, matchScores]);
   const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
   const filteredPersons = personRecords.filter(r => {
     if (linkedIds.has(r.id)) return false;
@@ -1727,31 +1678,6 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   });
 
   const peopleLinkOptions = allWorkflows.filter(w => w.workflow_type === "people_link" && w.object_id === objectId && !w.deleted_at);
-
-  // ── Shared category mapping (uses module-level CAT_KEYWORDS/guessCategory) ──
-  const stepToCatId = useMemo(() => {
-    const map = {};
-    plSteps.forEach(s => {
-      if (s.category_id) { map[s.id] = s.category_id; }
-      else {
-        const g = guessCategory(s.name);
-        if (g) { const c = categories.find(x => x.name === g); if (c) map[s.id] = c.id; }
-      }
-    });
-    return map;
-  }, [plSteps, categories]);
-
-  const allGroups = useMemo(() => {
-    if (!categories.length) return [];
-    const catGroups = categories
-      .map(cat => ({ cat, steps: plSteps.filter(s => stepToCatId[s.id] === cat.id) }))
-      .filter(g => g.steps.length > 0);
-    const uncatSteps = plSteps.filter(s => !stepToCatId[s.id]);
-    return [
-      ...catGroups,
-      ...(uncatSteps.length > 0 ? [{ cat: { id:'__uncat__', name:'Other', color:'#94A3B8' }, steps: uncatSteps }] : []),
-    ];
-  }, [plSteps, categories, stepToCatId]);
 
   // Don't render anything if no Linked Person workflows exist for this object type
   if (!loading && peopleLinkOptions.length === 0) return null;
@@ -1765,134 +1691,66 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   return (
     <div style={{ fontFamily:F, background:"white" }}>
 
-      {/* ── Category bar ──────────────────────────────────────────────────── */}
+      {/* ── Category bar (shows when steps have category_id assigned) ─────── */}
       {(() => {
-        if (!hasStages || allGroups.length === 0) return null;
+        const stepsWithCat = plSteps.filter(s => s.category_id);
+        if (!hasStages || stepsWithCat.length === 0 || categories.length === 0) return null;
+
+        // Group steps by category
+        const catGroups = categories
+          .map(cat => ({
+            cat,
+            steps: plSteps.filter(s => s.category_id === cat.id),
+          }))
+          .filter(g => g.steps.length > 0);
+
+        if (catGroups.length === 0) return null;
 
         return (
           <div style={{ borderBottom:`1px solid #f3f0ff` }}>
-            {/* ── Category bar — single unified row ── */}
-            <div style={{ display:"flex", alignItems:"stretch", borderBottom:`1px solid ${C.border}` }}>
-
-              {/* Category pills — left side */}
-              <div style={{ display:"flex", flex:1, overflowX:"auto", minWidth:0 }}>
-                {allGroups.map(({ cat, steps }, idx) => {
-                  const count = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
-                  const isExpanded = expandedCat === cat.id;
-                  return (
-                    <button key={cat.id} onClick={() => {
-                      setExpandedCat(isExpanded ? null : cat.id);
-                      if (isExpanded) { setSelectedStage(null); } else { setSelectedStage("__cat__"); }
-                    }}
-                      style={{ display:"flex", alignItems:"center", gap:8,
-                        padding:"10px 18px", flexShrink:0,
-                        borderBottom: isExpanded ? `3px solid ${cat.color}` : "3px solid transparent",
-                        background: isExpanded ? `${cat.color}0f` : "white",
-                        border:"none",
-                        cursor:"pointer", fontFamily:F, transition:"all .15s", position:"relative" }}>
-                      {/* Count badge */}
-                      <span style={{
-                        fontSize:20, fontWeight:900, lineHeight:1,
-                        color: isExpanded ? cat.color : count > 0 ? cat.color : "#d1d5db",
-                      }}>{count}</span>
-                      {/* Label */}
-                      <span style={{
-                        fontSize:12, fontWeight:600, color: isExpanded ? cat.color : count > 0 ? C.text2 : "#9ca3af",
-                        whiteSpace:"nowrap"
-                      }}>{cat.name}</span>
-                      {/* Active underline indicator */}
-                      {isExpanded && (
-                        <span style={{ position:"absolute", bottom:0, left:"15%", right:"15%",
-                          height:3, borderRadius:"3px 3px 0 0", background:cat.color }}/>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Right side — Linked People label + workflow name + add button */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 14px",
-                borderLeft:`1px solid ${C.border}`, flexShrink:0 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-                {peopleLinkWf ? (
-                  <span style={{ fontSize:11, color:C.text3, whiteSpace:"nowrap" }}>{peopleLinkWf.name}</span>
-                ) : (
-                  <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
-                    style={{ padding:"2px 6px", border:`1px solid ${C.border}`, borderRadius:6, fontSize:11,
-                      fontFamily:F, outline:"none", background:"white", color:C.text3 }}>
-                    <option value="">Assign…</option>
-                    {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                )}
-                {/* Gear to change workflow if no people linked */}
-                {peopleLinkWf && peopleLinks.length === 0 && (
-                  <div style={{ position:"relative" }} data-wfpicker="1">
-                    <button onClick={() => setShowWfPicker(p => !p)}
-                      style={{ background:"none", border:"none", cursor:"pointer", padding:"2px", display:"flex",
-                        alignItems:"center", color:C.text3 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-                      </svg>
-                    </button>
-                    {showWfPicker && (
-                      <div style={{ position:"absolute", top:"100%", right:0, zIndex:200, background:"white",
-                        border:`1px solid ${C.border}`, borderRadius:9, boxShadow:"0 4px 16px rgba(0,0,0,.1)",
-                        minWidth:170, padding:6, marginTop:4 }}>
-                        {peopleLinkOptions.map(w => (
-                          <button key={w.id} onClick={() => { assignWorkflow(w.id); setShowWfPicker(false); }}
-                            style={{ display:"block", width:"100%", padding:"7px 10px", borderRadius:6, border:"none",
-                              background: w.id === peopleLinkWf.id ? "#f5f3ff" : "transparent",
-                              color: w.id === peopleLinkWf.id ? "#7c3aed" : C.text1,
-                              fontSize:12, fontWeight: w.id === peopleLinkWf.id ? 700 : 400,
-                              cursor:"pointer", fontFamily:F, textAlign:"left" }}>
-                            {w.name}
-                          </button>
-                        ))}
-                        <div style={{ borderTop:`1px solid ${C.border}`, margin:"4px 0 2px" }}/>
-                        <button onClick={() => { assignWorkflow(""); setShowWfPicker(false); }}
-                          style={{ display:"block", width:"100%", padding:"6px 10px", borderRadius:6, border:"none",
-                            background:"transparent", color:"#ef4444", fontSize:11, cursor:"pointer",
-                            fontFamily:F, textAlign:"left" }}>Remove</button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* Add person */}
-                {canRecord('record_add_to_pipeline') && hasStages && (
-                  <button onClick={openAddPerson}
-                    style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 11px", borderRadius:99,
-                      border:`1.5px solid #7c3aed`, background:"#7c3aed", color:"white",
-                      fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
-                    + Add
+            {/* Category segment bar */}
+            <div style={{ display:"flex", gap:0, padding:"0 16px", paddingTop:8, overflowX:"auto" }}>
+              {catGroups.map(({ cat, steps }, idx) => {
+                const count = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
+                const isExpanded = expandedCat === cat.id;
+                return (
+                  <button key={cat.id} onClick={() => setExpandedCat(isExpanded ? null : cat.id)}
+                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+                      padding:"6px 16px 8px", border:`1.5px solid ${isExpanded ? cat.color : C.border}`,
+                      borderBottom: isExpanded ? `1.5px solid ${cat.color}` : `1.5px solid ${C.border}`,
+                      marginBottom: -2, borderRadius: idx === 0 ? "8px 0 0 0" : idx === catGroups.length-1 ? "0 8px 0 0" : "0",
+                      background: isExpanded ? cat.color : "transparent",
+                      color: isExpanded ? "white" : C.text2,
+                      cursor:"pointer", fontFamily:F, flexShrink:0, transition:"all .15s",
+                      minWidth:70 }}>
+                    <span style={{ fontSize:18, fontWeight:800, color: isExpanded ? "white" : cat.color, lineHeight:1 }}>{count}</span>
+                    <span style={{ fontSize:10, fontWeight:600, whiteSpace:"nowrap" }}>{cat.name}</span>
                   </button>
-                )}
-              </div>
+                );
+              })}
             </div>
 
-            {/* Expanded category: sub-stages */}
+            {/* Expanded category: show its stages as sub-pills */}
             {expandedCat && (() => {
-              const group = allGroups.find(g => g.cat.id === expandedCat);
+              const group = catGroups.find(g => g.cat.id === expandedCat);
               if (!group) return null;
               return (
                 <div style={{ padding:"10px 16px 12px", background:`${group.cat.color}08`,
                   borderTop:`2px solid ${group.cat.color}` }}>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {group.steps.map(step => {
-                      const count    = countByStage[step.id] || 0;
+                      const count   = countByStage[step.id] || 0;
                       const isActive = selectedStage === step.id;
                       return (
                         <button key={step.id}
-                          onClick={() => setSelectedStage(isActive ? "__cat__" : step.id)}
+                          onClick={() => setSelectedStage(isActive ? null : step.id)}
                           style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px",
                             borderRadius:99, border:`1.5px solid ${isActive ? group.cat.color : C.border}`,
                             background: isActive ? group.cat.color : "white",
                             color: isActive ? "white" : C.text1,
                             cursor:"pointer", fontFamily:F, fontSize:12, fontWeight:600, transition:"all .15s" }}>
                           {step.name}
-                          <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99, lineHeight:"16px",
+                          <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99,
                             background: isActive ? "rgba(255,255,255,.25)" : `${group.cat.color}20`,
                             color: isActive ? "white" : group.cat.color }}>
                             {count}
@@ -1900,6 +1758,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                         </button>
                       );
                     })}
+                    {/* Add person quick-action in expanded cat */}
                     {canRecord('record_add_to_pipeline') && (
                       <button onClick={openAddPerson}
                         style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
@@ -1917,30 +1776,25 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         );
       })()}
 
-      {/* Header row — only shown when NO category bar */}
-      {!hasStages && (
-      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:8, borderBottom:`1px solid #f3f0ff` }}>
+      {/* Single header row — label + workflow picker + pills + Add Person */}
+      <div style={{ padding:"10px 16px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", borderBottom:`1px solid #f3f0ff` }}>
+
+        {/* Label */}
         <span style={{ fontSize:12, fontWeight:700, color:"#7c3aed", display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Linked People
         </span>
-        {peopleLinkWf ? (
-          <span style={{ fontSize:12, color:C.text3 }}>{peopleLinkWf.name}</span>
-        ) : (
-          <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }} disabled={saving}
-            style={{ padding:"3px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
-              fontFamily:F, outline:"none", background:"white", color:C.text3, maxWidth:200 }}>
-            <option value="">— Assign workflow —</option>
-            {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        )}
-        <div style={{ flex:1 }}/>
-      </div>
-      )}
 
-      {/* Flat pills — only shown when there are stages but NO category bar (categories not loaded yet) */}
-      {hasStages && categories.length === 0 && (
-      <div style={{ padding:"8px 16px", display:"flex", alignItems:"center", gap:0, borderBottom:`1px solid #f3f0ff`, overflowX:"auto" }}>
+        {/* Workflow selector */}
+        <select value={peopleLinkWf?.id||""} onChange={e=>assignWorkflow(e.target.value)} disabled={saving}
+          style={{ padding:"4px 8px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
+            fontFamily:F, outline:"none", background:"white", color:C.text2, maxWidth:180, flexShrink:0 }}>
+          <option value="">— Select workflow —</option>
+          {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+
+        {/* Thin separator */}
+        {hasStages && <div style={{ width:1, height:20, background:"#e5e7eb", flexShrink:0 }}/>}
 
         {/* Pills inline */}
         {hasStages && (
@@ -2005,7 +1859,18 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             </div>
           </div>
         )}
-      </div>)}
+
+        {/* Add Person — gated on record_add_to_pipeline */}
+        {canRecord('record_add_to_pipeline') && <button onClick={openAddPerson} disabled={!hasStages}
+          title={hasStages?"Add a person":"Assign a workflow with stages first"}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:99,
+            border:`1.5px solid ${hasStages?"#7c3aed":C.border}`,
+            background:hasStages?"#7c3aed":"#f9fafb", color:hasStages?"white":C.text3,
+            fontSize:12, fontWeight:700, cursor:hasStages?"pointer":"not-allowed",
+            fontFamily:F, whiteSpace:"nowrap", flexShrink:0, marginLeft:"auto" }}>
+          + Add Person
+        </button>}
+      </div>
 
       {/* No workflow assigned */}
       {!peopleLinkWf && (
@@ -2022,7 +1887,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
       )}
 
       {/* Expanded people list */}
-      {hasStages && (selectedStage === "__cat__" || selectedStage === "__all__" || selectedStage) && selectedStage !== null && (
+      {hasStages && selectedStage && (
         <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8, background:"white", borderTop:`1px solid #f3f0ff` }}>
               {/* Section header with bulk controls and view toggle */}
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -2038,9 +1903,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     ? `${selectedLinks.length} selected`
                     : selectedStage === "__all__"
                       ? `All — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
-                      : selectedStage === "__cat__"
-                        ? `${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
-                        : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
+                      : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
                 </span>
                 {/* Bulk move */}
                 {selectedLinks.length > 0 && (
@@ -2139,34 +2002,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               )}
 
               {/* Card view */}
-              {pipelineView === "card" && selectedStage === "__cat__" ? (() => {
-                // Grouped by stage within this category
-                const group = expandedCat ? allGroups?.find(g => g.cat.id === expandedCat) : null;
-                const catSteps = group?.steps || plSteps;
-                return catSteps.map(step => {
-                  const stepPeople = visiblePeople.filter(l => l.stage_id === step.id);
-                  if (stepPeople.length === 0) return null;
-                  return (
-                    <div key={step.id} style={{ marginBottom:8 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed", textTransform:"uppercase",
-                        letterSpacing:".06em", padding:"4px 2px 6px", display:"flex", alignItems:"center", gap:6 }}>
-                        {step.name}
-                        <span style={{ background:"#ede9fe", color:"#7c3aed", borderRadius:99,
-                          padding:"0 6px", fontSize:10, fontWeight:800 }}>{stepPeople.length}</span>
-                      </div>
-                      {stepPeople.map(link => (
-                        <PipelinePersonRow key={link.id} link={link} steps={plSteps}
-                          label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
-                          matchScore={matchScores[link.id]}
-                          personData={link.person_data}
-                          selected={selectedLinks.includes(link.id)}
-                          onSelect={id=>setSelectedLinks(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
-                          onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
-                      ))}
-                    </div>
-                  );
-                });
-              })() : pipelineView === "card" && visiblePeople.map(link => (
+              {pipelineView === "card" && visiblePeople.map(link => (
                 <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
                   matchScore={matchScores[link.id]}
