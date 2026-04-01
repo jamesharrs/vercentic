@@ -105,6 +105,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     clipboard:"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z",
     "file-text":"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
     image:"M21 19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3l2-3h4l2 3h3a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+    user:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
     users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
     layers:"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   };
@@ -1522,6 +1523,8 @@ function testFilter(filt, fields, record) {
   if (!field) return true;
   const rawVal = record.data?.[field.api_key];
   const op = filt.op; const fv = filt.value;
+  // $me dynamic resolution
+  if (fv === ME_TOKEN) return matchesMe(rawVal, field, op);
   if (op === "is empty") return rawVal === null || rawVal === undefined || rawVal === "" || (Array.isArray(rawVal) && rawVal.length === 0);
   if (op === "is not empty") return rawVal !== null && rawVal !== undefined && rawVal !== "" && !(Array.isArray(rawVal) && rawVal.length === 0);
   if (op === "is true") return rawVal === true;
@@ -1545,6 +1548,68 @@ function testFilter(filt, fields, record) {
     default:                  return true;
   }
 }
+
+// ── $me dynamic user filter ────────────────────────────────────────────────────
+const ME_TOKEN = "$me";
+const ME_DISPLAY = "👤 Logged in user";
+
+let _mePersonRecordId = null;
+let _mePersonResolved = false;
+
+/** Pre-resolve the logged-in user's Person record ID (matched by email). */
+async function resolveMyPersonId() {
+  if (_mePersonResolved) return _mePersonRecordId;
+  try {
+    const session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const email = session.user?.email;
+    if (!email || !_currentEnvId) return null;
+    const res = await api.get(`/records/search?q=${encodeURIComponent(email)}&environment_id=${_currentEnvId}&limit=5`);
+    const records = Array.isArray(res) ? res : (res?.results || []);
+    const match = records.find(r => (r.data?.email || "").toLowerCase() === email.toLowerCase());
+    _mePersonRecordId = match?.id || null;
+    _mePersonResolved = true;
+    return _mePersonRecordId;
+  } catch { return null; }
+}
+window.addEventListener("storage", e => { if (e.key === "talentos_session") { _mePersonResolved = false; _mePersonRecordId = null; } });
+
+function getMeContext() {
+  try {
+    const session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const u = session.user;
+    if (!u) return null;
+    return { userId: u.id, email: (u.email || "").toLowerCase(), fullName: [u.first_name, u.last_name].filter(Boolean).join(" "), personRecordId: _mePersonRecordId };
+  } catch { return null; }
+}
+
+function matchesMe(rawVal, field, op) {
+  const me = getMeContext();
+  if (!me) return false;
+  if (field?.field_type === "people" || field?.field_type === "multi_lookup") {
+    const arr = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : []);
+    const matched = arr.some(p => {
+      const pid = typeof p === "object" ? p.id : p;
+      const pname = typeof p === "object" ? (p.name || "").toLowerCase() : "";
+      return pid === me.personRecordId || pid === me.userId || pname === me.fullName.toLowerCase();
+    });
+    return (op === "is not" || op === "excludes") ? !matched : matched;
+  }
+  if (field?.field_type === "email") {
+    const sv = String(rawVal || "").toLowerCase();
+    if (op === "is" || op === "=") return sv === me.email;
+    if (op === "is not" || op === "≠") return sv !== me.email;
+    if (op === "contains") return sv.includes(me.email);
+    return sv === me.email;
+  }
+  const sv = String(rawVal || "").toLowerCase(), mn = me.fullName.toLowerCase();
+  if (op === "is" || op === "=") return sv === mn;
+  if (op === "is not" || op === "≠") return sv !== mn;
+  if (op === "contains") return sv.includes(mn);
+  if (op === "does not contain") return !sv.includes(mn);
+  return sv === mn;
+}
+
+const displayFilterValue = v => v === ME_TOKEN ? ME_DISPLAY : v;
 
 // ── AdvancedFilterModal ────────────────────────────────────────────────────────
 // Filter object shape:
@@ -1663,8 +1728,22 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
         {ops.map(op => <option key={op} value={op}>{op}</option>)}
       </select>
 
-      {/* Value */}
-      {showVal && (opts.length > 0
+      {/* Value + $me button */}
+      {showVal && <>
+        <button
+          onClick={() => onUpdate(filt.id, { value: ME_TOKEN })}
+          title="Match the currently logged-in user"
+          style={{
+            padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:700, flexShrink:0,
+            border: filt.value === ME_TOKEN ? `2px solid ${C.accent}` : `1.5px solid ${C.border}`,
+            background: filt.value === ME_TOKEN ? C.accentLight : "white",
+            color: filt.value === ME_TOKEN ? C.accent : C.text2,
+            cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:4,
+            fontFamily:F, transition:"all .15s"
+          }}>
+          <Ic n="user" s={11} c={filt.value === ME_TOKEN ? C.accent : C.text3}/> Me
+        </button>
+        {filt.value !== ME_TOKEN && (opts.length > 0
         ? <select value={filt.value} onChange={e => onUpdate(filt.id, { value: e.target.value })}
             style={{ ...sel, flex:1 }}
             onFocus={e=>e.target.style.borderColor=C.accent}
@@ -1689,7 +1768,7 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
                 style={{ ...sel, flex:1 }}
                 onFocus={e=>e.target.style.borderColor=C.accent}
                 onBlur={e=>e.target.style.borderColor=C.border}/>
-      )}
+      )}</>}
       {!showVal && <div style={{ flex:1 }}/>}
 
       <button onClick={() => onRemove(filt.id)}
@@ -1861,7 +1940,7 @@ const FilterBar = ({ fields = [], filters = [], onEditFilter, onRemoveFilter }) 
               <Ic n="filter" s={10} c={C.accent}/>
               <span style={{ color:C.accent, fontWeight:700 }}>{field?.name||"?"}</span>
               <span style={{ color:C.text3, fontSize:11 }}>{opLabel(filt.op)}</span>
-              {hasVal && <span style={{ color:C.text2, fontStyle:"italic", maxWidth:110, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{filt.value}</span>}
+              {hasVal && <span style={{ color: filt.value === ME_TOKEN ? C.accent : C.text2, fontWeight: filt.value === ME_TOKEN ? 700 : 400, fontStyle: filt.value === ME_TOKEN ? "normal" : "italic", maxWidth:110, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{displayFilterValue(filt.value)}</span>}
             </button>
             <button onClick={e=>{e.stopPropagation();onRemoveFilter?.(filt.id);}}
               style={{ background:"transparent", border:"none", borderLeft:`1px solid ${C.accent}44`,
@@ -5511,6 +5590,7 @@ const SA_ICONS = {
   mail:"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm16 2l-8 5-8-5",
   calendar:"M3 9h18M3 15h18M8 3v2m8-2v2M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z",
   dollar:"M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+  user:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
   fileText:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
@@ -6949,7 +7029,7 @@ function buildListContext(object, records, total, fields) {
 
 export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed, allObjects = [] }) {
   // Make environment available to PeoplePicker without prop drilling
-  useEffect(() => { _currentEnvId = environment?.id; }, [environment?.id]);
+  useEffect(() => { _currentEnvId = environment?.id; resolveMyPersonId(); }, [environment?.id]);
 
   const [records, setRecords]   = useState([]);
   const [fields,  setFields]    = useState([]);
