@@ -1227,12 +1227,6 @@ const PeopleFieldConfig = ({ form, set, selEnv, F }) => {
     <div style={{marginBottom:12,padding:"12px",background:"#f8f9fc",borderRadius:10,border:"1px solid #e8eaed"}}>
       <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}}>People Field Settings</div>
 
-      {/* Object to link */}
-      <div style={{marginBottom:8}}>
-        <label style={{fontSize:11,fontWeight:600,color:"#6b7280",display:"block",marginBottom:4}}>OBJECT TO LINK</label>
-        <Inp value={form.related_object_slug} onChange={v=>set("related_object_slug",v)} placeholder="people"/>
-      </div>
-
       {/* Single / Multi */}
       <div style={{display:"flex",gap:8,marginBottom:12}}>
         {[{v:false,l:"Single select"},{v:true,l:"Multi select"}].map(({v,l})=>(
@@ -1690,7 +1684,7 @@ function FieldModal({ field, selEnv, selObj, onSaved, onClose }) {
         object_id: selObj.id,
         environment_id: selEnv.id,
         options: ["select","multi_select","status"].includes(form.field_type) ? form.options.split(",").map(s=>s.trim()).filter(Boolean) : undefined,
-        related_object_slug: form.field_type === "people" ? form.related_object_slug : undefined,
+        related_object_slug: form.field_type === "people" ? "people" : undefined,
         people_multi: form.field_type === "people" ? form.people_multi : undefined,
         people_filter_field: form.field_type === "people" ? form.people_filter_field : undefined,
         people_filter_value: form.field_type === "people" ? form.people_filter_value : undefined,

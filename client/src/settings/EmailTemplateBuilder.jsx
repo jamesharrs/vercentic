@@ -93,6 +93,9 @@ export default function EmailTemplateBuilder({ environment }) {
   const [showBrandRules, setShowBrandRules] = useState(false);
   const [activePanel, setActivePanel] = useState('blocks'); // blocks | settings | rules
   const [dragIdx, setDragIdx] = useState(null);
+  const [htmlCode, setHtmlCode] = useState(''); // generated or manually edited HTML
+  const [htmlEdited, setHtmlEdited] = useState(false); // true when user has manually edited the HTML
+  const htmlFileRef = useRef(null);
 
   const envId = environment?.id;
 
@@ -112,6 +115,11 @@ export default function EmailTemplateBuilder({ environment }) {
   // ── Preview ─────────────────────────────────────────────────────────────────
   const refreshPreview = useCallback(async () => {
     if (!editing) return;
+    // If user has manually edited/uploaded HTML, use that directly
+    if (htmlEdited && htmlCode) {
+      setPreviewHtml(htmlCode);
+      return;
+    }
     try {
       const result = await api.post('/email-builder/preview', {
         blocks: editing.blocks || [],
@@ -120,8 +128,9 @@ export default function EmailTemplateBuilder({ environment }) {
         brand_kit_id: editing.brand_kit_id || null,
       });
       setPreviewHtml(result.html || '');
+      setHtmlCode(result.html || '');
     } catch (_) {}
-  }, [editing?.blocks, editing?.subject, editing?.brand_kit_id]);
+  }, [editing?.blocks, editing?.subject, editing?.brand_kit_id, htmlEdited, htmlCode]);
 
   useEffect(() => {
     if (editing) {
@@ -141,14 +150,19 @@ export default function EmailTemplateBuilder({ environment }) {
       track_opens: true, track_clicks: true,
     });
     setActivePanel('blocks');
+    setHtmlEdited(false);
+    setHtmlCode('');
   };
 
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
+    const payload = { ...editing };
+    if (htmlEdited && htmlCode) payload.html_override = htmlCode;
+    else payload.html_override = null;
     try {
-      if (editing.id) await api.patch(`/email-builder/${editing.id}`, editing);
-      else { const created = await api.post('/email-builder', editing); setEditing(prev => ({ ...prev, id: created.id })); }
+      if (editing.id) await api.patch(`/email-builder/${editing.id}`, payload);
+      else { const created = await api.post('/email-builder', payload); setEditing(prev => ({ ...prev, id: created.id })); }
       await load();
     } catch (err) { alert('Save failed: ' + err.message); }
     setSaving(false);
@@ -213,6 +227,11 @@ export default function EmailTemplateBuilder({ environment }) {
             <button onClick={() => setShowMergeTags(!showMergeTags)} style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: showMergeTags ? C.accentLight : "white", fontSize: 11, fontWeight: 600, cursor: "pointer", color: showMergeTags ? C.accent : C.text3, fontFamily: F }}>
               {'{{ }}'} Tags
             </button>
+            {htmlEdited && (
+              <span style={{ padding: "4px 10px", borderRadius: 6, background: "#fffbeb", border: "1px solid #fcd34d", fontSize: 10, fontWeight: 700, color: C.amber }}>
+                HTML Override
+              </span>
+            )}
             <button onClick={handleSave} disabled={saving} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: C.accent, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: F, display: "flex", alignItems: "center", gap: 5 }}>
               <Ic n="check" s={12} c="white" /> {saving ? 'Saving…' : 'Save'}
             </button>
@@ -259,7 +278,7 @@ export default function EmailTemplateBuilder({ environment }) {
           <div style={{ width: 400, flexShrink: 0, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* Panel tabs */}
             <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-              {[{ id: 'blocks', label: 'Content' }, { id: 'settings', label: 'Brand & Tracking' }, { id: 'rules', label: 'Brand Rules' }].map(t => (
+              {[{ id: 'blocks', label: 'Content' }, { id: 'html', label: '</> HTML' }, { id: 'settings', label: 'Brand & Tracking' }, { id: 'rules', label: 'Brand Rules' }].map(t => (
                 <button key={t.id} onClick={() => setActivePanel(t.id)} style={{
                   flex: 1, padding: "8px", border: "none", borderBottom: `2px solid ${activePanel === t.id ? C.accent : 'transparent'}`,
                   background: "transparent", fontSize: 11, fontWeight: activePanel === t.id ? 700 : 500,
@@ -299,6 +318,82 @@ export default function EmailTemplateBuilder({ environment }) {
                     </div>
                   </div>
                 </>
+              )}
+
+              {activePanel === 'html' && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
+                  {/* Status bar */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.text2 }}>
+                      {htmlEdited
+                        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: C.amber }}>
+                            <Ic n="edit" s={11} c={C.amber} /> Custom HTML (overrides blocks)
+                          </span>
+                        : <span style={{ color: C.text3 }}>Auto-generated from blocks</span>
+                      }
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {htmlEdited && (
+                        <button onClick={() => { setHtmlEdited(false); setHtmlCode(''); refreshPreview(); }}
+                          style={{ padding: "3px 8px", borderRadius: 5, border: `1px solid ${C.border}`, background: "white",
+                            fontSize: 10, fontWeight: 600, cursor: "pointer", color: C.red, fontFamily: F }}>
+                          Revert to blocks
+                        </button>
+                      )}
+                      <button onClick={() => { navigator.clipboard.writeText(htmlCode); }}
+                        style={{ padding: "3px 8px", borderRadius: 5, border: `1px solid ${C.border}`, background: "white",
+                          fontSize: 10, fontWeight: 600, cursor: "pointer", color: C.text3, fontFamily: F }}>
+                        Copy HTML
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Code editor */}
+                  <textarea
+                    value={htmlCode}
+                    onChange={e => { setHtmlCode(e.target.value); setHtmlEdited(true); setPreviewHtml(e.target.value); }}
+                    spellCheck={false}
+                    style={{
+                      flex: 1, minHeight: 280, padding: "12px", borderRadius: 8,
+                      border: `1.5px solid ${htmlEdited ? C.amber : C.border}`,
+                      fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+                      fontSize: 11, lineHeight: 1.6, tabSize: 2, resize: "vertical",
+                      background: "#1e1e2e", color: "#cdd6f4",
+                      outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+
+                  {/* Upload HTML */}
+                  <input ref={htmlFileRef} type="file" accept=".html,.htm" style={{ display: "none" }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const html = ev.target.result;
+                        setHtmlCode(html);
+                        setHtmlEdited(true);
+                        setPreviewHtml(html);
+                      };
+                      reader.readAsText(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button onClick={() => htmlFileRef.current?.click()}
+                    style={{
+                      width: "100%", padding: "10px", borderRadius: 8,
+                      border: `1.5px dashed ${C.border}`, background: C.bg,
+                      cursor: "pointer", fontFamily: F, fontSize: 11, fontWeight: 600,
+                      color: C.text3, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
+                    <Ic n="zap" s={12} c={C.text4} /> Upload HTML file (.html)
+                  </button>
+
+                  <div style={{ fontSize: 10, color: C.text4, lineHeight: 1.5 }}>
+                    Edit the HTML directly or upload a file. Use <code style={{ background: "#f3f4f6", padding: "1px 4px", borderRadius: 3 }}>{'{{first_name}}'}</code> style
+                    merge tags for personalisation. Manually edited HTML overrides the block editor — click "Revert to blocks" to go back.
+                  </div>
+                </div>
               )}
 
               {activePanel === 'settings' && (
@@ -402,7 +497,7 @@ export default function EmailTemplateBuilder({ environment }) {
             const kit = brandKits.find(k => k.id === t.brand_kit_id);
             const catLabel = CATEGORIES.find(c => c.value === t.category)?.label || t.category;
             return (
-              <div key={t.id} onClick={() => setEditing({ ...t })} style={{
+              <div key={t.id} onClick={() => { setEditing({ ...t }); setHtmlEdited(!!t.html_override); setHtmlCode(t.html_override || ''); }} style={{
                 background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden", cursor: "pointer", transition: "all .15s",
               }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,.08)"; }}
