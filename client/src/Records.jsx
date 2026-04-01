@@ -4753,7 +4753,7 @@ const ACTIVITY_CATEGORIES = [
   { id:"note",          label:"Notes",        color:"#f59f00" },
   { id:"communication", label:"Comms",        color:"#0891b2" },
   { id:"file",          label:"Files",        color:"#7048e8" },
-  { id:"pipeline",      label:"Pipeline",     color:"#0ca678" },
+  { id:"pipeline",      label:"Linked People",     color:"#0ca678" },
   { id:"status",        label:"Status",       color:"#e03131" },
   { id:"created",       label:"Created",      color:"#16a34a" },
 ];

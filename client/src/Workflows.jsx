@@ -5,6 +5,7 @@ import { matchCandidateToJob } from "./AI.jsx";
 import SharePicker from "./SharePicker.jsx";
 import api from './apiClient.js';
 import WorkflowCanvas from "./WorkflowCanvas.jsx";
+import StageCategoriesSection from "./settings/StageCategoriesSection.jsx";
 
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const C = {
@@ -371,6 +372,7 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
   const [collapsed, setCollapsed]               = useState({}); // { actionId: bool }
   const [interviewTypes, setInterviewTypes]     = useState([]);
   const [agents, setAgents]                     = useState([]);
+  const [categories, setCategories]             = useState([]);
 
   // Load supporting data whenever any action type changes
   const actionTypes = actions.map(a => a.type).join(",");
@@ -380,9 +382,11 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
       api.get(`/interview-types?environment_id=${envId}`).then(d => setInterviewTypes(Array.isArray(d)?d:[])).catch(()=>{});
     if (actionTypes.includes("run_agent") || actionTypes.includes("ai_interview"))
       api.get(`/agents?environment_id=${envId}`).then(d => setAgents(Array.isArray(d)?d.filter(a=>a.is_active):[])).catch(()=>{});
+    api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
   }, [actionTypes, envId]);
 
   const setName = (name) => onChange({ ...step, name });
+  const setCategory = (category_id) => onChange({ ...step, category_id: category_id || null });
 
   // Update a single action
   const updateAction = (actionId, patch) => {
@@ -439,6 +443,22 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
         <input value={step.name || ""} onChange={e => setName(e.target.value)} placeholder="Stage name…"
           onClick={e => e.stopPropagation()}
           style={{ flex: 1, border: "none", outline: "none", fontSize: 13, fontWeight: 700, color: C.text1, background: "transparent", fontFamily: F, minWidth: 0 }}/>
+
+        {/* Category picker */}
+        {categories.length > 0 && (() => {
+          const selCat = categories.find(c => c.id === step.category_id);
+          return (
+            <select value={step.category_id || ""} onChange={e => { e.stopPropagation(); setCategory(e.target.value); }}
+              onClick={e => e.stopPropagation()}
+              style={{ border: selCat ? `1.5px solid ${selCat.color}40` : `1px solid ${C.border}`,
+                borderRadius: 99, padding: "2px 10px 2px 8px", fontSize: 11, fontWeight: 600,
+                color: selCat ? selCat.color : C.text3, background: selCat ? `${selCat.color}12` : "#f9fafb",
+                cursor: "pointer", outline: "none", fontFamily: F, flexShrink: 0, maxWidth: 130 }}>
+              <option value="">Category…</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          );
+        })()}
 
         {/* Action count badge */}
         {actions.length > 0 && (
@@ -853,7 +873,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
               <div style={{ display:"flex", gap:8 }}>
                 {[
                   { value:"automation",  label:"⚡ Automation",    desc:"Run automated steps on records" },
-                  { value:"pipeline",    label:"📋 Record Pipeline", desc:"Drive a record's status/stage" },
+                  { value:"pipeline",    label:"📋 Record Workflow", desc:"Drive a record's status/stage" },
                   { value:"people_link", label:"👥 Linked Person", desc:"Define stages for people linked to this record" },
                 ].map(t => (
                   <button key={t.value} onClick={()=>setWfType(t.value)}
@@ -1193,7 +1213,7 @@ function CanvasNewModal({ objects, environment, onClose, onCreated }) {
             <div style={{ display: "flex", gap: 8 }}>
               {[
                 { value: "automation",  label: "⚡ Automation",     desc: "Automated steps" },
-                { value: "pipeline",    label: "📋 Record Pipeline", desc: "Drive a record's stage" },
+                { value: "pipeline",    label: "📋 Record Workflow", desc: "Drive a record's stage" },
                 { value: "people_link", label: "👥 Linked Person",   desc: "Stages for linked people" },
               ].map(t => (
                 <button key={t.value} onClick={() => setWfType(t.value)}
@@ -1220,6 +1240,7 @@ function CanvasNewModal({ objects, environment, onClose, onCreated }) {
 }
 
 export default function WorkflowsPage({ environment }) {
+  const [activeTab, setActiveTab]   = useState("workflows"); // "workflows" | "stage_categories"
   const [workflows, setWorkflows]   = useState([]);
   const [objects, setObjects]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -1260,6 +1281,32 @@ export default function WorkflowsPage({ environment }) {
 
   return (
     <div style={{ fontFamily: F, height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${C.border}`, marginBottom: 24 }}>
+        {[
+          { id: "workflows",        label: "Workflows",       icon: "workflow" },
+          { id: "stage_categories", label: "Stage Categories", icon: "layers"  },
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 20px",
+              border: "none", borderBottom: activeTab === t.id ? `2px solid ${C.accent}` : "2px solid transparent",
+              marginBottom: -2, background: "transparent", cursor: "pointer", fontFamily: F,
+              fontSize: 13, fontWeight: activeTab === t.id ? 700 : 500,
+              color: activeTab === t.id ? C.accent : C.text3, transition: "all .15s" }}>
+            <Ic n={t.icon} s={14} c={activeTab === t.id ? C.accent : C.text3}/>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stage Categories tab */}
+      {activeTab === "stage_categories" && (
+        <StageCategoriesSection environment={environment}/>
+      )}
+
+      {/* Workflows tab */}
+      {activeTab === "workflows" && (<>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ flex: 1 }}>
@@ -1316,7 +1363,7 @@ export default function WorkflowsPage({ environment }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                     <span style={{ fontSize: 15, fontWeight: 700, color: C.text1 }}>{wf.name}</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color, background: `${color}15`, padding: "2px 8px", borderRadius: 99 }}>{objName(wf.object_id)}</span>
-                    {wf.workflow_type === "pipeline"    && <span style={{ fontSize:11, color:"#0ca678", background:"#ecfdf5", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>📋 Pipeline</span>}
+                    {wf.workflow_type === "pipeline"    && <span style={{ fontSize:11, color:"#0ca678", background:"#ecfdf5", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>📋 Record Workflow</span>}
                     {wf.workflow_type === "people_link" && <span style={{ fontSize:11, color:"#7c3aed", background:"#f5f3ff", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>👥 Linked Person</span>}
                     {!wf.active && <span style={{ fontSize: 11, color: C.text3, background: "#f3f4f6", padding: "2px 8px", borderRadius: 99 }}>Inactive</span>}
                   </div>
@@ -1392,6 +1439,7 @@ export default function WorkflowsPage({ environment }) {
         />,
         document.body
       )}
+      </>)}
     </div>
   );
 }
@@ -1451,16 +1499,16 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
 
   return (
     <div style={{ fontFamily:F, display:"flex", flexDirection:"column", gap:14 }}>
-      <div style={{ fontSize:12, color:C.text3 }}>Assign a pipeline to drive this record's status through defined stages.</div>
+      <div style={{ fontSize:12, color:C.text3 }}>Assign a workflow to drive this record's status through defined stages.</div>
       <div>
-        <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:"uppercase", letterSpacing:".06em" }}>Pipeline Workflow</div>
+        <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:"uppercase", letterSpacing:".06em" }}>Record Workflow</div>
         <select value={pipelineWf?.id||""} onChange={e=>assignWorkflow("pipeline", e.target.value)} disabled={saving}
           style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${C.border}`, borderRadius:9, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
           <option value="">— None —</option>
           {pipelineOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
         {pipelineOptions.length === 0 && (
-          <div style={{ fontSize:11, color:C.text3, marginTop:6 }}>No pipeline workflows yet — create one in Settings → Workflows with type "Record Pipeline".</div>
+          <div style={{ fontSize:11, color:C.text3, marginTop:6 }}>No record workflows yet — create one in Settings → Workflows with type "Record Workflow".</div>
         )}
       </div>
       {pipelineWf?.steps?.length > 0 && (
@@ -1584,7 +1632,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   };
 
   const removeLink = async (linkId) => {
-    if (!(await window.__confirm({ title:'Remove this person from the pipeline?', danger:true }))) return;
+    if (!(await window.__confirm({ title:'Remove this person from this workflow?', danger:true }))) return;
     await api.delete(`/workflows/people-links/${linkId}`);
     setPeopleLinks(ls => ls.filter(l => l.id !== linkId));
     if (peopleLinks.length <= 1) setSelectedStage(null);
@@ -1782,7 +1830,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       const stageName = selectedStage === '__all__' ? 'All Stages' : (plSteps.find(s => s.id === selectedStage)?.name || 'Stage');
                       const ids = visiblePeople.map(l => l.person_record_id).filter(Boolean);
                       window.dispatchEvent(new CustomEvent('talentos:open-people-list', {
-                        detail: { personIds: ids, stageName, label: `Pipeline: ${stageName}` }
+                        detail: { personIds: ids, stageName, label: `Stage: ${stageName}` }
                       }));
                     }}
                     title="Open these people in the People list view"

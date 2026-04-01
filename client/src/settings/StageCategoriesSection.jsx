@@ -54,7 +54,7 @@ function CategoryModal({ cat, onSave, onClose }) {
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 20 }}>
           <input type="checkbox" checked={form.is_terminal} onChange={e => set('is_terminal', e.target.checked)} />
-          <span style={{ fontSize: 13, color: C.text2 }}>Terminal stage (end of pipeline)</span>
+          <span style={{ fontSize: 13, color: C.text2 }}>Terminal stage (end of workflow process)</span>
         </label>
 
         <div style={{ display: 'flex', gap: 10 }}>

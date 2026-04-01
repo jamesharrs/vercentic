@@ -2491,7 +2491,6 @@ const NAV_GROUPS = [
       { id:"company_docs", icon:"file",       label:"Company Documents" },
       { id:"forms",      icon:"form",        label:"Forms" },
       { id:"questions",  icon:"help-circle", label:"Question library" },
-      { id:"stage_categories", icon:"layers", label:"Stage Categories" },
       { id:"agents",     icon:"bot",         label:"Agents" },
       { id:"datasets",   icon:"layers",      label:"Data Sets" },
       { id:"enterprise", icon:"briefcase",   label:"Enterprise Settings" },
