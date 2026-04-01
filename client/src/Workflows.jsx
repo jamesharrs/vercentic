@@ -1823,7 +1823,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   <defs>
                     <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
                       {allGroups.map(({ cat }, i) => (
-                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.18"/>
+                        <stop key={i} offset={`${(i / (n-1||1)) * 100}%`} stopColor={cat.color} stopOpacity="0.28"/>
                       ))}
                     </linearGradient>
                     <linearGradient id={gradId+"2"} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1849,6 +1849,21 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     const botY = allPts[i+1]?.botY ?? H/2 + PAD;
                     return <line key={i} x1={x} y1={topY} x2={x} y2={botY}
                       stroke="white" strokeWidth="1.5" strokeOpacity="0.5"/>;
+                  })}
+                  {/* Count labels — centred in each segment, only when > 0 */}
+                  {allGroups.map(({ cat }, i) => {
+                    const count = counts[i];
+                    if (!count) return null;
+                    const cx = i * W + W / 2;
+                    return (
+                      <text key={i} x={cx} y={H / 2 + 5}
+                        textAnchor="middle" dominantBaseline="middle"
+                        fontSize="14" fontWeight="700"
+                        fill="white" fillOpacity="0.9"
+                        style={{ fontFamily:"inherit", pointerEvents:"none" }}>
+                        {count}
+                      </text>
+                    );
                   })}
                 </svg>
 
@@ -1885,15 +1900,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                         borderBottom: isExpanded ? `2px solid ${cat.color}` : "2px solid transparent",
                         background: isExpanded ? `${cat.color}0a` : "transparent",
                         cursor:"pointer", fontFamily:F, transition:"all .12s", minWidth:50 }}>
-                      {/* Count badge — only show when > 0 */}
-                      {count > 0 && (
-                        <span style={{
-                          minWidth:20, height:20, borderRadius:99, display:"flex",
-                          alignItems:"center", justifyContent:"center",
-                          background: cat.color, color:"white",
-                          fontSize:11, fontWeight:700, padding:"0 6px", flexShrink:0,
-                        }}>{count}</span>
-                      )}
+                      {/* No badge — count shown in funnel graphic */}
+                      <span style={{ width:6, height:6, borderRadius:"50%",
+                        background: count > 0 ? cat.color : "#e5e7eb", flexShrink:0 }}/>
                       <span style={{
                         fontSize:11, fontWeight: isExpanded ? 700 : count > 0 ? 500 : 400,
                         color: isExpanded ? cat.color : count > 0 ? C.text2 : "#c4c9d4",
