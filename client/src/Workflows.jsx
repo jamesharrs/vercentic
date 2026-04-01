@@ -1921,38 +1921,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             );
           })()}
 
-            {/* Category label row — count + name, click to expand */}
-            <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}` }}>
-              <div style={{ display:"flex", flex:1, minWidth:0, gap:4 }}>
-                {allGroups.map(({ cat, steps }) => {
-                  const count = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
-                  const isExpanded = expandedCat === cat.id;
-                  return (
-                    <button key={cat.id}
-                      onClick={() => {
-                        const next = isExpanded ? null : cat.id;
-                        setExpandedCat(next);
-                        setSelectedStage(next ? "__cat__" : null);
-                      }}
-                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-                        gap:5, padding:"5px 4px", border:"none",
-                        borderBottom: isExpanded ? `2px solid ${cat.color}` : "2px solid transparent",
-                        background: isExpanded ? `${cat.color}0a` : "transparent",
-                        cursor:"pointer", fontFamily:F, transition:"all .12s", minWidth:50 }}>
-                      {/* No badge — count shown in funnel graphic */}
-                      <span style={{ width:6, height:6, borderRadius:"50%",
-                        background: count > 0 ? cat.color : "#e5e7eb", flexShrink:0 }}/>
-                      <span style={{
-                        fontSize:11, fontWeight: isExpanded ? 700 : count > 0 ? 500 : 400,
-                        color: isExpanded ? cat.color : count > 0 ? C.text2 : "#c4c9d4",
-                        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                      }}>{cat.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-            {/* Right: workflow name + gear + add */}
+            {/* Workflow picker row */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", borderBottom:`1px solid ${C.border}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 14px",
               borderLeft:`1px solid ${C.border}`, flexShrink:0 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
