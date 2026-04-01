@@ -1575,6 +1575,15 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           || d.job_title || d.pool_name || d.name || 'a record';
         return `viewing ${currentObject.name}: ${name}`;
       }
+      // Fallback: parse record_<recordId>_<objectId> nav string
+      if (activeNav?.startsWith('record_')) {
+        // Try to get the record name from navObjects or just say "a record"
+        const parts = activeNav.replace('record_','').split('_');
+        // UUIDs have 5 groups — last 5 underscore-separated parts are the objectId UUID
+        // Format: record_{recordUUID parts}_{objectUUID parts}
+        // Simplest: just say "a record" — the name will show once currentRecord loads
+        return 'a record';
+      }
       if (activeNav === 'dashboard')   return 'the Dashboard';
       if (activeNav === 'settings')    return `Settings${settingsSection ? ' — ' + settingsSection : ''}`;
       if (activeNav === 'interviews')  return 'Interviews';
@@ -1589,16 +1598,17 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       return activeNav;
     };
 
-    const pageLabel = getPageLabel();
-
-    setMessages(prev => [
-      ...prev,
-      // UI pill — visible to user, filtered from API
-      { role: 'system_notice', content: `📍 Navigated to ${pageLabel}`, ts: new Date() },
-      // API pair — sent to Claude so it knows context changed
-      { role: 'user',      content: `[Page navigation: I am now on ${pageLabel}]`, ts: new Date(), hidden: true },
-      { role: 'assistant', content: `Understood — I can see you're now on ${pageLabel}. I'll answer based on this new context.`, ts: new Date(), hidden: true },
-    ]);
+    // Delay slightly so currentRecord/currentObject have time to populate before we build the label
+    const timer = setTimeout(() => {
+      const pageLabel = getPageLabel();
+      setMessages(prev => [
+        ...prev,
+        { role: 'system_notice', content: `📍 Navigated to ${pageLabel}`, ts: new Date() },
+        { role: 'user',      content: `[Page navigation: I am now on ${pageLabel}]`, ts: new Date(), hidden: true },
+        { role: 'assistant', content: `Understood — I can see you're now on ${pageLabel}. I'll answer based on this new context.`, ts: new Date(), hidden: true },
+      ]);
+    }, 300);
+    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open, activeNav, currentRecord?.id, currentObject?.id]);
 
