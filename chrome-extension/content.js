@@ -11,6 +11,16 @@
   let panelOpen = false, extractedData = null, isExtracting = false, settings = {};
   chrome.storage.sync.get(['apiUrl', 'environmentId', 'environmentName'], d => { settings = d; });
 
+  // Route API calls through background worker to bypass CORS
+  function apiCall(endpoint, method, body) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: 'API_REQUEST', apiUrl: settings.apiUrl, endpoint, method, body },
+        (resp) => resolve(resp || { ok: false, data: { error: 'No response from extension' } })
+      );
+    });
+  }
+
   // ── Floating button ──────────────────────────────────────────────────────
   const fab = document.createElement('div');
   fab.id = 'vercentic-fab';
@@ -147,17 +157,13 @@
 
     try {
       const pageData = scrapePageContent();
-      const response = await fetch(`${settings.apiUrl}/api/chrome-import/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await apiCall('/api/chrome-import/extract', 'POST', {
           page_text: pageData.text, page_url: pageData.url, page_title: pageData.title,
           environment_id: settings.environmentId,
           structured_data: pageData.structured_data, meta: pageData.meta,
-        }),
       });
-      if (!response.ok) { const err = await response.json().catch(()=>({})); throw new Error(err.error || `Server returned ${response.status}`); }
-      extractedData = await response.json();
+      if (!response.ok) { throw new Error(response.data?.error || `Server returned ${response.status}`); }
+      extractedData = response.data;
       extractedData.page_url = pageData.url;
       if (pageData.profile_images.length) extractedData.extracted_data.photo_url = extractedData.extracted_data.photo_url || pageData.profile_images[0];
       renderPreview(extractedData);
@@ -238,17 +244,13 @@
         const key = input.dataset.key;
         if (key) extractedData.extracted_data[key] = input.value;
       });
-      const response = await fetch(`${settings.apiUrl}/api/chrome-import/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await apiCall('/api/chrome-import/create', 'POST', {
           environment_id: settings.environmentId,
           object_id: extractedData.object_id,
           data: extractedData.extracted_data,
           source_url: extractedData.page_url,
-        }),
       });
-      const result = await response.json();
+      const result = response.data;
       if (response.status === 409) {
         document.getElementById('vc-error-text').textContent = result.message || 'This person already exists.';
         showState('error'); return;

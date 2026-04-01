@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
+import { tFetch } from './apiClient.js'
 import PortalPageRenderer from './portals/PortalPageRenderer.jsx'
 import CandidateCopilot from './CandidateCopilot.jsx'
 
 const api = {
-  get: p => fetch(`/api${p}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-  post: (p, b) => fetch(`/api${p}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json()),
+  get:  p    => tFetch(p).then(r => r.json ? r.json() : r),
+  post: (p, b) => tFetch(p, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json ? r.json() : r),
 }
 
 const Spinner = ({ color = '#4361EE' }) => (
@@ -54,17 +55,13 @@ export default function PortalApp({ slug }) {
         setObjects(Array.isArray(objs) ? objs : [])
         setLoading(false)
       })
-      .catch(async (err) => {
-        // Try to get a friendlier error message from the response
-        try {
-          const resp = await fetch(`/api/portals/slug/${cleanSlug}`);
-          const body = await resp.json();
-          if (body.code === 'DRAFT') {
-            setError(`"${body.name}" exists but hasn't been published yet. Open the portal builder and click Publish.`);
-          } else {
-            setError(body.error || 'This portal is not available.');
-          }
-        } catch {
+      .catch(err => {
+        const status = err?.message || String(err);
+        if (status === '403') {
+          setError('This portal exists but has not been published yet. Open the portal builder and click Publish.');
+        } else if (status === '404') {
+          setError('No portal found at this URL. Check the link and try again.');
+        } else {
           setError('This portal is not available. It may have been unpublished or the URL is incorrect.');
         }
         setLoading(false);
