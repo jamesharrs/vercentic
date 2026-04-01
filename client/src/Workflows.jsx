@@ -382,8 +382,13 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
       api.get(`/interview-types?environment_id=${envId}`).then(d => setInterviewTypes(Array.isArray(d)?d:[])).catch(()=>{});
     if (actionTypes.includes("run_agent") || actionTypes.includes("ai_interview"))
       api.get(`/agents?environment_id=${envId}`).then(d => setAgents(Array.isArray(d)?d.filter(a=>a.is_active):[])).catch(()=>{});
-    api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
   }, [actionTypes, envId]);
+
+  // Always load categories on mount (separate from action types)
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/stage-categories?environment_id=${envId}`).then(d => setCategories(Array.isArray(d)?d:[])).catch(()=>{});
+  }, [envId]);
 
   const setName = (name) => onChange({ ...step, name });
   const setCategory = (category_id) => onChange({ ...step, category_id: category_id || null });

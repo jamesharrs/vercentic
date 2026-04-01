@@ -400,7 +400,7 @@ router.put('/:id/steps', async (req, res) => {
   store.workflow_steps = store.workflow_steps.filter(s => s.workflow_id !== req.params.id);
   // Insert new ones
   const saved = (steps || []).map((s, i) => {
-    const step = { id: s.id || uuidv4(), workflow_id: req.params.id, name: s.name || '', order: i, type: s.type, automation_type: s.automation_type || null, config: s.config || {}, actions: s.actions || [], created_at: new Date().toISOString() };
+    const step = { id: s.id || uuidv4(), workflow_id: req.params.id, name: s.name || '', order: i, type: s.type, automation_type: s.automation_type || null, config: s.config || {}, actions: s.actions || [], category_id: s.category_id || null, created_at: new Date().toISOString() };
     store.workflow_steps.push(step);
     return step;
   });
