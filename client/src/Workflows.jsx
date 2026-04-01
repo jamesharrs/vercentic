@@ -1886,8 +1886,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                           </span>
                         </>
                       ) : (
-                        /* Empty — faint pill bar */
-                        <div style={{ width:"40%", height:4, background:"#e2e8f0", borderRadius:99 }}/>
+                        /* Empty — faint full-width bar */
+                        <div style={{ position:"absolute", left:12, right:12, height:4, background:"#e2e8f0", borderRadius:99 }}/>
                       )}
                     </div>
                   );
