@@ -1080,9 +1080,17 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
   };
 
   const openAICopilot = () => {
-    window.dispatchEvent(new CustomEvent("talentos:openCopilot", {
-      detail: { prompt: `Create a new ${objectName}` }
-    }));
+    // Object-specific prompts that immediately kick off the creation flow
+    const slug = object?.slug || "";
+    const promptMap = {
+      jobs:          `Create a new job. Start by asking me: "Tell me about this role — what's the job title, and do you have a department or location in mind?"`,
+      people:        `I want to add a new person. Start by asking me: "Tell me about this person — what's their name and do you have an email or job title for them?"`,
+      "talent-pools": `Create a new talent pool. Start by asking me: "What should this talent pool be called, and what type of candidates is it for?"`,
+    };
+    const prompt = promptMap[slug] || `Create a new ${objectName}. Ask me for the key details to get started.`;
+
+    // Use copilotPrompt to auto-send (not just pre-fill the input box)
+    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt } }));
     onClose();
   };
 
