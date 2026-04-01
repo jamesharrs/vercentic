@@ -1844,9 +1844,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   {allGroups.map((_, i) => {
                     if (i === 0) return null;
                     const x = HPAD + i * W;
-                    const topY = pts[i] ? pts[i].topY : H/2 - 3;
-                    const botY = pts[i] ? pts[i].botY : H/2 + 3;
-                    return <line key={i} x1={x} y1={topY} x2={x} y2={botY}
+                    return <line key={i} x1={x} y1={0} x2={x} y2={H}
                       stroke="#BAE6FD" strokeWidth="1" strokeOpacity="0.9"/>;
                   })}
                   {/* no count labels in SVG — rendered as HTML overlay below */}
