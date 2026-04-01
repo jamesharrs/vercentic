@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import api from "./apiClient.js";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -655,13 +656,29 @@ const CategoryFilters = ({ types, activeTypes, onToggle }) => (
 );
 
 // ── Main CalendarView Export ──────────────────────────────────────────────────
-export default function CalendarView({ interviews, interviewTypes, onEdit, onDelete, onSchedule }) {
+export default function CalendarView({ interviews: interviewsProp, interviewTypes: typesProp, onEdit, onDelete, onSchedule, environment }) {
   const [viewMode, setViewMode] = useState("week");   // month | week | day
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [popupRect, setPopupRect] = useState(null);
   const [popupColor, setPopupColor] = useState(EVENT_COLORS[0]);
   const [activeTypes, setActiveTypes] = useState([]);
+  // Self-loading when used standalone (environment prop provided)
+  const [ownInterviews, setOwnInterviews] = useState([]);
+  const [ownTypes, setOwnTypes] = useState([]);
+  const interviews = interviewsProp ?? ownInterviews;
+  const interviewTypes = typesProp ?? ownTypes;
+
+  useEffect(() => {
+    if (!environment?.id) return;
+    const envId = environment.id;
+    api.get(`/interviews?environment_id=${envId}&limit=200`).then(d => {
+      setOwnInterviews(Array.isArray(d) ? d : d?.interviews ?? []);
+    }).catch(() => {});
+    api.get(`/interview-types?environment_id=${envId}`).then(d => {
+      setOwnTypes(Array.isArray(d) ? d : []);
+    }).catch(() => {});
+  }, [environment?.id]);
 
   // Init active types
   useEffect(() => {
