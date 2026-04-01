@@ -12,11 +12,11 @@ router.post('/extract', async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const objects = query('object_definitions', o => o.environment_id === environment_id);
+  const objects = query('objects', o => o.environment_id === environment_id);
   const peopleObj = objects.find(o => o.slug === 'people');
   if (!peopleObj) return res.status(404).json({ error: 'People object not found' });
 
-  const fields = query('field_definitions', f => f.object_id === peopleObj.id);
+  const fields = query('fields', f => f.object_id === peopleObj.id);
   const fieldDescriptions = fields
     .filter(f => !['id','created_at','updated_at'].includes(f.api_key))
     .map(f => {
@@ -154,7 +154,7 @@ router.get('/check', (req, res) => {
   const { email, environment_id } = req.query;
   if (!email || !environment_id) return res.json({ exists: false });
 
-  const objects = query('object_definitions', o => o.environment_id === environment_id && o.slug === 'people');
+  const objects = query('objects', o => o.environment_id === environment_id && o.slug === 'people');
   if (!objects.length) return res.json({ exists: false });
 
   const existing = query('records', r =>
