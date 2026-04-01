@@ -1857,8 +1857,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     return (
                       <text key={i} x={cx} y={H / 2 + 5}
                         textAnchor="middle" dominantBaseline="middle"
-                        fontSize="13" fontWeight="500" letterSpacing="-0.3"
-                        fill="#2563EB" fillOpacity="0.75"
+                        fontSize="12" fontWeight="600" fontStyle="normal" letterSpacing="0"
+                        fontFamily="'DM Sans', -apple-system, sans-serif"
+                        fill="#1D4ED8" fillOpacity="0.9"
                         fontFamily="'Space Grotesk', 'DM Sans', system-ui, sans-serif"
                         style={{ pointerEvents:"none" }}>
                         {count}
