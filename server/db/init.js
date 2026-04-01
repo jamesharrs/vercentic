@@ -221,6 +221,7 @@ async function initDB() {
     if (!store.bot_sessions) store.bot_sessions = [];
     if (!store.scorecards) store.scorecards = [];
     if (!store.auto_number_counters) store.auto_number_counters = [];
+    if (!store.stage_categories) store.stage_categories = [];
 
     (store.fields || []).forEach(f => {
       if (f.condition_field === undefined) f.condition_field = null;

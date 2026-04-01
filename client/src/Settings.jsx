@@ -8,11 +8,13 @@ import ReactDOM from "react-dom";
 import FileTypesSettings from "./settings/FileTypesSettings.jsx";
 import CompanyDocuments from "./settings/CompanyDocuments.jsx";
 import DuplicatesSettings from "./settings/DuplicatesSettings.jsx";
+import FieldModal from "./FieldModal.jsx";
 import GroupsSection from "./settings/GroupsSection.jsx";
 import AgentsSettings from "./settings/AgentsSettings.jsx";
 import DataImportSettings from "./settings/DataImportSettings.jsx";
 import AiGovernance from "./settings/AiGovernance.jsx";
 import QuestionBankSettings from "./settings/QuestionBankSettings.jsx";
+import StageCategoriesSection from "./settings/StageCategoriesSection.jsx";
 import FeatureFlagsSettings from "./settings/FeatureFlagsSettings.jsx";
 import AiMatchingSettings from "./settings/AiMatchingSettings.jsx";
 import { FormsList } from "./Forms.jsx";
@@ -1638,151 +1640,6 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
 };
 
 
-// ─── FieldModal (module-level — NOT inside DataModelSection) ──────────────────
-// Props: field, selEnv, selObj, onSaved, onClose
-function FieldModal({ field, selEnv, selObj, onSaved, onClose }) {
-  const isEdit = !!field?.id;
-  const [form, setForm] = React.useState({
-    name: field?.name||"", api_key: field?.api_key||"", field_type: field?.field_type||"text",
-    is_required: field?.is_required||false, show_in_list: field?.show_in_list!==undefined?!!field.show_in_list:true,
-    options: field?.options ? (Array.isArray(field.options)?field.options.join(", "):field.options) : "",
-    placeholder: field?.placeholder||"", help_text: field?.help_text||"",
-    section_label: field?.section_label||"",
-    related_object_slug: field?.related_object_slug||"people",
-    people_multi: field?.people_multi!==undefined ? !!field.people_multi : true,
-    people_filter_field: field?.people_filter_field || "",
-    people_filter_value: field?.people_filter_value || "",
-    people_selection_mode: field?.people_selection_mode || "all",
-    people_allowed_ids: field?.people_allowed_ids || [],
-    people_saved_list_id: field?.people_saved_list_id || "",
-    dataset_id: field?.dataset_id||"",
-    dataset_multi: field?.dataset_multi!==undefined ? !!field.dataset_multi : false,
-    skills_multi: field?.skills_multi!==undefined ? !!field.skills_multi : true,
-    skills_categories: field?.skills_categories||[],
-  });
-  const [autoKey, setAutoKey] = React.useState(!isEdit);
-  const [saving, setSaving] = React.useState(false);
-  const [datasets, setDatasets] = React.useState([]);
-  const [skillsCats, setSkillsCats] = React.useState([]);
-
-  React.useEffect(() => {
-    if (selEnv?.id) {
-      tFetch(`/api/datasets?environment_id=${selEnv.id}`).then(r=>r.json()).then(d=>setDatasets(Array.isArray(d)?d:[])).catch(()=>{});
-      tFetch(`/api/enterprise/skills/categories?environment_id=${selEnv.id}`).then(r=>r.json()).then(d=>setSkillsCats(Array.isArray(d)?d.map(c=>c.category):[])).catch(()=>{});
-    }
-  }, [selEnv?.id]);
-
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
-  const handleName = v => { set("name",v); if(autoKey) set("api_key", v.toLowerCase().replace(/[^a-z0-9]/g,"_").replace(/__+/g,"_").replace(/^_|_$/g,"")); };
-
-  const handle = async () => {
-    if (!form.name || !selObj?.id || !selEnv?.id) return;
-    setSaving(true);
-    try {
-      const payload = {
-        ...form,
-        object_id: selObj.id,
-        environment_id: selEnv.id,
-        options: ["select","multi_select","status"].includes(form.field_type) ? form.options.split(",").map(s=>s.trim()).filter(Boolean) : undefined,
-        related_object_slug: form.field_type === "people" ? "people" : undefined,
-        people_multi: form.field_type === "people" ? form.people_multi : undefined,
-        people_filter_field: form.field_type === "people" ? form.people_filter_field : undefined,
-        people_filter_value: form.field_type === "people" ? form.people_filter_value : undefined,
-        people_selection_mode: form.field_type === "people" ? form.people_selection_mode : undefined,
-        people_allowed_ids: form.field_type === "people" ? form.people_allowed_ids : undefined,
-        people_saved_list_id: form.field_type === "people" ? form.people_saved_list_id : undefined,
-        dataset_id: form.field_type === "dataset" ? form.dataset_id : undefined,
-        dataset_multi: form.field_type === "dataset" ? form.dataset_multi : undefined,
-        skills_multi: form.field_type === "skills" ? form.skills_multi : undefined,
-        skills_categories: form.field_type === "skills" ? form.skills_categories : undefined,
-      };
-      const result = isEdit ? await api.patch(`/fields/${field.id}`, payload) : await api.post("/fields", payload);
-      if (result?.error) { alert(`Could not save field: ${result.error}`); setSaving(false); return; }
-      onSaved();
-      onClose();
-    } catch(e) {
-      alert(`Could not save field: ${e.message}`);
-    }
-    setSaving(false);
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:520,maxHeight:"90vh",overflow:"auto",fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
-        <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px",marginBottom:16}}>{isEdit?"Edit":"New"} Field</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:16}}>
-          {FIELD_TYPES_DM.map(ft=>(
-            <button key={ft.value} onClick={()=>set("field_type",ft.value)} style={{padding:"7px 4px",borderRadius:8,border:`2px solid ${form.field_type===ft.value?"#3b5bdb":"#e8eaed"}`,background:form.field_type===ft.value?"#3b5bdb":"#fff",color:form.field_type===ft.value?"#fff":"#6b7280",cursor:"pointer",fontSize:10,fontWeight:600,textAlign:"center",fontFamily:F}}>
-              <div>{ft.icon}</div><div>{ft.label}</div>
-            </button>
-          ))}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Inp label="Field Name" value={form.name} onChange={handleName} required/>
-          <Inp label="API Key" value={form.api_key} onChange={v=>{set("api_key",v);setAutoKey(false);}} disabled={isEdit&&field?.is_system}/>
-        </div>
-        {["select","multi_select","status"].includes(form.field_type) && <div style={{marginBottom:12}}><Inp label="Options (comma-separated)" value={form.options} onChange={v=>set("options",v)} placeholder="Option A, Option B"/></div>}
-        {form.field_type === "people" && (
-          <PeopleFieldConfig form={form} set={set} selEnv={selEnv} F={F}/>
-        )}
-        {form.field_type === "dataset" && (
-          <div style={{marginBottom:12,padding:"12px",background:"#f8f9fc",borderRadius:10,border:"1px solid #e8eaed"}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:8}}>Data Set Field</div>
-            <select value={form.dataset_id} onChange={e=>set("dataset_id",e.target.value)}
-              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1px solid #e8eaed",fontSize:13,fontFamily:F,background:"white",color:C.text1,marginBottom:8}}>
-              <option value="">— choose a data set —</option>
-              {datasets.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <div style={{display:"flex",gap:8}}>
-              {[{v:false,l:"Single select"},{v:true,l:"Multi select"}].map(({v,l})=>(
-                <button key={String(v)} onClick={()=>set("dataset_multi",v)}
-                  style={{flex:1,padding:"6px",borderRadius:8,border:`2px solid ${form.dataset_multi===v?"#3b5bdb":"#e8eaed"}`,background:form.dataset_multi===v?"#3b5bdb":"#fff",color:form.dataset_multi===v?"#fff":"#6b7280",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:F}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {form.field_type === "skills" && (
-          <div style={{marginBottom:12,padding:"12px",background:"#f8f9fc",borderRadius:10,border:"1px solid #e8eaed"}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:8}}>Skills Field</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
-              {(skillsCats.length>0?skillsCats:['Technology','Business','Design','Soft Skills','Languages','Certifications']).map(cat=>{
-                const active=(form.skills_categories||[]).includes(cat);
-                return <button key={cat} onClick={()=>set("skills_categories",active?(form.skills_categories||[]).filter(c=>c!==cat):[...(form.skills_categories||[]),cat])}
-                  style={{padding:"3px 10px",borderRadius:99,border:`1.5px solid ${active?"#3b5bdb":"#e8eaed"}`,background:active?"#3b5bdb":"white",color:active?"white":"#6b7280",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>{cat}</button>;
-              })}
-            </div>
-            <div style={{display:"flex",gap:8}}>
-              {[{v:true,l:"Multi select"},{v:false,l:"Single select"}].map(({v,l})=>(
-                <button key={String(v)} onClick={()=>set("skills_multi",v)}
-                  style={{flex:1,padding:"6px",borderRadius:8,border:`2px solid ${form.skills_multi===v?"#3b5bdb":"#e8eaed"}`,background:form.skills_multi===v?"#3b5bdb":"#fff",color:form.skills_multi===v?"#fff":"#6b7280",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:F}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <Inp label="Placeholder" value={form.placeholder} onChange={v=>set("placeholder",v)}/>
-          <Inp label="Help Text" value={form.help_text} onChange={v=>set("help_text",v)}/>
-        </div>
-        <div style={{display:"flex",gap:16,marginBottom:16}}>
-          {form.field_type !== "section_separator" && [{k:"is_required",l:"Required"},{k:"show_in_list",l:"Show in list"}].map(({k,l})=>(
-            <label key={k} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,fontWeight:600,color:C.text2}}>
-              <input type="checkbox" checked={!!form[k]} onChange={e=>set(k,e.target.checked)}/>{l}
-            </label>
-          ))}
-        </div>
-        <div style={{display:"flex",gap:8,justifyContent:"flex-end",borderTop:`1px solid ${C.border}`,paddingTop:16}}>
-          <Btn v="secondary" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={handle} disabled={saving||!form.name}>{saving?"Saving…":isEdit?"Save Changes":"Add Field"}</Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── CreateObjectModal (module-level) ─────────────────────────────────────────
 function CreateObjectModal({ selEnv, onCreated, onClose }) {
   const [form, setForm] = React.useState({name:"",plural_name:"",slug:"",color:"#6366f1",description:""});
@@ -2634,6 +2491,7 @@ const NAV_GROUPS = [
       { id:"company_docs", icon:"file",       label:"Company Documents" },
       { id:"forms",      icon:"form",        label:"Forms" },
       { id:"questions",  icon:"help-circle", label:"Question library" },
+      { id:"stage_categories", icon:"layers", label:"Stage Categories" },
       { id:"agents",     icon:"bot",         label:"Agents" },
       { id:"datasets",   icon:"layers",      label:"Data Sets" },
       { id:"enterprise", icon:"briefcase",   label:"Enterprise Settings" },
@@ -2848,6 +2706,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="workflows"  && <WorkflowsPage environment={environment}/>}
         {activeSection==="portals"    && <PortalsPage environment={environment} onFullScreen={setFullScreenMode}/>}
         {activeSection==="questions"  && <QuestionBankSettings/>}
+        {activeSection==="stage_categories" && <StageCategoriesSection environment={environment}/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}
         {activeSection==="superadmin"  && <IntegrationsSettings environment={environment}/>}
         {activeSection==="feature-flags" && <FeatureFlagsSettings environment={environment}/>}

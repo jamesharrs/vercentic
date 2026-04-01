@@ -2302,6 +2302,10 @@ function App() {
           <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", padding:"0 32px" }}>
             <AgentsModule environment={selectedEnv} />
           </div>
+        ) : activeNav === "calendar" ? (
+          <div style={{ flex:1, overflow:"auto" }}>
+            <CalendarModule environment={selectedEnv} />
+          </div>
         ) : activeNav === "schema" ? (
           selectedObject
             ? <ObjectSchemaView object={selectedObject} allObjects={allObjects} environmentId={selectedEnv.id} onBack={() => setSelectedObject(null)} />

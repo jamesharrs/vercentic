@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import api from './apiClient.js';
+import CalendarView from "./CalendarView";
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const C = {
   bg:"#EEF2FF", surface:"#FFFFFF", border:"#E8ECF8", border2:"#d1d5db",
@@ -1299,28 +1300,16 @@ export default function Interviews({ environment }) {
       )}
 
       {!loading && view==="scheduled" && (
-        <div style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {scheduledSorted.length===0
-            ? <div style={{padding:"60px 40px",textAlign:"center",color:C.text3}}>
-                <div style={{width:52,height:52,borderRadius:16,background:`${C.accent}12`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
-                  <Ic n="calendar" s={22} c={C.accent}/>
-                </div>
-                <div style={{fontSize:14,fontWeight:600,color:C.text2,marginBottom:4}}>No interviews scheduled</div>
-                <div style={{fontSize:12}}>Create an interview type first, then schedule candidates.</div>
-              </div>
-            : <>
-                {upcoming.length>0 && <>
-                  <div style={{padding:"12px 18px",background:"#f8f9fc",borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em"}}>Upcoming ({upcoming.length})</div>
-                  {upcoming.map(s=><InterviewRow key={s.id} interview={s} envId={envId} onEdit={()=>setEditScheduled(s)} onDelete={()=>handleDeleteScheduled(s.id)}/>)}
-                </>}
-                {past.length>0 && <>
-                  <div style={{padding:"12px 18px",background:"#f8f9fc",borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em"}}>Past ({past.length})</div>
-                  {past.map(s=><InterviewRow key={s.id} interview={s} envId={envId} onEdit={()=>setEditScheduled(s)} onDelete={()=>handleDeleteScheduled(s.id)}/>)}
-                </>}
-              </>
-          }
-        </div>
-      )}
+  <div style={{flex:1, margin:"-32px -20px -20px", overflow:"hidden"}}>
+    <CalendarView
+      interviews={scheduled}
+      interviewTypes={types}
+      onEdit={(iv) => setEditScheduled(iv)}
+      onDelete={(id) => handleDeleteScheduled(id)}
+      onSchedule={() => setScheduleFor(types[0] || null)}
+    />
+  </div>
+)}
 
       {showForm && <TypeFormModal type={editType} envId={envId} onSave={handleSaveType} onClose={()=>{setShowForm(false);setEditType(null);}}/>}
       {scheduleFor && <ScheduleModal interviewType={scheduleFor} envId={envId} onSave={handleSchedule} onClose={()=>setScheduleFor(null)}/>}
