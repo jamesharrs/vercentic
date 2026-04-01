@@ -7080,6 +7080,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           )}
         </div>
 
+        {/* Linked People workflow picker — non-Person objects only, inline in toolbar */}
+        {objectName !== "Person" && (
+          <PeoplePipelineWidget
+            record={record} objectId={record.object_id}
+            environment={environment} onNavigate={onNavigate}
+            toolbarMode
+          />
+        )}
+
         {/* Destructive + close — far right, always visible */}
         <div style={{ display:"flex", gap:2, marginLeft:8, alignItems:"center" }}>
           <div style={{ width:1, height:20, background:C.border, marginRight:6, flexShrink:0 }}/>
@@ -7104,12 +7113,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     <div style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0, overflow:"hidden", background:"#F4F6FB" }}>
       <FunctionalityBar/>
       <SuggestedActions record={record} environment={environment} objectName={objectName} objectColor={objectColor} onAction={handleSuggestedAction}/>
-      {/* Full-width Linked People widget — only shown on non-Person objects */}
-      {objectName !== "Person" && (
-        <div style={{ flexShrink:0, borderBottom:`1px solid ${C.border}` }}>
-          <PeoplePipelineWidget record={record} objectId={record.object_id} environment={environment} onNavigate={onNavigate}/>
-        </div>
-      )}
+      {/* Full-width Linked People widget — moved to toolbar */}
 
       {/* 2-col body */}
       <div ref={containerRef} style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0, userSelect:draggingCol.current?"none":"auto" }}>

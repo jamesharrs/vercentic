@@ -1576,7 +1576,7 @@ const guessCatName = (stepName) => {
   return null;
 };
 
-export function PeoplePipelineWidget({ record, objectId, environment, onNavigate }) {
+export function PeoplePipelineWidget({ record, objectId, environment, onNavigate, toolbarMode = false }) {
   const _pc_ppw = _usePermCtx();
   const canRecord = (flag) => _pc_ppw ? _pc_ppw.canGlobal(flag) : true;
   const [assignments, setAssignments]     = useState([]);
@@ -1753,6 +1753,53 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   // Don't render anything if no Linked Person workflows exist for this object type
   if (!loading && peopleLinkOptions.length === 0) return null;
+
+  // ── Toolbar (compact) mode — just the workflow name + gear + add button ──
+  if (toolbarMode) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6, padding:"0 8px",
+        borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, height:"100%", flexShrink:0 }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        {peopleLinkWf ? (
+          <span style={{ fontSize:12, color:C.text3, whiteSpace:"nowrap",
+            maxWidth:120, overflow:"hidden", textOverflow:"ellipsis" }}>{peopleLinkWf.name}</span>
+        ) : (
+          <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
+            style={{ padding:"2px 6px", border:`1px solid ${C.border}`, borderRadius:6,
+              fontSize:11, fontFamily:F, outline:"none", background:"white", color:C.text3 }}>
+            <option value="">Assign…</option>
+            {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        )}
+        <button
+          onClick={() => setAddingPerson(true)}
+          disabled={!peopleLinkWf || plSteps.length === 0}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8,
+            border:"none", background: (!peopleLinkWf||plSteps.length===0) ? "#e5e7eb" : "#7c3aed",
+            color:"white", fontSize:12, fontWeight:700, cursor: (!peopleLinkWf||plSteps.length===0) ? "default" : "pointer",
+            fontFamily:F, flexShrink:0, opacity: (!peopleLinkWf||plSteps.length===0) ? 0.5 : 1 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Add
+        </button>
+        {/* Add person modal */}
+        {addingPerson && (
+          <AddPersonModal
+            steps={plSteps} personRecords={personRecords} peopleLinks={peopleLinks}
+            environment={environment}
+            onAdd={async (personId, stageId) => {
+              await api.post("/people-links", { record_id: record.id, person_id: personId, stage_id: stageId, environment_id: environment?.id });
+              setAddingPerson(false);
+              load();
+            }}
+            onClose={() => setAddingPerson(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (loading) return (
     <div style={{ padding:"14px 20px", background:"white", fontFamily:F, color:C.text3, fontSize:13 }}>
