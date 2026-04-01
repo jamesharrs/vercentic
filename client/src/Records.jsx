@@ -1053,8 +1053,16 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copyRecords, setCopyRecords] = useState([]);
   const [copyLoading, setCopyLoading] = useState(false);
+  // Person-specific import modes
+  const [importMode, setImportMode] = useState(null); // null | 'paste' | 'url'
+  const [importText, setImportText] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef(null);
   const set = (k,v) => setData(d=>({...d,[k]:v}));
   const isNew = !record;
+  const isPerson = object?.slug === "people";
 
   // Load records for copy picker
   const loadCopyRecords = async () => {
@@ -1103,6 +1111,77 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     return () => document.removeEventListener("mousedown", handler);
   }, [showCopyPicker]);
 
+  // ── Person import helpers ──────────────────────────────────────────────────
+  const applyParsedFields = (parsed) => {
+    const mapped = {};
+    if (parsed.first_name)    mapped.first_name    = parsed.first_name;
+    if (parsed.last_name)     mapped.last_name     = parsed.last_name;
+    if (parsed.email)         mapped.email         = parsed.email;
+    if (parsed.phone)         mapped.phone         = parsed.phone;
+    if (parsed.current_title) mapped.current_title = parsed.current_title;
+    if (parsed.location)      mapped.location      = parsed.location;
+    if (parsed.linkedin_url)  mapped.linkedin_url  = parsed.linkedin_url;
+    if (parsed.skills?.length) mapped.skills       = parsed.skills;
+    if (parsed.years_experience) mapped.years_experience = parsed.years_experience;
+    setData(d => ({ ...d, ...mapped }));
+    setImportMode(null);
+    setImportText("");
+    setImportUrl("");
+    setImportError("");
+  };
+
+  const handleFileImport = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const tFetch = (url, opts) => fetch((import.meta.env.VITE_API_URL||"")+url, opts);
+      const res = await tFetch("/api/cv-parse", { method:"POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Parse failed");
+      applyParsedFields(json);
+    } catch(e) { setImportError(e.message); }
+    finally { setImporting(false); }
+  };
+
+  const handlePasteExtract = async () => {
+    if (!importText.trim()) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const tFetch = (url, opts) => fetch((import.meta.env.VITE_API_URL||"")+url, opts);
+      const res = await tFetch("/api/cv-parse", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ raw_text: importText })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Extract failed");
+      applyParsedFields(json);
+    } catch(e) { setImportError(e.message); }
+    finally { setImporting(false); }
+  };
+
+  const handleUrlExtract = async () => {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const tFetch = (url, opts) => fetch((import.meta.env.VITE_API_URL||"")+url, opts);
+      const res = await tFetch("/api/cv-parse", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ url: importUrl })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Extract failed");
+      applyParsedFields(json);
+    } catch(e) { setImportError(e.message); }
+    finally { setImporting(false); }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     await onSave(data);
@@ -1125,98 +1204,198 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
 
         {/* Creation mode options – only for new records */}
         {isNew && (
-          <div style={{ padding:"12px 24px", background:C.surface2||"#f8f9fb", borderBottom:`1px solid ${C.border}`, display:"flex", gap:8 }}>
-            {/* Copy existing */}
-            <div style={{ position:"relative", flex:1 }} ref={copyRef}>
-              <button
-                onClick={() => { setShowCopyPicker(v=>!v); if (!copyRecords.length) loadCopyRecords(); }}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:7, padding:"8px 12px", borderRadius:8,
-                  border:`1.5px solid ${C.border}`, background:"white", cursor:"pointer", fontSize:12, fontWeight:600,
-                  color:C.text2, fontFamily:"inherit", transition:"all .15s" }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-              >
-                <Ic n="copy" s={13} c={C.accent}/> Copy existing record
-              </button>
+          <div style={{ padding:"12px 24px", background:C.surface2||"#f8f9fb", borderBottom:`1px solid ${C.border}` }}>
+            {isPerson ? (
+              /* ── Person: import options ── */
+              <>
+                <div style={{ display:"flex", gap:8 }}>
+                  {/* From File */}
+                  <button onClick={() => { setImportMode(null); fileInputRef.current?.click(); }}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"9px 12px",
+                      borderRadius:8, border:`1.5px solid ${C.border}`, background:"white", cursor:"pointer",
+                      fontSize:12, fontWeight:600, color:C.text2, fontFamily:"inherit", transition:"all .15s" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; }}
+                  >
+                    <Ic n="upload" s={13} c="inherit"/> From CV / File
+                  </button>
+                  <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display:"none" }}
+                    onChange={e=>{ if(e.target.files[0]) handleFileImport(e.target.files[0]); e.target.value=""; }}/>
 
-              {showCopyPicker && (
-                <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, width:320, zIndex:1100,
-                  background:"white", borderRadius:10, border:`1px solid ${C.border}`,
-                  boxShadow:"0 8px 32px rgba(0,0,0,.12)", overflow:"hidden" }}>
-                  <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
-                    <input autoFocus value={copySearch} onChange={e=>setCopySearch(e.target.value)}
-                      placeholder={`Search ${objectName}s…`}
-                      style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 10px",
-                        fontSize:12, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
-                  </div>
-                  <div style={{ maxHeight:220, overflowY:"auto" }}>
-                    {copyLoading ? (
-                      <div style={{ padding:16, textAlign:"center", fontSize:12, color:C.text3 }}>Loading…</div>
-                    ) : copyRecords.filter(r => {
-                        const d = r.data || {};
-                        const searchLabel = [d.first_name, d.last_name, d.job_title, d.name, d.pool_name].filter(Boolean).join(" ");
-                        return !copySearch || searchLabel.toLowerCase().includes(copySearch.toLowerCase());
-                      }).slice(0, 30).map(r => {
-                        const d = r.data || {};
-                        // Build a clean label — prefer full name for people, job title for jobs
-                        const hasPerson = d.first_name || d.last_name;
-                        const label = hasPerson
-                          ? [d.first_name, d.last_name].filter(Boolean).join(" ")
-                          : (d.job_title || d.name || d.pool_name || "Untitled");
-                        // Subtitle must differ from label
-                        const sub = hasPerson
-                          ? [d.job_title, d.department, d.location].filter(Boolean).join(" · ")
-                          : [d.department, d.location, d.status].filter(Boolean).join(" · ");
-                        const initials = label.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase() || "?";
-                        return (
-                          <button key={r.id} onClick={() => handleCopyRecord(r)}
-                            style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                              border:"none", background:"transparent", cursor:"pointer", textAlign:"left",
-                              fontFamily:"inherit", transition:"background .1s" }}
-                            onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                          >
-                            <div style={{ width:32, height:32, borderRadius:"50%", background:C.accent, display:"flex",
-                              alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                              <span style={{ color:"white", fontSize:12, fontWeight:700 }}>{initials}</span>
-                            </div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ fontSize:13, fontWeight:600, color:C.text1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</div>
-                              {sub && <div style={{ fontSize:11, color:C.text3, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sub}</div>}
-                            </div>
-                            <Ic n="chevR" s={12} c={C.text3}/>
-                          </button>
-                        );
-                      })
-                    }
-                    {!copyLoading && copyRecords.length === 0 && (
-                      <div style={{ padding:16, textAlign:"center", fontSize:12, color:C.text3 }}>No records found</div>
-                    )}
-                  </div>
+                  {/* Copy paste */}
+                  <button onClick={() => setImportMode(importMode==="paste" ? null : "paste")}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"9px 12px",
+                      borderRadius:8, border:`1.5px solid ${importMode==="paste" ? C.accent : C.border}`,
+                      background: importMode==="paste" ? `${C.accent}10` : "white",
+                      cursor:"pointer", fontSize:12, fontWeight:600,
+                      color: importMode==="paste" ? C.accent : C.text2, fontFamily:"inherit", transition:"all .15s" }}
+                    onMouseEnter={e=>{ if(importMode!=="paste"){ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; } }}
+                    onMouseLeave={e=>{ if(importMode!=="paste"){ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; } }}
+                  >
+                    <Ic n="clipboard" s={13} c="inherit"/> Copy & Paste
+                  </button>
+
+                  {/* URL */}
+                  <button onClick={() => setImportMode(importMode==="url" ? null : "url")}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"9px 12px",
+                      borderRadius:8, border:`1.5px solid ${importMode==="url" ? C.accent : C.border}`,
+                      background: importMode==="url" ? `${C.accent}10` : "white",
+                      cursor:"pointer", fontSize:12, fontWeight:600,
+                      color: importMode==="url" ? C.accent : C.text2, fontFamily:"inherit", transition:"all .15s" }}
+                    onMouseEnter={e=>{ if(importMode!=="url"){ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; } }}
+                    onMouseLeave={e=>{ if(importMode!=="url"){ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; } }}
+                  >
+                    <Ic n="link" s={13} c="inherit"/> From URL
+                  </button>
                 </div>
-              )}
-            </div>
 
-            {/* AI create */}
-            <button onClick={openAICopilot}
-              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"8px 12px",
-                borderRadius:8, border:`1.5px solid ${C.border}`, background:"white", cursor:"pointer",
-                fontSize:12, fontWeight:600, color:C.text2, fontFamily:"inherit", transition:"all .15s" }}
-              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#7c3aed"; e.currentTarget.style.color="#7c3aed"; }}
-              onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; }}
-            >
-              <Ic n="zap" s={13} c="#7c3aed"/> Create with AI
-            </button>
+                {/* Paste panel */}
+                {importMode==="paste" && (
+                  <div style={{ marginTop:10 }}>
+                    <textarea value={importText} onChange={e=>setImportText(e.target.value)}
+                      placeholder="Paste CV text, LinkedIn bio, or any profile information here…"
+                      autoFocus rows={5}
+                      style={{ width:"100%", boxSizing:"border-box", border:`1.5px solid ${C.border}`,
+                        borderRadius:8, padding:"10px 12px", fontSize:12, fontFamily:"inherit",
+                        resize:"vertical", outline:"none", lineHeight:1.6, color:C.text1 }}
+                      onFocus={e=>e.target.style.borderColor=C.accent}
+                      onBlur={e=>e.target.style.borderColor=C.border}/>
+                    {importError && <div style={{ fontSize:11, color:"#ef4444", marginTop:4 }}>{importError}</div>}
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:8, gap:8 }}>
+                      <Btn v="secondary" onClick={()=>{ setImportMode(null); setImportText(""); setImportError(""); }}>Cancel</Btn>
+                      <Btn onClick={handlePasteExtract} disabled={importing||!importText.trim()}>
+                        {importing ? <><Ic n="loader" s={12}/> Extracting…</> : <>Extract fields</>}
+                      </Btn>
+                    </div>
+                  </div>
+                )}
 
-            {/* Template – coming soon */}
-            <button disabled
-              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"8px 12px",
-                borderRadius:8, border:`1.5px dashed ${C.border}`, background:"transparent", cursor:"not-allowed",
-                fontSize:12, fontWeight:600, color:C.text3, fontFamily:"inherit", opacity:0.6 }}
-              title="Templates – coming soon"
-            >
-              <Ic n="file-text" s={13} c={C.text3}/> Use template
-            </button>
+                {/* URL panel */}
+                {importMode==="url" && (
+                  <div style={{ marginTop:10 }}>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <input value={importUrl} onChange={e=>setImportUrl(e.target.value)}
+                        placeholder="https://linkedin.com/in/… or any profile URL"
+                        autoFocus
+                        style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px",
+                          fontSize:12, fontFamily:"inherit", outline:"none", color:C.text1 }}
+                        onFocus={e=>e.target.style.borderColor=C.accent}
+                        onBlur={e=>e.target.style.borderColor=C.border}
+                        onKeyDown={e=>e.key==="Enter"&&handleUrlExtract()}/>
+                      <Btn onClick={handleUrlExtract} disabled={importing||!importUrl.trim()}>
+                        {importing ? <><Ic n="loader" s={12}/> Fetching…</> : <>Extract</>}
+                      </Btn>
+                    </div>
+                    {importError && <div style={{ fontSize:11, color:"#ef4444", marginTop:4 }}>{importError}</div>}
+                    <div style={{ fontSize:11, color:C.text3, marginTop:6 }}>
+                      Paste a LinkedIn profile, personal website, or any public page with profile information.
+                    </div>
+                  </div>
+                )}
+
+                {/* Loading overlay */}
+                {importing && !importMode && (
+                  <div style={{ marginTop:8, fontSize:12, color:C.text3, display:"flex", alignItems:"center", gap:6 }}>
+                    <Ic n="loader" s={13} c={C.accent}/> Parsing file…
+                  </div>
+                )}
+              </>
+            ) : (
+              /* ── Other objects: copy / AI / template ── */
+              <div style={{ display:"flex", gap:8 }}>
+
+                {/* Copy existing — with dropdown picker */}
+                <div style={{ position:"relative", flex:1 }} ref={copyRef}>
+                  <button
+                    onClick={() => { setShowCopyPicker(v=>!v); if (!copyRecords.length) loadCopyRecords(); }}
+                    style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+                      padding:"9px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"white",
+                      cursor:"pointer", fontSize:12, fontWeight:600, color:C.text2, fontFamily:"inherit", transition:"all .15s" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; }}
+                  >
+                    <Ic n="copy" s={13} c="inherit"/> Copy existing
+                  </button>
+
+                  {showCopyPicker && (
+                    <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, width:320, zIndex:1100,
+                      background:"white", borderRadius:10, border:`1px solid ${C.border}`,
+                      boxShadow:"0 8px 32px rgba(0,0,0,.12)", overflow:"hidden" }}>
+                      <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
+                        <input autoFocus value={copySearch} onChange={e=>setCopySearch(e.target.value)}
+                          placeholder={`Search ${objectName}s…`}
+                          style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 10px",
+                            fontSize:12, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
+                      </div>
+                      <div style={{ maxHeight:240, overflowY:"auto" }}>
+                        {copyLoading ? (
+                          <div style={{ padding:16, textAlign:"center", fontSize:12, color:C.text3 }}>Loading…</div>
+                        ) : copyRecords.filter(r => {
+                            const d = r.data || {};
+                            const searchLabel = [d.first_name, d.last_name, d.job_title, d.name, d.pool_name].filter(Boolean).join(" ");
+                            return !copySearch || searchLabel.toLowerCase().includes(copySearch.toLowerCase());
+                          }).slice(0, 30).map(r => {
+                            const d = r.data || {};
+                            const hasPerson = d.first_name || d.last_name;
+                            const label = hasPerson
+                              ? [d.first_name, d.last_name].filter(Boolean).join(" ")
+                              : (d.job_title || d.name || d.pool_name || "Untitled");
+                            const sub = hasPerson
+                              ? [d.job_title, d.department, d.location].filter(Boolean).join(" · ")
+                              : [d.department, d.location, d.status].filter(Boolean).join(" · ");
+                            const initials = label.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase() || "?";
+                            return (
+                              <button key={r.id} onClick={() => handleCopyRecord(r)}
+                                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                                  border:"none", background:"transparent", cursor:"pointer", textAlign:"left",
+                                  fontFamily:"inherit", transition:"background .1s" }}
+                                onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
+                                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                              >
+                                <div style={{ width:32, height:32, borderRadius:"50%", background:C.accent, display:"flex",
+                                  alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                                  <span style={{ color:"white", fontSize:12, fontWeight:700 }}>{initials}</span>
+                                </div>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ fontSize:13, fontWeight:600, color:C.text1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</div>
+                                  {sub && <div style={{ fontSize:11, color:C.text3, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sub}</div>}
+                                </div>
+                                <Ic n="chevR" s={12} c={C.text3}/>
+                              </button>
+                            );
+                          })
+                        }
+                        {!copyLoading && copyRecords.length === 0 && (
+                          <div style={{ padding:16, textAlign:"center", fontSize:12, color:C.text3 }}>No records found</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* AI create */}
+                <button onClick={openAICopilot}
+                  style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"9px 12px",
+                    borderRadius:8, border:`1.5px solid ${C.border}`, background:"white", cursor:"pointer",
+                    fontSize:12, fontWeight:600, color:C.text2, fontFamily:"inherit", transition:"all .15s" }}
+                  onMouseEnter={e=>{ e.currentTarget.style.borderColor="#7c3aed"; e.currentTarget.style.color="#7c3aed"; }}
+                  onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; }}
+                >
+                  <Ic n="zap" s={13} c="#7c3aed"/> Create with AI
+                </button>
+
+                {/* Template – coming soon */}
+                <button disabled
+                  style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"9px 12px",
+                    borderRadius:8, border:`1.5px dashed ${C.border}`, background:"transparent", cursor:"not-allowed",
+                    fontSize:12, fontWeight:600, color:C.text3, fontFamily:"inherit", opacity:0.6 }}
+                  title="Templates – coming soon"
+                >
+                  <Ic n="file-text" s={13} c={C.text3}/> Use template
+                </button>
+
+              </div>
+            )}
           </div>
         )}
 

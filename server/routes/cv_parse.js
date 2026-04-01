@@ -71,8 +71,36 @@ router.post('/', (req, res, next) => {
     if (!att?.filename) return res.status(404).json({ error: 'Attachment not found' });
     const filePath = path.join(UPLOAD_DIR, att.filename);
     cvText = await extractText(filePath, att.mimetype);
+  } else if (req.body?.raw_text) {
+    // Plain text pasted by the user
+    cvText = req.body.raw_text;
+  } else if (req.body?.url) {
+    // Fetch text from a URL (LinkedIn profile, personal site, etc.)
+    try {
+      const https = require('https');
+      const http  = require('http');
+      const fetchUrl = (u) => new Promise((resolve, reject) => {
+        const mod = u.startsWith('https') ? https : http;
+        mod.get(u, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (r) => {
+          let data = '';
+          r.on('data', c => data += c);
+          r.on('end', () => resolve(data));
+        }).on('error', reject);
+      });
+      const html = await fetchUrl(req.body.url);
+      // Strip HTML tags to get readable text
+      cvText = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .slice(0, 15000); // cap at 15k chars
+    } catch (e) {
+      return res.status(422).json({ error: `Could not fetch URL: ${e.message}` });
+    }
   } else {
-    return res.status(400).json({ error: 'Provide file or attachment_id' });
+    return res.status(400).json({ error: 'Provide file, attachment_id, raw_text, or url' });
   }
 
   if (!cvText.trim()) {
