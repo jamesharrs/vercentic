@@ -1303,10 +1303,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   useEffect(() => {
     var handler = function(e) {
       var prompt = e.detail && e.detail.prompt;
+      var silent = e.detail && e.detail.silent;
       if (!prompt) return;
       setOpen(true);
       // Small delay so the panel animates open before the message is sent
-      setTimeout(function() { if (sendMessageRef.current) sendMessageRef.current(prompt); }, 150);
+      setTimeout(function() { if (sendMessageRef.current) sendMessageRef.current(prompt, silent); }, 150);
     };
     window.addEventListener('talentos:copilotPrompt', handler);
     return function() { window.removeEventListener('talentos:copilotPrompt', handler); };
@@ -1936,7 +1937,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     e.target.value = "";
   };
 
-  const sendMessage = async (text) => {
+  const sendMessage = async (text, silent = false) => {
     const userMsg = text||input.trim();
     if (!userMsg||loading) return;
 
@@ -1975,8 +1976,10 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setParsedJob(null);
     setProposedAction(null);
 
-    const newMessages=[...messages,{role:"user",content:userMsg,ts:new Date()}];
-    setMessages(newMessages);
+    const newMessages = silent
+      ? [...messages, { role:"user", content:userMsg, ts:new Date(), hidden:true }]
+      : [...messages, { role:"user", content:userMsg, ts:new Date() }];
+    setMessages(silent ? messages : newMessages); // don't show silent messages in UI
 
     try {
       const objectsInfo = objects.map(o=>{

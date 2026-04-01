@@ -1089,8 +1089,8 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     };
     const prompt = promptMap[slug] || `Create a new ${objectName}. Ask me for the key details to get started.`;
 
-    // Use copilotPrompt to auto-send (not just pre-fill the input box)
-    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt } }));
+    // Use copilotPrompt with silent:true so only Claude's response is shown (no user message bubble)
+    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt, silent: true } }));
     onClose();
   };
 
@@ -1140,7 +1140,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
               </button>
 
               {showCopyPicker && (
-                <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, zIndex:1100,
+                <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, width:320, zIndex:1100,
                   background:"white", borderRadius:10, border:`1px solid ${C.border}`,
                   boxShadow:"0 8px 32px rgba(0,0,0,.12)", overflow:"hidden" }}>
                   <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
