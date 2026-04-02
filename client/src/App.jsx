@@ -949,7 +949,6 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
               { id: "interviews",  label: "Interviews",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
               { id: "offers",      label: "Offers",      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>, desc: "Acceptance & approvals" },
         { id: "campaigns",     icon: "zap",  label: "Campaigns" },
-        { id: "campaign-links", label: "Campaign Links", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>, desc: "UTM tracking & A/B tests" },
               { id: "screening",   label: "Screening",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"/></svg>, desc: "Candidates & AI review" },
               { id: "onboarding",  label: "Onboarding",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>, desc: "Pre & post start" },
               { id: "admin",       label: "Admin Stats", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, desc: "Platform stats" },
@@ -1760,7 +1759,6 @@ function App() {
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
         { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
         { id: "campaigns",     icon: "zap",       label: "Campaigns" },
-        { id: "campaign-links", icon: "link",      label: "Campaign Links" },
         { id: "chat",        icon: "message-circle", label: "Chat" },
         { id: "documents",   icon: "file-text",    label: "Documents" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
@@ -2294,12 +2292,6 @@ function App() {
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <div style={{ flex:1, overflow:"auto" }}>
               <Campaigns environment={selectedEnv} />
-            </div>
-          </Suspense>
-        ) : activeNav === "campaign-links" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <div style={{ flex:1, overflow:"auto" }}>
-              <CampaignLinks environment={selectedEnv} />
             </div>
           </Suspense>
         ) : activeNav === "integrations" ? (

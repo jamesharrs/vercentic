@@ -390,6 +390,20 @@ export default function CampaignLinks({ environment, portalId, poolId, initialLi
   },[environment?.id,portalId,poolId]);
   useEffect(()=>{ load(); },[load]);
 
+  // Listen for channel template selection from CampaignDetail → open modal with prefilled UTMs
+  useEffect(()=>{
+    const handler = (e) => {
+      const d = e.detail || {};
+      if (d.campaign_id && campaignId && d.campaign_id !== campaignId) return;
+      setLinkDefaults({ ...d });
+      setCreating(true);
+    };
+    window.addEventListener("campaign:new-link", handler);
+    return () => window.removeEventListener("campaign:new-link", handler);
+  }, [campaignId]);
+
+  const [linkDefaults, setLinkDefaults] = useState(initialLinkDefaults || null);
+
   const handleSave = async()=>{ setCreating(false); setEditing(null); await load(); };
   const handleDelete = async(id)=>{ if(!window.confirm("Delete this link?")) return; await api.del(`/campaign-links/${id}`); setLinks(l=>l.filter(x=>x.id!==id)); };
   const filtered = links.filter(l=>!search||l.name?.toLowerCase().includes(search.toLowerCase())||l.utm_source?.toLowerCase().includes(search.toLowerCase())||l.utm_campaign?.toLowerCase().includes(search.toLowerCase()));
@@ -430,7 +444,7 @@ export default function CampaignLinks({ environment, portalId, poolId, initialLi
       :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
           {filtered.map(link=><LinkCard key={link.id} link={link} onEdit={()=>setEditing(link)} onDelete={()=>handleDelete(link.id)} onViewStats={()=>setStatsLink(link)}/>)}
         </div>)}
-      {(creating||editing)&&<LinkModal environment={environment} portals={portals} pools={pools} existing={editing} defaults={!editing ? initialLinkDefaults : undefined} onSave={handleSave} onClose={()=>{setCreating(false);setEditing(null);}}/>}
+      {(creating||editing)&&<LinkModal environment={environment} portals={portals} pools={pools} existing={editing} defaults={!editing ? (linkDefaults || initialLinkDefaults) : undefined} onSave={()=>{ setCreating(false); setEditing(null); setLinkDefaults(null); load(); }} onClose={()=>{setCreating(false);setEditing(null);setLinkDefaults(null);}}/>}
       {statsLink&&<StatsPanel link={statsLink} onClose={()=>setStatsLink(null)}/>}
     </div>
   );

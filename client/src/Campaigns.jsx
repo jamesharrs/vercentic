@@ -1,6 +1,7 @@
 // client/src/Campaigns.jsx  — Campaign Builder (Phase 1)
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import apiClient from "./apiClient.js";
+import { ChannelTemplatePicker, AutomationRulesPanel, CampaignCalendar } from "./CampaignPhase2.jsx";
 
 const CampaignLinksInline = lazy(() => import("./CampaignLinks.jsx"));
 
@@ -337,6 +338,47 @@ function ContentPanel({ campaign, onGenerated }) {
 }
 
 // ── Campaign Detail ───────────────────────────────────────────────────────────
+// Shows a channel picker strip above the links list so you can create a new
+// link pre-populated with channel UTM params in one click.
+function LinkChannelHeader({ campaign }) {
+  const [open, setOpen] = useState(false);
+  const [channel, setChannel] = useState(null);
+
+  const handleSelect = (tmpl) => {
+    setChannel(tmpl);
+    setOpen(false);
+    // Store selected channel so CampaignLinksInline can prefill the modal
+    window.__campaignLinkDefaults = {
+      utm_source:   tmpl.utm_source,
+      utm_medium:   tmpl.utm_medium,
+      utm_content:  tmpl.utm_content,
+      utm_campaign: campaign.name || "",
+      campaign_id:  campaign.id,
+    };
+    window.dispatchEvent(new CustomEvent("campaign:new-link", { detail: window.__campaignLinkDefaults }));
+  };
+
+  return (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom: open ? 12 : 0 }}>
+        <Btn v="secondary" icon="plus" s="sm" onClick={() => setOpen(o=>!o)}>
+          Add link by channel
+        </Btn>
+        {channel && (
+          <span style={{ fontSize:11,color:C.text3 }}>
+            Last used: <strong style={{color:C.text2}}>{channel.label}</strong>
+          </span>
+        )}
+      </div>
+      {open && (
+        <div style={{ background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:12,padding:16,marginTop:8 }}>
+          <ChannelTemplatePicker onSelect={handleSelect}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated }) {
   const [campaign, setCampaign] = useState(initCampaign);
   // Fetch full campaign on mount to pick up generated_content if stale in parent
@@ -375,11 +417,20 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
     fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,boxSizing:"border-box" };
   const lbl = { fontSize:12,fontWeight:600,color:C.text2,marginBottom:4,display:"block" };
 
+  const [workflows, setWorkflows] = useState([]);
+
+  // Load workflows for automation rules
+  useEffect(() => {
+    if (!environment?.id) return;
+    api.get(`/workflows?environment_id=${environment.id}`).then(d => setWorkflows(Array.isArray(d)?d:[])).catch(()=>{});
+  }, [environment?.id]);
+
   const tabs = [
-    { id:"brief",     label:"Brief" },
-    { id:"content",   label:"AI Content" },
-    { id:"links",     label:"Links" },
-    { id:"analytics", label:"Analytics" },
+    { id:"brief",      label:"Brief" },
+    { id:"content",    label:"AI Content" },
+    { id:"links",      label:"Links" },
+    { id:"automation", label:"Automation" },
+    { id:"analytics",  label:"Analytics" },
   ];
 
   const STATUS_ACTIONS = {
@@ -503,10 +554,19 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
 
         {tab === "links" && (
           <div>
+            <LinkChannelHeader campaign={campaign} />
             <Suspense fallback={<div style={{color:C.text3,fontSize:13,padding:20}}>Loading…</div>}>
               <CampaignLinksInline environment={environment} campaignId={campaign.id}/>
             </Suspense>
           </div>
+        )}
+
+        {tab === "automation" && (
+          <AutomationRulesPanel
+            campaign={campaign}
+            workflows={workflows}
+            onSave={rules => setCampaign(c => ({...c, automation_rules: rules}))}
+          />
         )}
 
         {tab === "analytics" && (
@@ -585,7 +645,8 @@ export default function Campaigns({ environment }) {
   const [loading, setLoading]     = useState(true);
   const [creating, setCreating]   = useState(false);
   const [selected, setSelected]   = useState(null);
-  const [filter, setFilter]       = useState("all"); // all|draft|active|paused|ended
+  const [filter, setFilter]       = useState("all");
+  const [viewMode, setViewMode]   = useState("grid"); // grid | calendar
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
@@ -628,7 +689,28 @@ export default function Campaigns({ environment }) {
           <h1 style={{ margin:0,fontSize:20,fontWeight:800,color:C.text1 }}>Campaigns</h1>
           <div style={{ fontSize:13,color:C.text3,marginTop:2 }}>Manage your recruitment marketing campaigns</div>
         </div>
-        <Btn icon="plus" onClick={() => setCreating(true)}>New campaign</Btn>
+        <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+          {/* View toggle */}
+          <div style={{ display:"flex",borderRadius:8,border:`1.5px solid ${C.border}`,overflow:"hidden" }}>
+            {[
+              { id:"grid",     icon:"M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z" },
+              { id:"calendar", icon:PATHS.calendar },
+            ].map(v => (
+              <button key={v.id} onClick={()=>setViewMode(v.id)} style={{
+                padding:"6px 10px",border:"none",cursor:"pointer",fontFamily:F,
+                background:viewMode===v.id?C.accent:"transparent",
+                display:"flex",alignItems:"center",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke={viewMode===v.id?"#fff":C.text3} strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <path d={v.icon}/>
+                </svg>
+              </button>
+            ))}
+          </div>
+          <Btn icon="plus" onClick={() => setCreating(true)}>New campaign</Btn>
+        </div>
       </div>
 
       {/* Status filter tabs */}
@@ -648,6 +730,10 @@ export default function Campaigns({ environment }) {
       {/* Content */}
       {loading ? (
         <div style={{ textAlign:"center", padding:"60px 0", color:C.text3, fontSize:13 }}>Loading campaigns…</div>
+      ) : viewMode === "calendar" ? (
+        <div style={{ background:C.surface, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
+          <CampaignCalendar campaigns={campaigns} onSelect={c=>{setSelected(c);setViewMode("grid");}}/>
+        </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign:"center", padding:"80px 0" }}>
           <div style={{ width:56,height:56,borderRadius:"50%",background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>

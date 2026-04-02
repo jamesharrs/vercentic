@@ -192,4 +192,17 @@ Keep LinkedIn posts under 200 words each. Email subjects under 60 chars. WhatsAp
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /:id/rules — save automation rules ───────────────────────────────────
+router.post('/:id/rules', (req, res) => {
+  try {
+    const { rules } = req.body; // array of rule objects
+    if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' });
+    update('campaigns', c => c.id === req.params.id, {
+      automation_rules: rules,
+      updated_at: new Date().toISOString(),
+    });
+    res.json({ ok: true, rules });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
