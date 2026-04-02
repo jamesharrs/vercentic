@@ -941,6 +941,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
   const [triggerConfig, setTriggerConfig] = useState(workflow?.trigger_config || {});
   const [steps, setSteps]     = useState(workflow?.steps || []);
   const [viewMode, setViewMode] = useState(workflow?._openCanvas ? "canvas" : "list"); // "list" | "canvas"
+  const [flowType, setFlowType] = useState(workflow?.flow_type || 'unstructured');
   const [saving, setSaving]   = useState(false);
   const [fields, setFields]   = useState([]);
   const [objects, setObjects] = useState(parentObjects || []);
@@ -982,9 +983,9 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
     try {
       let wf;
       if (workflow?.id) {
-        wf = await api.patch(`/workflows/${workflow.id}`, { name, object_id: objectId, description: desc, workflow_type: wfType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
+        wf = await api.patch(`/workflows/${workflow.id}`, { name, object_id: objectId, description: desc, workflow_type: wfType, flow_type: flowType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
       } else {
-        wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
+        wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, flow_type: flowType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
       }
       if (!wf?.id) throw new Error("Server did not return a workflow ID");
       await api.put(`/workflows/${wf.id}/steps`, { steps: steps.map(migrateStep) });
@@ -1041,7 +1042,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
                 if (!environment?.id) return;
                 setSaving(true);
                 try {
-                  const wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
+                  const wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, flow_type: flowType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
                   if (!wf?.id) throw new Error("No id returned");
                   if (steps.length > 0) await api.put(`/workflows/${wf.id}/steps`, { steps: steps.map(migrateStep) });
                   onSave({ ...wf, steps }); // update parent so workflow.id is set
@@ -1184,7 +1185,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
                     if (!environment?.id) return;
                     setSaving(true);
                     try {
-                      const wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
+                      const wf = await api.post("/workflows", { name, object_id: objectId, description: desc, environment_id: environment.id, workflow_type: wfType, flow_type: flowType, trigger_type: triggerType, trigger_config: triggerConfig, sharing });
                       if (!wf?.id) throw new Error("No id returned");
                       if (steps.length > 0) await api.put(`/workflows/${wf.id}/steps`, { steps: steps.map(migrateStep) });
                       onSave({ ...wf, steps });
