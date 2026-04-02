@@ -23,6 +23,7 @@ import NotificationsSection from './NotificationsSection';
 import DatasetsSection from "./settings/DatasetsSection.jsx";
 import EnterpriseSettings from "./EnterpriseSettings.jsx";
 import IntegrationHub from "./IntegrationHub.jsx";
+import IntegrationsSettings from "./IntegrationsSettings.jsx";
 import OrgChart from "./OrgChart.jsx";
 import WorkflowsPage from "./Workflows.jsx";
 import PortalsPage from "./Portals.jsx";
@@ -2517,7 +2518,8 @@ const NAV_GROUPS = [
     id: "system",
     label: "System",
     items: [
-      { id:"integration_hub",  icon:"zap",        label:"Integrations" },
+      { id:"integrations",     icon:"zap",        label:"Integrations" },
+      { id:"integration_hub",  icon:"globe",      label:"Integration Hub" },
       { id:"feature-flags",    icon:"flag",       label:"Feature Flags" },
       { id:"sandbox",          icon:"gitBranch",  label:"Sandbox Manager" },
       { id:"config",           icon:"refresh",    label:"Import / Export" },
@@ -2712,6 +2714,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="config"      && <ImportExportTabs environment={environment}/>}
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
+        {activeSection==="integrations" && <IntegrationsSettings environment={environment}/>}
         {activeSection==="integration_hub" && <IntegrationHub environment={environment}/>}
         {activeSection==="setup_wizard" && (
           <CompanyProfilePanel environment={environment}/>
