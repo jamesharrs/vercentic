@@ -368,10 +368,26 @@ router.put('/:provider', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Store init ────────────────────────────────────────────────────────────────
+// ── Store init + load saved credentials into process.env ──────────────────────
 try {
   const s = getStore();
   if (!s.integrations) { s.integrations = []; saveStore(); }
+  // On startup, restore saved credentials to process.env so messaging service works immediately
+  const ENV_KEYS = ['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_SMS_NUMBER','TWILIO_WA_NUMBER',
+    'SENDGRID_API_KEY','SENDGRID_FROM_EMAIL','SENDGRID_FROM_NAME','RESEND_API_KEY','WEBHOOK_BASE_URL'];
+  const list = Array.isArray(s.integrations) ? s.integrations : Object.values(s.integrations || {});
+  for (const integration of list) {
+    if (!integration.config || integration.enabled === false) continue;
+    for (const [key, val] of Object.entries(integration.config)) {
+      if (!ENV_KEYS.includes(key) || !val) continue;
+      const decrypted = val.includes(':') ? decrypt(val) : val;
+      if (decrypted && !decrypted.includes('••••')) {
+        process.env[key] = decrypted;
+      }
+    }
+  }
+  const loaded = ENV_KEYS.filter(k => process.env[k] && process.env[k] !== 'YOUR_ACCOUNT_SID');
+  if (loaded.length) console.log(`[integrations] Restored ${loaded.length} credentials from store:`, loaded.join(', '));
 } catch(e) { console.error('Integrations store init:', e.message); }
 
 module.exports = router;
