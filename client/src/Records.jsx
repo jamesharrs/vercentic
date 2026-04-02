@@ -8,6 +8,7 @@ import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
 import { RecordFormPanel } from "./Forms.jsx";
+const CampaignLinksModal = lazy(() => import("./CampaignLinks.jsx").then(m => ({ default: m.CampaignLinksModal })));
 import { evaluateFormula, formatFormulaResult } from "./utils/formula.js";
 import { COUNTRIES, COUNTRY_MAP, PHONE_CODES, formatPhone,
          validatePhone, autoFormatPhoneNumber, countryCodeFromDial,
@@ -6074,6 +6075,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
   const [showCommMenu, setShowCommMenu] = useState(false);
   const [showTalentCard, setShowTalentCard] = useState(false);
+  const [showCampaignLinks, setShowCampaignLinks] = useState(false);
   // Track which custom sections are collapsed (by separatorId)
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`talentos_collapsed_${objectName}`)) || {}; } catch { return {}; }
@@ -6979,7 +6981,20 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {/* Spacer */}
         <div style={{ flex:1 }}/>
 
-        {/* Talent Card — only on Person records */}
+        {/* Campaign Link builder — non-Person records only (Jobs, Talent Pools, etc.) */}
+        {objectName !== "Person" && (
+          <button
+            onClick={() => setShowCampaignLinks(true)}
+            title="Create a tracked campaign link for this record"
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:9,
+              border:`1.5px solid ${C.border}`, background:C.surface, color:C.text2,
+              fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:F, flexShrink:0 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+            </svg>
+            Campaign link
+          </button>
+        )}
         {objectName === "Person" && (
           <ActionBtn icon="fileText" label="Talent Card" onClick={() => setShowTalentCard(true)}/>
         )}
@@ -7222,6 +7237,18 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           environment={environment}
           onClose={() => setShowTalentCard(false)}
         />
+      )}
+
+      {/* Campaign Links modal — pre-populated from this record */}
+      {showCampaignLinks && (
+        <Suspense fallback={null}>
+          <CampaignLinksModal
+            environment={environment}
+            poolId={objectName?.toLowerCase().includes("pool") ? record?.id : undefined}
+            initialRecord={{ record, objectName, objectColor }}
+            onClose={() => setShowCampaignLinks(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

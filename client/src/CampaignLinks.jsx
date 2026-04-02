@@ -84,9 +84,10 @@ const UTM_SOURCES = ["linkedin","twitter","facebook","instagram","email","newsle
 const UTM_MEDIUMS = ["social","email","organic","paid","referral","cpc","banner","event","dm","other"];
 
 // ── Link Modal ────────────────────────────────────────────────────────────────
-function LinkModal({ environment, portals, pools, existing, onSave, onClose }) {
+function LinkModal({ environment, portals, pools, existing, defaults, onSave, onClose }) {
   const blank = { name:"",portal_id:"",portal_slug:"",page_slug:"/",pool_id:"",pool_stage:"",
-    utm_source:"linkedin",utm_medium:"social",utm_campaign:"",utm_content:"",utm_term:"",notes:"" };
+    utm_source:"linkedin",utm_medium:"social",utm_campaign:"",utm_content:"",utm_term:"",notes:"",
+    ...(defaults||{}) };  // pre-populate from record context
   const [form,setForm] = useState(existing?{...blank,...existing}:blank);
   const [saving,setSaving] = useState(false);
   const [tab,setTab] = useState("link");
@@ -342,7 +343,7 @@ function StatsPanel({ link, onClose }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function CampaignLinks({ environment, portalId, poolId, compact=false }) {
+export default function CampaignLinks({ environment, portalId, poolId, initialLinkDefaults, compact=false }) {
   const [links,setLinks]     = useState([]);
   const [portals,setPortals] = useState([]);
   const [pools,setPools]     = useState([]);
@@ -359,13 +360,26 @@ export default function CampaignLinks({ environment, portalId, poolId, compact=f
       const qs = new URLSearchParams({ environment_id: environment.id });
       if(portalId) qs.set("portal_id", portalId);
       if(poolId)   qs.set("pool_id",   poolId);
-      const [lnks,prts,allObjs] = await Promise.all([
-        api.get(`/campaign-links?${qs}`),
-        api.get(`/portals?environment_id=${environment.id}`).catch(()=>[]),
+
+      // Load campaign links + portals + objects in parallel
+      // Portals need special handling: response may be array or {portals:[...]} or error object
+      const safePortals = async () => {
+        try {
+          const r = await api.get(`/portals?environment_id=${environment.id}`);
+          if (Array.isArray(r)) return r;
+          if (r && Array.isArray(r.portals)) return r.portals;
+          if (r && Array.isArray(r.data)) return r.data;
+          return [];
+        } catch { return []; }
+      };
+
+      const [lnks, prts, allObjs] = await Promise.all([
+        api.get(`/campaign-links?${qs}`).catch(()=>[]),
+        safePortals(),
         api.get(`/objects?environment_id=${environment.id}`).catch(()=>[]),
       ]);
       setLinks(Array.isArray(lnks)?lnks:[]);
-      setPortals(Array.isArray(prts)?prts:[]);
+      setPortals(prts);  // already sanitised by safePortals()
       const poolObj=(Array.isArray(allObjs)?allObjs:[]).find(o=>o.slug==="talent-pools"||o.name?.toLowerCase().includes("pool"));
       if(poolObj){
         const pRecs=await api.get(`/records?object_id=${poolObj.id}&environment_id=${environment.id}&limit=200`).catch(()=>({records:[]}));
@@ -415,24 +429,49 @@ export default function CampaignLinks({ environment, portalId, poolId, compact=f
       :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
           {filtered.map(link=><LinkCard key={link.id} link={link} onEdit={()=>setEditing(link)} onDelete={()=>handleDelete(link.id)} onViewStats={()=>setStatsLink(link)}/>)}
         </div>)}
-      {(creating||editing)&&<LinkModal environment={environment} portals={portals} pools={pools} existing={editing} onSave={handleSave} onClose={()=>{setCreating(false);setEditing(null);}}/>}
+      {(creating||editing)&&<LinkModal environment={environment} portals={portals} pools={pools} existing={editing} defaults={!editing ? initialLinkDefaults : undefined} onSave={handleSave} onClose={()=>{setCreating(false);setEditing(null);}}/>}
       {statsLink&&<StatsPanel link={statsLink} onClose={()=>setStatsLink(null)}/>}
     </div>
   );
 }
 
 // ── Modal wrapper (used from Portals.jsx + Talent Pool records) ───────────────
-export function CampaignLinksModal({ environment, portalId, poolId, onClose }) {
+export function CampaignLinksModal({ environment, portalId, poolId, initialRecord, onClose }) {
+  // Build a context-aware title and initial link defaults from the record
+  const recordContext = initialRecord?.record;
+  const recordName = recordContext?.data?.job_title
+    || recordContext?.data?.pool_name
+    || recordContext?.data?.name
+    || initialRecord?.objectName || "";
+  const isPool = initialRecord?.objectName?.toLowerCase().includes("pool");
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1800,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}
          onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div onMouseDown={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,width:"min(900px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.25)"}}>
+      <div onMouseDown={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,width:"min(920px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.25)"}}>
         <div style={{padding:"14px 18px",background:C.surface,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{fontSize:15,fontWeight:700,color:C.text1,display:"flex",alignItems:"center",gap:8}}><Ic n="link" s={16} c={C.accent}/>Campaign Links</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:32,height:32,borderRadius:9,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Ic n="link" s={15} c={C.accent}/>
+            </div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text1}}>Campaign Links</div>
+              {recordName && <div style={{fontSize:11,color:C.text3}}>Linked to: {recordName}</div>}
+            </div>
+          </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer"}}><Ic n="x" s={18} c={C.text3}/></button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:20}}>
-          <CampaignLinks environment={environment} portalId={portalId} poolId={poolId} compact/>
+          <CampaignLinks
+            environment={environment}
+            portalId={portalId}
+            poolId={isPool ? (recordContext?.id || poolId) : poolId}
+            initialLinkDefaults={recordName ? {
+              utm_campaign: recordName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""),
+              notes: `Campaign link for ${recordName}`,
+            } : undefined}
+            compact
+          />
         </div>
       </div>
     </div>
