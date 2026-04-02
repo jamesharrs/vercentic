@@ -339,6 +339,12 @@ function ContentPanel({ campaign, onGenerated }) {
 // ── Campaign Detail ───────────────────────────────────────────────────────────
 function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated }) {
   const [campaign, setCampaign] = useState(initCampaign);
+  // Fetch full campaign on mount to pick up generated_content if stale in parent
+  useEffect(() => {
+    api.get(`/campaigns/${initCampaign.id}`).then(d => {
+      if (d && d.id) setCampaign(c => ({ ...c, ...d }));
+    }).catch(() => {});
+  }, [initCampaign.id]);
   const [tab, setTab]           = useState("brief");
   const [editing, setEditing]   = useState(false);
   const [form, setForm]         = useState({ ...initCampaign });
@@ -487,7 +493,11 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
 
         {tab === "content" && (
           <div style={{ maxWidth:640 }}>
-            <ContentPanel campaign={campaign} onGenerated={c=>setCampaign(cc=>({...cc,generated_content:c}))}/>
+            <ContentPanel campaign={campaign} onGenerated={c=>{
+              const updated = {...campaign, generated_content: c};
+              setCampaign(updated);
+              onUpdated(updated);
+            }}/>
           </div>
         )}
 
