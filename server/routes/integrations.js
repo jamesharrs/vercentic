@@ -174,16 +174,19 @@ router.post('/', (req, res) => {
   const cat = CATALOG.find(c => c.slug === provider_slug);
   if (!cat) return res.status(404).json({ error: 'Provider not found' });
 
-  // Encrypt secret fields
+  // Encrypt secret fields + apply raw values to process.env for live messaging
   const encConfig = {};
   for (const [key, val] of Object.entries(config || {})) {
     const field = (cat.fields || []).find(f => f.key === key);
     if (!val) continue;
-    if (field?.secret && !val.includes('••••')) {
+    if (val.includes('••••')) continue; // skip masked values
+    if (field?.secret) {
       encConfig[key] = encrypt(val);
-    } else if (!val.includes('••••')) {
+    } else {
       encConfig[key] = val;
     }
+    // Set raw value in process.env so messaging service picks it up immediately
+    process.env[key] = val;
   }
 
   const store = getStore();

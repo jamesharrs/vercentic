@@ -2,68 +2,68 @@
  * Vercentic Messaging Service
  * Handles SMS, WhatsApp, and Email dispatch via Twilio (SMS/WA) and SendGrid (Email).
  *
- * SETUP — add these to server/.env:
+ * Credentials can be set via:
+ *   1. Environment variables (.env file)
+ *   2. Settings → Integrations (saved to store, applied to process.env at runtime)
  *
- *   # Twilio (SMS + WhatsApp)
- *   TWILIO_ACCOUNT_SID=YOUR_ACCOUNT_SID
- *   TWILIO_AUTH_TOKEN=YOUR_AUTH_TOKEN
- *   TWILIO_SMS_NUMBER=+14155552671
- *   TWILIO_WA_NUMBER=whatsapp:+14155552671
- *
- *   # SendGrid (Email)
- *   SENDGRID_API_KEY=YOUR_SENDGRID_KEY
- *   SENDGRID_FROM_EMAIL=noreply@yourdomain.com
- *   SENDGRID_FROM_NAME=Vercentic
- *
- *   # Twilio Webhook (inbound messages)
- *   WEBHOOK_BASE_URL=https://your-railway-url.up.railway.app
- *
- * Until credentials are configured the service runs in SIMULATION mode —
- * messages are saved to the DB but not actually dispatched.
+ * The service checks process.env DYNAMICALLY on every call, so credentials
+ * saved via the Integrations UI take effect immediately without a server restart.
  */
 
-const TWILIO_CONFIGURED = !!(
-  process.env.TWILIO_ACCOUNT_SID &&
-  process.env.TWILIO_AUTH_TOKEN &&
-  process.env.TWILIO_ACCOUNT_SID !== 'YOUR_ACCOUNT_SID'
-);
+// ─── Dynamic credential checks (evaluated on every call, not once at startup) ─
+function isTwilioConfigured() {
+  return !!(
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    process.env.TWILIO_ACCOUNT_SID !== 'YOUR_ACCOUNT_SID'
+  );
+}
 
-const SENDGRID_CONFIGURED = !!(
-  process.env.SENDGRID_API_KEY &&
-  process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_KEY'
-);
-const RESEND_CONFIGURED = !!(
-  process.env.RESEND_API_KEY &&
-  process.env.RESEND_API_KEY !== 'YOUR_RESEND_KEY'
-);
+function isSendGridConfigured() {
+  return !!(
+    process.env.SENDGRID_API_KEY &&
+    process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_KEY'
+  );
+}
 
-let twilioClient = null;
-if (TWILIO_CONFIGURED) {
+function isResendConfigured() {
+  return !!(
+    process.env.RESEND_API_KEY &&
+    process.env.RESEND_API_KEY !== 'YOUR_RESEND_KEY'
+  );
+}
+
+// ─── Lazy Twilio client (created on first use, recreated if credentials change)
+let _twilioClient = null;
+let _twilioSid = null;
+
+function getTwilioClient() {
+  if (!isTwilioConfigured()) return null;
+  if (_twilioClient && _twilioSid === process.env.TWILIO_ACCOUNT_SID) return _twilioClient;
   try {
-    twilioClient = require('twilio')(
+    _twilioClient = require('twilio')(
       process.env.TWILIO_ACCOUNT_SID,
       process.env.TWILIO_AUTH_TOKEN
     );
-    console.log('[messaging] Twilio: LIVE');
+    _twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    console.log('[messaging] Twilio client initialised (LIVE)');
+    return _twilioClient;
   } catch (e) {
     console.warn('[messaging] Twilio init failed:', e.message);
+    return null;
   }
-} else {
-  console.log('[messaging] Twilio: SIMULATION (no credentials)');
 }
 
-if (SENDGRID_CONFIGURED) {
-  console.log('[messaging] SendGrid: LIVE');
-} else {
-  console.log('[messaging] SendGrid: SIMULATION (no credentials)');
-}
+console.log(`[messaging] Twilio: ${isTwilioConfigured() ? 'LIVE' : 'SIMULATION (no credentials)'}`);
+console.log(`[messaging] Email: ${isResendConfigured() ? 'Resend LIVE' : isSendGridConfigured() ? 'SendGrid LIVE' : 'SIMULATION (no credentials)'}`);
 
 // ─── SMS ─────────────────────────────────────────────────────────────────────
 async function sendSMS({ to, body }) {
-  if (!twilioClient) {
+  const client = getTwilioClient();
+  if (!client) {
     return { simulated: true, sid: `sim_${Date.now()}`, status: 'simulated' };
   }
-  const msg = await twilioClient.messages.create({
+  const msg = await client.messages.create({
     body,
     from: process.env.TWILIO_SMS_NUMBER,
     to,
@@ -76,13 +76,13 @@ async function sendSMS({ to, body }) {
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 async function sendWhatsApp({ to, body }) {
-  if (!twilioClient) {
+  const client = getTwilioClient();
+  if (!client) {
     return { simulated: true, sid: `sim_${Date.now()}`, status: 'simulated' };
   }
-  // Twilio WhatsApp requires whatsapp: prefix on both sides
   const from = process.env.TWILIO_WA_NUMBER || `whatsapp:${process.env.TWILIO_SMS_NUMBER}`;
   const toWA = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
-  const msg = await twilioClient.messages.create({
+  const msg = await client.messages.create({
     body,
     from,
     to: toWA,
@@ -93,13 +93,12 @@ async function sendWhatsApp({ to, body }) {
   return { sid: msg.sid, status: msg.status };
 }
 
-// ─── Email (SendGrid or Resend) ───────────────────────────────────────────────
+// ─── Email (Resend or SendGrid) ───────────────────────────────────────────────
 async function sendEmail({ to, toName, subject, body, text, html }) {
   const textBody = text || body || '';
   const htmlBody = html || textBody.replace(/\n/g, '<br>');
 
-  // Try Resend first (simpler setup, free tier)
-  if (RESEND_CONFIGURED) {
+  if (isResendConfigured()) {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -119,8 +118,7 @@ async function sendEmail({ to, toName, subject, body, text, html }) {
     return { messageId: data.id, status: 'sent', provider: 'resend' };
   }
 
-  // Fall back to SendGrid
-  if (SENDGRID_CONFIGURED) {
+  if (isSendGridConfigured()) {
     const sgMail = require('@sendgrid/mail');
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     const [response] = await sgMail.send({
@@ -136,7 +134,6 @@ async function sendEmail({ to, toName, subject, body, text, html }) {
     return { messageId: response.headers['x-message-id'], status: 'sent', provider: 'sendgrid' };
   }
 
-  // Simulation mode
   console.log(`[email-sim] To: ${to} | Subject: ${subject}`);
   return { simulated: true, messageId: `sim_${Date.now()}`, status: 'simulated' };
 }
@@ -144,10 +141,10 @@ async function sendEmail({ to, toName, subject, body, text, html }) {
 // ─── Status helpers ───────────────────────────────────────────────────────────
 function getProviderStatus() {
   return {
-    sms:       TWILIO_CONFIGURED                       ? 'live' : 'simulation',
-    whatsapp:  TWILIO_CONFIGURED                       ? 'live' : 'simulation',
-    email:     RESEND_CONFIGURED || SENDGRID_CONFIGURED ? 'live' : 'simulation',
-    email_provider: RESEND_CONFIGURED ? 'resend' : SENDGRID_CONFIGURED ? 'sendgrid' : 'none',
+    sms:       isTwilioConfigured()                            ? 'live' : 'simulation',
+    whatsapp:  isTwilioConfigured()                            ? 'live' : 'simulation',
+    email:     isResendConfigured() || isSendGridConfigured()   ? 'live' : 'simulation',
+    email_provider: isResendConfigured() ? 'resend' : isSendGridConfigured() ? 'sendgrid' : 'none',
   };
 }
 
