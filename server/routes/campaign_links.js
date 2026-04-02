@@ -49,11 +49,12 @@ function buildLinkUrl(link, req) {
 router.get('/', (req, res) => {
   try {
     ensureStore();
-    const { environment_id, portal_id, pool_id } = req.query;
+    const { environment_id, portal_id, pool_id, campaign_id } = req.query;
     let links = query('campaign_links', l => {
       if (environment_id && l.environment_id !== environment_id) return false;
-      if (portal_id && l.portal_id !== portal_id) return false;
-      if (pool_id && l.pool_id !== pool_id) return false;
+      if (portal_id   && l.portal_id   !== portal_id)   return false;
+      if (pool_id     && l.pool_id     !== pool_id)     return false;
+      if (campaign_id && l.campaign_id !== campaign_id) return false;
       return !l.deleted_at;
     }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -87,7 +88,7 @@ router.post('/', (req, res) => {
     ensureStore();
     const { name, environment_id, portal_id, portal_slug, page_slug,
             pool_id, pool_stage, utm_source, utm_medium, utm_campaign,
-            utm_content, utm_term, notes } = req.body;
+            utm_content, utm_term, notes, campaign_id } = req.body;
     if (!name || !environment_id) return res.status(400).json({ error: 'name and environment_id required' });
     let short_code;
     do { short_code = makeShortCode(); }
@@ -97,6 +98,7 @@ router.post('/', (req, res) => {
       portal_id: portal_id||null, portal_slug: portal_slug||'',
       page_slug: page_slug||'/',
       pool_id: pool_id||null, pool_stage: pool_stage||null,
+      campaign_id: campaign_id||null,
       utm_source: utm_source||'', utm_medium: utm_medium||'',
       utm_campaign: utm_campaign||'', utm_content: utm_content||'',
       utm_term: utm_term||'', notes: notes||'',

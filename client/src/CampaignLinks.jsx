@@ -343,7 +343,7 @@ function StatsPanel({ link, onClose }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function CampaignLinks({ environment, portalId, poolId, initialLinkDefaults, compact=false }) {
+export default function CampaignLinks({ environment, portalId, poolId, initialLinkDefaults, compact=false, campaignId=null }) {
   const [links,setLinks]     = useState([]);
   const [portals,setPortals] = useState([]);
   const [pools,setPools]     = useState([]);
@@ -358,8 +358,9 @@ export default function CampaignLinks({ environment, portalId, poolId, initialLi
     setLoading(true);
     try {
       const qs = new URLSearchParams({ environment_id: environment.id });
-      if(portalId) qs.set("portal_id", portalId);
-      if(poolId)   qs.set("pool_id",   poolId);
+      if(portalId)   qs.set("portal_id",   portalId);
+      if(poolId)     qs.set("pool_id",     poolId);
+      if(campaignId) qs.set("campaign_id", campaignId);
 
       // Load campaign links + portals + objects in parallel
       // Portals need special handling: response may be array or {portals:[...]} or error object
