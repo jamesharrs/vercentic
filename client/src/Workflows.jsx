@@ -533,7 +533,7 @@ function migrateStep(step) {
   return { ...step, actions: step.actions || [] };
 }
 
-const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, envId, allSteps=[] }) => {
+const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, visibilityFields, envId, allSteps=[] }) => {
   const step = migrateStep(rawStep);
   const actions = step.actions || [];
 
@@ -910,7 +910,7 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
           </div>
           <VisibilityRuleBuilder
             rules={step.visibility_rules||[]}
-            fields={fields||[]}
+            fields={visibilityFields||fields||[]}
             onChange={rules => onChange({ ...step, visibility_rules: rules })}/>
         </div>
       )}
@@ -943,7 +943,8 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
   const [viewMode, setViewMode] = useState(workflow?._openCanvas ? "canvas" : "list"); // "list" | "canvas"
   const [flowType, setFlowType] = useState(workflow?.flow_type || 'unstructured');
   const [saving, setSaving]   = useState(false);
-  const [fields, setFields]   = useState([]);
+  const [fields, setFields]         = useState([]);
+  const [visibilityFields, setVisibilityFields] = useState([]);
   const [objects, setObjects] = useState(parentObjects || []);
 
   useEffect(() => {
@@ -960,6 +961,20 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
     if (!objectId) return;
     api.get(`/fields?object_id=${objectId}&environment_id=${environment?.id}`).then(fs => setFields(Array.isArray(fs) ? fs : []));
   }, [objectId]);
+
+  // For people_link workflows, visibility rules apply to Person fields, not the host object
+  useEffect(() => {
+    if (wfType !== 'people_link' || !environment?.id) { setVisibilityFields(fields); return; }
+    // Find the People object and load its fields
+    api.get(`/objects?environment_id=${environment.id}`)
+      .then(objs => {
+        const peopleObj = (Array.isArray(objs) ? objs : []).find(o =>
+          o.slug === 'people' || o.name?.toLowerCase() === 'people' || o.name?.toLowerCase() === 'person');
+        if (!peopleObj) { setVisibilityFields(fields); return; }
+        api.get(`/fields?object_id=${peopleObj.id}&environment_id=${environment.id}`)
+          .then(fs => setVisibilityFields(Array.isArray(fs) ? fs : []));
+      }).catch(() => setVisibilityFields(fields));
+  }, [wfType, environment?.id, fields]);
 
   const addStep = () => {
     setSteps(s => [...s, { id: `new_${Date.now()}`, name: "", automation_type: null, config: {}, actions: [] }]);
@@ -1216,7 +1231,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
                     {i < steps.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 20, background: `${stepDef(step.type).color}30`, marginTop: 4 }}/>}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <StepCard step={step} index={i} total={steps.length} fields={fields} envId={environment?.id}
+                    <StepCard step={step} index={i} total={steps.length} fields={fields} visibilityFields={visibilityFields} envId={environment?.id}
                       allSteps={steps}
                       onChange={updated => updateStep(i, updated)}
                       onDelete={() => deleteStep(i)}
