@@ -1503,7 +1503,7 @@ function App() {
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
-  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|campaign-links|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
 
   // Client support portal — must be before the portal slug fallback
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;

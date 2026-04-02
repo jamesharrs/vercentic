@@ -1,7 +1,9 @@
 // client/src/CampaignLinks.jsx  — Smart link builder with UTM tracking + A/B support
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import apiClient from "./apiClient.js";
-import ABTestPanel from "./ABTestPanel";
+
+// Lazy-load ABTestPanel to avoid circular dependency issues and hook count problems
+const ABTestPanel = lazy(() => import("./ABTestPanel.jsx"));
 
 const api = {
   get:   u => apiClient.get(u),
@@ -289,7 +291,9 @@ function StatsPanel({ link, onClose }) {
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
         {tab==="ab"
-          ? <ABTestPanel portalId={link.portal_id} links={[link]} days={days}/>
+          ? <Suspense fallback={<div style={{textAlign:"center",padding:32,color:C.text3}}>Loading…</div>}>
+              <ABTestPanel portalId={link.portal_id} links={[link]} days={days}/>
+            </Suspense>
           : loading ? <div style={{textAlign:"center",padding:40,color:C.text3}}>Loading…</div>
           : !stats   ? <div style={{textAlign:"center",padding:40,color:C.text3}}>No data yet</div>
           : (<>
