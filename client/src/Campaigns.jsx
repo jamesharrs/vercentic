@@ -356,7 +356,7 @@ function ContentPanel({ campaign, environment, onGenerated, onPortalCreated }) {
         <div style={{ display:"flex", gap:8 }}>
           {pageCreated ? (
             <Btn v="green" s="sm" icon="check"
-              onClick={() => window.open(`/portals?edit=${pageCreated.portalId}`, "_blank")}>
+              onClick={() => window.open(`/settings/portals?edit=${pageCreated.portalId}`, "_blank")}>
               View campaign page ↗
             </Btn>
           ) : (
@@ -555,7 +555,7 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
             <Badge label={goal.label}   color={goal.color}   bg={goal.bg}/>
             <Badge label={status.label} color={status.color} bg={status.bg}/>
             {campaign.campaign_portal_id && (
-              <span onClick={()=>window.open(`/portals?edit=${campaign.campaign_portal_id}`,"_blank")}
+              <span onClick={()=>window.open(`/settings/portals?edit=${campaign.campaign_portal_id}`,"_blank")}
                 style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:99,
                   fontSize:11,fontWeight:700,background:"#F3F0FF",color:"#7048e8",cursor:"pointer" }}>
                 📄 Page created ↗

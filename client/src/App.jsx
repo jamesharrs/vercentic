@@ -2265,7 +2265,7 @@ function App() {
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <SettingsPage
               environment={selectedEnv}
-              initialSection={window.location.pathname.startsWith('/settings/') ? window.location.pathname.split('/settings/')[1] : null}
+              initialSection={window.location.pathname.startsWith('/settings/') ? window.location.pathname.split('/settings/')[1].split('/')[0] : null}
               onSectionChange={(sectionId) => {
                 const url = sectionId ? `/settings/${sectionId}` : '/settings';
                 if (window.location.pathname !== url) window.history.pushState({ nav: 'settings', section: sectionId }, '', url);

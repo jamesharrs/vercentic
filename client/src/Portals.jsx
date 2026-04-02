@@ -3118,6 +3118,17 @@ export default function PortalsPage({ environment, onFullScreen }) {
     setPortals(list);
     setLoading(false);
     loadStats(list);
+    // Auto-open portal if ?edit=<id> is in the URL (e.g. from campaign page creation)
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get("edit");
+    if (editId) {
+      const target = list.find(p => p.id === editId);
+      if (target) {
+        setEditing(target);
+        // Clean up the URL so refreshing doesn't re-open it
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
   }, [environment?.id]);
 
   useEffect(()=>{ load(); },[load]);
