@@ -72,7 +72,7 @@ const MessageRow = ({ msg, selected, onClick }) => {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
             <span style={{ fontSize: 13, fontWeight: isUnread ? 700 : 500, color: C.text1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {msg.from_name || msg.from_email}
+              {msg.from_name || msg.from_contact || msg.from_email}
             </span>
             <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>{relTime(msg.received_at)}</span>
           </div>
@@ -84,6 +84,14 @@ const MessageRow = ({ msg, selected, onClick }) => {
           </div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5 }}>
             {isUnread && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: C.accent, color: 'white' }}>NEW</span>}
+            {/* Channel badge */}
+            {msg.channel && msg.channel !== 'email' && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                background: msg.channel === 'sms' ? '#DBEAFE' : '#D1FAE5',
+                color: msg.channel === 'sms' ? '#1E40AF' : '#065F46' }}>
+                {msg.channel.toUpperCase()}
+              </span>
+            )}
             {msg.matched_record
               ? <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 99, background: '#D1FAE5', color: '#065F46' }}>✓ {msg.matched_record.name}</span>
               : <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 99, background: '#FEF3C7', color: '#92400E' }}>Unmatched</span>
@@ -97,7 +105,7 @@ const MessageRow = ({ msg, selected, onClick }) => {
 
 const ThreadBubble = ({ msg, isInbound }) => (
   <div style={{ display: 'flex', justifyContent: isInbound ? 'flex-start' : 'flex-end', marginBottom: 12 }}>
-    {isInbound && <Avatar name={msg.from_name || msg.from_email} size={28} />}
+    {isInbound && <Avatar name={msg.from_name || msg.from_contact || msg.from_email} size={28} />}
     <div style={{ maxWidth: '70%', marginLeft: isInbound ? 8 : 0, marginRight: isInbound ? 0 : 8 }}>
       <div style={{
         padding: '10px 14px', borderRadius: isInbound ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
@@ -106,7 +114,7 @@ const ThreadBubble = ({ msg, isInbound }) => (
         fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
       }}>{msg.body || msg.body_text}</div>
       <div style={{ fontSize: 10, color: C.text3, marginTop: 3, textAlign: isInbound ? 'left' : 'right' }}>
-        {isInbound ? (msg.from_name || msg.from_email) : 'You'} · {relTime(msg.sent_at || msg.received_at)}
+        {isInbound ? (msg.from_name || msg.from_contact || msg.from_email) : 'You'} · {relTime(msg.sent_at || msg.received_at)}
       </div>
     </div>
     {!isInbound && <Avatar name="Me" size={28} color="#4361EE" />}
@@ -228,7 +236,7 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
             <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: C.text1 }}>{msg.subject || '(no subject)'}</h2>
             <div style={{ fontSize: 12, color: C.text3 }}>
               <span style={{ fontWeight: 600, color: C.text2 }}>{msg.from_name}</span>
-              {' '}<span>&lt;{msg.from_email}&gt;</span>
+              {' '}<span>&lt;{msg.from_contact || msg.from_email}&gt;</span>
               <span style={{ marginLeft: 8 }}>{relTime(msg.received_at)}</span>
             </div>
           </div>
@@ -264,7 +272,7 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
       <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.card, flexShrink: 0 }}>
         <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '4px 12px 2px', fontSize: 11, color: C.text3, borderBottom: `1px solid ${C.border}` }}>
-            To: <span style={{ color: C.text2, fontWeight: 600 }}>{msg.from_email}</span>
+            To: <span style={{ color: C.text2, fontWeight: 600 }}>{msg.from_contact || msg.from_email}</span>
           </div>
           <textarea value={reply} onChange={e => setReply(e.target.value)} placeholder="Write a reply…" rows={3}
             style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', padding: '10px 12px', fontSize: 13, fontFamily: F, color: C.text1, background: 'transparent', boxSizing: 'border-box' }}
@@ -290,27 +298,36 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
   );
 };
 
-export default function InboxModule({ environment, onNavigate }) {
-  const [messages, setMessages] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+export default function InboxModule({ environment, session, onNavigate }) {
+  const [messages,  setMessages]  = useState([]);
+  const [total,     setTotal]     = useState(0);
+  const [loading,   setLoading]   = useState(true);
+  const [filter,    setFilter]    = useState('mine');
+  const [channel,   setChannel]   = useState('all');
+  const [channelCounts, setChannelCounts] = useState({});
+  const [search,    setSearch]    = useState('');
   const [selectedId, setSelectedId] = useState(null);
-  const [seeding, setSeeding] = useState(false);
-  const [showSeed, setShowSeed] = useState(false);
-  const [seedForm, setSeedForm] = useState({ from_name: '', from_email: '', subject: '', body: '' });
+  const [seeding,   setSeeding]   = useState(false);
+  const [showSeed,  setShowSeed]  = useState(false);
+  const [seedForm,  setSeedForm]  = useState({ from_name: '', from_email: '', subject: '', body: '' });
   const searchRef = useRef('');
+  const userId = session?.user?.id || '';
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
     try {
-      const data = await api.get(`/inbox?environment_id=${environment.id}&filter=${filter}&search=${encodeURIComponent(searchRef.current)}`);
+      const params = new URLSearchParams({
+        environment_id: environment.id, filter, channel,
+        search: searchRef.current,
+        ...(userId ? { user_id: userId } : {}),
+      });
+      const data = await api.get(`/inbox?${params}`);
       setMessages(data.messages || []);
       setTotal(data.total || 0);
+      setChannelCounts(data.channel_counts || {});
     } catch { setMessages([]); }
     setLoading(false);
-  }, [environment?.id, filter]);
+  }, [environment?.id, filter, channel, userId]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
   useEffect(() => { searchRef.current = search; const t = setTimeout(() => load(), 280); return () => clearTimeout(t); }, [search, load]);
@@ -326,7 +343,14 @@ export default function InboxModule({ environment, onNavigate }) {
   };
 
   const unreadCount = messages.filter(m => !m.read).length;
-  const FILTERS = [{ id: 'all', label: 'All' }, { id: 'unread', label: `Unread${unreadCount ? ` (${unreadCount})` : ''}` }, { id: 'unmatched', label: 'Unmatched' }];
+
+  const CHANNELS = [
+    { id: 'all',      label: 'All',      icon: 'inbox' },
+    { id: 'email',    label: 'Email',    icon: 'mail' },
+    { id: 'sms',      label: 'SMS',      icon: 'phone' },
+    { id: 'whatsapp', label: 'WhatsApp', icon: 'messageSquare' },
+  ];
+  const FILTERS = [{ id: 'mine', label: 'Mine' }, { id: 'all', label: 'All' }, { id: 'unread', label: `Unread${unreadCount ? ` (${unreadCount})` : ''}` }, { id: 'unmatched', label: 'Unmatched' }];
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', fontFamily: F, background: C.bg }}>
@@ -350,6 +374,27 @@ export default function InboxModule({ environment, onNavigate }) {
               style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, flex: 1, fontFamily: F, color: C.text1 }} />
             {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Ic n="x" s={11} c={C.text3} /></button>}
           </div>
+          {/* Channel pills */}
+          <div style={{ display:'flex', gap:5, marginBottom:8, flexWrap:'wrap' }}>
+            {CHANNELS.map(ch => {
+              const cnt = ch.id === 'all' ? undefined : channelCounts[ch.id];
+              return (
+                <button key={ch.id} onClick={() => setChannel(ch.id)} style={{
+                  display:'flex', alignItems:'center', gap:4,
+                  padding:'4px 10px', borderRadius:99, border:'1.5px solid',
+                  borderColor: channel === ch.id ? C.accent : C.border,
+                  background: channel === ch.id ? C.accentLight : 'transparent',
+                  color: channel === ch.id ? C.accent : C.text3,
+                  fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, transition:'all .12s',
+                }}>
+                  <Ic n={ch.icon} s={10}/>
+                  {ch.label}
+                  {cnt > 0 && <span style={{ fontSize:10, background:channel===ch.id?C.accent:C.border, color:channel===ch.id?'white':C.text3, borderRadius:99, padding:'0 4px', lineHeight:'14px' }}>{cnt}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {/* Status filter tabs */}
           <div style={{ display: 'flex' }}>
             {FILTERS.map(f => (
               <button key={f.id} onClick={() => setFilter(f.id)} style={{
@@ -359,6 +404,25 @@ export default function InboxModule({ environment, onNavigate }) {
                 cursor: 'pointer', fontFamily: F, transition: 'all .12s'
               }}>{f.label}</button>
             ))}
+          </div>
+          {/* Channel pills */}
+          <div style={{ display:'flex', gap:5, padding:'8px 0 2px', flexWrap:'wrap' }}>
+            {CHANNELS.map(ch => {
+              const cnt = ch.id !== 'all' ? channelCounts[ch.id] : null;
+              return (
+                <button key={ch.id} onClick={() => setChannel(ch.id)} style={{
+                  display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:99,
+                  border:`1.5px solid ${channel === ch.id ? C.accent : C.border}`,
+                  background: channel === ch.id ? C.accentLight : 'transparent',
+                  color: channel === ch.id ? C.accent : C.text3,
+                  fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, transition:'all .12s',
+                }}>
+                  <Ic n={ch.icon} s={10} c={channel === ch.id ? C.accent : C.text3}/>
+                  {ch.label}
+                  {cnt > 0 && <span style={{ fontSize:9, background: channel===ch.id ? C.accent : C.border, color: channel===ch.id ? 'white' : C.text3, borderRadius:99, padding:'0 4px', lineHeight:'14px', marginLeft:1 }}>{cnt}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -373,7 +437,7 @@ export default function InboxModule({ environment, onNavigate }) {
                     {filter === 'unread' ? 'No unread messages' : filter === 'unmatched' ? 'No unmatched messages' : 'No messages yet'}
                   </div>
                   <div style={{ fontSize: 11, color: C.text3 }}>
-                    {filter === 'all' ? 'Click + to simulate an inbound message' : 'Try changing the filter'}
+                    {filter === 'mine' ? 'No messages yet — try switching to All' : filter === 'all' ? 'Click + to simulate an inbound message' : 'Try changing the filter'}
                   </div>
                 </div>
               : messages.map(m => <MessageRow key={m.id} msg={m} selected={m.id === selectedId} onClick={() => setSelectedId(m.id)} />)

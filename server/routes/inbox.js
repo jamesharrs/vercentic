@@ -3,47 +3,112 @@ const router = express.Router();
 const { getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
 
-// GET /api/inbox — list messages
+// GET /api/inbox — unified multi-channel inbox (email + SMS + WhatsApp)
 router.get('/', (req, res) => {
-  const { environment_id, filter = 'all', page = 1, limit = 50, search } = req.query;
+  const { environment_id, filter = 'mine', channel = 'all', page = 1, limit = 50, search, user_id } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   const store = getStore();
-  let messages = (store.inbound_messages || []).filter(m => m.environment_id === environment_id);
-  if (filter === 'unread') messages = messages.filter(m => !m.read);
+
+  // 1. Inbound emails from inbound_messages
+  const inboundEmails = (store.inbound_messages || [])
+    .filter(m => m.environment_id === environment_id)
+    .map(m => ({
+      _source: 'inbound_message', channel: 'email', id: m.id,
+      thread_id: m.thread_id, from_name: m.from_name, from_contact: m.from_email,
+      subject: m.subject, preview: (m.body_text || '').slice(0, 120),
+      matched_record_id: m.matched_record_id, related_record_id: m.related_record_id,
+      read: !!m.read, assigned_to: m.assigned_to,
+      received_at: m.received_at, created_at: m.created_at, context: m.context || 'general',
+    }));
+
+  // 2. Inbound SMS / WhatsApp / web from communications
+  const inboundComms = (store.communications || [])
+    .filter(c => c.environment_id === environment_id && c.direction === 'inbound'
+              && ['sms', 'whatsapp', 'web'].includes(c.type))
+    .map(c => ({
+      _source: 'communication', channel: c.type, id: c.id,
+      thread_id: c.thread_id || c.id,
+      from_name: c.from_name || c.from_number || 'Unknown',
+      from_contact: c.from_number || c.from_email || '',
+      subject: c.subject || (c.type === 'sms' ? 'SMS' : c.type === 'whatsapp' ? 'WhatsApp' : 'Web message'),
+      preview: (c.body || '').slice(0, 120),
+      matched_record_id: c.record_id, related_record_id: c.related_record_id,
+      read: !!c.read, assigned_to: c.assigned_to || null,
+      received_at: c.sent_at || c.created_at, created_at: c.created_at, context: c.context || 'general',
+    }));
+
+  // 3. Merge — keep latest message per thread
+  const threadMap = new Map();
+  [...inboundEmails, ...inboundComms].forEach(m => {
+    const key = m.thread_id || m.id;
+    const ex  = threadMap.get(key);
+    if (!ex || new Date(m.received_at) > new Date(ex.received_at)) threadMap.set(key, m);
+  });
+  let messages = Array.from(threadMap.values());
+
+  // 4. "Mine" — threads I replied to, OR candidates linked to jobs I'm on
+  if (filter === 'mine' && user_id) {
+    const myThreads = new Set(
+      (store.communications || [])
+        .filter(c => c.direction === 'outbound' && c.created_by === user_id)
+        .map(c => c.thread_id).filter(Boolean)
+    );
+    const myJobIds = new Set(
+      (store.records || [])
+        .filter(r => r.data?.owner_id === user_id || r.data?.recruiter_id === user_id || r.data?.hiring_manager_id === user_id)
+        .map(r => r.id)
+    );
+    const myPersonIds = new Set(
+      (store.people_links || []).filter(l => myJobIds.has(l.record_id)).map(l => l.person_id)
+    );
+    messages = messages.filter(m => myThreads.has(m.thread_id) || myPersonIds.has(m.matched_record_id));
+  }
+
+  // 5. Standard filters
+  if (filter === 'unread')    messages = messages.filter(m => !m.read);
   if (filter === 'unmatched') messages = messages.filter(m => !m.matched_record_id);
-  if (filter === 'mine') messages = messages.filter(m => m.assigned_to === req.query.user_id);
+  if (channel !== 'all')      messages = messages.filter(m => m.channel === channel);
+
+  // 6. Search
   if (search) {
     const q = search.toLowerCase();
     messages = messages.filter(m =>
       (m.from_name || '').toLowerCase().includes(q) ||
-      (m.from_email || '').toLowerCase().includes(q) ||
+      (m.from_contact || '').toLowerCase().includes(q) ||
       (m.subject || '').toLowerCase().includes(q) ||
-      (m.body_text || '').toLowerCase().includes(q)
+      (m.preview || '').toLowerCase().includes(q)
     );
   }
+
   messages.sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
+
+  // 7. Enrich with person name
+  const allUnified = Array.from(threadMap.values());
   const total = messages.length;
   const start = (parseInt(page) - 1) * parseInt(limit);
-  const paginated = messages.slice(start, start + parseInt(limit));
-  const records = store.records || [];
-  const enriched = paginated.map(m => {
+  const enriched = messages.slice(start, start + parseInt(limit)).map(m => {
     let matched_record = null;
     if (m.matched_record_id) {
-      const rec = records.find(r => r.id === m.matched_record_id);
+      const rec = (store.records || []).find(r => r.id === m.matched_record_id);
       if (rec) {
         const d = rec.data || {};
-        matched_record = {
-          id: rec.id,
-          name: [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown',
-          object_id: rec.object_id
-        };
+        matched_record = { id: rec.id, object_id: rec.object_id,
+          name: [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown' };
       }
     }
     return { ...m, matched_record };
   });
-  const unread_count = (store.inbound_messages || [])
-    .filter(m => m.environment_id === environment_id && !m.read).length;
-  res.json({ messages: enriched, total, unread_count });
+
+  res.json({
+    messages: enriched, total,
+    unread_count: allUnified.filter(m => !m.read).length,
+    channel_counts: {
+      email:    allUnified.filter(m => m.channel === 'email').length,
+      sms:      allUnified.filter(m => m.channel === 'sms').length,
+      whatsapp: allUnified.filter(m => m.channel === 'whatsapp').length,
+      web:      allUnified.filter(m => m.channel === 'web').length,
+    },
+  });
 });
 
 // GET /api/inbox/unread-count
