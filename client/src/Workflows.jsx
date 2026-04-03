@@ -1972,6 +1972,12 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     catch { return DEFAULT_PIPELINE_COLS; }
   });
   const saveColIds = ids => { setVisibleColIds(ids); try { localStorage.setItem('talentos_pipeline_cols', JSON.stringify(ids)); } catch {} };
+  const [sortBy,  setSortBy]  = useState(null);   // column id or null
+  const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
+  const toggleSort = col => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+  };
   const [addingPerson, setAddingPerson]   = useState(false);
   const [personSearch, setPersonSearch]   = useState("");
   const [saving, setSaving]               = useState(false);
@@ -2114,8 +2120,27 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         })
       : selectedStage ? peopleLinks.filter(l => l.stage_id === selectedStage)
       : [];
-    return [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
-  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, categories]);
+    const getVal = (link, col) => {
+      const d = link.person_data || {};
+      if (col === 'match')      return matchScores[link.id]?.score ?? -1;
+      if (col === 'name')       return [d.first_name, d.last_name].filter(Boolean).join(' ').toLowerCase();
+      if (col === 'title')      return (d.current_title || '').toLowerCase();
+      if (col === 'location')   return (d.location || '').toLowerCase();
+      if (col === 'email')      return (d.email || '').toLowerCase();
+      if (col === 'department') return (d.department || '').toLowerCase();
+      if (col === 'linked_job') return (link.target_title || '').toLowerCase();
+      if (col === 'added')      return link.created_at || '';
+      return '';
+    };
+    const sorted = sortBy
+      ? [...base].sort((a, b) => {
+          const va = getVal(a, sortBy), vb = getVal(b, sortBy);
+          const cmp = typeof va === 'number' ? vb - va : va < vb ? -1 : va > vb ? 1 : 0;
+          return sortDir === 'asc' ? cmp : -cmp;
+        })
+      : [...base].sort((a, b) => (matchScores[b.id]?.score || 0) - (matchScores[a.id]?.score || 0));
+    return sorted;
+  }, [selectedStage, expandedCat, peopleLinks, matchScores, plSteps, categories, sortBy, sortDir]);
 
   // stepToCatId — maps step.id → category.id using explicit or keyword-guessed category
   const stepToCatId = useMemo(() => {
@@ -2545,24 +2570,19 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     </button>
                   </>
                 )}
-                {/* Open in People list */}
-                {visiblePeople.length > 0 && (
-                  <button
-                    onClick={() => {
-                      const stageName = selectedStage === '__all__' ? 'All Stages' : (plSteps.find(s => s.id === selectedStage)?.name || 'Stage');
-                      const ids = visiblePeople.map(l => l.person_record_id).filter(Boolean);
-                      window.dispatchEvent(new CustomEvent('talentos:open-people-list', {
-                        detail: { personIds: ids, stageName, label: `Stage: ${stageName}` }
-                      }));
-                    }}
-                    title="Open these people in the People list view"
-                    style={{ background:"none", border:`1px solid #e5e7eb`, borderRadius:6, padding:"3px 8px", cursor:"pointer", display:"flex", alignItems:"center", gap:4, color:"#6b7280", fontSize:11 }}>
-                    <Ic n="users" s={12}/>
-                    List
-                  </button>
-                )}
-                {/* Column picker — only in list view */}
-                {pipelineView === "list" && (
+                {/* View toggle */}
+                <div style={{ display:'flex', gap:2, background:'#f3f4f6', borderRadius:6, padding:2 }}>
+                  {['card','list'].map(v=>(
+                    <button key={v} onClick={()=>setPipelineView(v)}
+                      style={{ padding:'2px 8px', borderRadius:5, fontSize:11, fontWeight:600, border:'none', cursor:'pointer', fontFamily:F,
+                        background:pipelineView===v?'white':'transparent', color:pipelineView===v?'#374151':'#9ca3af',
+                        boxShadow:pipelineView===v?'0 1px 3px rgba(0,0,0,.1)':'none' }}>
+                      {v==='card'?'Cards':'List'}
+                    </button>
+                  ))}
+                </div>
+                {/* Columns button — always visible */}
+                {
                   <div style={{ position:"relative" }}>
                     <button onClick={()=>setShowColPicker(v=>!v)}
                       style={{ background:"none", border:`1px solid #e5e7eb`, borderRadius:6, padding:"3px 8px", cursor:"pointer", display:"flex", alignItems:"center", gap:4, color:"#6b7280", fontSize:11 }}>
@@ -2596,7 +2616,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       );
                     })()}
                   </div>
-                )}
+                }
                 <button onClick={openAddPerson}
                   style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"2px 6px" }}>
                   + Add
@@ -2618,8 +2638,14 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                           onChange={e=>setSelectedLinks(e.target.checked?visiblePeople.map(l=>l.id):[])}
                           style={{ accentColor:"#7c3aed", cursor:"pointer" }}/>
                       </th>
+                      {/* Name header — always first, sortable */}
+                      <th onClick={()=>toggleSort('name')} style={{ padding:"5px 8px", textAlign:"left", fontWeight:700, color:"#7c3aed", fontSize:11, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap" }}>
+                        Name {sortBy==='name'?(sortDir==='asc'?'↑':'↓'):''}
+                      </th>
                       {PIPELINE_COLS.filter(c=>visibleColIds.includes(c.id)&&c.id!=="name"&&c.id!=="stage").map(c=>(
-                        <th key={c.id} style={{ padding:"5px 8px", textAlign:"left", fontWeight:700, color:"#7c3aed", fontSize:11 }}>{c.label}</th>
+                        <th key={c.id} onClick={()=>toggleSort(c.id)} style={{ padding:"5px 8px", textAlign:"left", fontWeight:700, color:"#7c3aed", fontSize:11, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap" }}>
+                          {c.label} {sortBy===c.id?(sortDir==='asc'?'↑':'↓'):''}
+                        </th>
                       ))}
                       <th style={{ padding:"5px 8px", textAlign:"left", fontWeight:700, color:"#7c3aed", fontSize:11 }}>Stage</th>
                       <th style={{ width:24 }}/>
@@ -2692,6 +2718,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
                   matchScore={matchScores[link.id]}
                   personData={link.person_data}
+                  visibleColIds={visibleColIds}
                   selected={selectedLinks.includes(link.id)}
                   onSelect={id=>setSelectedLinks(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
                   onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
@@ -2751,7 +2778,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   );
 }
 // ─── PipelinePersonRow ────────────────────────────────────────────────────────
-function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, personData, selected, onSelect, onMove, onRemove, onNavigate }) {
+function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, personData, visibleColIds, selected, onSelect, onMove, onRemove, onNavigate }) {
+  const effectiveCols = visibleColIds || ['name','match','title','location','stage'];
   const currentIdx  = steps.findIndex(s => s.id === link.stage_id);
   const currentStep = steps[currentIdx] || steps[0];
   const prevStep    = currentIdx > 0 ? steps[currentIdx - 1] : null;
@@ -2803,8 +2831,8 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
         }
       </div>
 
-      {/* Match score badge */}
-      {score !== null && (
+      {/* Match score badge — only when match col is visible */}
+      {score !== null && effectiveCols.includes('match') && (
         <div title={matchScore?.reasons?.join(" · ")||"Recommendation score"}
           style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0,
             background:scoreBg, border:`1px solid ${scoreColor}22`, borderRadius:8,
@@ -2814,19 +2842,37 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
         </div>
       )}
 
-      {/* Name + location */}
+      {/* Name + configurable extra fields */}
       <div style={{ flex:1, minWidth:0 }}>
         <div onClick={() => onNavigate && onNavigate(link.person_record_id)}
           style={{ fontSize:13, fontWeight:600, color: onNavigate ? "#7c3aed" : C.text1,
             cursor: onNavigate ? "pointer" : "default", overflow:"hidden", textOverflow:"ellipsis",
             whiteSpace:"nowrap", textDecoration: onNavigate ? "underline" : "none" }}>{label}</div>
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:1, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2, flexWrap:"wrap" }}>
+          {/* Always show current title as the primary subtitle */}
           {subtitle && <span style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{subtitle}</span>}
-          {location && (
-            <span style={{ fontSize:10, color:"#7c3aed", background:"#ede9fe", borderRadius:20, padding:"1px 6px", fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
-              📍 {location}
-            </span>
-          )}
+          {/* Render extra configured columns as chips */}
+          {effectiveCols.filter(id=>!['name','match','stage'].includes(id)).map(colId => {
+            const d = personData || {};
+            let val = null;
+            if (colId==='title'      && d.current_title)  val = d.current_title;
+            if (colId==='location'   && (d.location||d.city)) val = (d.location||d.city);
+            if (colId==='email'      && d.email)           val = d.email;
+            if (colId==='phone'      && (d.phone||d.mobile)) val = d.phone||d.mobile;
+            if (colId==='department' && d.department)      val = d.department;
+            if (colId==='linked_job') val = link.target_title||null;
+            if (colId==='added')      val = link.created_at?new Date(link.created_at).toLocaleDateString():null;
+            if (!val || (colId==='title' && val===subtitle)) return null; // skip if same as subtitle
+            const isLocation = colId==='location';
+            return (
+              <span key={colId} style={{ fontSize:10, color: isLocation?"#7c3aed":"#6b7280",
+                background: isLocation?"#ede9fe":"#f3f4f6",
+                borderRadius:20, padding:"1px 6px", fontWeight: isLocation?600:400,
+                whiteSpace:"nowrap", flexShrink:0, maxWidth:120, overflow:"hidden", textOverflow:"ellipsis" }}>
+                {isLocation && "📍 "}{val}
+              </span>
+            );
+          })}
         </div>
       </div>
       {/* Stage controls */}
