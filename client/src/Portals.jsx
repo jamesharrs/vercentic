@@ -439,8 +439,12 @@ const EqualOppsTab = ({ portal, onChange }) => {
         <span style={{ fontWeight:600 }}>Enable Equal Opportunities section on application forms</span>
       </label>
       {portal.eo_enabled!==false && (<>
-        <div>
-          {lbl("Country / region template")}
+        <div style={{ background:C.accentLight, border:`1px solid ${C.accent}28`, borderRadius:10, padding:"10px 14px", marginBottom:4 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:4 }}>📍 Location-driven templates</div>
+          <p style={{ fontSize:11, color:C.text2, margin:0, lineHeight:1.6 }}>The EO template is <strong>automatically selected from the job's location</strong> when a candidate applies. UK / EU → full UK EO form. US → EEO form. UAE / Gulf → gender + age. The setting below is the <em>fallback</em> for ambiguous locations.</p>
+        </div>
+        <div style={{ marginTop:10 }}>
+          {lbl("Fallback template (when job location is ambiguous)")}
           <select value={portal.eo_country||"generic"} onChange={e=>set("eo_country",e.target.value)} style={inp}>
             <option value="uk">United Kingdom — gender, age, ethnicity, disability, religion, orientation</option>
             <option value="us">United States — EEO compliant (gender, race, veteran, disability)</option>
@@ -448,9 +452,9 @@ const EqualOppsTab = ({ portal, onChange }) => {
             <option value="generic">Generic / International — gender and age</option>
           </select>
         </div>
-        <div style={{ background:C.surface2, borderRadius:10, padding:12, border:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:8 }}>QUESTIONS IN THIS TEMPLATE</div>
-          {(TEMPLATE_FIELDS[portal.eo_country||"generic"]||[]).map(q=>(
+        <div style={{ background:C.surface2, borderRadius:10, padding:12, border:`1px solid ${C.border}`, marginTop:4 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:8 }}>EXAMPLE — UK / EU template questions</div>
+          {(TEMPLATE_FIELDS["uk"]||[]).map(q=>(
             <div key={q} style={{ fontSize:12, color:C.text2, padding:"3px 0", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:6 }}><span style={{ color:"#0CA678" }}>✓</span> {q} <span style={{ color:C.text3, marginLeft:"auto", fontSize:11 }}>+ Prefer not to say</span></div>
           ))}
         </div>

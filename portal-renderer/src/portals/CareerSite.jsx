@@ -144,7 +144,20 @@ const ApplyForm = ({ job, portal, onBack, onSuccess, api }) => {
   const emailCheckedRef = useRef('')
 
   const eoEnabled = portal.eo_enabled !== false
-  const eoTemplate = EO_TEMPLATES[portal.eo_country || 'generic']
+
+  // Derive EO template from job location, falling back to portal setting, then generic
+  const resolveEoCountry = (location) => {
+    const l = (location || '').toLowerCase()
+    if (/\b(uk|united kingdom|england|scotland|wales|northern ireland|london|manchester|birmingham|leeds|glasgow|edinburgh)\b/.test(l)) return 'uk'
+    if (/\b(us|usa|united states|new york|california|texas|florida|illinois|washington|chicago|los angeles|san francisco|boston|seattle|austin|denver)\b/.test(l)) return 'us'
+    if (/\b(uae|dubai|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|middle east|gulf)\b/.test(l)) return 'uae'
+    if (/\b(canada|toronto|vancouver|montreal|calgary|ottawa)\b/.test(l)) return 'generic'
+    if (/\b(australia|sydney|melbourne|brisbane|perth|adelaide)\b/.test(l)) return 'generic'
+    if (/\b(germany|france|spain|italy|netherlands|belgium|sweden|norway|denmark|finland|switzerland|austria|ireland)\b/.test(l)) return 'uk' // EU countries use UK-style EO
+    return portal.eo_country || 'generic'
+  }
+  const eoCountry = resolveEoCountry(d.location)
+  const eoTemplate = EO_TEMPLATES[eoCountry]
   const STEPS = ['Start', 'Your Details', 'Pre-screen', eoEnabled ? 'Equal Opps' : null, 'Review'].filter(Boolean)
   const STEP_SCREENING = 2
   const STEP_EO = eoEnabled ? 3 : null
@@ -390,6 +403,11 @@ const ApplyForm = ({ job, portal, onBack, onSuccess, api }) => {
                 <h3 style={{ fontSize:20, fontWeight:800, color:'#0F1729', margin:0 }}>Equal opportunities monitoring</h3>
                 <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:99, background:'#EEF2FF', color:'#4361EE' }}>Optional</span>
               </div>
+              {d.location && (
+                <div style={{ fontSize:11, color:'#6B7280', marginBottom:8 }}>
+                  Monitoring form for: <strong>{d.location}</strong> ({eoTemplate.label})
+                </div>
+              )}
               <div style={{ background:'#F0FDF4', border:'1px solid #86EFAC', borderRadius:10, padding:'12px 16px', marginBottom:20 }}>
                 <p style={{ fontSize:12, color:'#15803D', margin:0, lineHeight:1.6 }}>🔒 <strong>Anonymous & confidential.</strong> {eoTemplate.intro}</p>
               </div>
