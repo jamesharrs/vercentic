@@ -286,7 +286,7 @@ const CustomFieldsSection = ({ fields, data, fieldIds }) => {
 };
 
 // ── Main TalentProfileView modal ─────────────────────────────────────────────
-export default function TalentProfileView({ link, matchScore, environmentId, onClose, onNavigate, onMoveStage, steps }) {
+export default function TalentProfileView({ link, allLinks, onNavigateProfile, matchScore, environmentId, onClose, onNavigate, onMoveStage, steps }) {
   const [profileData, setProfileData] = useState(null);
   const [config, setConfig]           = useState(null);
   const [loading, setLoading]         = useState(true);
@@ -304,12 +304,16 @@ export default function TalentProfileView({ link, matchScore, environmentId, onC
     }).catch(() => setLoading(false));
   }, [link?.person_record_id]);
 
-  // Keyboard close
+  // Keyboard close + left/right navigation
   useEffect(() => {
-    const h = e => { if (e.key === 'Escape') onClose(); };
+    const h = e => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight' && nextLink) onNavigateProfile(nextLink);
+      if (e.key === 'ArrowLeft'  && prevLink) onNavigateProfile(prevLink);
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [onClose, onNavigateProfile, link?.id]);
 
   const d    = profileData?.record?.data || {};
   const name = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown';
@@ -343,11 +347,40 @@ export default function TalentProfileView({ link, matchScore, environmentId, onC
   const prevStep = curIdx > 0 ? steps[curIdx-1] : null;
   const nextStep = curIdx < (steps?.length||0)-1 ? steps[curIdx+1] : null;
 
+  // Candidate prev/next navigation
+  const allIdx  = allLinks?.findIndex(l => l.id === link.id) ?? -1;
+  const prevLink = allIdx > 0 ? allLinks[allIdx - 1] : null;
+  const nextLink = allIdx >= 0 && allIdx < (allLinks?.length||0) - 1 ? allLinks[allIdx + 1] : null;
+
   const headerFields = config?.header_fields || ['email','phone','location'];
 
   return ReactDOM.createPortal(
     <div onClick={e=>{if(e.target===e.currentTarget)onClose();}}
       style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(15,23,41,0.75)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, fontFamily:F }}>
+
+      {/* ◀ Prev candidate arrow */}
+      <button onClick={()=>prevLink&&onNavigateProfile(prevLink)} disabled={!prevLink} title="Previous candidate (←)"
+        style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', width:44, height:44, borderRadius:'50%', border:'none', background:prevLink?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.2)', color:prevLink?'#374151':'#9ca3af', cursor:prevLink?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:prevLink?'0 4px 16px rgba(0,0,0,0.2)':'none', fontSize:20, fontWeight:700, zIndex:10, transition:'all .15s' }}
+        onMouseEnter={e=>{if(prevLink)e.currentTarget.style.background='white';}}
+        onMouseLeave={e=>{if(prevLink)e.currentTarget.style.background='rgba(255,255,255,0.9)';}}>
+        ‹
+      </button>
+
+      {/* candidate counter */}
+      {allLinks?.length > 1 && (
+        <div style={{ position:'absolute', top:16, left:'50%', transform:'translateX(-50%)', background:'rgba(255,255,255,0.15)', borderRadius:99, padding:'4px 14px', fontSize:12, fontWeight:700, color:'white', letterSpacing:'0.04em', zIndex:10 }}>
+          {allIdx + 1} / {allLinks.length}
+        </div>
+      )}
+
+      {/* ▶ Next candidate arrow */}
+      <button onClick={()=>nextLink&&onNavigateProfile(nextLink)} disabled={!nextLink} title="Next candidate (→)"
+        style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', width:44, height:44, borderRadius:'50%', border:'none', background:nextLink?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.2)', color:nextLink?'#374151':'#9ca3af', cursor:nextLink?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:nextLink?'0 4px 16px rgba(0,0,0,0.2)':'none', fontSize:20, fontWeight:700, zIndex:10, transition:'all .15s' }}
+        onMouseEnter={e=>{if(nextLink)e.currentTarget.style.background='white';}}
+        onMouseLeave={e=>{if(nextLink)e.currentTarget.style.background='rgba(255,255,255,0.9)';}}>
+        ›
+      </button>
+
       <div style={{ width:'100%', maxWidth:1100, height:'90vh', background:'#f8f5ff', borderRadius:20, display:'flex', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.35)' }}>
 
         {/* ── Left identity panel ───────────────────────── */}

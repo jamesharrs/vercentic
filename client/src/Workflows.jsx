@@ -2884,6 +2884,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
       {activeProfile && (
         <TalentProfileView
           link={activeProfile}
+          allLinks={visiblePeople}
+          onNavigateProfile={link => setActiveProfile(link)}
           matchScore={matchScores[activeProfile.id]}
           environmentId={environment?.id}
           steps={plSteps}
