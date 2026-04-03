@@ -6,6 +6,7 @@ import SharePicker from "./SharePicker.jsx";
 import api from './apiClient.js';
 import WorkflowCanvas from "./WorkflowCanvas.jsx";
 import StageCategoriesSection from "./settings/StageCategoriesSection.jsx";
+import TalentProfileView from "./TalentProfileView.jsx";
 
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const C = {
@@ -1966,6 +1967,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [selectedStage, setSelectedStage] = useState(null);
   const [selectedLinks, setSelectedLinks] = useState([]);
   const [pipelineView, setPipelineView]   = useState("cards"); // "cards" | "grid" | "list"
+  const [activeProfile, setActiveProfile] = useState(null);    // link object for talent profile modal
   const [showColPicker, setShowColPicker] = useState(false);
   const [visibleColIds, setVisibleColIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('talentos_pipeline_cols') || 'null') || DEFAULT_PIPELINE_COLS; }
@@ -2661,10 +2663,13 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                         <div key={link.id} style={{ flexShrink:0, width:180, border:`1.5px solid ${selectedLinks.includes(link.id)?'#7c3aed':'#ede9fe'}`, borderRadius:14, background:selectedLinks.includes(link.id)?'#faf5ff':'white', padding:"14px 12px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:8, boxShadow:"0 2px 8px rgba(124,58,237,.06)", transition:"box-shadow .15s", cursor:"default",
                           onMouseEnter:e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(124,58,237,.13)",
                           onMouseLeave:e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(124,58,237,.06)" }}>
+                          {/* Click header area to open talent profile */}
+                          <div onClick={()=>setActiveProfile(link)} style={{ width:"100%", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:6 }} title="Click to open talent profile">
                           {/* Select + match */}
                           <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                             <input type="checkbox" checked={selectedLinks.includes(link.id)}
-                              onChange={e=>setSelectedLinks(prev=>e.target.checked?[...prev,link.id]:prev.filter(x=>x!==link.id))}
+                              onChange={e=>{e.stopPropagation();setSelectedLinks(prev=>e.target.checked?[...prev,link.id]:prev.filter(x=>x!==link.id));}}
+                              onClick={e=>e.stopPropagation()}
                               style={{ accentColor:"#7c3aed", cursor:"pointer", width:13, height:13 }}/>
                             {score!==null && (
                               <span style={{ fontSize:10, fontWeight:800, color:scoreColor, background:scoreColor+"15", padding:"2px 6px", borderRadius:99 }}>{score}%</span>
@@ -2685,6 +2690,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                             {title && <div style={{ fontSize:11, color:"#6b7280", lineHeight:1.3 }}>{title}</div>}
                             {loc   && <div style={{ fontSize:10, color:"#9ca3af", marginTop:2 }}>📍 {loc}</div>}
                           </div>
+                          </div>{/* end clickable header */}
                           {/* Stage pill + prev/next */}
                           <div style={{ width:"100%", marginTop:"auto" }}>
                             <div style={{ display:"flex", alignItems:"center", gap:4, justifyContent:"center" }}>
@@ -2801,6 +2807,18 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               )}
 
               {/* Grid view — row cards */}
+              {/* Talent Profile modal */}
+              {activeProfile && (
+                <TalentProfileView
+                  link={activeProfile}
+                  matchScore={matchScores[activeProfile.id]}
+                  environmentId={environment?.id}
+                  steps={plSteps}
+                  onClose={()=>setActiveProfile(null)}
+                  onNavigate={id=>{setActiveProfile(null);onNavigate&&onNavigate(id);}}
+                  onMoveStage={moveStage}
+                />
+              )}
               {pipelineView === "grid" && visiblePeople.map(link => (
                 <PipelinePersonRow key={link.id} link={link} steps={plSteps}
                   label={pLabel(link)} subtitle={pSub(link)} initial={pInit(link)}
@@ -2861,6 +2879,18 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             </div>
           </div>
         </div>
+      )}
+      {/* Talent Profile modal */}
+      {activeProfile && (
+        <TalentProfileView
+          link={activeProfile}
+          matchScore={matchScores[activeProfile.id]}
+          environmentId={environment?.id}
+          steps={plSteps}
+          onClose={() => setActiveProfile(null)}
+          onNavigate={onNavigate}
+          onMoveStage={(linkId, step) => { moveStage(linkId, step); setActiveProfile(ap => ap ? {...ap, stage_id: step.id} : null); }}
+        />
       )}
     </div>
   );

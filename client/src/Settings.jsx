@@ -5,6 +5,7 @@ import EmailTemplateBuilder from "./settings/EmailTemplateBuilder.jsx";
 import SettingsDashboard from "./SettingsDashboard.jsx";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
+import { TalentProfileBuilder } from "./TalentProfileView.jsx";
 import FileTypesSettings from "./settings/FileTypesSettings.jsx";
 import CompanyDocuments from "./settings/CompanyDocuments.jsx";
 import DuplicatesSettings from "./settings/DuplicatesSettings.jsx";
@@ -2502,8 +2503,10 @@ const NAV_GROUPS = [
     items: [
       { id:"brand_kits",      icon:"palette",  label:"Brand Kits" },
       { id:"email_templates", icon:"mail",     label:"Email Templates" },
+      { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
       { id:"workflows", icon:"workflow", label:"Workflows" },
       { id:"portals",   icon:"globe",    label:"Portals" },
+      { id:"talent_profile", icon:"user", label:"Talent Profile" },
     ],
   },
   {
@@ -2702,8 +2705,17 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="appearance" && <AppearanceSection/>}
         {activeSection==="notifications" && <NotificationsSection/>}
         {activeSection==="language"   && <LanguageSection/>}
-        {activeSection==="workflows"  && <WorkflowsPage environment={environment}/>}
-        {activeSection==="portals"    && <PortalsPage environment={environment} onFullScreen={setFullScreenMode}/>}
+        {activeSection==="workflows"     && <WorkflowsPage environment={environment}/>}
+        {activeSection==="portals"       && <PortalsPage environment={environment} onFullScreen={setFullScreenMode}/>}
+        {activeSection==="talent_profile" && (
+          <div style={{ maxWidth:700, padding:24 }}>
+            <div style={{ marginBottom:20 }}>
+              <h2 style={{ margin:'0 0 4px', fontSize:18, fontWeight:800 }}>Talent Profile Builder</h2>
+              <p style={{ margin:0, color:'#6b7280', fontSize:13 }}>Configure which sections and fields appear when opening a candidate's talent profile card.</p>
+            </div>
+            <TalentProfileBuilder environmentId={environment?.id}/>
+          </div>
+        )}
         {activeSection==="questions"  && <QuestionBankSettings/>}
         {activeSection==="stage_categories" && <StageCategoriesSection environment={environment}/>}
         {activeSection==="agents"     && <AgentsSettings environment={environment}/>}

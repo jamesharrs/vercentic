@@ -168,6 +168,7 @@ app.use('/api/field-visibility',  require('./routes/field_visibility'));
 app.use('/api/integrations',      require('./routes/integrations'));
 app.use('/api/connector-actions', require('./routes/connector_actions'));
 app.use('/api/brand-kits',        require('./routes/brand_kits'));
+app.use('/api/talent-profile',    require('./routes/talent_profile'));
 app.use('/api/webhooks',          require('./routes/webhooks'));
 
 // ── Enterprise ────────────────────────────────────────────────────────────────
