@@ -5,14 +5,19 @@ const { v4: uuidv4 } = require('uuid');
 
 // Notification types and their display config
 const NOTIF_TYPES = {
-  message_reply:    { label: 'Message Reply',       icon: 'mail',       color: '#3b82f6' },
-  task_reminder:    { label: 'Task Reminder',        icon: 'clock',      color: '#f59e0b' },
-  agent_review:     { label: 'Agent Review Needed',  icon: 'sparkles',   color: '#8b5cf6' },
-  interview_today:  { label: 'Interview Today',      icon: 'calendar',   color: '#0ca678' },
-  offer_action:     { label: 'Offer Action',         icon: 'dollar',     color: '#10b981' },
-  application_new:  { label: 'New Application',      icon: 'user',       color: '#6366f1' },
-  workflow_blocked: { label: 'Workflow Blocked',      icon: 'layers',     color: '#ef4444' },
-  mention:          { label: 'Mention',              icon: 'at-sign',    color: '#ec4899' },
+  message_reply:       { label: 'Message Reply',        icon: 'mail',       color: '#3b82f6' },
+  task_reminder:       { label: 'Task Reminder',         icon: 'clock',      color: '#f59e0b' },
+  agent_review:        { label: 'Agent Review Needed',   icon: 'sparkles',   color: '#8b5cf6' },
+  interview_today:     { label: 'Interview Today',       icon: 'calendar',   color: '#0ca678' },
+  interview_tomorrow:  { label: 'Interview Tomorrow',    icon: 'calendar',   color: '#0ca678' },
+  offer_action:        { label: 'Offer Action',          icon: 'dollar',     color: '#10b981' },
+  offer_accepted:      { label: 'Offer Accepted',        icon: 'check',      color: '#059669' },
+  offer_declined:      { label: 'Offer Declined',        icon: 'x',          color: '#ef4444' },
+  application_new:     { label: 'New Application',       icon: 'user',       color: '#6366f1' },
+  workflow_blocked:    { label: 'Workflow Blocked',       icon: 'layers',     color: '#ef4444' },
+  stage_change:        { label: 'Stage Change',          icon: 'arrow-right',color: '#8b5cf6' },
+  scorecard_submitted: { label: 'Scorecard Submitted',   icon: 'star',       color: '#f59e0b' },
+  mention:             { label: 'Mention',               icon: 'at-sign',    color: '#ec4899' },
 };
 
 // GET /api/notifications?user_id=&environment_id=&unread_only=true&limit=20
@@ -73,4 +78,19 @@ router.post('/', (req, res) => {
 // GET /api/notifications/types  — return type metadata
 router.get('/types', (req, res) => res.json(NOTIF_TYPES));
 
+// Shared helper — call from other routes to fire notifications
+module.exports.fireNotification = function({ type, title, body, record_id, object_id, object_slug, user_id, environment_id, count = 1 }) {
+  try {
+    const store = require('../db/init').getStore();
+    if (!store.notifications) store.notifications = [];
+    store.notifications.push({
+      id: require('uuid').v4(), type, title, body: body||'',
+      record_id: record_id||null, object_id: object_id||null,
+      object_slug: object_slug||null, user_id: user_id||null,
+      environment_id: environment_id||null, count: count||1,
+      read_at: null, created_at: new Date().toISOString(),
+    });
+    require('../db/init').saveStore();
+  } catch(e) { console.error('fireNotification error:', e.message); }
+};
 module.exports = router;

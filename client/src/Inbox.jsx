@@ -374,26 +374,6 @@ export default function InboxModule({ environment, session, onNavigate }) {
               style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, flex: 1, fontFamily: F, color: C.text1 }} />
             {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Ic n="x" s={11} c={C.text3} /></button>}
           </div>
-          {/* Channel pills */}
-          <div style={{ display:'flex', gap:5, marginBottom:8, flexWrap:'wrap' }}>
-            {CHANNELS.map(ch => {
-              const cnt = ch.id === 'all' ? undefined : channelCounts[ch.id];
-              return (
-                <button key={ch.id} onClick={() => setChannel(ch.id)} style={{
-                  display:'flex', alignItems:'center', gap:4,
-                  padding:'4px 10px', borderRadius:99, border:'1.5px solid',
-                  borderColor: channel === ch.id ? C.accent : C.border,
-                  background: channel === ch.id ? C.accentLight : 'transparent',
-                  color: channel === ch.id ? C.accent : C.text3,
-                  fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, transition:'all .12s',
-                }}>
-                  <Ic n={ch.icon} s={10}/>
-                  {ch.label}
-                  {cnt > 0 && <span style={{ fontSize:10, background:channel===ch.id?C.accent:C.border, color:channel===ch.id?'white':C.text3, borderRadius:99, padding:'0 4px', lineHeight:'14px' }}>{cnt}</span>}
-                </button>
-              );
-            })}
-          </div>
           {/* Status filter tabs */}
           <div style={{ display: 'flex' }}>
             {FILTERS.map(f => (

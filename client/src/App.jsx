@@ -1126,7 +1126,6 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                     {[
                       { id:"notifications", label:"Notifications", badge: unread },
                       { id:"whats_new",     label:"What's New",    badge: newReleases },
-                      { id:"preferences",   label:"Preferences",   badge: 0 },
                     ].map(tab => (
                       <button key={tab.id} onClick={() => {
                         setBellTab(tab.id);
@@ -1171,33 +1170,73 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin:"0 auto 8px", display:"block", opacity:0.4 }}><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                         All caught up!
                       </div>
-                    ) : notifs.map(n => {
-                      const color    = NOTIF_COLORS[n.type] || "#6b7280";
-                      const icon     = NOTIF_ICONS[n.type]  || null;
-                      const isUnread = !n.read_at;
-                      return (
-                        <div key={n.id} onClick={() => { if(isUnread) markRead(n.id); }}
-                          style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"11px 14px", borderBottom:"1px solid #f3f4f6", cursor: isUnread ? "pointer" : "default", background: isUnread ? `${color}09` : "transparent", transition:"background .1s" }}
-                          onMouseEnter={e=>{ e.currentTarget.style.background = isUnread ? `${color}16` : "#f9fafb"; }}
-                          onMouseLeave={e=>{ e.currentTarget.style.background = isUnread ? `${color}09` : "transparent"; }}>
-                          <div style={{ width:30, height:30, borderRadius:9, background:`${color}18`, color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
-                            {icon}
+                    ) : (() => {
+                      // Time-group notifications
+                      const now = new Date();
+                      const todayStart = new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+                      const yestStart  = todayStart - 86400000;
+                      const weekStart  = todayStart - 6*86400000;
+                      const groups = [
+                        { label:"Today",     items: notifs.filter(n=>new Date(n.created_at).getTime()>=todayStart) },
+                        { label:"Yesterday", items: notifs.filter(n=>{const t=new Date(n.created_at).getTime();return t>=yestStart&&t<todayStart;}) },
+                        { label:"This week", items: notifs.filter(n=>{const t=new Date(n.created_at).getTime();return t>=weekStart&&t<yestStart;}) },
+                        { label:"Earlier",   items: notifs.filter(n=>new Date(n.created_at).getTime()<weekStart) },
+                      ].filter(g=>g.items.length>0);
+
+                      // Inline action map
+                      const NOTIF_ACTIONS = {
+                        interview_today:  { label:"View interview",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        application_new:  { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        offer_action:     { label:"View offer",      fn:(n)=>{ setBellOpen(false); setActiveNav("offers"); } },
+                        workflow_blocked: { label:"Review workflow",  fn:(n)=>{ setBellOpen(false); setActiveNav("workflows"); } },
+                        agent_review:     { label:"Review agent",     fn:(n)=>{ setBellOpen(false); setActiveNav("agents"); } },
+                        stage_change:     { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        scorecard_submitted:{ label:"View scorecard",fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                      };
+
+                      return groups.map(group => (
+                        <div key={group.label}>
+                          <div style={{ padding:"8px 14px 4px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:".06em", background:"#f9fafb", borderBottom:"1px solid #f3f4f6" }}>
+                            {group.label}
                           </div>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                              <span style={{ fontSize:12, fontWeight: isUnread ? 700 : 500, color:"#111827", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title}</span>
-                              {isUnread && <span style={{ width:7, height:7, borderRadius:"50%", background:color, flexShrink:0 }}/>}
-                            </div>
-                            <div style={{ fontSize:11, color:"#6b7280", lineHeight:1.45, marginBottom:3 }}>{n.body}</div>
-                            <div style={{ fontSize:10, color:"#9ca3af" }}>{relTime(n.created_at)}</div>
-                          </div>
-                          <button onClick={e=>deleteNotif(n.id,e)}
-                            style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 5px", color:"#d1d5db", borderRadius:4, fontSize:16, lineHeight:1, flexShrink:0 }}
-                            onMouseEnter={e=>{e.currentTarget.style.color="#ef4444";}}
-                            onMouseLeave={e=>{e.currentTarget.style.color="#d1d5db";}}>×</button>
+                          {group.items.map(n => {
+                            const color    = NOTIF_COLORS[n.type] || "#6b7280";
+                            const icon     = NOTIF_ICONS[n.type]  || null;
+                            const isUnread = !n.read_at;
+                            const action   = NOTIF_ACTIONS[n.type];
+                            return (
+                              <div key={n.id} onClick={() => { if(isUnread) markRead(n.id); }}
+                                style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 14px", borderBottom:"1px solid #f3f4f6", cursor:"pointer", background: isUnread ? `${color}08` : "transparent", transition:"background .1s" }}
+                                onMouseEnter={e=>{ e.currentTarget.style.background = isUnread ? `${color}14` : "#f9fafb"; }}
+                                onMouseLeave={e=>{ e.currentTarget.style.background = isUnread ? `${color}08` : "transparent"; }}>
+                                <div style={{ width:30, height:30, borderRadius:9, background:`${color}18`, color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+                                  {icon}
+                                </div>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                                    <span style={{ fontSize:12, fontWeight: isUnread ? 700 : 500, color:"#111827", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title}</span>
+                                    {isUnread && <span style={{ width:6, height:6, borderRadius:"50%", background:color, flexShrink:0 }}/>}
+                                  </div>
+                                  <div style={{ fontSize:11, color:"#6b7280", lineHeight:1.45, marginBottom:n.count>1||action?5:0 }}>{n.body}</div>
+                                  {n.count>1 && <div style={{ fontSize:10, color:color, fontWeight:700, marginBottom:4 }}>+{n.count-1} more like this</div>}
+                                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                    <span style={{ fontSize:10, color:"#9ca3af" }}>{relTime(n.created_at)}</span>
+                                    {action && <button onClick={e=>{e.stopPropagation();markRead(n.id);action.fn(n);}}
+                                      style={{ fontSize:10, fontWeight:700, color:color, background:`${color}12`, border:`1px solid ${color}25`, borderRadius:6, padding:"2px 8px", cursor:"pointer", fontFamily:"inherit" }}>
+                                      {action.label} →
+                                    </button>}
+                                  </div>
+                                </div>
+                                <button onClick={e=>deleteNotif(n.id,e)}
+                                  style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", color:"#d1d5db", borderRadius:4, fontSize:16, lineHeight:1, flexShrink:0 }}
+                                  onMouseEnter={e=>{e.currentTarget.style.color="#ef4444";}}
+                                  onMouseLeave={e=>{e.currentTarget.style.color="#d1d5db";}}>×</button>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      ));
+                    })()}
                   </div>
                 </>
               )}
@@ -1276,44 +1315,6 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
                       );
                     })
                   )}
-                </div>
-              )}
-
-              {/* Preferences tab */}
-              {bellTab === "preferences" && (
-                <div style={{ overflowY:"auto", flex:1, padding:"14px" }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:"var(--t-text3)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:12 }}>
-                    Choose which notifications you receive
-                  </div>
-                  {[
-                    { type:"message_reply",    label:"Message replies",        desc:"When someone replies to your message" },
-                    { type:"task_reminder",    label:"Task reminders",         desc:"Upcoming and overdue task alerts" },
-                    { type:"agent_review",     label:"Agent review needed",    desc:"When an agent needs your approval" },
-                    { type:"interview_today",  label:"Interview today",        desc:"Interviews scheduled for today" },
-                    { type:"offer_action",     label:"Offer actions",          desc:"Offers requiring attention" },
-                    { type:"application_new",  label:"New applications",       desc:"New candidates from portals" },
-                    { type:"workflow_blocked", label:"Workflow blocked",       desc:"Automated workflows that need help" },
-                    { type:"mention",          label:"Mentions",               desc:"When someone @mentions you" },
-                  ].map(({ type, label, desc }) => {
-                    const enabled = notifPrefs[type] !== false;
-                    return (
-                      <div key={type} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--t-border)" }}>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:13, fontWeight:600, color:"var(--t-text1)" }}>{label}</div>
-                          <div style={{ fontSize:11, color:"var(--t-text3)", marginTop:2 }}>{desc}</div>
-                        </div>
-                        <button onClick={() => saveNotifPref(type, !enabled)}
-                          style={{ width:38, height:22, borderRadius:99, flexShrink:0, border:"none", cursor:"pointer",
-                            background: enabled ? "var(--t-accent,#4361EE)" : "#e5e7eb", position:"relative", transition:"background .2s" }}>
-                          <div style={{ width:16, height:16, borderRadius:"50%", background:"white", position:"absolute",
-                            top:3, left: enabled ? 19 : 3, transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
-                        </button>
-                      </div>
-                    );
-                  })}
-                  <div style={{ marginTop:14, fontSize:11, color:"var(--t-text3)", textAlign:"center" }}>
-                    Preferences saved automatically
-                  </div>
                 </div>
               )}
 
