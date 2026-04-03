@@ -3303,14 +3303,7 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
           <Ic n="arrowRight" s={13} c={C.accent}/>
         </button>
       )}
-      {/* Remove */}
-      <button onClick={() => onRemove(link.id)}
-        style={{ background:"none", border:"none", cursor:"pointer", padding:4, flexShrink:0, opacity:0.35 }}
-        title="Remove from pipeline"
-        onMouseEnter={e=>e.currentTarget.style.opacity=1}
-        onMouseLeave={e=>e.currentTarget.style.opacity=0.35}>
-        <Ic n="x" s={12} c={C.red}/>
-      </button>
+
     </div>
   );
 }
