@@ -2500,13 +2500,28 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                         ? `${allGroups.find(g=>g.cat.id===expandedCat)?.cat.name || "Category"} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`
                         : `${plSteps.find(s=>s.id===selectedStage)?.name} — ${visiblePeople.length} ${visiblePeople.length===1?"person":"people"}`}
                 </span>
-                {/* Bulk move */}
+                {/* ── Bulk action bar ─────────────────────────────────── */}
                 {selectedLinks.length > 0 && (
-                  <select onChange={e => { if(!e.target.value) return; const s=plSteps.find(st=>st.id===e.target.value); if(s) { selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); } e.target.value=""; }}
-                    style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
-                    <option value="">Move to stage…</option>
-                    {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
-                  </select>
+                  <>
+                    {/* Move to stage */}
+                    <select onChange={e => { if(!e.target.value) return; const s=plSteps.find(st=>st.id===e.target.value); if(s) { selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); } e.target.value=""; }}
+                      style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
+                      <option value="">Move to…</option>
+                      {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
+                    </select>
+                    {plSteps.some(s=>(s.actions||[]).some(a=>a.type)) && (
+                      <select onChange={e => { if(!e.target.value) return; bulkRunStepActions(e.target.value); e.target.value=""; }}
+                        style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #fde68a`, background:"#fffbeb", color:"#92400e", cursor:"pointer", fontFamily:F, outline:"none" }}>
+                        <option value="">Run actions…</option>
+                        {plSteps.filter(s=>(s.actions||[]).some(a=>a.type)).map(s=><option key={s.id} value={s.id}>⚡ {s.name}</option>)}
+                      </select>
+                    )}
+                    <button onClick={bulkRemove}
+                      title={`Remove ${selectedLinks.length} ${selectedLinks.length===1?"person":"people"} from workflow`}
+                      style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #fecaca`, background:"#fef2f2", color:"#dc2626", cursor:"pointer", fontFamily:F, display:"flex", alignItems:"center", gap:4 }}>
+                      <Ic n="trash" s={11} c="#dc2626"/> Remove
+                    </button>
+                  </>
                 )}
                 {/* Open in People list */}
                 {visiblePeople.length > 0 && (
