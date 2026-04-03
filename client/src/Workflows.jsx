@@ -611,6 +611,144 @@ function migrateStep(step) {
   return { ...step, actions: step.actions || [] };
 }
 
+// ─── Candidate Hub config constants ──────────────────────────────────────────
+const HUB_SECTIONS = [
+  { key:'applications', label:'Applications',  desc:'Application history & stage tracker' },
+  { key:'interviews',   label:'Interviews',    desc:'Upcoming and past interview details' },
+  { key:'offers',       label:'Offers',        desc:'Offer details with accept/decline' },
+  { key:'onboarding',  label:'Onboarding',    desc:'Onboarding tasks and documents' },
+  { key:'documents',   label:'Documents',     desc:'Document uploads and viewing' },
+  { key:'messages',    label:'Messages',      desc:'Recruiter messages and comms' },
+];
+const HUB_OPS = [
+  { v:'eq', l:'is' },{ v:'neq', l:'is not' },{ v:'contains', l:'contains' },
+  { v:'gt', l:'>' },{ v:'lt', l:'<' },{ v:'is_set', l:'is set' },{ v:'is_not_set', l:'is not set' },
+];
+
+const StepHubConfig = ({ step, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const hub  = step.hub_config || {};
+  const secs = hub.sections || {};
+  const conds = hub.conditions || [];
+  const hasConfig = Object.values(secs).some(Boolean) || hub.message;
+  const setHub = (k, v) => onChange({ ...step, hub_config: { ...hub, [k]: v } });
+  const setSec = (k, v) => setHub('sections', { ...secs, [k]: v });
+  const setCond = (i, f, v) => { const a=[...conds]; a[i]={...a[i],[f]:v}; setHub('conditions',a); };
+  return (
+    <div style={{ borderTop:`1px solid ${C.border}`, marginTop:8 }}>
+      <button onClick={()=>setOpen(o=>!o)} style={{ width:'100%', display:'flex', alignItems:'center', gap:8,
+        padding:'8px 0', background:'none', border:'none', cursor:'pointer', fontFamily:F, textAlign:'left' }}>
+        <div style={{ width:18, height:18, borderRadius:5, flexShrink:0,
+          background:hasConfig?'#7c3aed':C.border, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <Ic n="user" s={10} c="white"/>
+        </div>
+        <span style={{ fontSize:11, fontWeight:700, color:hasConfig?'#7c3aed':C.text3, flex:1 }}>
+          Candidate Hub
+          {hasConfig && <span style={{ marginLeft:6, fontSize:10, fontWeight:500 }}>
+            {Object.values(secs).filter(Boolean).length} visible{hub.notify_candidate?' · notifies':''}{conds.length?` · ${conds.length} cond`:''}
+          </span>}
+        </span>
+        <Ic n={open?'chevD':'chevRight'} s={11} c={C.text3} style={{ transform: open ? 'none' : 'rotate(-90deg)' }}/>
+      </button>
+      {open && (
+        <div style={{ paddingBottom:12 }}>
+          {/* Notify toggle */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>Notify candidate on reach</div>
+              <div style={{ fontSize:11, color:C.text3 }}>Send a magic-link email at this stage</div>
+            </div>
+            <div onClick={()=>setHub('notify_candidate',!hub.notify_candidate)}
+              style={{ width:36, height:20, borderRadius:10, cursor:'pointer', flexShrink:0,
+                background:hub.notify_candidate?'#7c3aed':C.border, position:'relative', transition:'background .2s' }}>
+              <div style={{ width:16, height:16, borderRadius:'50%', background:'white', position:'absolute',
+                top:2, left:hub.notify_candidate?18:2, transition:'left .2s' }}/>
+            </div>
+          </div>
+          {/* Section toggles */}
+          <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:'uppercase', letterSpacing:'.4px' }}>Visible sections</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:5, marginBottom:12 }}>
+            {HUB_SECTIONS.map(s=>(
+              <label key={s.key} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+                <div onClick={()=>setSec(s.key,!secs[s.key])} style={{ width:32, height:18, borderRadius:9, cursor:'pointer', flexShrink:0,
+                  background:secs[s.key]?'#7c3aed':C.border, position:'relative', transition:'background .2s' }}>
+                  <div style={{ width:14, height:14, borderRadius:'50%', background:'white', position:'absolute',
+                    top:2, left:secs[s.key]?16:2, transition:'left .2s' }}/>
+                </div>
+                <span style={{ fontSize:11, fontWeight:600, color:C.text1 }}>{s.label}</span>
+                <span style={{ fontSize:11, color:C.text3 }}>{s.desc}</span>
+              </label>
+            ))}
+          </div>
+          {/* Message */}
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:5, textTransform:'uppercase', letterSpacing:'.4px' }}>Candidate status message</div>
+            <textarea value={hub.message||''} onChange={e=>setHub('message',e.target.value)} rows={2}
+              placeholder="e.g. We're reviewing your application and will be in touch soon."
+              style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', border:`1px solid ${C.border}`,
+                borderRadius:8, fontSize:12, fontFamily:F, resize:'vertical', color:C.text1, outline:'none' }}/>
+          </div>
+          {/* Conditions */}
+          <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:6, textTransform:'uppercase', letterSpacing:'.4px' }}>
+            Conditions (all must be true)
+          </div>
+          {conds.map((c,i)=>(
+            <div key={i} style={{ display:'flex', gap:5, alignItems:'flex-end', marginBottom:6,
+              padding:7, background:'#F9FAFB', borderRadius:8 }}>
+              <div style={{ width:64, flexShrink:0 }}>
+                <div style={{ fontSize:9, color:C.text3, marginBottom:2 }}>SOURCE</div>
+                <select value={c.source||'person'} onChange={e=>setCond(i,'source',e.target.value)}
+                  style={{ width:'100%', padding:'4px 5px', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, fontFamily:F, color:C.text1 }}>
+                  <option value="person">Person</option><option value="job">Job</option>
+                </select>
+              </div>
+              <div style={{ flex:2 }}>
+                <div style={{ fontSize:9, color:C.text3, marginBottom:2 }}>FIELD</div>
+                <input value={c.field||''} onChange={e=>setCond(i,'field',e.target.value)} placeholder="api_key"
+                  style={{ width:'100%', boxSizing:'border-box', padding:'4px 5px', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, fontFamily:F, color:C.text1 }}/>
+              </div>
+              <div style={{ width:76, flexShrink:0 }}>
+                <div style={{ fontSize:9, color:C.text3, marginBottom:2 }}>OPERATOR</div>
+                <select value={c.operator||'eq'} onChange={e=>setCond(i,'operator',e.target.value)}
+                  style={{ width:'100%', padding:'4px 5px', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, fontFamily:F, color:C.text1 }}>
+                  {HUB_OPS.map(op=><option key={op.v} value={op.v}>{op.l}</option>)}
+                </select>
+              </div>
+              {!['is_set','is_not_set'].includes(c.operator) && (
+                <div style={{ flex:2 }}>
+                  <div style={{ fontSize:9, color:C.text3, marginBottom:2 }}>VALUE</div>
+                  <input value={c.value||''} onChange={e=>setCond(i,'value',e.target.value)} placeholder="value"
+                    style={{ width:'100%', boxSizing:'border-box', padding:'4px 5px', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, fontFamily:F, color:C.text1 }}/>
+                </div>
+              )}
+              <button onClick={()=>setHub('conditions',conds.filter((_,j)=>j!==i))}
+                style={{ background:'none', border:'none', cursor:'pointer', color:C.danger, padding:0, flexShrink:0 }}>
+                <Ic n="x" s={12}/>
+              </button>
+            </div>
+          ))}
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:4 }}>
+            <button onClick={()=>setHub('conditions',[...conds,{source:'person',field:'',operator:'eq',value:''}])}
+              style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:6,
+                border:`1.5px dashed ${C.border}`, background:'transparent', color:C.text3,
+                fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+              <Ic n="plus" s={11}/> Add condition
+            </button>
+            {conds.length>1 && ['and','or'].map(l=>(
+              <button key={l} onClick={()=>setHub('conditions_logic',l)}
+                style={{ padding:'3px 8px', borderRadius:5, border:'1px solid',
+                  borderColor:(hub.conditions_logic||'and')===l?'#7c3aed':C.border,
+                  background:(hub.conditions_logic||'and')===l?'#7c3aed10':'transparent',
+                  color:(hub.conditions_logic||'and')===l?'#7c3aed':C.text3,
+                  fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:F }}>{l.toUpperCase()}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, onMoveDown, fields, visibilityFields, envId, allSteps=[] }) => {
   const step = migrateStep(rawStep);
   const actions = step.actions || [];
@@ -765,6 +903,7 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
           { id:'details',    label:'Actions' },
           { id:'next_steps', label:'Next Steps' },
           { id:'visibility', label:'Visibility', badge:(step.visibility_rules||[]).length||null },
+          { id:'hub',        label:'Hub', badge: Object.values(step.hub_config?.sections||{}).filter(Boolean).length||null },
         ].map(tab => (
           <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
             style={{ padding:'7px 12px', background:'none', border:'none',
@@ -990,6 +1129,11 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
             rules={step.visibility_rules||[]}
             fields={visibilityFields||fields||[]}
             onChange={rules => onChange({ ...step, visibility_rules: rules })}/>
+        </div>
+      )}
+      {activeTab==='hub' && (
+        <div style={{ padding:'4px 0' }}>
+          <StepHubConfig step={step} onChange={onChange}/>
         </div>
       )}
     </div>

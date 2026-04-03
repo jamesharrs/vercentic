@@ -68,6 +68,7 @@ const AUTH_EXEMPT = [
   '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
   '/error-logs', '/ai', '/translate', '/linkedin-search',
   '/chrome-import',
+  '/hub/request-link', '/hub/verify', '/hub/portal-branding',
 ];
 app.use('/api', (req, res, next) => {
   if (AUTH_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
@@ -178,6 +179,7 @@ app.use('/api/company-documents', require('./routes/company_documents'));
 app.use('/api/chats',            require('./routes/candidate_chat'));
 app.use('/api/documents',        require('./routes/documents'));
 app.use('/api/rpo-clients',       require('./routes/rpo_clients'));
+app.use('/api/hub',               require('./routes/hub'));
 
 // ── Flows ─────────────────────────────────────────────────────────────────────
 const { router: flowsRouter, initScheduler } = require('./routes/flows');

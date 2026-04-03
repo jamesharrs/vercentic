@@ -515,7 +515,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           </button>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
-          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["eo","Equal Opps"],["feedback","Feedback"],["copilot","Copilot"]].map(([id,l])=>(
+          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["eo","Equal Opps"],["feedback","Feedback"],["copilot","Copilot"],["hub","Hub"]].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent"}}>{l}</button>
           ))}
         </div>
@@ -658,6 +658,52 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
                 <div style={{marginTop:10,fontSize:11,opacity:.7}}>Preview — this is how the copilot header will look</div>
               </div>
             </>}
+          </>);
+        })()}
+        {tab==="hub"&&(()=>{
+          const hub = portal.hub || {};
+          const setHub = (k,v) => onChange({ ...portal, hub: { ...hub, [k]: v } });
+          const hubUrl = `${typeof window!=="undefined"?window.location.origin:""}/hub?portal_id=${portal.id}`;
+          return (<>
+            {/* Enable toggle */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderRadius:12,border:`1.5px solid ${hub.enabled?C.accent:C.border}`,background:hub.enabled?C.accentLight:"transparent",transition:"all .15s",marginBottom:4}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text1}}>Enable Candidate Hub</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2}}>Candidates can log in to track their application journey</div>
+              </div>
+              <button onClick={()=>setHub("enabled",!hub.enabled)} style={{width:44,height:24,borderRadius:12,border:"none",background:hub.enabled?C.accent:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s"}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:"white",position:"absolute",top:3,left:hub.enabled?23:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </button>
+            </div>
+            {/* RPO mode */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1}}>RPO / White-label mode</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2}}>Only show applications made through this portal</div>
+              </div>
+              <button onClick={()=>setHub("rpo_mode",!hub.rpo_mode)} style={{width:36,height:20,borderRadius:10,border:"none",background:hub.rpo_mode?"#e03131":"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:hub.rpo_mode?18:2,transition:"left .2s"}}/>
+              </button>
+            </div>
+            {/* Welcome message */}
+            <div>
+              {lbl("Hub tagline (shown on login screen)")}
+              <input value={hub.tagline||""} onChange={e=>setHub("tagline",e.target.value)}
+                placeholder="Track your application journey" style={inp}/>
+            </div>
+            {/* Hub URL */}
+            <div>
+              {lbl("Hub link — share with candidates")}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:C.surface2,fontSize:11,color:C.text1,border:`1px solid ${C.border}`,wordBreak:"break-all",lineHeight:1.5}}>{hubUrl}</code>
+                <button onClick={()=>navigator.clipboard?.writeText(hubUrl)}
+                  style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2,whiteSpace:"nowrap"}}>Copy</button>
+              </div>
+            </div>
+            <div style={{padding:"12px 14px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,fontSize:12,color:"#15803D",lineHeight:1.7}}>
+              <strong>Branding is automatic.</strong> The hub inherits this portal's colours, logo, font, and company name — no extra config needed.<br/>
+              <strong>Stage visibility</strong> is configured per workflow step — open any workflow, click a step, then the <strong>Hub</strong> tab.
+            </div>
           </>);
         })()}
         </div>
