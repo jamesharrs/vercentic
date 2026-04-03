@@ -1210,8 +1210,9 @@ const TabsWidget = ({ cfg, theme }) => {
       <div style={{ display:'flex', gap:style==='pill'?8:0, borderBottom:style!=='pill'?'2px solid #F3F4F6':'none', background:style==='boxed'?'#F9FAFB':'transparent', borderRadius:style==='pill'?12:0, padding:style==='pill'?4:0 }}>
         {tabs.map((tab, i) => {
           const isActive = active === i
+          const label = tab.title || tab.label || `Tab ${i+1}`
           return (
-            <button key={i} onClick={() => setActive(i)} style={{ padding:'12px 20px', border:'none', cursor:'pointer', fontFamily:ff, fontSize:14, fontWeight:isActive?700:500, background:((style==='pill'||style==='boxed')&&isActive)?'white':'transparent', color:isActive?pr:'#6B7280', borderBottom:style==='underline'?`2px solid ${isActive?pr:'transparent'}`:'none', borderRadius:(style==='pill'||style==='boxed')?8:0, marginBottom:style==='underline'?-2:0, boxShadow:((style==='pill'||style==='boxed')&&isActive)?'0 1px 4px rgba(0,0,0,.08)':'none', transition:'all .15s' }}>{tab.label}</button>
+            <button key={i} onClick={() => setActive(i)} style={{ padding:'12px 20px', border:'none', cursor:'pointer', fontFamily:ff, fontSize:14, fontWeight:isActive?700:500, background:((style==='pill'||style==='boxed')&&isActive)?'white':'transparent', color:isActive?pr:'#6B7280', borderBottom:style==='underline'?`2px solid ${isActive?pr:'transparent'}`:'none', borderRadius:(style==='pill'||style==='boxed')?8:0, marginBottom:style==='underline'?-2:0, boxShadow:((style==='pill'||style==='boxed')&&isActive)?'0 1px 4px rgba(0,0,0,.08)':'none', transition:'all .15s' }}>{label}</button>
           )
         })}
       </div>

@@ -1227,6 +1227,71 @@ const ListWidgetConfig = ({ cfg, set, setMany, inp, lbl, environmentId, cellId, 
   );
 };
 
+// ─── Rich Text Editor (markdown toolbar) ─────────────────────────────────────
+const RichTextEditor = ({ value, onChange, inp }) => {
+  const ref = React.useRef(null);
+
+  const wrap = (before, after='') => {
+    const el = ref.current;
+    if (!el) return;
+    const {selectionStart:s, selectionEnd:e} = el;
+    const sel = value.slice(s, e);
+    const newVal = value.slice(0,s) + before + sel + after + value.slice(e);
+    onChange(newVal);
+    setTimeout(()=>{ el.focus(); el.setSelectionRange(s+before.length, e+before.length); }, 0);
+  };
+
+  const prefixLine = (prefix) => {
+    const el = ref.current;
+    if (!el) return;
+    const {selectionStart:s} = el;
+    const lineStart = value.lastIndexOf('\n', s-1)+1;
+    const lineContent = value.slice(lineStart);
+    // Toggle: if already prefixed, remove it; otherwise add
+    const already = lineContent.startsWith(prefix);
+    let newVal;
+    if (already) {
+      newVal = value.slice(0,lineStart) + value.slice(lineStart+prefix.length);
+    } else {
+      newVal = value.slice(0,lineStart) + prefix + value.slice(lineStart);
+    }
+    onChange(newVal);
+    setTimeout(()=>{ el.focus(); }, 0);
+  };
+
+  const FMT_BTNS = [
+    { label:'B', title:'Bold',     action:()=>wrap('**','**'),  style:{fontWeight:900} },
+    { label:'I', title:'Italic',   action:()=>wrap('*','*'),    style:{fontStyle:'italic'} },
+    { label:'H1',title:'Heading 1',action:()=>prefixLine('# '), style:{fontWeight:700,fontSize:10} },
+    { label:'H2',title:'Heading 2',action:()=>prefixLine('## '),style:{fontWeight:700,fontSize:10} },
+    { label:'H3',title:'Heading 3',action:()=>prefixLine('### '),style:{fontWeight:700,fontSize:10} },
+    { label:'•', title:'Bullet list',action:()=>prefixLine('- '),style:{fontSize:16,lineHeight:1} },
+    { label:'🔗',title:'Link',     action:()=>wrap('[','](url)'),style:{} },
+  ];
+
+  return (
+    <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface}}>
+      {/* Toolbar */}
+      <div style={{display:"flex",gap:2,padding:"6px 8px",borderBottom:`1px solid ${C.border}`,background:C.surface2,flexWrap:"wrap"}}>
+        {FMT_BTNS.map(b=>(
+          <button key={b.label} title={b.title} onClick={b.action}
+            style={{minWidth:28,height:26,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:12,fontFamily:F,color:C.text1,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px",flexShrink:0,...b.style}}
+            onMouseEnter={e=>{e.currentTarget.style.background=C.accentLight;e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+            onMouseLeave={e=>{e.currentTarget.style.background=C.surface;e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text1;}}>
+            {b.label}
+          </button>
+        ))}
+        <div style={{width:1,background:C.border,margin:"0 4px",alignSelf:"stretch"}}/>
+        <span style={{fontSize:10,color:C.text3,alignSelf:"center",paddingLeft:4}}>Markdown</span>
+      </div>
+      {/* Textarea */}
+      <textarea ref={ref} value={value} onChange={e=>onChange(e.target.value)} rows={10}
+        placeholder={"## Heading\n\nBody text with **bold** and *italic*.\n\n- List item\n- Another item\n\n[Link text](https://…)"}
+        style={{...inp,resize:"vertical",fontFamily:"monospace",fontSize:12,border:"none",borderRadius:0,outline:"none"}}/>
+    </div>
+  );
+};
+
 // ─── Widget Config Panel ──────────────────────────────────────────────────────
 const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   const cfg = cell.widgetConfig || {};
@@ -1419,8 +1484,8 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
       case "rich_text": return (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {lbl("Label / eyebrow (optional)")}<input value={cfg.label||""} onChange={e=>set("label",e.target.value)} placeholder="Our Story" style={inp}/>
-          {lbl("Content (Markdown supported)")}
-          <textarea value={cfg.content||""} onChange={e=>set("content",e.target.value)} rows={10} placeholder={"## Heading\n\nBody text with **bold** and *italic*.\n\n- List item\n- Another item\n\n[Link text](https://…)"} style={{...inp,resize:"vertical",fontFamily:"monospace",fontSize:12}}/>
+          {lbl("Content")}
+          <RichTextEditor value={cfg.content||""} onChange={v=>set("content",v)} inp={inp}/>
           {lbl("Text alignment")}
           <div style={{display:"flex",gap:6}}>{["left","center","right"].map(a=><button key={a} onClick={()=>set("align",a)} style={{flex:1,padding:"6px",borderRadius:8,border:`1.5px solid ${cfg.align===a?C.accent:C.border}`,background:cfg.align===a?C.accentLight:"transparent",cursor:"pointer",fontSize:12,color:cfg.align===a?C.accent:C.text2,fontFamily:F}}>{a[0].toUpperCase()+a.slice(1)}</button>)}</div>
         </div>
