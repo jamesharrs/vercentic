@@ -53,6 +53,7 @@ import CalendarModule from "./Calendar.jsx";
 import CandidateChat from "./CandidateChat.jsx";
 import DocumentBuilder from "./DocumentBuilder.jsx";
 import BotInterview from "./BotInterview.jsx";
+import CandidateHub from "./CandidateHub.jsx";
 import ClientHub from "./ClientHub.jsx";
 import ClientCasePortal from "./ClientCasePortal.jsx";
 import SupportPortalPage from "./SupportPortalPage.jsx";
@@ -1504,7 +1505,10 @@ function App() {
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   const _path = window.location.pathname;
-  const _appRoutes = /^\/(support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+
+  // Candidate Hub — magic-link auth, completely separate from admin app
+  if (_path.startsWith('/hub')) return <CandidateHub />;
 
   // Client support portal — must be before the portal slug fallback
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
