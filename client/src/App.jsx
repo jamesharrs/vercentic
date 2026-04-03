@@ -1509,15 +1509,23 @@ function App() {
   // Client support portal — must be before the portal slug fallback
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
 
-  // Legacy /portal/slug route
+  // /portal/{slug} is the canonical public portal URL.
+  // vercel.json gives /portal/* an explicit SPA rewrite and public cache headers.
+  // All portal API calls go through /api/portal-public/* which is fully auth-exempt.
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
   if (portalSlug) return <PortalApp slug={portalSlug}/>;
-  // Clean URL: any path that isn't a known app route and isn't root → try as portal
+
+  // Legacy fallback: bare slug URLs (e.g. /careers) also resolve as portals.
+  // Limited to single-segment paths only so mis-typed app routes don't silently
+  // render as an empty portal page.
   if (_path !== '/' && !_appRoutes.test(_path)) {
-    const cleanSlug = _path.replace(/^\//, '');
-    if (cleanSlug && !cleanSlug.includes('.')) return <PortalApp slug={cleanSlug}/>;
+    const segments = _path.replace(/^\//, '').split('/');
+    const cleanSlug = segments[0];
+    if (cleanSlug && !cleanSlug.includes('.') && segments.length <= 2) {
+      return <PortalApp slug={cleanSlug}/>;
+    }
   }
-  if (_path === '/superadmin') return <SuperAdminConsole />;
+    if (_path === '/superadmin') return <SuperAdminConsole />;
   if (_path.startsWith('/availability/')) {
     return <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}><AvailabilityPickerPage/></Suspense>;
   }

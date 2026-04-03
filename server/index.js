@@ -58,6 +58,7 @@ const AUTH_EXEMPT = [
   '/users/login', '/users/auth/login',
   '/health', '/environments',
   '/portals/public', '/portals/by-slug', '/portals/slug',
+  '/portals/job-alerts', '/portals/application-status', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/campaign-links',
     '/integrations',  
@@ -141,6 +142,7 @@ app.use('/api/portal-auth',       require('./routes/portal_auth'));
 app.use('/api/cases',             require('./routes/cases'));
 
 // ── Portals ───────────────────────────────────────────────────────────────────
+app.use('/api/portal-public', require('./routes/portal_public'));
 app.use('/api/portals',           require('./routes/portals'));
 app.use('/api/portal-copilot',    require('./routes/portal_copilot'));
 app.use('/api/portal-feedback',   require('./routes/portal_feedback'));
