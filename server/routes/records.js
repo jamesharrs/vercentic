@@ -242,6 +242,25 @@ router.get('/linked-jobs', (req, res) => {
   res.json(results);
 });
 
+// Look up a record by object slug + sequential record_number (e.g. /people/42)
+router.get('/by-number', (req, res) => {
+  const { object_slug, number, environment_id } = req.query;
+  if (!object_slug || !number || !environment_id)
+    return res.status(400).json({ error: 'object_slug, number, environment_id required' });
+  const num = parseInt(number, 10);
+  if (isNaN(num)) return res.status(400).json({ error: 'number must be an integer' });
+  const obj = findOne('objects', o => o.slug === object_slug && o.environment_id === environment_id);
+  if (!obj) return res.status(404).json({ error: 'Object not found' });
+  const record = findOne('records', r =>
+    r.object_id === obj.id &&
+    r.environment_id === environment_id &&
+    r.record_number === num &&
+    !r.deleted_at
+  );
+  if (!record) return res.status(404).json({ error: 'Record not found' });
+  res.json({ ...record, object_id: obj.id });
+});
+
 router.get('/:id', (req, res) => {
   const r = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!r) return res.status(404).json({error:'Not found'});
@@ -261,7 +280,11 @@ router.post('/', (req, res) => {
   const org_unit_id = creator?.org_unit_id || null;
   // Resolve auto_number fields
   const resolvedData = resolveAutoNumbers(object_id, data);
-  const record = insert('records', {id:uuidv4(),object_id,environment_id,data:resolvedData,org_unit_id,created_by:created_by||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
+  // Auto-assign sequential record_number per object (used for clean URLs)
+  const _existingNums = query('records', r => r.object_id === object_id && r.environment_id === environment_id)
+    .map(r => r.record_number || 0).filter(n => typeof n === 'number' && !isNaN(n));
+  const record_number = _existingNums.length > 0 ? Math.max(..._existingNums) + 1 : 1;
+  const record = insert('records', {id:uuidv4(),record_number,object_id,environment_id,data:resolvedData,org_unit_id,created_by:created_by||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
   insert('activity', {id:uuidv4(),environment_id,record_id:record.id,object_id,action:'created',actor:created_by||null,changes:resolvedData,created_at:new Date().toISOString()});
   // Fire agent triggers + workflow automation triggers
   getEngine().fireEventTrigger('record_created', record, null).catch(()=>{});

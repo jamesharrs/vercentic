@@ -1607,7 +1607,11 @@ function App() {
     const seg1 = parts[1];
     // /record/:objectSlug/:recordId  (deep link to a specific record)
     if (seg0 === 'record' && seg1 && parts[2]) return `record_${parts[2]}_${seg1}`;
-    // /:objectSlug/:recordId  (short form — look up object id from slug)
+    // /:objectSlug/:number  (clean numeric URL e.g. /people/42)
+    if (seg1 && /^\d+$/.test(seg1)) {
+      return `resolve_${seg0}_${seg1}`;
+    }
+    // /:objectSlug/:recordId  (UUID form — look up object id from slug)
     if (seg1 && seg1.length > 8) {
       const obj = objects.find(o => o.slug === seg0);
       if (obj) return `record_${seg1}_${obj.id}`;
@@ -1891,6 +1895,23 @@ function App() {
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
   }, [navObjects]);
+  // Resolve numeric URL tokens (e.g. /people/42) to full record UUIDs
+  useEffect(() => {
+    if (!activeNav?.startsWith('resolve_')) return;
+    if (!selectedEnv || !navObjects?.length) return;
+    const [, slug, number] = activeNav.split('_');
+    if (!slug || !number) { setActiveNav('dashboard'); return; }
+    fetch(`/api/records/by-number?object_slug=${slug}&number=${number}&environment_id=${selectedEnv.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(rec => {
+        if (!rec?.id) { setActiveNav('dashboard'); return; }
+        openRecord(rec.id, rec.object_id);
+      })
+      .catch(() => setActiveNav('dashboard'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNav, selectedEnv?.id, navObjects?.length]);
+
+
 
   // Keep refs so event listeners always call the latest version — prevents stale closure bugs
   const openRecordRef = useRef(openRecord);
@@ -2251,7 +2272,15 @@ function App() {
           const parts = activeNav.split("_"); const recordId = parts[1]; const objectId = parts[2];
           const obj = navObjects.find(o => o.id === objectId);
           return <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}><RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
-            onRecordLoad={(rec, recObj) => { setActiveRecord(rec); setActiveRecordObj(recObj); }}
+            onRecordLoad={(rec, recObj) => {
+            setActiveRecord(rec); setActiveRecordObj(recObj);
+            // Swap UUID URL for clean numeric URL once record is loaded
+            if (rec?.record_number && recObj?.slug) {
+              const numUrl = `/${recObj.slug}/${rec.record_number}`;
+              if (window.location.pathname !== numUrl)
+                window.history.replaceState({ nav: activeNav }, '', numUrl);
+            }
+          }}
           /></div>;
         })() : activeNav === "search" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
