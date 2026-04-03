@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { REPORT_LIBRARY, LIBRARY_CATEGORIES, CHART_ICON_PATHS } from './reportLibrary';
 import {
   BarChart, Bar, AreaChart, Area, LineChart, Line,
   PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis,
@@ -333,6 +334,8 @@ function ResultRow({ row, cols, groupBy, chartX, onFilter }) {
 // ── Main Reports component ────────────────────────────────────────────────────
 export default function Reports({ environment, initialReport }) {
   const [objects,       setObjects]       = useState([]);
+  const [libCat,    setLibCat]    = useState('all');
+  const [libSearch, setLibSearch] = useState('');
   const [fields,        setFields]        = useState([]);
   const [selObject,     setSelObject]     = useState("");
   const [selCols,       setSelCols]       = useState([]);
@@ -664,6 +667,49 @@ export default function Reports({ environment, initialReport }) {
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // ── Report Library ──────────────────────────────────────────────────────
+  const _resolveObj = (slug) => allObjs.find(o =>
+    o.slug === slug ||
+    (o.plural_name||'').toLowerCase().replace(/\s+/g,'-') === slug ||
+    (o.name||'').toLowerCase() === slug
+  );
+
+  const loadLibraryReport = (t) => {
+    const obj = _resolveObj(t.object);
+    if (!obj) { alert('Object "'+t.object+'" not found in this environment.'); return; }
+    if (skipReset) skipReset.current = true;
+    setSelObject(obj.id);
+    setGroupBy(t.groupBy||'');
+    setSortBy(t.sortBy||'');
+    setSortDir(t.sortDir||'desc');
+    setFilters((t.filters||[]).map((f,i)=>({...f,id:String(i)})));
+    setFormulas((t.formulas||[]).map((f,i)=>({...f,id:f.id||String(i)})));
+    setChartType(t.chartType||'bar');
+    setPanel(t.formulas?.length?'formula':'builder');
+    setTimeout(()=>{ if(typeof runReport==='function') runReport(); },200);
+  };
+
+  const copyLibraryReport = async (t) => {
+    const name = window.prompt('Save this report as:', t.title+' (copy)');
+    if (!name) return;
+    const obj = _resolveObj(t.object);
+    await api.post('/reports',{
+      name, environment_id:environment?.id, object_id:obj?.id||selObject,
+      config:JSON.stringify({groupBy:t.groupBy,sortBy:t.sortBy,sortDir:t.sortDir,
+        filters:t.filters,formulas:t.formulas,chartType:t.chartType,cols:t.cols}),
+    });
+    await loadSavedReports();
+    setPanel('saved');
+  };
+
+  const copySavedReport = async (r) => {
+    const name = window.prompt('Name for the copy:', r.name+' (copy)');
+    if (!name) return;
+    await api.post('/reports',{name,environment_id:environment?.id,object_id:r.object_id,config:r.config});
+    await loadSavedReports();
+  };
+
   return (
     <div style={{ background:B.bg,minHeight:"100vh",padding:"28px 32px",fontFamily:F }}>
       {scheduleView && <ScheduleModal savedView={scheduleView} environment={environment} onClose={()=>setScheduleView(null)}/>}
