@@ -2967,12 +2967,14 @@ function getSystemValue(record, col, linkedJobs) {
   if (col === '_created') return record.created_at ? new Date(record.created_at).toLocaleDateString() : '—';
   if (col === '_updated') return record.updated_at ? new Date(record.updated_at).toLocaleDateString() : '—';
   if (col === '_linked_job') {
-    const job = linkedJobs?.[record.id];
-    return job ? (job.title || '—') : '—';
+    const jobs = linkedJobs?.[record.id];
+    if (!jobs?.length) return '—';
+    return jobs.map(j => j.title).filter(Boolean).join(', ') || '—';
   }
   if (col === '_stage') {
-    const job = linkedJobs?.[record.id];
-    return job?.stage || '—';
+    const jobs = linkedJobs?.[record.id];
+    if (!jobs?.length) return '—';
+    return jobs.map(j => j.stage).filter(Boolean).join(', ') || '—';
   }
   return '—';
 }
@@ -3287,11 +3289,37 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
                             {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={record?.data}/>}
                           </span>
-                        : f.apiKey === '_stage'
-                          ? <StagePill
-                              linkInfo={linkedJobs?.[record.id]}
-                              onStageChange={updated => onStageChange?.(record.id, updated)}
-                            />
+                        : f.apiKey === '_linked_job'
+                          ? (() => {
+                              const jobs = linkedJobs?.[record.id] || [];
+                              if (!jobs.length) return <span style={{ fontSize:12, color:'#9ca3af' }}>—</span>;
+                              return (
+                                <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                                  {jobs.map((j, idx) => (
+                                    <span key={idx} style={{ fontSize:11, fontWeight:600, color:'#4361EE',
+                                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:180 }}
+                                      title={j.title}>
+                                      {j.title || '—'}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()
+                          : f.apiKey === '_stage'
+                          ? (() => {
+                              const jobs = linkedJobs?.[record.id] || [];
+                              if (!jobs.length) return <span style={{ fontSize:12, color:'#9ca3af' }}>—</span>;
+                              return (
+                                <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                                  {jobs.map((j, idx) => (
+                                    <StagePill key={idx}
+                                      linkInfo={j}
+                                      onStageChange={updated => onStageChange?.(record.id, updated)}
+                                    />
+                                  ))}
+                                </div>
+                              );
+                            })()
                           : f.isSystem
                             ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
                             : <FieldValue field={f} value={val} allFieldValues={record?.data}/>
@@ -7872,15 +7900,15 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         const map = {};
         links.forEach(l => {
           const pid = l.person_record_id;
-          if (pid && !map[pid]) {
-            map[pid] = {
-              title:    l.target_title || l.target_data?.job_title || l.target_data?.title || '',
-              stage:    l.stage_name  || '',
-              stage_id: l.stage_id    || null,
-              link_id:  l.id          || null,
-              steps:    l.workflow_steps || [],
-            };
-          }
+          if (!pid) return;
+          if (!map[pid]) map[pid] = [];
+          map[pid].push({
+            title:    l.target_title || l.target_data?.job_title || l.target_data?.title || '',
+            stage:    l.stage_name  || '',
+            stage_id: l.stage_id    || null,
+            link_id:  l.id          || null,
+            steps:    l.workflow_steps || [],
+          });
         });
         setLinkedJobs(map);
         // Also store flat people_links for cross-object filtering
