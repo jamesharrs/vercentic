@@ -402,13 +402,13 @@ export default function Reports({ environment, initialReport }) {
     }
   }, [initialReport, objects]);
 
-  // Auto-run on config change
+  // Auto-run on config change (NOT on selObject — that's handled directly in load functions)
   useEffect(() => {
     if (!selObject && !(dataMode==="forms"&&selForm)) return;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(()=>runReport(),600);
     return ()=>clearTimeout(debounceRef.current);
-  }, [selObject, filters, selCols, groupBy, sortBy, sortDir, joinObject]);
+  }, [filters, selCols, groupBy, sortBy, sortDir, joinObject]);
 
   function applyFilter(row, f) {
     const v=String(row[f.field]??"").toLowerCase(), fv=String(f.value??"").toLowerCase();

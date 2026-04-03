@@ -228,7 +228,63 @@ router.get('/application-status', (req, res) => {
 });
 
 
+
+// ── Check email — duplicate detection ─────────────────────────────────────────
+router.get('/:id/apply/check-email', (req, res) => {
+  try {
+    const store = getStore();
+    const portal = (store.portals||[]).find(p=>p.id===req.params.id);
+    if (!portal) return res.status(404).json({ error:'Portal not found' });
+    const email = (req.query.email||'').toLowerCase().trim();
+    if (!email) return res.json({ exists:false });
+    const jobId = req.query.job_id;
+    const person = (store.records||[]).find(r=>r.data?.email?.toLowerCase()===email);
+    if (!person) return res.json({ exists:false });
+    const priorApplication = jobId ? (store.activity||[]).find(a=>a.record_id===person.id&&a.action==='applied'&&a.details?.job_id===jobId) : null;
+    const priorAny = (store.activity||[]).find(a=>a.record_id===person.id&&a.action==='applied');
+    res.json({ exists:true, already_applied_this_job:!!priorApplication, already_applied_any:!!priorAny,
+      person:{ first_name:person.data?.first_name||'', last_name:person.data?.last_name||'', phone:person.data?.phone||'', location:person.data?.location||'', current_title:person.data?.current_title||'', linkedin_url:person.data?.linkedin_url||'' } });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+// ── Save draft ─────────────────────────────────────────────────────────────────
+router.post('/:id/draft', (req, res) => {
+  try {
+    const store = getStore();
+    const portal = (store.portals||[]).find(p=>p.id===req.params.id);
+    if (!portal) return res.status(404).json({ error:'Portal not found' });
+    const { email, job_id, form_data, step } = req.body;
+    if (!email) return res.status(400).json({ error:'email required' });
+    if (!store.application_drafts) store.application_drafts = [];
+    const existing = store.application_drafts.find(d=>d.email===email&&d.job_id===job_id&&d.portal_id===req.params.id);
+    const token = existing?.token || require('crypto').randomBytes(24).toString('hex');
+    const draft = { id:existing?.id||uid(), token, portal_id:req.params.id, email, job_id:job_id||null, form_data:form_data||{}, step:step||1, created_at:existing?.created_at||new Date().toISOString(), updated_at:new Date().toISOString(), expires_at:new Date(Date.now()+7*24*60*60*1000).toISOString() };
+    if (existing) { store.application_drafts=store.application_drafts.map(d=>d.id===existing.id?draft:d); } else { store.application_drafts.push(draft); }
+    saveStore();
+    const baseUrl = process.env.PORTAL_BASE_URL || 'https://client-gamma-ruddy-63.vercel.app';
+    const portalSlug = portal.slug || req.params.id;
+    const resumeUrl = `${baseUrl}/${portalSlug}?resume_token=${token}&job_id=${job_id||''}`;
+    try {
+      const { sendEmail } = require('../services/messaging');
+      sendEmail({ to:email, subject:`Continue your application — ${portal.branding?.company_name||'Us'}`, body:`Hi${draft.form_data.first_name?' '+draft.form_data.first_name:''},\n\nYou saved your application. Click below to continue:\n\n${resumeUrl}\n\nThis link expires in 7 days.` });
+    } catch(_) {}
+    res.json({ ok:true, token, resume_url:resumeUrl });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+// ── Resume draft ───────────────────────────────────────────────────────────────
+router.get('/:id/draft/:token', (req, res) => {
+  try {
+    const store = getStore();
+    const draft = (store.application_drafts||[]).find(d=>d.token===req.params.token&&d.portal_id===req.params.id);
+    if (!draft) return res.status(404).json({ error:'Draft not found or expired' });
+    if (new Date(draft.expires_at)<new Date()) return res.status(410).json({ error:'This link has expired. Please start a new application.' });
+    res.json(draft);
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
 module.exports = router;
+
 
 // ── Career site: submit application ──────────────────────────────────────────
 // POST /api/portals/:id/apply
