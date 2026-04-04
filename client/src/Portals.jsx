@@ -1619,9 +1619,22 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
 };
 
 const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
-  const cfg = cell.widgetConfig || {};
-  const set = (k, v) => onUpdate({ ...cell, widgetConfig: { ...cfg, [k]: v } });
-  const setMany = (obj) => onUpdate({ ...cell, widgetConfig: { ...cfg, ...obj } });
+  // Keep local cfg state so sequential set() calls accumulate rather than overwrite each other
+  const [localCfg, setLocalCfg] = useState(cell.widgetConfig || {});
+  const localCfgRef = useRef(localCfg);
+  localCfgRef.current = localCfg;
+
+  const set = (k, v) => {
+    const next = { ...localCfgRef.current, [k]: v };
+    setLocalCfg(next);
+    onUpdate({ ...cell, widgetConfig: next });
+  };
+  const setMany = (obj) => {
+    const next = { ...localCfgRef.current, ...obj };
+    setLocalCfg(next);
+    onUpdate({ ...cell, widgetConfig: next });
+  };
+  const cfg = localCfg;
   const inp = { padding:"7px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13,
     fontFamily:F, outline:"none", color:C.text1, background:C.surface, width:"100%", boxSizing:"border-box" };
   const lbl = (text) => (
