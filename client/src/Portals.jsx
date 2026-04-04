@@ -1371,6 +1371,123 @@ const RichTextEditor = ({ value, onChange, inp }) => {
 };
 
 // ─── Widget Config Panel ──────────────────────────────────────────────────────
+const HM_CTA_OPTIONS = [
+  { action:'submit_feedback',    label:'Submit Feedback' },
+  { action:'move_stage',         label:'Move Stage' },
+  { action:'arrange_interview',  label:'Arrange Interview' },
+  { action:'approve_offer',      label:'Approve Offer' },
+  { action:'reject',             label:'Reject' },
+  { action:'view_profile',       label:'View Profile' },
+];
+
+const HMWidgetConfig = ({ cfg, set, environmentId }) => {
+  const [savedLists, setSavedLists] = useState([]);
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/saved-views/portal-lists?environment_id=${environmentId}`)
+      .then(d => setSavedLists(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [environmentId]);
+
+  const accentColor = cfg.accent_color || C.accent;
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      {/* Title + Colour */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'end'}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Widget Title</div>
+          <input value={cfg.widget_title||''} onChange={e=>set('widget_title',e.target.value)}
+            placeholder="My Candidates"
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}
+            onFocus={e=>e.target.style.borderColor=accentColor} onBlur={e=>e.target.style.borderColor=C.border}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Accent</div>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <input type="color" value={accentColor} onChange={e=>set('accent_color',e.target.value)}
+              style={{width:36,height:36,padding:2,borderRadius:8,border:`1.5px solid ${C.border}`,cursor:'pointer'}}/>
+            <span style={{fontSize:11,color:C.text3,fontFamily:'monospace'}}>{accentColor}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Data source */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Data Source (Saved List)</div>
+        <select value={cfg.list_id||''} onChange={e=>set('list_id',e.target.value)}
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
+          <option value=''>— Select a saved list —</option>
+          {savedLists.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+        {savedLists.length===0&&(
+          <div style={{fontSize:11,color:'#D97706',marginTop:4}}>
+            ⚠ Mark lists as "Portal Visible" in the Lists panel to use them here.
+          </div>
+        )}
+      </div>
+
+      {/* Display mode pills */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Display Mode</div>
+        <div style={{display:'flex',gap:8}}>
+          {['card','table','kanban'].map(m=>(
+            <button key={m} onClick={()=>set('display_mode',m)} style={{
+              flex:1,padding:'8px 0',borderRadius:9,cursor:'pointer',fontFamily:F,
+              border:`1.5px solid ${(cfg.display_mode||'card')===m?accentColor:C.border}`,
+              background:(cfg.display_mode||'card')===m?`${accentColor}14`:C.surface,
+              color:(cfg.display_mode||'card')===m?accentColor:C.text2,
+              fontSize:12,fontWeight:700,textTransform:'capitalize',transition:'all .12s'
+            }}>{m}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Kanban stages */}
+      {cfg.display_mode==='kanban'&&(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Kanban Stages</div>
+          <input value={(cfg.stages||[]).join(', ')} onChange={e=>set('stages',e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}
+            placeholder="Applied, Screening, Interview, Offer"
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+      )}
+
+      {/* CTA Actions */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>CTA Actions</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+          {HM_CTA_OPTIONS.map(opt=>{
+            const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
+            return (
+              <button key={opt.action} onClick={()=>{
+                const btns=active
+                  ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
+                  :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
+                set('cta_buttons',btns);
+              }} style={{
+                padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
+                border:`1.5px solid ${active?accentColor:C.border}`,
+                background:active?`${accentColor}14`:C.surface,
+                color:active?accentColor:C.text2,
+                fontSize:12,fontWeight:600,transition:'all .12s'
+              }}>{active?'✓ ':''}{opt.label}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Empty state */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Empty State Message</div>
+        <input value={cfg.empty_message||''} onChange={e=>set('empty_message',e.target.value)}
+          placeholder="No candidates to show"
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
+      </div>
+    </div>
+  );
+};
+
 const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   const cfg = cell.widgetConfig || {};
   const set = (k, v) => onUpdate({ ...cell, widgetConfig: { ...cfg, [k]: v } });
@@ -1384,7 +1501,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   const WIDGET_LABELS = {
     hero:"Hero Banner", text:"Rich Text", image:"Image", stats:"Stats",
     video:"Video", jobs:"Job List", job_list:"Job List", people:"People List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer", files:"Files / Docs",
-    content:"Content Block", accordion:"Accordion", cta:"CTA Section",
+    content:"Content Block", accordion:"Accordion", cta:"CTA Section", hm_widget:"HM Widget",
   };
   const renderFields = () => {
     switch (cell.widgetType) {
@@ -1510,20 +1627,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="people"/>
       );
       case "hm_widget": return (
-        <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div>{lbl("Widget Title")}<input value={cfg.widget_title||""} onChange={e=>set("widget_title",e.target.value)} placeholder="My Candidates" style={inp}/></div>
-          <div>{lbl("Display Mode")}
-            <select value={cfg.display_mode||"card"} onChange={e=>set("display_mode",e.target.value)} style={inp}>
-              <option value="card">Card</option>
-              <option value="table">Table</option>
-              <option value="kanban">Kanban</option>
-            </select>
-          </div>
-          <div>{lbl("Saved List ID (portal-visible lists only)")}<input value={cfg.list_id||""} onChange={e=>set("list_id",e.target.value)} placeholder="Paste saved list ID" style={inp}/></div>
-          <div>{lbl("CTA Buttons (comma-separated)")}<input value={(cfg.cta_buttons||[]).map(b=>b.label||b.action).join(", ")||""} onChange={e=>set("cta_buttons",e.target.value.split(",").map(s=>({action:s.trim().toLowerCase().replace(/ /g,"_"),label:s.trim()})))} placeholder="Submit Feedback, Move Stage, Approve Offer" style={inp}/></div>
-          {cfg.display_mode==="kanban"&&<div>{lbl("Kanban Stages (comma-separated)")}<input value={(cfg.stages||[]).join(", ")||""} onChange={e=>set("stages",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))} placeholder="Applied, Screening, Interview, Offer" style={inp}/></div>}
-          <div>{lbl("Empty State Message")}<input value={cfg.empty_message||""} onChange={e=>set("empty_message",e.target.value)} placeholder="No candidates to show" style={inp}/></div>
-        </div>
+        <HMWidgetConfig cfg={cfg} set={set} environmentId={environmentId}/>
       );
       case "job_list": return (
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="jobs"/>
