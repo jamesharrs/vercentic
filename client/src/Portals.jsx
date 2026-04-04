@@ -39,6 +39,7 @@ const WIDGET_TYPES = [
   { type:"image",        label:"Image",          icon:"image",     desc:"Photo or illustration" },
   { type:"jobs",         label:"Job List",       icon:"briefcase", desc:"Open positions with filters" },
   { type:"people",       label:"People List",    icon:"users2",    desc:"Candidates or team members" },
+  { type:"hm_widget",   label:"HM Widget",      icon:"users2",    desc:"Candidate list with CTA actions for hiring managers" },
   { type:"form",         label:"Form",           icon:"form",      desc:"Linked to any object" },
   { type:"stats",        label:"Stats",          icon:"bar2",      desc:"Numbers & social proof" },
   { type:"testimonials", label:"Testimonials",   icon:"quote",     desc:"Employee quotes & stories" },
@@ -730,7 +731,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
 const WIDGET_CATEGORIES = [
   { id:"layout",     label:"Layout",      color:"#64748b", icon:"grid",      widgets:["divider","spacer","tabs"] },
   { id:"content",    label:"Content",     color:"#7c3aed", icon:"align",     widgets:["hero","text","rich_text","image","image_gallery","video","stats","trust_bar","testimonials","benefits_grid","faq","cta_banner","content","accordion","cta"] },
-  { id:"recruitment",label:"Recruitment", color:"#0891b2", icon:"briefcase", widgets:["jobs","featured_jobs","dept_grid","job_alerts","app_status","saved_jobs"] },
+  { id:"recruitment",label:"Recruitment", color:"#0891b2", icon:"briefcase", widgets:["jobs","featured_jobs","dept_grid","job_alerts","app_status","saved_jobs","hm_widget"] },
   { id:"people",     label:"People",      color:"#059669", icon:"users2",    widgets:["people","team"] },
   { id:"forms",      label:"Forms",       color:"#d97706", icon:"form",      widgets:["form","multistep_form","files","map_embed"] },
 ];
@@ -743,7 +744,7 @@ const WidgetPicker = ({ onSelect, onClose }) => {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.42)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:C.surface,borderRadius:18,width:580,maxWidth:"96vw",maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 72px rgba(0,0,0,.22)",overflow:"hidden"}}>
+      <div style={{background:C.surface,borderRadius:18,width:650,maxWidth:"96vw",maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 72px rgba(0,0,0,.22)",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"18px 22px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
           <div>
@@ -928,6 +929,20 @@ const WidgetPreview = ({ cell, theme }) => {
       <div style={{textAlign:"center",color:"rgba(255,255,255,.5)"}}>
         <Ic n="film" s={32} c="rgba(255,255,255,.4)"/>
         <div style={{fontSize:11,marginTop:4}}>{cfg.url?cfg.url.slice(0,40)+"…":"Add video URL"}</div>
+      </div>
+    </div>
+  );
+
+  if (cell.widgetType==="hm_widget") return (
+    <div style={{padding:"16px 20px",display:"flex",gap:10,alignItems:"center",background:"#EEF2FF",borderRadius:8}}>
+      <div style={{width:36,height:36,borderRadius:10,background:"#4361EE18",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <Ic n="users2" s={17} c="#4361EE"/>
+      </div>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:"#1E2235"}}>{cfg.widget_title||"HM Widget"}</div>
+        <div style={{fontSize:11,color:"#4B5675"}}>
+          {cfg.display_mode||"card"} · {(cfg.cta_buttons||[]).length} CTAs{cfg.list_id?" · list linked":"· no list selected"}
+        </div>
       </div>
     </div>
   );
@@ -1493,6 +1508,22 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
       );
       case "people": return (
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="people"/>
+      );
+      case "hm_widget": return (
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div>{lbl("Widget Title")}<input value={cfg.widget_title||""} onChange={e=>set("widget_title",e.target.value)} placeholder="My Candidates" style={inp}/></div>
+          <div>{lbl("Display Mode")}
+            <select value={cfg.display_mode||"card"} onChange={e=>set("display_mode",e.target.value)} style={inp}>
+              <option value="card">Card</option>
+              <option value="table">Table</option>
+              <option value="kanban">Kanban</option>
+            </select>
+          </div>
+          <div>{lbl("Saved List ID (portal-visible lists only)")}<input value={cfg.list_id||""} onChange={e=>set("list_id",e.target.value)} placeholder="Paste saved list ID" style={inp}/></div>
+          <div>{lbl("CTA Buttons (comma-separated)")}<input value={(cfg.cta_buttons||[]).map(b=>b.label||b.action).join(", ")||""} onChange={e=>set("cta_buttons",e.target.value.split(",").map(s=>({action:s.trim().toLowerCase().replace(/ /g,"_"),label:s.trim()})))} placeholder="Submit Feedback, Move Stage, Approve Offer" style={inp}/></div>
+          {cfg.display_mode==="kanban"&&<div>{lbl("Kanban Stages (comma-separated)")}<input value={(cfg.stages||[]).join(", ")||""} onChange={e=>set("stages",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))} placeholder="Applied, Screening, Interview, Offer" style={inp}/></div>}
+          <div>{lbl("Empty State Message")}<input value={cfg.empty_message||""} onChange={e=>set("empty_message",e.target.value)} placeholder="No candidates to show" style={inp}/></div>
+        </div>
       );
       case "job_list": return (
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="jobs"/>
@@ -3334,7 +3365,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const [showDomainWizard, setShowDomainWizard] = useState(false);
   const [showBrandKit,     setShowBrandKit]     = useState(false);
   const [showPortalSettings, setShowPortalSettings] = useState(false);
-  const [showTypeSwitch, setShowTypeSwitch] = useState(false);
   const [pageActionsFor,  setPageActionsFor]  = useState(null);
   const [isEditing, setIsEditing] = useState(true);
   const [viewportMode, setViewportMode] = useState("desktop"); // "desktop" | "mobile"
@@ -3403,15 +3433,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         <input value={portal.name} onChange={e=>setPortal(p=>({...p,name:e.target.value}))}
           style={{border:"none",outline:"none",fontSize:14,fontWeight:700,color:C.text1,background:"transparent",fontFamily:F,minWidth:140}}/>
         {isDirty&&<span style={{width:7,height:7,borderRadius:"50%",background:"#F59E0B",flexShrink:0,marginLeft:-4}} title="Unsaved changes"/>}
-        {/* Portal type badge */}
-        <span onClick={()=>setShowTypeSwitch(true)} title="Change portal type" style={{
-          padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,cursor:"pointer",
-          background: portal.type==="hm_portal"?"#EDE9FE":portal.type==="onboarding"?"#D1FAE5":portal.type==="agency_portal"?"#FEF3C7":"#EFF6FF",
-          color: portal.type==="hm_portal"?"#7C3AED":portal.type==="onboarding"?"#059669":portal.type==="agency_portal"?"#D97706":"#2563EB",
-          marginLeft:4, userSelect:"none"
-        }}>
-          {portal.type==="hm_portal"?"HM Portal":portal.type==="onboarding"?"Onboarding":portal.type==="agency_portal"?"Agency":"Career Site"}
-        </span>
         <div style={{flex:1}}/>
         {/* Page tabs — draggable to reorder */}
         <div style={{display:"flex",gap:2,background:C.surface2,borderRadius:8,padding:3,border:`1px solid ${C.border}`,maxWidth:280,overflowX:"auto",flexShrink:0}}>
@@ -3471,7 +3492,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
                   {icon:"sparkles",label:"Brand Kit",onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
                   {icon:"externalLink",label:"Domain",onClick:()=>{setShowDomainWizard(true);setShowMoreMenu(false);}},
                   {icon:"settings",label:"Settings",onClick:()=>{setShowPortalSettings(s=>!s);setShowTheme(false);setShowMoreMenu(false);}},
-                  {icon:"briefcase",label:"Portal Type…",onClick:()=>{setShowTypeSwitch(true);setShowMoreMenu(false);}},
                 ].map(item=>(
                   <button key={item.label} onClick={item.onClick}
                     style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:7,border:"none",background:"transparent",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:500,color:C.text1,textAlign:"left"}}
@@ -3531,54 +3551,22 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
           width:390,minHeight:600,background:"white",borderRadius:36,boxShadow:"0 24px 80px rgba(0,0,0,.25),inset 0 0 0 2px rgba(0,0,0,.08)",
           overflow:"hidden",border:"8px solid #1a1a2e",flexShrink:0,
         }:{width:"100%"}}>
-          {portal.type === 'hm_portal' ? (
-            <HMPortalEditor portal={portal} setPortal={setPortal} environment={{ id: portal.environment_id }}/>
-          ) : (<>
-            <InlineNav
-              nav={portal.nav||defaultNav()}
-              theme={portal.theme}
-              onChange={nav=>setPortal(p=>({...p,nav}))}
-              isEditing={isEditing}/>
-            <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id}/>
-            <InlineFooter
-              footer={portal.footer||defaultFooter()}
-              theme={portal.theme}
-              onChange={footer=>setPortal(p=>({...p,footer}))}
-              isEditing={isEditing}/>
-          </>)}
+          <InlineNav
+            nav={portal.nav||defaultNav()}
+            theme={portal.theme}
+            onChange={nav=>setPortal(p=>({...p,nav}))}
+            isEditing={isEditing}/>
+          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id}/>
+          <InlineFooter
+            footer={portal.footer||defaultFooter()}
+            theme={portal.theme}
+            onChange={footer=>setPortal(p=>({...p,footer}))}
+            isEditing={isEditing}/>
         </div>
       </div>
 
       {showLibrary&&<SectionLibrary onInsert={row=>{const rows=[...page.rows];rows.push(row);updatePage({...page,rows});}} onClose={()=>setShowLibrary(false)}/>}
 
-      {/* Portal Type Switcher modal */}
-      {showTypeSwitch&&(
-        <div onClick={()=>setShowTypeSwitch(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:18,padding:28,width:420,boxShadow:"0 32px 80px rgba(0,0,0,0.2)"}}>
-            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:4}}>Portal Type</div>
-            <div style={{fontSize:12,color:C.text3,marginBottom:20}}>Choose the type of experience this portal delivers.</div>
-            {[
-              {id:"career_site",   label:"Career Site",           desc:"Public job listings and apply forms for candidates."},
-              {id:"hm_portal",     label:"Hiring Manager Portal",  desc:"Configurable widgets showing candidate lists with CTA actions for HMs."},
-              {id:"agency_portal", label:"Agency Portal",          desc:"Agency partner portal for submitting and tracking candidates."},
-              {id:"onboarding",    label:"Onboarding Portal",      desc:"Post-offer onboarding experience for new hires."},
-            ].map(t=>(
-              <div key={t.id} onClick={()=>{setPortal(p=>({...p,type:t.id}));setShowTypeSwitch(false);}}
-                style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${portal.type===t.id?C.accent:C.border}`,
-                  background:portal.type===t.id?C.accentLight:C.surface,cursor:"pointer",marginBottom:8,transition:"all .15s"}}
-                onMouseEnter={e=>{if(portal.type!==t.id){e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background=C.accentLight;}}}
-                onMouseLeave={e=>{if(portal.type!==t.id){e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;}}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{fontSize:13,fontWeight:700,color:portal.type===t.id?C.accent:C.text1,flex:1}}>{t.label}</div>
-                  {portal.type===t.id&&<span style={{fontSize:11,color:C.accent,fontWeight:700}}>✓ Active</span>}
-                </div>
-                <div style={{fontSize:12,color:C.text3,marginTop:3}}>{t.desc}</div>
-              </div>
-            ))}
-            <button onClick={()=>setShowTypeSwitch(false)} style={{marginTop:8,width:"100%",padding:"9px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
-          </div>
-        </div>
-      )}
       {pageActionsFor&&<PageActionsMenu
         page={pageActionsFor} allPages={portal.pages}
         onUpdate={updated=>{setPortal(p=>({...p,pages:p.pages.map(x=>x.id===updated.id?updated:x)}));setPageActionsFor(updated);if(page?.id===updated.id)updatePage(updated);}}
@@ -3992,7 +3980,7 @@ export default function PortalsPage({ environment, onFullScreen }) {
       {creating&&(
         <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}
           onClick={e=>e.target===e.currentTarget&&(setCreating(false),setSelectedTemplate(null),setNewName(""))}>
-          <div style={{background:C.surface,borderRadius:16,width:680,maxWidth:"100%",boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"90vh"}}>
+          <div style={{background:C.surface,borderRadius:16,width:740,maxWidth:"96vw",boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"90vh"}}>
             {/* Modal header */}
             <div style={{padding:"18px 24px 14px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               <div style={{fontSize:17,fontWeight:800,color:C.text1,marginBottom:2}}>New Portal</div>
@@ -4024,7 +4012,7 @@ export default function PortalsPage({ environment, onFullScreen }) {
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:selectedTemplate===t.id?t.accent:C.text1}}>{t.name}</div>
-                      <div style={{fontSize:10,color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.desc}</div>
+                      <div style={{fontSize:10,color:C.text3,marginTop:1,lineHeight:1.5}}>{t.desc}</div>
                       <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
                         {t.tags.map(tag=>(
                           <span key={tag} style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,
