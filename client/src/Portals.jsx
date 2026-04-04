@@ -125,7 +125,7 @@ const defaultCell = () => ({ id:uid(), widgetType:null, widgetConfig:{} });
 const defaultRow  = (preset="1") => ({
   id:uid(), preset,
   bgColor:"", bgImage:"", overlayOpacity:0, padding:"md",
-  cells: preset==="1" ? [defaultCell()] : [defaultCell(), defaultCell()],
+  cells: preset==="1" ? [defaultCell()] : preset==="3" ? [defaultCell(), defaultCell(), defaultCell()] : [defaultCell(), defaultCell()],
 });
 const defaultPage = () => ({ id:uid(), name:"Home", slug:"/", rows:[defaultRow("1")], seo:{ title:"", description:"", ogImage:"" } });
 
