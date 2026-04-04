@@ -1516,30 +1516,31 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
     if (!portal?.environment_id || !cfg.object_id) { setLoading(false); return; }
     const load = async () => {
       try {
-        // 1. Load fields for the object
-        const flds = await api.get(`/fields?object_id=${cfg.object_id}`);
-        const allFields = Array.isArray(flds) ? flds : [];
+        // 1. Load fields (best-effort — don't fail if unavailable)
+        let allFields = [];
+        try {
+          const flds = await api.get(`/fields?object_id=${cfg.object_id}`);
+          allFields = Array.isArray(flds) ? flds : [];
+        } catch(e) {}
         setFields(allFields);
 
-        // 2. Load saved list config to get columns, filters, sort
+        // 2. Load saved list config (best-effort)
         let savedList = null;
         if (cfg.list_id) {
           try { savedList = await api.get(`/saved-views/${cfg.list_id}`); } catch(e) {}
         }
 
-        // 3. Resolve visible columns from saved list
-        if (savedList?.visible_field_ids?.length) {
-          // Use the saved list's column order
+        // 3. Resolve visible columns
+        if (savedList?.visible_field_ids?.length && allFields.length) {
           const ordered = savedList.visible_field_ids
             .map(id => allFields.find(f => f.id === id || f.api_key === id))
             .filter(Boolean);
           setListCols(ordered.length ? ordered : allFields.filter(f => f.show_in_list).slice(0, 5));
-        } else {
-          // Fall back to show_in_list fields
+        } else if (allFields.length) {
           setListCols(allFields.filter(f => f.show_in_list).slice(0, 5));
         }
 
-        // 4. Build records URL — apply filter_chip from saved list
+        // 4. Fetch records — always do this even if fields/list failed
         let url = `/records?object_id=${cfg.object_id}&environment_id=${portal.environment_id}&limit=200`;
         if (savedList?.sort_by) url += `&sort_by=${encodeURIComponent(savedList.sort_by)}&sort_dir=${savedList.sort_dir||'asc'}`;
         if (savedList?.filter_chip) {
@@ -1549,31 +1550,36 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
         const data = await api.get(url);
         let all = Array.isArray(data) ? data : (data?.records || []);
 
-        // 5. Apply advanced filters from saved list
-        if (savedList?.filters?.length) {
-          const fm = {};
-          allFields.forEach(f => { fm[f.id] = f.api_key; fm[f.api_key] = f.api_key; });
-          all = all.filter(r => savedList.filters.every(filt => {
-            const ak = fm[filt.field] || filt.field || '';
-            const rv = r.data?.[ak];
-            const op = filt.op || filt.operator || 'contains';
-            const fv = String(filt.value ?? '').toLowerCase();
-            const sv = String(rv ?? '').toLowerCase();
-            if (op === 'is empty')     return !rv;
-            if (op === 'is not empty') return !!rv;
-            if (op === 'contains')     return sv.includes(fv);
-            if (op === 'is')           return sv === fv;
-            if (op === 'is not')       return sv !== fv;
-            if (op === '>') return parseFloat(rv) > parseFloat(filt.value);
-            if (op === '<') return parseFloat(rv) < parseFloat(filt.value);
-            if (op === 'includes') { const arr=Array.isArray(rv)?rv:(rv?[rv]:[]).map(String); return arr.some(v=>v.toLowerCase()===fv); }
-            return true;
-          }));
+        // 5. Apply advanced filters (best-effort)
+        if (savedList?.filters?.length && allFields.length) {
+          try {
+            const fm = {};
+            allFields.forEach(f => { fm[f.id] = f.api_key; fm[f.api_key] = f.api_key; });
+            all = all.filter(r => savedList.filters.every(filt => {
+              const ak = fm[filt.field] || filt.field || '';
+              const rv = r.data?.[ak];
+              const op = filt.op || filt.operator || 'contains';
+              const fv = String(filt.value ?? '').toLowerCase();
+              const sv = String(rv ?? '').toLowerCase();
+              if (op === 'is empty')     return !rv;
+              if (op === 'is not empty') return !!rv;
+              if (op === 'contains')     return sv.includes(fv);
+              if (op === 'is')           return sv === fv;
+              if (op === 'is not')       return sv !== fv;
+              if (op === '>') return parseFloat(rv) > parseFloat(filt.value);
+              if (op === '<') return parseFloat(rv) < parseFloat(filt.value);
+              if (op === 'includes') { const arr=Array.isArray(rv)?rv:[rv].filter(Boolean).map(String); return arr.some(v=>v.toLowerCase()===fv); }
+              return true;
+            }));
+          } catch(e) {}
         }
 
         setRecords(all);
-      } catch(e) { console.error(e); }
-      finally { setLoading(false); }
+      } catch(e) {
+        console.error('HMPortalWidget load error:', e);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [portal?.environment_id, cfg.object_id, cfg.list_id]);
