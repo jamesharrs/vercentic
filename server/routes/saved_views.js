@@ -16,6 +16,7 @@ router.get('/', (req, res) => {
   if (!object_id || !environment_id) return res.status(400).json({ error: 'object_id and environment_id required' });
   const views = query('saved_views', v => {
     if (v.object_id !== object_id || v.environment_id !== environment_id) return false;
+    if (user_id === 'system') return true; // widget config bypass — show all lists
     if (v.created_by === user_id) return true;
     const sh = v.sharing;
     if (!sh) return !!v.is_shared; // legacy

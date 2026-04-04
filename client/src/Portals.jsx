@@ -1380,17 +1380,147 @@ const HM_CTA_OPTIONS = [
   { action:'view_profile',       label:'View Profile' },
 ];
 
-const HMWidgetConfig = ({ cfg, set, environmentId }) => {
+const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
+  const [objects,    setObjects]    = useState([]);
   const [savedLists, setSavedLists] = useState([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+
+  // Load objects once
   useEffect(() => {
     if (!environmentId) return;
-    api.get(`/saved-views/portal-lists?environment_id=${environmentId}`)
-      .then(d => setSavedLists(Array.isArray(d) ? d : []))
+    api.get(`/objects?environment_id=${environmentId}`)
+      .then(d => setObjects(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, [environmentId]);
 
+  // Load saved lists when object changes
+  useEffect(() => {
+    const obj = objects.find(o => o.id === cfg.object_id);
+    if (!obj) { setSavedLists([]); return; }
+    setLoadingLists(true);
+    // Use a system user_id so all shared lists show
+    api.get(`/saved-views?object_id=${obj.id}&environment_id=${environmentId}&user_id=system`)
+      .then(d => setSavedLists(Array.isArray(d) ? d : []))
+      .catch(() => setSavedLists([]))
+      .finally(() => setLoadingLists(false));
+  }, [cfg.object_id, objects, environmentId]);
+
   const accentColor = cfg.accent_color || C.accent;
 
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+
+      {/* Title + Colour */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'end'}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Widget Title</div>
+          <input value={cfg.widget_title||''} onChange={e=>set('widget_title',e.target.value)}
+            placeholder="My Candidates"
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Accent</div>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <input type="color" value={accentColor} onChange={e=>set('accent_color',e.target.value)}
+              style={{width:36,height:36,padding:2,borderRadius:8,border:`1.5px solid ${C.border}`,cursor:'pointer'}}/>
+            <span style={{fontSize:11,color:C.text3,fontFamily:'monospace'}}>{accentColor}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 1: Object type */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+          1 · Object Type
+        </div>
+        <select value={cfg.object_id||''} onChange={e=>setMany({object_id:e.target.value, list_id:''})}
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
+          <option value=''>— Select an object —</option>
+          {objects.map(o=><option key={o.id} value={o.id}>{o.plural_name||o.name}</option>)}
+        </select>
+      </div>
+
+      {/* Step 2: Saved list (only when object is selected) */}
+      {cfg.object_id && (
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+            2 · Saved List (optional — blank shows all records)
+          </div>
+          <select value={cfg.list_id||''} onChange={e=>set('list_id',e.target.value)}
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
+            <option value=''>— All records (no filter) —</option>
+            {loadingLists
+              ? <option disabled>Loading…</option>
+              : savedLists.map(l=><option key={l.id} value={l.id}>{l.name}</option>)
+            }
+          </select>
+          {!loadingLists && savedLists.length === 0 && (
+            <div style={{fontSize:11,color:C.text3,marginTop:4}}>
+              No saved lists for this object yet. Create one in the list view.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Display mode pills */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Display Mode</div>
+        <div style={{display:'flex',gap:8}}>
+          {['card','table','kanban'].map(m=>(
+            <button key={m} onClick={()=>set('display_mode',m)} style={{
+              flex:1,padding:'8px 0',borderRadius:9,cursor:'pointer',fontFamily:F,
+              border:`1.5px solid ${(cfg.display_mode||'card')===m?accentColor:C.border}`,
+              background:(cfg.display_mode||'card')===m?`${accentColor}14`:C.surface,
+              color:(cfg.display_mode||'card')===m?accentColor:C.text2,
+              fontSize:12,fontWeight:700,textTransform:'capitalize',transition:'all .12s'
+            }}>{m}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Kanban stages */}
+      {cfg.display_mode==='kanban'&&(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Kanban Stages (comma-separated)</div>
+          <input value={(cfg.stages||[]).join(', ')} onChange={e=>set('stages',e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}
+            placeholder="Applied, Screening, Interview, Offer"
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+      )}
+
+      {/* CTA Actions */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>CTA Actions</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+          {HM_CTA_OPTIONS.map(opt=>{
+            const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
+            return (
+              <button key={opt.action} onClick={()=>{
+                const btns=active
+                  ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
+                  :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
+                set('cta_buttons',btns);
+              }} style={{
+                padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
+                border:`1.5px solid ${active?accentColor:C.border}`,
+                background:active?`${accentColor}14`:C.surface,
+                color:active?accentColor:C.text2,
+                fontSize:12,fontWeight:600,transition:'all .12s'
+              }}>{active?'✓ ':''}{opt.label}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Empty state */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Empty State Message</div>
+        <input value={cfg.empty_message||''} onChange={e=>set('empty_message',e.target.value)}
+          placeholder="No candidates to show"
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
+      </div>
+    </div>
+  );
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16}}>
       {/* Title + Colour */}
@@ -1627,7 +1757,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="people"/>
       );
       case "hm_widget": return (
-        <HMWidgetConfig cfg={cfg} set={set} environmentId={environmentId}/>
+        <HMWidgetConfig cfg={cfg} set={set} setMany={setMany} environmentId={environmentId}/>
       );
       case "job_list": return (
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="jobs"/>
@@ -3204,203 +3334,6 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
 };
 
 // ─── HM Widget Configurator (for hm_portal type) ─────────────────────────────
-const HMPortalEditor = ({ portal, setPortal, environment }) => {
-  const widgets = portal.hm_widgets || [];
-  const [savedLists, setSavedLists] = useState([]);
-  const [editingIdx, setEditingIdx] = useState(null);
-
-  useEffect(() => {
-    if (!environment?.id) return;
-    api.get(`/saved-views/portal-lists?environment_id=${environment.id}`)
-      .then(d => setSavedLists(Array.isArray(d) ? d : []))
-      .catch(() => {});
-  }, [environment?.id]);
-
-  const updateWidgets = (w) => setPortal(p => ({ ...p, hm_widgets: w }));
-  const addWidget = () => {
-    updateWidgets([...widgets, {
-      id: uid(), title: 'New Widget', list_id: '',
-      display_mode: 'card', cta_buttons: [], show_fields: [],
-      stages: [], empty_message: '', color: C.accent,
-    }]);
-    setEditingIdx(widgets.length);
-  };
-  const removeWidget = (i) => updateWidgets(widgets.filter((_,j) => j !== i));
-  const updateWidget = (i, w) => updateWidgets(widgets.map((x,j) => j===i ? { ...x, ...w } : x));
-
-  const CTA_OPTIONS = [
-    { action:'submit_feedback',    label:'Submit Feedback' },
-    { action:'move_stage',         label:'Move Stage' },
-    { action:'arrange_interview',  label:'Arrange Interview' },
-    { action:'approve_offer',      label:'Approve Offer' },
-    { action:'reject',             label:'Reject' },
-    { action:'view_profile',       label:'View Profile' },
-  ];
-
-  return (
-    <div style={{ padding:24, maxWidth:860, margin:'0 auto' }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-        <div>
-          <div style={{ fontSize:18, fontWeight:800, color:C.text1 }}>Hiring Manager Widgets</div>
-          <div style={{ fontSize:13, color:C.text3, marginTop:3 }}>
-            Each widget shows a saved list and optional CTA buttons for HMs to take action.
-          </div>
-        </div>
-        <button onClick={addWidget} style={{
-          display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:9,
-          border:'none', background:C.accent, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F
-        }}>
-          <Ic n="plus" s={13}/> Add Widget
-        </button>
-      </div>
-
-      {widgets.length === 0 ? (
-        <div style={{ textAlign:'center', padding:'60px 0', color:C.text3, border:`2px dashed ${C.border}`, borderRadius:14 }}>
-          <Ic n="grid" s={32} c={C.border}/>
-          <div style={{ marginTop:12, fontSize:14, fontWeight:600 }}>No widgets yet</div>
-          <div style={{ fontSize:12, marginTop:4 }}>Add a widget to show a list of candidates, jobs, or other records to hiring managers.</div>
-          <button onClick={addWidget} style={{ marginTop:16, padding:'8px 20px', borderRadius:9,
-            border:'none', background:C.accent, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-            + Add Widget
-          </button>
-        </div>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {widgets.map((w, i) => (
-            <div key={w.id||i} style={{ background:C.surface, borderRadius:14, border:`1.5px solid ${editingIdx===i ? C.accent : C.border}`, overflow:'hidden' }}>
-              {/* Widget header */}
-              <div style={{ padding:'14px 18px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
-                onClick={() => setEditingIdx(editingIdx === i ? null : i)}>
-                <div style={{ width:10, height:10, borderRadius:3, background:w.color||C.accent, flexShrink:0 }}/>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>{w.title || 'Untitled Widget'}</div>
-                  <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>
-                    {w.display_mode} · {w.cta_buttons?.length||0} CTAs
-                    {w.list_id && savedLists.find(l=>l.id===w.list_id) ? ` · ${savedLists.find(l=>l.id===w.list_id).name}` : ''}
-                  </div>
-                </div>
-                <div style={{ display:'flex', gap:6 }}>
-                  <button onClick={e=>{e.stopPropagation();removeWidget(i);}} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, padding:4 }}>
-                    <Ic n="trash" s={13}/>
-                  </button>
-                  <Ic n={editingIdx===i ? 'chevU' : 'chevD'} s={14} c={C.text3}/>
-                </div>
-              </div>
-
-              {/* Expanded config */}
-              {editingIdx === i && (
-                <div style={{ borderTop:`1px solid ${C.border}`, padding:'18px 18px 20px' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
-                    {/* Title */}
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Widget Title</label>
-                      <input value={w.title} onChange={e=>updateWidget(i,{title:e.target.value})}
-                        style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`,
-                          fontSize:13, fontFamily:F, outline:'none', boxSizing:'border-box' }}
-                        onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
-                    </div>
-                    {/* Accent colour */}
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Accent Colour</label>
-                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                        <input type="color" value={w.color||C.accent} onChange={e=>updateWidget(i,{color:e.target.value})}
-                          style={{ width:36, height:36, padding:2, borderRadius:8, border:`1.5px solid ${C.border}`, cursor:'pointer' }}/>
-                        <span style={{ fontSize:12, color:C.text3 }}>{w.color||C.accent}</span>
-                      </div>
-                    </div>
-                    {/* Data source */}
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Data Source (Saved List)</label>
-                      <select value={w.list_id||''} onChange={e=>updateWidget(i,{list_id:e.target.value})}
-                        style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`,
-                          fontSize:13, fontFamily:F, outline:'none', background:C.surface }}>
-                        <option value="">— Select a saved list —</option>
-                        {savedLists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                      </select>
-                      {savedLists.length === 0 && (
-                        <div style={{ fontSize:11, color:'#D97706', marginTop:4 }}>
-                          ⚠ Mark lists as "Portal Visible" in the Lists panel to use them here.
-                        </div>
-                      )}
-                    </div>
-                    {/* Display mode */}
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Display Mode</label>
-                      <div style={{ display:'flex', gap:6 }}>
-                        {['card','table','kanban'].map(m => (
-                          <button key={m} onClick={()=>updateWidget(i,{display_mode:m})} style={{
-                            flex:1, padding:'7px 0', borderRadius:8, border:`1.5px solid ${w.display_mode===m?C.accent:C.border}`,
-                            background: w.display_mode===m ? C.accentLight : C.surface,
-                            color: w.display_mode===m ? C.accent : C.text2,
-                            fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F, textTransform:'capitalize'
-                          }}>{m}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stages (for kanban) */}
-                  {w.display_mode === 'kanban' && (
-                    <div style={{ marginBottom:16 }}>
-                      <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Kanban Stages (comma-separated)</label>
-                      <input value={(w.stages||[]).join(', ')}
-                        onChange={e=>updateWidget(i,{stages:e.target.value.split(',').map(s=>s.trim()).filter(Boolean)})}
-                        placeholder="Applied, Screening, Interview, Offer"
-                        style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`,
-                          fontSize:13, fontFamily:F, outline:'none', boxSizing:'border-box' }}
-                        onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
-                    </div>
-                  )}
-
-                  {/* CTA buttons */}
-                  <div>
-                    <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>CTA Actions</label>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                      {CTA_OPTIONS.map(opt => {
-                        const active = (w.cta_buttons||[]).some(b=>b.action===opt.action);
-                        return (
-                          <button key={opt.action} onClick={()=>{
-                            const btns = active
-                              ? (w.cta_buttons||[]).filter(b=>b.action!==opt.action)
-                              : [...(w.cta_buttons||[]), {action:opt.action, label:opt.label, color:''}];
-                            updateWidget(i, {cta_buttons:btns});
-                          }} style={{
-                            padding:'6px 12px', borderRadius:8, cursor:'pointer', fontFamily:F,
-                            border:`1.5px solid ${active ? C.accent : C.border}`,
-                            background: active ? C.accentLight : C.surface,
-                            color: active ? C.accent : C.text2, fontSize:12, fontWeight:600
-                          }}>{active ? '✓ ' : ''}{opt.label}</button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Empty message */}
-                  <div style={{ marginTop:16 }}>
-                    <label style={{ fontSize:11, fontWeight:700, color:C.text3, display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' }}>Empty State Message</label>
-                    <input value={w.empty_message||''} onChange={e=>updateWidget(i,{empty_message:e.target.value})}
-                      placeholder="No items to show"
-                      style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`,
-                        fontSize:13, fontFamily:F, outline:'none', boxSizing:'border-box' }}
-                      onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Saved lists info box */}
-      <div style={{ marginTop:20, padding:'14px 16px', borderRadius:12,
-        background:'#EFF6FF', border:'1.5px solid #BFDBFE', fontSize:12, color:'#1E40AF' }}>
-        <strong>Tip:</strong> To use a list here, open any object's list view → Lists → save a list → enable "Portal Visible" in the list settings.
-        Use <code style={{ background:'#DBEAFE', padding:'1px 4px', borderRadius:4 }}>$me</code> as a filter value to scope data to the logged-in hiring manager automatically.
-      </div>
-    </div>
-  );
-};
-
 // ─── Portal Builder (full-screen editor) ──────────────────────────────────────
 const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const [portal, setPortal] = useState({

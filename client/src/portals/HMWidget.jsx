@@ -296,31 +296,28 @@ export default function HMWidget({ widgetConfig, portal, api, color, user }) {
     setLoading(true)
     setError(null)
     try {
-      // Fetch the saved list config to get object_id + filters
-      const listId = widgetConfig.list_id
-      if (!listId) { setLoading(false); return }
+      const objectId = widgetConfig.object_id
+      const listId   = widgetConfig.list_id
+      if (!objectId) { setLoading(false); return }
 
-      const list = await api.get(`/saved-views/${listId}`)
-      if (!list || !list.object_id) { setLoading(false); return }
+      // Build query — use list filters if a list is selected, otherwise all records
+      let url = `/records?object_id=${objectId}&environment_id=${portal.environment_id}&limit=50`
 
-      // Build query params — resolve $me against the portal user
-      let url = `/records?object_id=${list.object_id}&environment_id=${portal.environment_id}&limit=50`
-      if (list.filter_chip) {
-        url += `&filter_key=${encodeURIComponent(list.filter_chip.fieldKey)}`
-        url += `&filter_value=${encodeURIComponent(list.filter_chip.fieldValue)}`
-      }
-      if (list.filters?.length) {
-        // Apply the first filter as the primary key/value pair
-        // Server now resolves $me via req.portalUser or req.currentUser
-        const f = list.filters[0]
-        if (f.field && f.value) {
-          url += `&filter_key=${encodeURIComponent(f.field)}&filter_value=${encodeURIComponent(f.value)}`
-        }
+      if (listId) {
+        try {
+          const list = await api.get(`/saved-views/${listId}`)
+          if (list?.filter_chip) {
+            url += `&filter_key=${encodeURIComponent(list.filter_chip.fieldKey)}&filter_value=${encodeURIComponent(list.filter_chip.fieldValue)}`
+          } else if (list?.filters?.length) {
+            const f = list.filters[0]
+            if (f.field && f.value) url += `&filter_key=${encodeURIComponent(f.field)}&filter_value=${encodeURIComponent(f.value)}`
+          }
+        } catch { /* list not found — still show all records */ }
       }
 
       const [recRes, fldRes] = await Promise.all([
         api.get(url),
-        api.get(`/fields?object_id=${list.object_id}`),
+        api.get(`/fields?object_id=${objectId}`),
       ])
       setRecords(Array.isArray(recRes) ? recRes : (recRes.records || []))
       setFields(Array.isArray(fldRes) ? fldRes : [])
@@ -329,7 +326,7 @@ export default function HMWidget({ widgetConfig, portal, api, color, user }) {
     } finally {
       setLoading(false)
     }
-  }, [widgetConfig.list_id, portal.environment_id])
+  }, [widgetConfig.object_id, widgetConfig.list_id, portal.environment_id])
 
   useEffect(() => { loadData() }, [loadData])
 
