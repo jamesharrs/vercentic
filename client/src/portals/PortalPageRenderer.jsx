@@ -1496,6 +1496,177 @@ const CtaWidget = ({ cfg, theme }) => {
   )
 }
 
+const HMPortalWidget = ({ cfg, theme, portal, api }) => {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal]     = useState(null); // { type, record }
+  const [search, setSearch]   = useState('');
+  const ff = theme.fontFamily || "'DM Sans', sans-serif";
+  const pr = cfg.accent_color || theme.primaryColor || '#4361EE';
+  const tc = theme.textColor || '#1a1a2e';
+
+  const recordTitle = (r) => {
+    const d = r.data || {};
+    return [d.first_name, d.last_name].filter(Boolean).join(' ') || d.job_title || d.name || d.title || d.pool_name || 'Record';
+  };
+
+  useEffect(() => {
+    if (!portal?.environment_id || !cfg.object_id) { setLoading(false); return; }
+    const load = async () => {
+      try {
+        let url = `/records?object_id=${cfg.object_id}&environment_id=${portal.environment_id}&limit=100`;
+        // Apply saved list filters if a list is selected
+        if (cfg.list_id) {
+          try {
+            const sv = await api.get(`/saved-views/${cfg.list_id}`);
+            if (sv?.filter_chip) {
+              url += `&filter_key=${encodeURIComponent(sv.filter_chip.fieldKey)}&filter_value=${encodeURIComponent(sv.filter_chip.fieldValue)}`;
+            }
+          } catch(e) {}
+        }
+        const data = await api.get(url);
+        setRecords(Array.isArray(data) ? data : (data?.records || []));
+      } catch(e) { console.error(e); }
+      finally { setLoading(false); }
+    };
+    load();
+  }, [portal?.environment_id, cfg.object_id, cfg.list_id]);
+
+  const ctaButtons = cfg.cta_buttons || [];
+  const displayMode = cfg.display_mode || 'card';
+  const filtered = search ? records.filter(r => JSON.stringify(r.data||{}).toLowerCase().includes(search.toLowerCase())) : records;
+
+  const handleAction = async (action, record) => {
+    if (action === 'submit_feedback') { setModal({ type:'feedback', record }); return; }
+    if (action === 'move_stage')      { setModal({ type:'move_stage', record }); return; }
+    if (action === 'view_profile')    { window.open(`/people/${record.id}`, '_blank'); return; }
+    if (action === 'approve_offer') {
+      await api.patch(`/records/${record.id}`, { data:{ status:'Approved' } });
+      setRecords(rs => rs.map(r => r.id===record.id ? {...r, data:{...r.data, status:'Approved'}} : r));
+    }
+    if (action === 'reject') {
+      await api.patch(`/records/${record.id}`, { data:{ status:'Rejected' } });
+      setRecords(rs => rs.map(r => r.id===record.id ? {...r, data:{...r.data, status:'Rejected'}} : r));
+    }
+  };
+
+  const RecordCard = ({ record }) => {
+    const d = record.data || {};
+    const name = recordTitle(record);
+    const sub  = d.current_title || d.job_title || d.department || d.category || '';
+    const status = d.status;
+    const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return (
+      <div style={{ background:'#fff', borderRadius:14, border:'1.5px solid #E8ECF8', padding:'16px 18px', marginBottom:10 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:ctaButtons.length?12:0 }}>
+          <div style={{ width:42, height:42, borderRadius:12, background:`${pr}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:14, fontWeight:700, color:pr, fontFamily:ff }}>{initials}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:tc, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:ff }}>{name}</div>
+            {sub && <div style={{ fontSize:12, color:'#9DA8C7', marginTop:2, fontFamily:ff }}>{sub}</div>}
+          </div>
+          {status && <span style={{ fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:99, background:`${pr}14`, color:pr }}>{status}</span>}
+        </div>
+        {ctaButtons.length > 0 && (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {ctaButtons.map((btn,i) => (
+              <button key={i} onClick={() => handleAction(btn.action, record)} style={{
+                padding:'6px 12px', borderRadius:8, border:'none', cursor:'pointer',
+                background: pr, color:'white', fontSize:11, fontWeight:700, fontFamily:ff
+              }}>{btn.label || btn.action}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (!cfg.object_id) return (
+    <div style={{ padding:32, textAlign:'center', color:'#9DA8C7', fontFamily:ff }}>
+      No data source configured for this widget.
+    </div>
+  );
+
+  return (
+    <div style={{ padding:'16px 0' }}>
+      {/* Header */}
+      {(cfg.widget_title || filtered.length > 0) && (
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+          {cfg.widget_title && <div style={{ fontSize:18, fontWeight:800, color:tc, flex:1, fontFamily:ff }}>{cfg.widget_title}</div>}
+          {!loading && <span style={{ fontSize:12, color:'#9DA8C7', fontFamily:ff }}>{filtered.length} record{filtered.length!==1?'s':''}</span>}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
+            style={{ padding:'6px 12px', borderRadius:8, border:'1.5px solid #E8ECF8', fontSize:12, fontFamily:ff, outline:'none', width:140 }}/>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding:40, textAlign:'center', color:'#9DA8C7', fontFamily:ff }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding:40, textAlign:'center', color:'#9DA8C7', fontFamily:ff }}>{cfg.empty_message || 'No records to show'}</div>
+      ) : displayMode === 'table' ? (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:ff }}>
+            <thead>
+              <tr style={{ background:'#F8F9FF', borderBottom:'1.5px solid #E8ECF8' }}>
+                <th style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:700, color:'#9DA8C7' }}>NAME</th>
+                <th style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:700, color:'#9DA8C7' }}>STATUS</th>
+                {ctaButtons.length > 0 && <th style={{ padding:'10px 16px' }}/>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(r => {
+                const d = r.data||{};
+                const name = recordTitle(r);
+                const sub  = d.current_title||d.job_title||d.department||'';
+                return (
+                  <tr key={r.id} style={{ borderBottom:'1px solid #F3F4F6' }}>
+                    <td style={{ padding:'12px 16px' }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:tc }}>{name}</div>
+                      {sub && <div style={{ fontSize:11, color:'#9DA8C7' }}>{sub}</div>}
+                    </td>
+                    <td style={{ padding:'12px 16px' }}>
+                      {d.status && <span style={{ fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:99, background:`${pr}14`, color:pr }}>{d.status}</span>}
+                    </td>
+                    {ctaButtons.length > 0 && (
+                      <td style={{ padding:'12px 16px' }}>
+                        <div style={{ display:'flex', gap:6 }}>
+                          {ctaButtons.map((btn,i) => (
+                            <button key={i} onClick={() => handleAction(btn.action, r)} style={{
+                              padding:'5px 10px', borderRadius:7, border:'none', cursor:'pointer',
+                              background:pr, color:'white', fontSize:11, fontWeight:700, fontFamily:ff
+                            }}>{btn.label||btn.action}</button>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        filtered.map(r => <RecordCard key={r.id} record={r}/>)
+      )}
+
+      {/* Feedback modal */}
+      {modal?.type === 'feedback' && (
+        <div onClick={()=>setModal(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, padding:28, width:360, boxShadow:'0 32px 80px rgba(0,0,0,0.2)', fontFamily:ff }}>
+            <div style={{ fontSize:16, fontWeight:800, color:tc, marginBottom:4 }}>Submit Feedback</div>
+            <div style={{ fontSize:12, color:'#9DA8C7', marginBottom:20 }}>{recordTitle(modal.record)}</div>
+            <textarea rows={4} placeholder="Your feedback…" id="hm-feedback-note"
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, resize:'vertical', outline:'none', boxSizing:'border-box' }}/>
+            <div style={{ display:'flex', gap:10, marginTop:16 }}>
+              <button onClick={()=>setModal(null)} style={{ flex:1, padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
+              <button onClick={async()=>{ const note=document.getElementById('hm-feedback-note').value; await api.patch(`/records/${modal.record.id}`, { data:{ feedback_note:note } }); setModal(null); }} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Widget = ({ cell, theme, portal, api, track }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
@@ -1532,6 +1703,7 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'content':       return <ContentWidget       cfg={cfg} theme={theme}/>
     case 'accordion':     return <AccordionWidget     cfg={cfg} theme={theme}/>
     case 'cta':           return <CtaWidget           cfg={cfg} theme={theme}/>
+    case 'hm_widget':    return <HMPortalWidget       cfg={cfg} theme={theme} portal={portal} api={api}/>
     default:        return null
   }
 }
