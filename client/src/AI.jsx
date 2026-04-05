@@ -111,32 +111,71 @@ export const matchCandidateToJob = (candidate, job) => {
   const cData = candidate.data || {};
   const jData = job.data || {};
 
+  // ── Job Title Match (15 pts) ─────────────────────────────────────────────
+  const NOISE_WORDS = new Set(["senior","junior","lead","principal","staff","associate","head","chief","vp","director","manager","officer","specialist","consultant","coordinator","analyst","engineer","developer","architect","designer","executive"]);
+  const titleTokens = (str) =>
+    String(str||"").toLowerCase()
+      .replace(/[^\w\s]/g,"")
+      .split(/\s+/)
+      .filter(t => t.length > 1 && !NOISE_WORDS.has(t));
+
+  const candidateTitle = cData.current_title || cData.job_title || "";
+  const jobTitle = jData.job_title || jData.name || "";
+
+  if (candidateTitle && jobTitle) {
+    const cT = String(candidateTitle).toLowerCase();
+    const jT = String(jobTitle).toLowerCase();
+    const cTokens = titleTokens(candidateTitle);
+    const jTokens = titleTokens(jobTitle);
+
+    if (cT === jT) {
+      score += 15; reasons.push("Exact job title match");
+    } else if (cT.includes(jT) || jT.includes(cT)) {
+      score += 12; reasons.push("Strong title match");
+    } else if (jTokens.length > 0 && cTokens.length > 0) {
+      const overlap = cTokens.filter(ct => jTokens.some(jt => jt.includes(ct) || ct.includes(jt)));
+      const overlapRatio = overlap.length / Math.max(jTokens.length, 1);
+      if (overlapRatio >= 0.5) {
+        score += 8; reasons.push("Partial title match");
+      } else if (overlapRatio > 0) {
+        score += 4;
+      } else {
+        gaps.push(`Title mismatch: ${candidateTitle} vs ${jobTitle}`);
+      }
+    }
+  }
+
+  // ── Skills Match (35 pts) ────────────────────────────────────────────────
   const cSkills = (Array.isArray(cData.skills)?cData.skills:String(cData.skills||"").split(",")).map(s=>s.trim().toLowerCase()).filter(Boolean);
   const jSkills = (Array.isArray(jData.required_skills)?jData.required_skills:String(jData.required_skills||"").split(",")).map(s=>s.trim().toLowerCase()).filter(Boolean);
   if (jSkills.length > 0) {
     const matched = cSkills.filter(s=>jSkills.some(j=>j.includes(s)||s.includes(j)));
-    score += Math.round((matched.length/jSkills.length)*40);
+    score += Math.round((matched.length/jSkills.length)*35);
     if (matched.length>0) reasons.push(`Matches ${matched.length}/${jSkills.length} required skills`);
     const missing = jSkills.filter(j=>!cSkills.some(c=>c.includes(j)||j.includes(c)));
     if (missing.length>0) gaps.push(`Missing: ${missing.slice(0,3).join(", ")}`);
-  } else score += 30;
+  } else score += 25;
 
+  // ── Location Match (15 pts) ──────────────────────────────────────────────
   if (cData.location && jData.location) {
     const cl=String(cData.location).toLowerCase(), jl=String(jData.location).toLowerCase();
-    if (cl===jl||cl.includes(jl)||jl.includes(cl)) { score+=20; reasons.push("Location match"); }
-    else if (jData.work_type==="Remote") { score+=15; reasons.push("Remote role"); }
+    if (cl===jl||cl.includes(jl)||jl.includes(cl)) { score+=15; reasons.push("Location match"); }
+    else if (jData.work_type==="Remote") { score+=12; reasons.push("Remote role"); }
     else gaps.push(`Location: ${cData.location} vs ${jData.location}`);
-  } else score+=10;
+  } else score+=8;
 
+  // ── Experience (15 pts) ──────────────────────────────────────────────────
   const exp=Number(cData.years_experience||0);
-  if (exp>=5){score+=20;reasons.push(`${exp}y exp`);}
-  else if(exp>=2){score+=12;reasons.push(`${exp}y exp`);}
-  else if(exp>0){score+=6;gaps.push("Limited experience");}
+  if (exp>=5){score+=15;reasons.push(`${exp}y exp`);}
+  else if(exp>=2){score+=9;reasons.push(`${exp}y exp`);}
+  else if(exp>0){score+=4;gaps.push("Limited experience");}
 
+  // ── Availability (10 pts) ────────────────────────────────────────────────
   if (cData.status==="Active"){score+=10;reasons.push("Actively looking");}
   else if(cData.status==="Passive") score+=5;
   else if(cData.status==="Not Looking") gaps.push("Not actively looking");
 
+  // ── Rating (10 pts) ──────────────────────────────────────────────────────
   const rating=Number(cData.rating||0);
   if(rating>=4){score+=10;reasons.push(`Rated ${rating}/5`);}
   else if(rating>=3) score+=5;

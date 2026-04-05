@@ -9,9 +9,10 @@ const STORAGE_KEY = "talentos_matching_config";
 
 const DEFAULT_CONFIG = {
   criteria: [
-    { id:"skills",      label:"Skills Match",        field_candidate:"skills", field_job:"required_skills", weight:40, enabled:true,  description:"Overlap between candidate skills and required job skills" },
-    { id:"location",    label:"Location Match",       field_candidate:"location", field_job:"location",     weight:20, enabled:true,  description:"Candidate location vs job location (or remote eligibility)" },
-    { id:"experience",  label:"Years of Experience",  field_candidate:"years_experience", field_job:"",     weight:20, enabled:true,  description:"Experience level weighting (5y+ = full, 2-4y = partial)" },
+    { id:"title",       label:"Job Title Match",      field_candidate:"current_title", field_job:"job_title", weight:15, enabled:true,  description:"Exact or fuzzy match between candidate's current title and the role title (noise words like Senior/Junior stripped)" },
+    { id:"skills",      label:"Skills Match",         field_candidate:"skills", field_job:"required_skills", weight:35, enabled:true,  description:"Overlap between candidate skills and required job skills" },
+    { id:"location",    label:"Location Match",        field_candidate:"location", field_job:"location",    weight:15, enabled:true,  description:"Candidate location vs job location (or remote eligibility)" },
+    { id:"experience",  label:"Years of Experience",  field_candidate:"years_experience", field_job:"",     weight:15, enabled:true,  description:"Experience level weighting (5y+ = full, 2-4y = partial)" },
     { id:"availability",label:"Availability Status",  field_candidate:"status", field_job:"",              weight:10, enabled:true,  description:"Active > Passive > Not Looking" },
     { id:"rating",      label:"Candidate Rating",     field_candidate:"rating", field_job:"",              weight:10, enabled:true,  description:"Internal star rating (4-5★ = bonus points)" },
   ],
