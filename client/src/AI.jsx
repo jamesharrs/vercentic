@@ -124,91 +124,137 @@ const resolveCriteria = () => {
 
 export const matchCandidateToJob = (candidate, job) => {
   const criteria = resolveCriteria();
-
-  // Total enabled weight (may not equal 100 if user left some unallocated)
   const totalW = Object.values(criteria).filter(c=>c.enabled).reduce((s,c)=>s+c.weight, 0) || 100;
 
   let score = 0;
   const reasons = [];
   const gaps = [];
+  const criteriaScores = {}; // { id: { earned, max, label } }
+  let skillsDetail = null;   // populated below when skills criterion is enabled
+
   const cData = candidate.data || {};
   const jData = job.data || {};
 
-  // ── Job Title Match ──────────────────────────────────────────────────────
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const track = (id, earned, max, label) => {
+    criteriaScores[id] = { earned: Math.round(earned), max, label };
+    score += earned;
+  };
+
+  // ── Job Title Match ───────────────────────────────────────────────────────
   if (criteria.title?.enabled) {
     const w = criteria.title.weight;
     const NOISE = new Set(["senior","junior","lead","principal","staff","associate","head","chief","vp","director","manager","officer","specialist","consultant","coordinator","analyst","engineer","developer","architect","designer","executive"]);
     const tok = s => String(s||"").toLowerCase().replace(/[^\w\s]/g,"").split(/\s+/).filter(t=>t.length>1&&!NOISE.has(t));
     const cT = String(cData.current_title||cData.job_title||"").toLowerCase();
     const jT = String(jData.job_title||jData.name||"").toLowerCase();
+    let titleEarned = 0;
     if (cT && jT) {
       const cTok = tok(cT), jTok = tok(jT);
-      if (cT === jT)                              { score += w;              reasons.push("Exact job title match"); }
-      else if (cT.includes(jT)||jT.includes(cT)) { score += Math.round(w*0.8); reasons.push("Strong title match"); }
+      if (cT === jT)                              { titleEarned = w;              reasons.push("Exact job title match"); }
+      else if (cT.includes(jT)||jT.includes(cT)) { titleEarned = Math.round(w*0.8); reasons.push("Strong title match"); }
       else if (jTok.length>0 && cTok.length>0) {
         const overlap = cTok.filter(ct=>jTok.some(jt=>jt.includes(ct)||ct.includes(jt)));
         const ratio = overlap.length / Math.max(jTok.length,1);
-        if      (ratio>=0.5) { score += Math.round(w*0.53); reasons.push("Partial title match"); }
-        else if (ratio>0)    { score += Math.round(w*0.27); }
-        else                 { gaps.push(`Title mismatch: ${cData.current_title||cData.job_title} vs ${jData.job_title||jData.name}`); }
+        if      (ratio>=0.5) { titleEarned = Math.round(w*0.53); reasons.push("Partial title match"); }
+        else if (ratio>0)    { titleEarned = Math.round(w*0.27); }
+        else gaps.push(`Title mismatch: ${cData.current_title||cData.job_title} vs ${jData.job_title||jData.name}`);
       }
+    }
+    track("title", titleEarned, w, "Job Title Match");
+  }
+
+  // ── Skills Match ──────────────────────────────────────────────────────────
+  if (criteria.skills?.enabled) {
+    const w = criteria.skills.weight;
+    const norm = s => s.trim().toLowerCase();
+    const cSkills = (Array.isArray(cData.skills)?cData.skills:String(cData.skills||"").split(",")).map(norm).filter(Boolean);
+    const jSkills = (Array.isArray(jData.required_skills)?jData.required_skills:String(jData.required_skills||"").split(",")).map(norm).filter(Boolean);
+
+    if (jSkills.length > 0) {
+      const matched = [], close = [], missing = [];
+      jSkills.forEach(js => {
+        // Exact or strong containment → matched
+        const mIdx = cSkills.findIndex(cs => cs===js || cs.includes(js) || js.includes(cs));
+        if (mIdx !== -1) {
+          matched.push({ required: js, candidate: cSkills[mIdx] });
+        } else {
+          // Shared token of ≥3 chars → close
+          const jToks = js.split(/[\s\-_/]+/).filter(t=>t.length>=3);
+          const closeCs = cSkills.find(cs =>
+            jToks.some(jt => cs.includes(jt)) ||
+            cs.split(/[\s\-_/]+/).filter(t=>t.length>=3).some(ct => js.includes(ct))
+          );
+          if (closeCs) close.push({ required: js, candidate: closeCs });
+          else missing.push(js);
+        }
+      });
+      // Extra skills candidate has that aren't required
+      const extra = cSkills.filter(cs =>
+        !jSkills.some(js => js===cs || js.includes(cs) || cs.includes(js))
+      );
+      skillsDetail = { matched, close, missing, extra };
+
+      // Score: matched=full, close=half credit
+      const rawScore = (matched.length + close.length*0.5) / jSkills.length;
+      const skillsEarned = Math.round(rawScore * w);
+      if (matched.length>0) reasons.push(`Matches ${matched.length}/${jSkills.length} required skills`);
+      if (close.length>0)   reasons.push(`${close.length} near-match${close.length>1?"es":""}`);
+      if (missing.length>0) gaps.push(`Missing: ${missing.slice(0,3).join(", ")}${missing.length>3?` +${missing.length-3} more`:""}`);
+      track("skills", skillsEarned, w, "Skills Match");
+    } else {
+      track("skills", Math.round(w*0.7), w, "Skills Match");
+      skillsDetail = { matched:[], close:[], missing:[], extra:[] };
     }
   }
 
-  // ── Skills Match ─────────────────────────────────────────────────────────
-  if (criteria.skills?.enabled) {
-    const w = criteria.skills.weight;
-    const cSkills = (Array.isArray(cData.skills)?cData.skills:String(cData.skills||"").split(",")).map(s=>s.trim().toLowerCase()).filter(Boolean);
-    const jSkills = (Array.isArray(jData.required_skills)?jData.required_skills:String(jData.required_skills||"").split(",")).map(s=>s.trim().toLowerCase()).filter(Boolean);
-    if (jSkills.length > 0) {
-      const matched = cSkills.filter(s=>jSkills.some(j=>j.includes(s)||s.includes(j)));
-      score += Math.round((matched.length/jSkills.length)*w);
-      if (matched.length>0) reasons.push(`Matches ${matched.length}/${jSkills.length} required skills`);
-      const missing = jSkills.filter(j=>!cSkills.some(c=>c.includes(j)||j.includes(c)));
-      if (missing.length>0) gaps.push(`Missing: ${missing.slice(0,3).join(", ")}`);
-    } else { score += Math.round(w*0.7); } // no required skills defined — give partial credit
-  }
-
-  // ── Location Match ───────────────────────────────────────────────────────
+  // ── Location Match ────────────────────────────────────────────────────────
   if (criteria.location?.enabled) {
     const w = criteria.location.weight;
+    let earned = Math.round(w*0.5);
     if (cData.location && jData.location) {
       const cl=String(cData.location).toLowerCase(), jl=String(jData.location).toLowerCase();
-      if      (cl===jl||cl.includes(jl)||jl.includes(cl)) { score+=w;              reasons.push("Location match"); }
-      else if (jData.work_type==="Remote")                 { score+=Math.round(w*0.8); reasons.push("Remote role"); }
+      if      (cl===jl||cl.includes(jl)||jl.includes(cl)) { earned=w;              reasons.push("Location match"); }
+      else if (jData.work_type==="Remote")                 { earned=Math.round(w*0.8); reasons.push("Remote role"); }
       else gaps.push(`Location: ${cData.location} vs ${jData.location}`);
-    } else { score += Math.round(w*0.5); } // unknown — neutral
+    }
+    track("location", earned, w, "Location Match");
   }
 
   // ── Years of Experience ───────────────────────────────────────────────────
   if (criteria.experience?.enabled) {
     const w = criteria.experience.weight;
     const exp = Number(cData.years_experience||0);
-    if      (exp>=5) { score+=w;              reasons.push(`${exp}y exp`); }
-    else if (exp>=2) { score+=Math.round(w*0.6); reasons.push(`${exp}y exp`); }
-    else if (exp>0)  { score+=Math.round(w*0.27); gaps.push("Limited experience"); }
+    let earned = 0;
+    if      (exp>=5) { earned=w;              reasons.push(`${exp}y experience`); }
+    else if (exp>=2) { earned=Math.round(w*0.6); reasons.push(`${exp}y experience`); }
+    else if (exp>0)  { earned=Math.round(w*0.27); gaps.push("Limited experience"); }
+    else             { gaps.push("No experience data"); }
+    track("experience", earned, w, "Years of Experience");
   }
 
   // ── Availability Status ───────────────────────────────────────────────────
   if (criteria.availability?.enabled) {
     const w = criteria.availability.weight;
-    if      (cData.status==="Active")      { score+=w;              reasons.push("Actively looking"); }
-    else if (cData.status==="Passive")     { score+=Math.round(w*0.5); }
-    else if (cData.status==="Not Looking") { gaps.push("Not actively looking"); }
-    else                                   { score+=Math.round(w*0.3); } // unknown — small credit
+    let earned = Math.round(w*0.3);
+    if      (cData.status==="Active")      { earned=w;              reasons.push("Actively looking"); }
+    else if (cData.status==="Passive")     { earned=Math.round(w*0.5); }
+    else if (cData.status==="Not Looking") { earned=0; gaps.push("Not actively looking"); }
+    track("availability", earned, w, "Availability Status");
   }
 
   // ── Candidate Rating ──────────────────────────────────────────────────────
   if (criteria.rating?.enabled) {
     const w = criteria.rating.weight;
     const rating = Number(cData.rating||0);
-    if      (rating>=4) { score+=w;              reasons.push(`Rated ${rating}/5`); }
-    else if (rating>=3) { score+=Math.round(w*0.5); }
+    let earned = 0;
+    if      (rating>=4) { earned=w;              reasons.push(`Rated ${rating}/5`); }
+    else if (rating>=3) { earned=Math.round(w*0.5); }
+    track("rating", earned, w, "Candidate Rating");
   }
 
-  // Normalise: if enabled weights don't sum to 100, scale proportionally
   const normalised = totalW===100 ? score : Math.round((score/totalW)*100);
-  return { score: Math.min(100, Math.max(0, normalised)), reasons, gaps };
+  return { score: Math.min(100, Math.max(0, Math.round(normalised))), reasons, gaps, criteriaScores, skillsDetail };
 };
 
 // ── Matching helpers (module-level so MatchResultsList can use them) ──────────
@@ -278,7 +324,7 @@ const MatchResultsList = ({ matches, onNavigate }) => {
 
               {/* Score — explainable ring */}
               <div style={{padding:"0 10px",flexShrink:0,borderLeft:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>e.stopPropagation()}>
-                <ScoreExplainer score={m.score} reasons={m.reasons||[]} gaps={m.gaps||[]} candidateName={getTitle(m.item,m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools")} size={38} fontSize={11}/>
+                <ScoreExplainer score={m.score} reasons={m.reasons||[]} gaps={m.gaps||[]} criteriaScores={m.criteriaScores} skillsDetail={m.skillsDetail} candidateName={getTitle(m.item,m.type==="person"?"people":m.type==="job"?"jobs":"talent-pools")} size={38} fontSize={11}/>
               </div>
             </div>
           );

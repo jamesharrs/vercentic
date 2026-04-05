@@ -35,7 +35,7 @@ function QuestionPickerModal({ onPick, onClose, alreadyAdded=[] }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/api/question-bank/questions").then(d => {
+    api.get("/question-bank/questions").then(d => {
       setQuestions(Array.isArray(d) ? d : (d.questions||[]));
       setLoading(false);
     }).catch(()=>setLoading(false));
@@ -213,7 +213,7 @@ export default function ScreeningRulesPanel({ jobId }) {
     if (!jobId) return;
     setLoading(true);
     try {
-      const data = await api.get(`/api/screening/job/${jobId}`);
+      const data = await api.get(`/screening/job/${jobId}`);
       setRules(Array.isArray(data?.rules) ? data.rules : []);
       if (data?.auto_actions) setAutoActions(data.auto_actions);
     } catch(e) { console.error(e); }
@@ -240,7 +240,7 @@ export default function ScreeningRulesPanel({ jobId }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put(`/api/screening/job/${jobId}`, { rules, auto_actions: autoActions });
+      await api.put(`/screening/job/${jobId}`, { rules, auto_actions: autoActions });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch(e) { console.error(e); }

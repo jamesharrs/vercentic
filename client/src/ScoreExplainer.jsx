@@ -84,117 +84,206 @@ function ScoreTooltip({ score, reasons = [], gaps = [], style = {} }) {
 }
 
 // ── Modal (click) ─────────────────────────────────────────────────────────────
-function ScoreModal({ score, reasons = [], gaps = [], candidateName, jobName, onClose }) {
+function ScoreModal({ score, reasons = [], gaps = [], criteriaScores, skillsDetail, candidateName, jobName, onClose }) {
   const col = scoreColor(score);
   const bg  = scoreBg(score);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+
   useEffect(() => {
     const handler = e => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const factors = [
-    ...reasons.map(r => ({ text: r, ok: true })),
-    ...gaps.map(g => ({ text: g, ok: false })),
-  ];
+  const CRITERION_COLORS = {
+    title:"#e64980", skills:"#4361EE", location:"#0CAF77",
+    experience:"#F79009", availability:"#7C3AED", rating:"#ef4444",
+  };
+
+  const hasCriteria = criteriaScores && Object.keys(criteriaScores).length > 0;
+  const hasSkills   = skillsDetail && (skillsDetail.matched?.length || skillsDetail.close?.length || skillsDetail.missing?.length || skillsDetail.extra?.length);
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:10000,display:"flex",alignItems:"center",
       justifyContent:"center",background:"rgba(15,23,41,.5)",backdropFilter:"blur(3px)"}}
       onClick={onClose}>
-      <div style={{background:C.surface,borderRadius:20,padding:28,width:460,maxWidth:"95vw",
+      <div style={{background:C.surface,borderRadius:20,padding:28,width:500,maxWidth:"95vw",
+        maxHeight:"90vh",overflowY:"auto",
         boxShadow:"0 24px 60px rgba(0,0,0,.2)",fontFamily:F}} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
           <div>
-            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:4}}>
-              AI Match Explanation
-            </div>
-            {candidateName && jobName && (
-              <div style={{fontSize:12,color:C.text3}}>
-                {candidateName} → {jobName}
-              </div>
-            )}
-            {(candidateName && !jobName) && (
-              <div style={{fontSize:12,color:C.text3}}>{candidateName}</div>
-            )}
+            <div style={{fontSize:16,fontWeight:800,color:C.text1,marginBottom:4}}>AI Match Breakdown</div>
+            {candidateName && <div style={{fontSize:12,color:C.text3}}>{candidateName}{jobName ? ` → ${jobName}` : ""}</div>}
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",
-            padding:4,color:C.text3,fontSize:18,lineHeight:1}}>×</button>
+            padding:4,color:C.text3,fontSize:20,lineHeight:1,marginTop:-2}}>×</button>
         </div>
 
-        {/* Score gauge */}
-        <div style={{display:"flex",alignItems:"center",gap:20,padding:"16px 20px",
+        {/* Overall score gauge */}
+        <div style={{display:"flex",alignItems:"center",gap:20,padding:"14px 18px",
           borderRadius:14,background:bg,border:`1.5px solid ${col}30`,marginBottom:20}}>
-          {/* Circle */}
-          <div style={{position:"relative",width:72,height:72,flexShrink:0}}>
-            <svg width="72" height="72" viewBox="0 0 72 72">
-              <circle cx="36" cy="36" r="30" fill="none" stroke={`${col}20`} strokeWidth="7"/>
-              <circle cx="36" cy="36" r="30" fill="none" stroke={col} strokeWidth="7"
+          <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke={`${col}20`} strokeWidth="6"/>
+              <circle cx="32" cy="32" r="26" fill="none" stroke={col} strokeWidth="6"
                 strokeLinecap="round"
-                strokeDasharray={`${score * 1.885} 188.5`}
-                strokeDashoffset="47.1"
-                transform="rotate(-90 36 36)"/>
+                strokeDasharray={`${score*1.634} 163.4`} strokeDashoffset="40.9"
+                transform="rotate(-90 32 32)"/>
             </svg>
             <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
               alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:18,fontWeight:900,color:col,lineHeight:1}}>{score}</span>
-              <span style={{fontSize:9,color:col,fontWeight:700}}>%</span>
+              <span style={{fontSize:17,fontWeight:900,color:col,lineHeight:1}}>{score}</span>
+              <span style={{fontSize:8,color:col,fontWeight:700}}>%</span>
             </div>
           </div>
-          <div>
-            <div style={{fontSize:18,fontWeight:800,color:col,marginBottom:4}}>{scoreLabel(score)}</div>
-            <div style={{fontSize:12,color:C.text2,lineHeight:1.5}}>
-              {reasons.length} positive signal{reasons.length !== 1 ? "s" : ""}
-              {gaps.length > 0 ? ` · ${gaps.length} gap${gaps.length !== 1 ? "s" : ""} identified` : ""}
-            </div>
-            {/* Score bar */}
-            <div style={{marginTop:8,height:6,width:200,borderRadius:99,background:`${col}20`,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${score}%`,background:col,borderRadius:99,
-                transition:"width .6s ease"}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:16,fontWeight:800,color:col,marginBottom:2}}>{scoreLabel(score)}</div>
+            <div style={{fontSize:11,color:C.text2}}>
+              {reasons.length} positive signal{reasons.length!==1?"s":""}
+              {gaps.length>0?` · ${gaps.length} gap${gaps.length!==1?"s":""}`:""}</div>
+            <div style={{marginTop:7,height:5,borderRadius:99,background:`${col}20`,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${score}%`,background:col,borderRadius:99,transition:"width .6s"}}/>
             </div>
           </div>
         </div>
 
-        {/* Factor list */}
-        <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:280,overflowY:"auto"}}>
-          {reasons.length > 0 && (
-            <div style={{fontSize:11,fontWeight:700,color:C.green,textTransform:"uppercase",
-              letterSpacing:".06em",marginBottom:4}}>✓ Positive signals</div>
-          )}
-          {reasons.map((r,i) => (
-            <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",
-              padding:"9px 12px",borderRadius:9,background:C.greenL,
-              border:`1px solid ${C.green}25`}}>
-              <CheckIcon ok={true}/>
-              <span style={{fontSize:13,color:C.text2,lineHeight:1.5}}>{r}</span>
+        {/* Per-criterion breakdown */}
+        {hasCriteria && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",
+              letterSpacing:".06em",marginBottom:10}}>Score by criterion</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {Object.entries(criteriaScores).map(([id, cs]) => {
+                const color = CRITERION_COLORS[id] || C.accent;
+                const pct   = cs.max > 0 ? Math.round((cs.earned/cs.max)*100) : 0;
+                const isSkillsRow = id === "skills";
+                return (
+                  <div key={id}
+                    onClick={isSkillsRow && hasSkills ? ()=>setSkillsOpen(o=>!o) : undefined}
+                    style={{borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",
+                      cursor:isSkillsRow&&hasSkills?"pointer":"default",
+                      transition:"box-shadow .12s",
+                      boxShadow:isSkillsRow&&skillsOpen?"0 0 0 2px "+color+"33":"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px"}}>
+                      {/* Colour dot */}
+                      <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
+                      {/* Label */}
+                      <span style={{fontSize:12,fontWeight:600,color:C.text1,flex:1}}>{cs.label}</span>
+                      {/* Earned / Max */}
+                      <span style={{fontSize:11,fontWeight:700,color:color,minWidth:52,textAlign:"right"}}>
+                        {cs.earned}<span style={{color:C.text3,fontWeight:400}}>/{cs.max}</span>
+                      </span>
+                      {/* Pct */}
+                      <span style={{fontSize:11,color:C.text3,minWidth:32,textAlign:"right"}}>{pct}%</span>
+                      {/* Expand chevron for skills */}
+                      {isSkillsRow && hasSkills && (
+                        <span style={{fontSize:11,color:C.text3,transform:skillsOpen?"rotate(180deg)":"none",transition:"transform .2s"}}>▾</span>
+                      )}
+                    </div>
+                    {/* Mini bar */}
+                    <div style={{height:3,background:`${color}15`}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:color,transition:"width .5s ease"}}/>
+                    </div>
+
+                    {/* Skills expandable detail */}
+                    {isSkillsRow && hasSkills && skillsOpen && (
+                      <div style={{padding:"12px 14px",borderTop:`1px solid ${C.border}`,background:"#fafbff"}}>
+
+                        {skillsDetail.matched?.length > 0 && (
+                          <div style={{marginBottom:10}}>
+                            <div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:"uppercase",
+                              letterSpacing:".05em",marginBottom:6}}>✓ Matched ({skillsDetail.matched.length})</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {skillsDetail.matched.map((m,i)=>(
+                                <span key={i} style={{fontSize:11,padding:"3px 9px",borderRadius:99,
+                                  background:C.greenL,color:C.green,fontWeight:600,border:`1px solid ${C.green}30`}}
+                                  title={m.candidate!==m.required?`Candidate has: ${m.candidate}`:undefined}>
+                                  {m.required}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {skillsDetail.close?.length > 0 && (
+                          <div style={{marginBottom:10}}>
+                            <div style={{fontSize:10,fontWeight:700,color:C.amber,textTransform:"uppercase",
+                              letterSpacing:".05em",marginBottom:6}}>≈ Close match ({skillsDetail.close.length})</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {skillsDetail.close.map((m,i)=>(
+                                <span key={i} style={{fontSize:11,padding:"3px 9px",borderRadius:99,
+                                  background:C.amberL,color:C.amber,fontWeight:600,border:`1px solid ${C.amber}30`}}
+                                  title={`Candidate has: ${m.candidate}`}>
+                                  {m.required}
+                                </span>
+                              ))}
+                            </div>
+                            <div style={{fontSize:10,color:C.text3,marginTop:5,fontStyle:"italic"}}>Half-credit applied. Candidate has related but not identical skills.</div>
+                          </div>
+                        )}
+
+                        {skillsDetail.missing?.length > 0 && (
+                          <div style={{marginBottom:10}}>
+                            <div style={{fontSize:10,fontWeight:700,color:C.red,textTransform:"uppercase",
+                              letterSpacing:".05em",marginBottom:6}}>✗ Missing ({skillsDetail.missing.length})</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {skillsDetail.missing.map((s,i)=>(
+                                <span key={i} style={{fontSize:11,padding:"3px 9px",borderRadius:99,
+                                  background:C.redL,color:C.red,fontWeight:600,border:`1px solid ${C.red}30`}}>
+                                  {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {skillsDetail.extra?.length > 0 && (
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",
+                              letterSpacing:".05em",marginBottom:6}}>+ Additional skills</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {skillsDetail.extra.slice(0,8).map((s,i)=>(
+                                <span key={i} style={{fontSize:11,padding:"3px 9px",borderRadius:99,
+                                  background:`${C.accent}10`,color:C.accent,fontWeight:500,border:`1px solid ${C.accent}20`}}>
+                                  {s}
+                                </span>
+                              ))}
+                              {skillsDetail.extra.length>8 && <span style={{fontSize:11,color:C.text3,padding:"3px 0"}}>+{skillsDetail.extra.length-8} more</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
-          {gaps.length > 0 && (
-            <div style={{fontSize:11,fontWeight:700,color:C.amber,textTransform:"uppercase",
-              letterSpacing:".06em",marginTop:4,marginBottom:4}}>⚠ Gaps & considerations</div>
-          )}
-          {gaps.map((g,i) => (
-            <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",
-              padding:"9px 12px",borderRadius:9,background:C.amberL,
-              border:`1px solid ${C.amber}25`}}>
-              <CheckIcon ok={false}/>
-              <span style={{fontSize:13,color:C.text2,lineHeight:1.5}}>{g}</span>
-            </div>
-          ))}
-          {factors.length === 0 && (
-            <div style={{padding:"20px 12px",textAlign:"center",color:C.text3,fontSize:13}}>
-              No detailed explanation available for this score.
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Fallback: plain reasons/gaps if no criteriaScores */}
+        {!hasCriteria && (
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+            {reasons.map((r,i)=>(
+              <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"9px 12px",borderRadius:9,background:C.greenL,border:`1px solid ${C.green}25`}}>
+                <CheckIcon ok={true}/><span style={{fontSize:13,color:C.text2,lineHeight:1.5}}>{r}</span>
+              </div>
+            ))}
+            {gaps.map((g,i)=>(
+              <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"9px 12px",borderRadius:9,background:C.amberL,border:`1px solid ${C.amber}25`}}>
+                <CheckIcon ok={false}/><span style={{fontSize:13,color:C.text2,lineHeight:1.5}}>{g}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Footer */}
-        <div style={{marginTop:20,padding:"10px 14px",borderRadius:9,background:`${C.accent}08`,
+        <div style={{padding:"9px 12px",borderRadius:9,background:`${C.accent}08`,
           border:`1px solid ${C.accent}20`,fontSize:11,color:C.text3,lineHeight:1.6}}>
-          Scores are computed from skills overlap, title matching, location, experience and profile completeness.
-          They are a guide only — always apply your own judgement.
+          Scores use weighted criteria from your AI Matching settings. They are a guide — always apply your own judgement.
+          {hasSkills && <span style={{color:C.accent,fontWeight:600}}> Click the Skills row to see the full skills breakdown.</span>}
         </div>
       </div>
     </div>
@@ -206,10 +295,12 @@ export default function ScoreExplainer({
   score,
   reasons = [],
   gaps = [],
+  criteriaScores,
+  skillsDetail,
   candidateName,
   jobName,
-  size = 44,      // ring diameter
-  fontSize = 12,  // score font size inside ring
+  size = 44,
+  fontSize = 12,
 }) {
   const [hovered, setHovered] = useState(false);
   const [open, setOpen]       = useState(false);
@@ -254,6 +345,8 @@ export default function ScoreExplainer({
           score={score}
           reasons={reasons}
           gaps={gaps}
+          criteriaScores={criteriaScores}
+          skillsDetail={skillsDetail}
           candidateName={candidateName}
           jobName={jobName}
           onClose={() => setOpen(false)}
