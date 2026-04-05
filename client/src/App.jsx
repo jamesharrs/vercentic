@@ -34,6 +34,7 @@ const PortalsPage     = lazyWithRetry(() => import("./Portals.jsx"));
 const ReportsPage     = lazyWithRetry(() => import("./Reports.jsx"));
 const Interviews      = lazyWithRetry(() => import("./Interviews.jsx"));
 const OffersModule    = lazyWithRetry(() => import("./Offers.jsx"));
+const SourcingHub     = lazyWithRetry(() => import("./SourcingHub.jsx"));
 const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
 const Campaigns       = lazyWithRetry(() => import("./Campaigns.jsx"));
 const SuperAdminConsole = lazyWithRetry(() => import("./SuperAdminConsole.jsx"));
@@ -1774,6 +1775,7 @@ function App() {
       items: [
         { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
+        { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
         { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
         { id: "campaigns",     icon: "zap",       label: "Campaigns" },
         { id: "chat",        icon: "message-circle", label: "Chat" },
@@ -2330,6 +2332,12 @@ function App() {
           canGlobal("access_interviews")
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}><Interviews environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Interviews"/>
+        ) : activeNav === "sourcing" ? (
+          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
+            <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+              <SourcingHub environment={selectedEnv} />
+            </div>
+          </Suspense>
         ) : activeNav === "offers" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>

@@ -147,6 +147,7 @@ app.use('/api/interview-types',   require('./routes/interview_types'));
 app.use('/api/interview-plans',   require('./routes/interview_plans'));
 app.use('/api/interview-coordinator', require('./routes/interview_coordinator'));
 app.use('/api/offers',            require('./routes/offers'));
+app.use('/api/sourcing',          require('./routes/sourcing'));
 app.use('/api/calendar',          require('./routes/calendar'));
 app.use('/api/scorecards',require('./routes/scorecards'));
 app.use('/api/screening',         require('./routes/screening'));
