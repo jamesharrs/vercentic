@@ -296,6 +296,11 @@ initDB().then(() => {
     }
   }
 
+  // Apply saved sourcing API keys to process.env
+  for (const [k, v] of Object.entries(store.sourcing_config || {})) {
+    if (v) process.env[k] = v;
+  }
+
   seedDefaultPermissions(store);
 
   // ── Migrations ──────────────────────────────────────────────────────────────

@@ -144,26 +144,128 @@ function AlertRow({ alert:a, onDelete, onRun }) {
   );
 }
 
-// ── Source config card ────────────────────────────────────────────────────────
-function SourceCard({ source:s }) {
+// ── Source configure modal ────────────────────────────────────────────────────
+function SourceConfigModal({ source:s, onClose, onSaved }) {
+  const [vals, setVals]       = useState({});
+  const [show, setShow]       = useState({});
+  const [saving, setSaving]   = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  const set = (k,v) => setVals(p=>({...p,[k]:v}));
+  const toggleShow = (k) => setShow(p=>({...p,[k]:!p[k]}));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.post("/sourcing/configure", { source_id: s.id, keys: vals });
+      onSaved();
+      onClose();
+    } catch(e) { alert("Save failed: "+e.message); }
+    setSaving(false);
+  };
+
+  const handleTest = async () => {
+    setTesting(true); setTestResult(null);
+    try {
+      const r = await api.post("/sourcing/test", { source_id: s.id, keys: vals });
+      setTestResult(r);
+    } catch(e) { setTestResult({ ok: false, message: e.message }); }
+    setTesting(false);
+  };
+
   return (
-    <div style={{padding:16,borderRadius:14,border:`1.5px solid ${s.configured?C.green+"50":C.border}`,background:s.configured?C.greenL:C.surface}}>
+    <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,41,.45)",backdropFilter:"blur(2px)"}} onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:18,padding:28,width:480,maxWidth:"95vw",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}} onClick={e=>e.stopPropagation()}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{width:38,height:38,borderRadius:10,background:s.configured?C.green:"linear-gradient(135deg,#4361EE,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Ic n={s.icon||"globe"} s={17} c="white"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.text1}}>{s.name}</div>
+            <a href={s.setup_url} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none"}}>Setup guide → get your API keys</a>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><Ic n="x" s={18} c={C.text3}/></button>
+        </div>
+
+        {/* Description */}
+        <div style={{padding:"10px 14px",borderRadius:10,background:C.bg,marginBottom:18,fontSize:12,color:C.text2,lineHeight:1.6}}>
+          {s.description}
+          <span style={{marginLeft:8,fontSize:11,color:C.text3}}>· {s.cost}</span>
+        </div>
+
+        {/* Key fields */}
+        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:18}}>
+          {(s.env_keys||[]).map(k=>(
+            <div key={k}>
+              <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:5,textTransform:"uppercase",letterSpacing:".04em"}}>{k.replace(/_/g," ")}</div>
+              <div style={{display:"flex",gap:6}}>
+                <input
+                  type={show[k]?"text":"password"}
+                  value={vals[k]||""}
+                  onChange={e=>set(k,e.target.value)}
+                  placeholder={s.configured?"••••••••••••••••":"Paste your key here"}
+                  style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:13,color:C.text1,background:C.bg,outline:"none"}}
+                />
+                <button onClick={()=>toggleShow(k)} style={{padding:"0 10px",borderRadius:9,border:`1.5px solid ${C.border}`,background:C.surface,cursor:"pointer",color:C.text3,fontSize:11}}>
+                  {show[k]?"Hide":"Show"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Test result */}
+        {testResult && (
+          <div style={{padding:"10px 14px",borderRadius:10,background:testResult.ok?C.greenL:C.redL,border:`1px solid ${testResult.ok?C.green+"40":C.red+"40"}`,marginBottom:14,fontSize:12,color:testResult.ok?C.green:C.red,fontWeight:600}}>
+            {testResult.ok?"✓ Connection successful":"✗ "+testResult.message}
+            {testResult.detail && <div style={{fontWeight:400,marginTop:3,color:C.text2}}>{testResult.detail}</div>}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={handleTest} disabled={testing||Object.keys(vals).length===0} style={{flex:1,padding:"10px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+            {testing?"Testing…":"Test Connection"}
+          </button>
+          <button onClick={handleSave} disabled={saving||Object.keys(vals).length===0} style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:C.accent,color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:F}}>
+            {saving?"Saving…":"Save & Activate"}
+          </button>
+        </div>
+
+        {s.configured && (
+          <div style={{marginTop:10,textAlign:"center"}}>
+            <button onClick={async()=>{await api.post("/sourcing/configure",{source_id:s.id,keys:{},clear:true});onSaved();onClose();}} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:C.red,fontFamily:F}}>
+              Remove credentials
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Source card ───────────────────────────────────────────────────────────────
+function SourceCard({ source:s, onConfigure }) {
+  return (
+    <div
+      onClick={onConfigure}
+      style={{padding:16,borderRadius:14,border:`1.5px solid ${s.configured?C.green+"50":C.border}`,background:s.configured?C.greenL:C.surface,cursor:"pointer",transition:"all .15s"}}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=s.configured?C.green:C.accent+"50";}}
+      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=s.configured?C.green+"50":C.border;}}
+    >
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
         <div style={{width:32,height:32,borderRadius:8,background:s.configured?C.green:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <Ic n={s.icon||"globe"} s={15} c={s.configured?"white":C.text3}/>
         </div>
         <div style={{flex:1}}>
           <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{s.name}</div>
-          <div style={{fontSize:10,color:s.configured?C.green:C.text3,fontWeight:600}}>{s.configured?"✓ Configured":"Not configured"}</div>
+          <div style={{fontSize:10,color:s.configured?C.green:C.accent,fontWeight:600}}>{s.configured?"✓ Configured — click to update":"Click to configure"}</div>
         </div>
         <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"#f3f4f6",color:C.text3}}>{s.cost}</span>
       </div>
-      <div style={{fontSize:11,color:C.text2,lineHeight:1.5,marginBottom:8}}>{s.description}</div>
-      {!s.configured && (
-        <div style={{fontSize:10,color:C.text3}}>
-          Railway env vars: {s.env_keys?.join(", ")} · <a href={s.setup_url} target="_blank" rel="noreferrer" style={{color:C.accent}}>Setup guide →</a>
-        </div>
-      )}
+      <div style={{fontSize:11,color:C.text2,lineHeight:1.5}}>{s.description}</div>
     </div>
   );
 }
@@ -184,6 +286,7 @@ export default function SourcingHub({ environment }) {
   const [linkedJob, setLinkedJob] = useState("");
   const [alertForm, setAlertForm] = useState(false);
   const [newAlert, setNewAlert] = useState({ name:"", query:"", schedule:"daily" });
+  const [configuringSource, setConfiguringSource] = useState(null);
   const [toast, setToast]       = useState(null);
   const inputRef = useRef(null);
 
@@ -195,6 +298,8 @@ export default function SourcingHub({ environment }) {
     api.get(`/sourcing/alerts?environment_id=${environment.id}`).then(d=>setAlerts(Array.isArray(d)?d.filter(a=>!a.deleted):[])).catch(()=>{});
     api.get(`/records?object_id=jobs&environment_id=${environment.id}&limit=100`).then(d=>setJobs(Array.isArray(d?.records)?d.records:[])).catch(()=>{});
   }, [environment?.id]);
+
+  const reloadSources = () => api.get("/sourcing/sources").then(d=>setSources(Array.isArray(d)?d:[])).catch(()=>{});
 
   const runSearch = useCallback(async (q=queryText) => {
     if (!q.trim()) return;
@@ -377,9 +482,9 @@ export default function SourcingHub({ environment }) {
         {/* ─ SOURCES ─ */}
         {tab==="sources"&&(
           <div>
-            <div style={{marginBottom:16}}><div style={{fontSize:16,fontWeight:700,color:C.text1}}>Configured Sources</div><div style={{fontSize:12,color:C.text3,marginTop:2}}>Add API keys in Railway → Variables to activate each source. GitHub works immediately without a token.</div></div>
+            <div style={{marginBottom:16}}><div style={{fontSize:16,fontWeight:700,color:C.text1}}>Configured Sources</div><div style={{fontSize:12,color:C.text3,marginTop:2}}>Click any source to add or update its API credentials. Changes apply immediately.</div></div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              {sources.map(s=><SourceCard key={s.id} source={s}/>)}
+              {sources.map(s=><SourceCard key={s.id} source={s} onConfigure={()=>setConfiguringSource(s)}/>)}
             </div>
             <div style={{marginTop:16,padding:"12px 16px",borderRadius:10,background:C.accentL,fontSize:12,color:C.text2,lineHeight:1.7}}>
               <strong>Roadmap adapters:</strong> Monster, CareerBuilder, Seek (APAC), Naukri (India), StepStone (Europe), LinkedIn (partner programme) — all slot into the existing adapter pattern when commercial agreements are in place.
@@ -387,6 +492,15 @@ export default function SourcingHub({ environment }) {
           </div>
         )}
       </div>
+
+      {/* ─ CONFIGURE MODAL ─ */}
+      {configuringSource && (
+        <SourceConfigModal
+          source={configuringSource}
+          onClose={()=>setConfiguringSource(null)}
+          onSaved={()=>{ reloadSources(); showToast(`${configuringSource.name} configured`); }}
+        />
+      )}
     </div>
   );
 }

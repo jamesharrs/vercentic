@@ -404,4 +404,91 @@ router.get("/sources", (req, res) => {
   ]);
 });
 
+// POST /api/sourcing/configure — save API keys to process.env + persistent store
+router.post("/configure", async (req, res) => {
+  try {
+    const { source_id, keys, clear } = req.body;
+    if (!source_id) return res.status(400).json({ error: "source_id required" });
+
+    const KEY_MAP = {
+      google:  ["GOOGLE_SEARCH_API_KEY","GOOGLE_SEARCH_CX"],
+      apollo:  ["APOLLO_API_KEY"],
+      github:  ["GITHUB_TOKEN"],
+      hunter:  ["HUNTER_API_KEY"],
+    };
+    const envKeys = KEY_MAP[source_id];
+    if (!envKeys) return res.status(400).json({ error: "Unknown source" });
+
+    if (clear) {
+      envKeys.forEach(k => { delete process.env[k]; });
+    } else {
+      envKeys.forEach(k => { if (keys[k]) process.env[k] = keys[k]; });
+    }
+
+    // Persist to store so they survive server restarts
+    const { getStore, saveStore } = require("../db/init");
+    const store = getStore();
+    if (!store.sourcing_config) store.sourcing_config = {};
+    if (clear) {
+      envKeys.forEach(k => { delete store.sourcing_config[k]; });
+    } else {
+      envKeys.forEach(k => { if (keys[k]) store.sourcing_config[k] = keys[k]; });
+    }
+    saveStore();
+
+    res.json({ ok: true, source_id, configured: !clear && envKeys.some(k => !!process.env[k]) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/sourcing/test — test a source connection with supplied keys
+router.post("/test", async (req, res) => {
+  try {
+    const { source_id, keys } = req.body;
+
+    // Temporarily apply keys for this test
+    const KEY_MAP = { google:["GOOGLE_SEARCH_API_KEY","GOOGLE_SEARCH_CX"], apollo:["APOLLO_API_KEY"], github:["GITHUB_TOKEN"], hunter:["HUNTER_API_KEY"] };
+    const envKeys = KEY_MAP[source_id] || [];
+    const originals = {};
+    envKeys.forEach(k => { originals[k] = process.env[k]; if (keys[k]) process.env[k] = keys[k]; });
+
+    let result;
+    try {
+      if (source_id === "google") {
+        const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+        const cx     = process.env.GOOGLE_SEARCH_CX;
+        if (!apiKey || !cx) throw new Error("Both GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX are required");
+        const r = await fetchUrl(`https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=software+engineer&num=1`);
+        if (r.json?.error) throw new Error(r.json.error.message);
+        result = { ok: true, message: "Connected", detail: `Search engine verified — ${r.json?.searchInformation?.totalResults||"?"} results available` };
+      } else if (source_id === "apollo") {
+        const apiKey = process.env.APOLLO_API_KEY;
+        if (!apiKey) throw new Error("APOLLO_API_KEY is required");
+        const r = await postJson("https://api.apollo.io/v1/auth/health_check", {}, { "Cache-Control":"no-cache", "X-Api-Key": apiKey });
+        if (r.status === 401) throw new Error("Invalid API key");
+        result = { ok: true, message: "Connected to Apollo.io", detail: "API key verified" };
+      } else if (source_id === "github") {
+        const headers = { "User-Agent":"Vercentic/1.0", "Accept":"application/vnd.github.v3+json" };
+        if (process.env.GITHUB_TOKEN) headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
+        const r = await fetchUrl("https://api.github.com/rate_limit", { headers });
+        const remaining = r.json?.resources?.search?.remaining;
+        result = { ok: true, message: "Connected to GitHub", detail: `${remaining||"60"} search requests remaining this hour` };
+      } else if (source_id === "hunter") {
+        const apiKey = process.env.HUNTER_API_KEY;
+        if (!apiKey) throw new Error("HUNTER_API_KEY is required");
+        const r = await fetchUrl(`https://api.hunter.io/v2/account?api_key=${apiKey}`);
+        if (r.json?.errors) throw new Error(r.json.errors[0]?.details || "Invalid key");
+        result = { ok: true, message: "Connected to Hunter.io", detail: `${r.json?.data?.requests?.searches?.available||"?"} searches available` };
+      } else {
+        result = { ok: false, message: "Unknown source" };
+      }
+    } catch (e) {
+      result = { ok: false, message: e.message };
+    } finally {
+      // Restore originals
+      envKeys.forEach(k => { if (originals[k] !== undefined) process.env[k] = originals[k]; else delete process.env[k]; });
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
