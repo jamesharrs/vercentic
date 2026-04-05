@@ -80,18 +80,51 @@ Text: ${rawText.slice(0, 3000)}`);
 }
 
 async function buildSearchQueries(naturalQuery) {
-  const txt = await callClaude(`Convert this recruiting search into optimised queries. Return ONLY valid JSON, no markdown:
-{
-  "google":"site:linkedin.com example search",
-  "apollo":{"q":"keywords","person_titles":["Title"],"person_locations":["City"]},
-  "github":"language:python location:london",
-  "keywords":["kw1"],"titles":["Title"],"skills":["skill1"]
-}
-Search: "${naturalQuery}"`);
-  if (!txt) return { google: naturalQuery, apollo: { q: naturalQuery }, github: naturalQuery, keywords: [], titles: [], skills: [] };
-  try { return JSON.parse(txt.replace(/```json|```/g, "").trim()); } catch {
-    return { google: naturalQuery, apollo: { q: naturalQuery }, github: naturalQuery, keywords: [], titles: [], skills: [] };
-  }
+  const q = naturalQuery.toLowerCase();
+
+  // Reliable keyword extraction — no AI dependency
+  const techWords = ["react","vue","angular","node","python","java","typescript","javascript","go","rust","kubernetes","aws","gcp","azure","docker","sql","postgres","mongodb","redis","graphql","flutter","swift","kotlin","devops","ml","ai","data"];
+  const skills = techWords.filter(t => q.includes(t));
+
+  const titleWords = [];
+  if (q.includes("senior") || q.includes("sr ")) titleWords.push("Senior");
+  if (q.includes("junior") || q.includes("jr ")) titleWords.push("Junior");
+  if (q.includes("lead") || q.includes("principal")) titleWords.push("Lead");
+  if (q.includes("manager")) titleWords.push("Manager");
+  if (q.includes("director")) titleWords.push("Director");
+  if (q.includes("engineer") || q.includes("developer")) titleWords.push("Engineer");
+  if (q.includes("designer") || q.includes("ux") || q.includes("ui")) titleWords.push("Designer");
+  if (q.includes("product manager")) titleWords.push("Product Manager");
+  if (q.includes("data scientist")) titleWords.push("Data Scientist");
+  if (q.includes("devops")) titleWords.push("DevOps");
+
+  const locationWords = ["london","new york","dubai","singapore","berlin","toronto","sydney","amsterdam","paris","tokyo","new delhi","mumbai","bangalore","hong kong","shanghai"];
+  const locations = locationWords.filter(l => q.includes(l));
+
+  const stopWords = new Set(["the","and","or","with","for","of","in","at","to","a","an","years","year","global","remote","experience","background","looking","search","find","strong","good","great","excellent"]);
+  const keywords = naturalQuery.split(/[\s,;+]+/).map(w=>w.toLowerCase().replace(/[^\w]/g,"")).filter(w=>w.length>2 && !stopWords.has(w) && !/^\d+$/.test(w));
+
+  // GitHub user search works best with simple terms — NOT boolean operators
+  const githubQuery = [...new Set([...skills.slice(0,3)])].join(" ") || keywords.slice(0,3).join(" ") || naturalQuery.split(",")[0].trim();
+
+  // Google X-ray
+  const googleQuery = `(site:linkedin.com/in OR site:github.com) ${titleWords.slice(0,2).join(" ")} ${skills.slice(0,4).join(" ")} ${locations[0]||""}`.trim();
+
+  // Apollo people search
+  const apolloQuery = { q: keywords.slice(0,5).join(" ") || naturalQuery, person_titles: titleWords.slice(0,2), person_locations: locations };
+
+  // Try AI to improve (non-blocking, only use if it extracts skills/titles)
+  try {
+    const txt = await callClaude(`Convert this recruiting search into optimised queries. Return ONLY valid JSON, no markdown:
+{"google":"site:linkedin.com/in boolean search","apollo":{"q":"keywords","person_titles":["Title"],"person_locations":["City"]},"github":"react typescript","keywords":["kw1"],"titles":["Senior Engineer"],"skills":["React","TypeScript"]}
+Search: "${naturalQuery}"`, 500);
+    if (txt) {
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      if (parsed.skills?.length > 0 || parsed.titles?.length > 0) return parsed;
+    }
+  } catch { /* use manual queries below */ }
+
+  return { google: googleQuery, apollo: apolloQuery, github: githubQuery, keywords, titles: titleWords, skills };
 }
 
 // ── Source adapters ───────────────────────────────────────────────────────────
@@ -226,11 +259,17 @@ router.post("/search", async (req, res) => {
       r.candidates = (r.candidates || []).map(c => ({ ...c, match_score: c.match_score ?? scoreCandidate(c, scoring) }));
       r.candidates.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
     });
+    const total = results.reduce((s, r) => s + (r.candidates?.length || 0), 0);
+    // If no real results at all, augment with simulation so UI is always useful
+    const finalResults = total === 0
+      ? [simulateResults(q, 6)]
+      : results;
+    const simMode = total === 0;
     if (job_id && environment_id) {
       insert("sourcing_searches", { id: uuidv4(), job_id, environment_id, query: q, sources_used: sources.join(","),
-        total_results: results.reduce((s, r) => s + (r.candidates?.length || 0), 0), created_at: new Date().toISOString() });
+        total_results: total, created_at: new Date().toISOString() });
     }
-    res.json({ query: q, parsed: queries, results, total_candidates: results.reduce((s, r) => s + (r.candidates?.length || 0), 0) });
+    res.json({ query: q, parsed: queries, results: finalResults, total_candidates: total, simulation_mode: simMode });
   } catch (e) { console.error("[sourcing]", e); res.status(500).json({ error: e.message }); }
 });
 
