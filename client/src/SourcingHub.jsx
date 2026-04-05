@@ -201,6 +201,7 @@ export default function SourcingHub({ environment }) {
     setSearching(true); setResults(null);
     try {
       const data = await api.post("/sourcing/search", { query:q, sources:activeSrcs, limit:10, environment_id:environment?.id, job_id:linkedJob||undefined });
+      if (data?.error) { showToast("Search error: " + data.error, "error"); setSearching(false); return; }
       setResults(data); setSimMode(data.simulation_mode||false);
     } catch(e) { showToast("Search failed: "+e.message,"error"); }
     setSearching(false);
