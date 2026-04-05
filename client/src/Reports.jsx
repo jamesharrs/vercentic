@@ -388,8 +388,34 @@ export default function Reports({ environment, initialReport }) {
   }, [selObject]);
 
   useEffect(() => {
-    if (!initialReport||!objects.length) return;
-    const obj = objects.find(o=>o.slug===initialReport.object||o.name?.toLowerCase().includes(initialReport.object));
+    if (!initialReport || !objects.length) return;
+
+    // Support loading a saved report by ID (e.g. from Copilot "open saved report" flow)
+    if (initialReport.saved_view_id) {
+      api.get(`/saved-views/${initialReport.saved_view_id}`).then(sv => {
+        if (!sv?.object_id) return;
+        skipReset.current = true;
+        if (sv.object_id)   setSelObject(sv.object_id);
+        if (sv.group_by)    setGroupBy(sv.group_by);
+        if (sv.chart_type)  setChartType(sv.chart_type);
+        if (sv.formulas)    setFormulas(sv.formulas);
+        if (sv.filters)     setFilters(sv.filters);
+        if (sv.sort_by)     setSortBy(sv.sort_by);
+        if (sv.sort_dir)    setSortDir(sv.sort_dir);
+        setPanel(sv.formulas?.length ? "formulas" : "build");
+        setTimeout(() => runReport(sv.object_id, sv.group_by), 400);
+      }).catch(() => {});
+      return;
+    }
+
+    // objectId direct or resolve from objectSlug / object name
+    const objectIdentifier = initialReport.objectId || initialReport.objectSlug || initialReport.object;
+    const obj = objects.find(o =>
+      o.id    === objectIdentifier ||
+      o.slug  === objectIdentifier ||
+      o.slug  === initialReport.objectSlug ||
+      (typeof objectIdentifier === 'string' && o.name?.toLowerCase().includes(objectIdentifier.toLowerCase()))
+    );
     if (obj) {
       skipReset.current = true;
       setSelObject(obj.id);
@@ -397,8 +423,10 @@ export default function Reports({ environment, initialReport }) {
       if (initialReport.chartType) setChartType(initialReport.chartType);
       if (initialReport.formulas)  setFormulas(initialReport.formulas);
       if (initialReport.filters)   setFilters(initialReport.filters);
-      setPanel(initialReport.formulas?.length?"formulas":"build");
-      setTimeout(()=>runReport(obj.id,initialReport.groupBy),400);
+      if (initialReport.sortBy)    setSortBy(initialReport.sortBy);
+      if (initialReport.sortDir)   setSortDir(initialReport.sortDir);
+      setPanel(initialReport.formulas?.length ? "formulas" : "build");
+      setTimeout(() => runReport(obj.id, initialReport.groupBy), 400);
     }
   }, [initialReport, objects]);
 

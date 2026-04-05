@@ -1942,8 +1942,14 @@ function App() {
       const { objectSlug: slugA, object: slugB, objectId: oidA, ...config } = e.detail || {};
       const objectSlug = slugA || slugB;
       const { navObjects: objs, activeNav: nav, setReportPreset: srp, setActiveNav: sna } = reportNavRef.current;
-      const obj = objectSlug ? objs.find(o => o.slug === objectSlug) : null;
-      const preset = { objectId: oidA || obj?.id, objectSlug: objectSlug || obj?.slug, ...config };
+      const obj = objectSlug ? objs.find(o => o.slug === objectSlug || o.name?.toLowerCase() === objectSlug?.toLowerCase()) : null;
+      // Preserve all identifiers so Reports.jsx can resolve the object
+      const preset = {
+        objectId:   oidA || obj?.id,
+        objectSlug: objectSlug || obj?.slug,
+        object:     slugB || objectSlug,   // Reports.jsx legacy lookup key
+        ...config,
+      };
       if (nav === "reports") {
         srp(null);
         setTimeout(() => srp(preset), 0);

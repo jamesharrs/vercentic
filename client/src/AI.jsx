@@ -3390,15 +3390,16 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                       <button onClick={()=>setMessages(m=>m.map((mm,mi)=>mi===i?{...mm,hasReport:false}:mm))} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
                       <button onClick={()=>{
                         const cfg = {
-                          title:     rpt.title,
-                          objectSlug:rpt.object,
-                          object:    rpt.object,
-                          groupBy:   rpt.group_by,
-                          chartType: rpt.chart_type||"bar",
-                          sortBy:    rpt.sort_by,
-                          sortDir:   rpt.sort_dir||"desc",
-                          filters:   rpt.filters||[],
-                          formulas:  rpt.formulas||[],
+                          title:          rpt.title,
+                          objectSlug:     rpt.object,
+                          object:         rpt.object,
+                          saved_view_id:  rpt.saved_view_id || null,
+                          groupBy:        rpt.group_by,
+                          chartType:      rpt.chart_type||"bar",
+                          sortBy:         rpt.sort_by,
+                          sortDir:        rpt.sort_dir||"desc",
+                          filters:        rpt.filters||[],
+                          formulas:       rpt.formulas||[],
                           autoRun:   true,
                           _ts:       Date.now(),
                         };
