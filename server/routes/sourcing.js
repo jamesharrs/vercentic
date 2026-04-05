@@ -190,20 +190,47 @@ async function searchGitHub(q, limit = 8) {
   try {
     const headers = { "User-Agent": "Vercentic-SourcingHub/1.0", "Accept": "application/vnd.github.v3+json" };
     if (process.env.GITHUB_TOKEN) headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
-    const res = await fetchUrl(`https://api.github.com/search/users?q=${encodeURIComponent(q)}&per_page=${limit}`, { headers });
+
+    // Fetch extra to account for filtering — type:user in query ensures only individual accounts
+    const searchQ = `${q} type:user`;
+    const fetchLimit = Math.min(limit * 3, 30);
+    const res = await fetchUrl(`https://api.github.com/search/users?q=${encodeURIComponent(searchQ)}&per_page=${fetchLimit}`, { headers });
     if (!res.json?.items) return { source: "github", candidates: [] };
-    const candidates = await Promise.all(res.json.items.slice(0, Math.min(limit, 5)).map(async (u) => {
+
+    // Filter: only User type (not Organization), exclude obvious bots/projects
+    const botPatterns = /bot|[.-]io$|[.-]org$|project|community|official|team|group|labs|open-?source|inc\b|corp\b|llc\b/i;
+    const userItems = res.json.items.filter(u => u.type === "User" && !botPatterns.test(u.login));
+
+    // Fetch profiles for top results — stop early once we have enough valid people
+    const candidates = [];
+    for (const u of userItems.slice(0, Math.min(limit * 2, 15))) {
+      if (candidates.length >= limit) break;
       let prof = {};
       try { const pd = await fetchUrl(`https://api.github.com/users/${u.login}`, { headers }); prof = pd.json || {}; } catch {}
-      return {
+
+      // Skip accounts that look like bots, orgs or projects based on profile data
+      if (prof.type === "Organization") continue;
+      if (!prof.name && !prof.bio) continue; // Skip accounts with no identity info
+
+      // Must have at least a bio or public repos suggesting a developer
+      if ((prof.public_repos || 0) === 0 && !prof.bio) continue;
+
+      candidates.push({
         id: `github_${u.id}`, source: "github", source_label: "GitHub",
-        name: prof.name || u.login, title: prof.bio?.split("\n")[0] || "Developer",
-        company: prof.company?.replace("@", "") || null, location: prof.location || null,
-        skills: [], summary: prof.bio || null,
-        profile_url: u.html_url, email: prof.email || null,
-        github_url: u.html_url, photo_url: u.avatar_url, match_score: null,
-      };
-    }));
+        name: prof.name || u.login,
+        title: prof.bio ? prof.bio.split(/[.\n]/)[0].slice(0, 80) : "Developer",
+        company: prof.company ? prof.company.replace(/^@/, "") : null,
+        location: prof.location || null,
+        skills: [],
+        summary: prof.bio || null,
+        profile_url: u.html_url,
+        email: prof.email || null,
+        github_url: u.html_url,
+        photo_url: u.avatar_url,
+        match_score: null,
+      });
+    }
+
     return { source: "github", candidates, total: res.json.total_count };
   } catch (e) { return { source: "github", candidates: [], error: e.message }; }
 }
