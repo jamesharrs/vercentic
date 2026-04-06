@@ -255,9 +255,10 @@ const EventPopup = ({ event, color, rect, onClose, onEdit, onDelete, avatarCache
 const HOUR_HEIGHT = 64; // px per hour
 const HEADER_HEIGHT = 72;
 
-const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarCache = {} }) => {
+const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarCache = {}, workWeek = false, secTz = '' }) => {
   const today = new Date();
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const dayCount = workWeek ? 5 : 7;
+  const days = Array.from({ length: dayCount }, (_, i) => addDays(weekStart, i));
   const gridRef = useRef(null);
 
   // Scroll to ~8am on mount
@@ -291,16 +292,25 @@ const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarC
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", borderRadius: 20, border: `1.5px solid ${C.border}`, background: C.surface }}>
       {/* Day headers */}
       <div style={{ display: "flex", borderBottom: `1.5px solid ${C.border}`, flexShrink: 0, background: "linear-gradient(180deg, #FAFAFF 0%, #F5F3FF 100%)" }}>
-        {/* Time gutter header */}
-        <div style={{ width: 56, flexShrink: 0, borderRight: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 0" }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: C.text3, letterSpacing: "0.08em", transform: "rotate(-90deg)", whiteSpace: "nowrap" }}>
-            GMT+4
-          </span>
+        {/* Time gutter header — local + optional secondary TZ */}
+        <div style={{ flexShrink: 0, borderRight: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "flex-end", width: secTz ? 84 : 56 }}>
+          {secTz && (
+            <div style={{ width: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px dashed ${C.border}`, padding: "6px 0", background: `${C.accent}06` }}>
+              <span style={{ fontSize: 8, fontWeight: 700, color: C.accent, letterSpacing: "0.06em", transform: "rotate(-90deg)", whiteSpace: "nowrap", textTransform: "uppercase" }}>
+                {(() => { try { return new Intl.DateTimeFormat('en',{timeZone:secTz,timeZoneName:'short'}).formatToParts(new Date()).find(p=>p.type==='timeZoneName')?.value||secTz.split('/').pop().replace('_',' '); } catch(e){return secTz.split('/').pop().replace('_',' ');} })()}
+              </span>
+            </div>
+          )}
+          <div style={{ width: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "6px 0" }}>
+            <span style={{ fontSize: 8, fontWeight: 700, color: C.text3, letterSpacing: "0.06em", transform: "rotate(-90deg)", whiteSpace: "nowrap" }}>
+              LOCAL
+            </span>
+          </div>
         </div>
         {days.map((d, i) => {
           const isToday2 = isSameDay(d, today);
           return (
-            <div key={i} style={{ flex: 1, padding: "12px 8px 10px", textAlign: "center", borderRight: i < 6 ? `1px solid ${C.border}` : "none" }}>
+            <div key={i} style={{ flex: 1, padding: "12px 8px 10px", textAlign: "center", borderRight: i < dayCount - 1 ? `1px solid ${C.border}` : "none" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: isToday2 ? C.accent : C.text3, textTransform: "lowercase", letterSpacing: "0.02em" }}>
                 {DAY_NAMES[i].toLowerCase()}
               </div>
@@ -318,19 +328,46 @@ const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarC
       {/* Time grid */}
       <div ref={gridRef} style={{ flex: 1, overflow: "auto", position: "relative" }}>
         <div style={{ display: "flex", minHeight: HOURS.length * HOUR_HEIGHT, position: "relative" }}>
-          {/* Time labels */}
-          <div style={{ width: 56, flexShrink: 0, borderRight: `1px solid ${C.border}`, position: "relative" }}>
-            {HOURS.map(h => (
-              <div key={h} style={{
-                position: "absolute", top: (h - 7) * HOUR_HEIGHT, height: HOUR_HEIGHT,
-                width: "100%", display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                paddingRight: 10, paddingTop: 0, boxSizing: "border-box",
-              }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: C.text3, lineHeight: 1, transform: "translateY(-5px)" }}>
-                  {h === 12 ? "12 pm" : h > 12 ? `${h - 12} pm` : `${h} am`}
-                </span>
+          {/* Time labels — local + optional secondary TZ */}
+          <div style={{ flexShrink: 0, borderRight: `1px solid ${C.border}`, position: "relative", display: "flex", width: secTz ? 84 : 56 }}>
+            {/* Secondary timezone column */}
+            {secTz && (
+              <div style={{ width: 32, flexShrink: 0, borderRight: `1px dashed ${C.border}`, position: "relative", background: `${C.accent}06` }}>
+                {HOURS.map(h => {
+                  const d = new Date(); d.setHours(h, 0, 0, 0);
+                  let tzLabel = '';
+                  try {
+                    tzLabel = d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true, timeZone: secTz })
+                      .replace(':00','').replace(' ','').toLowerCase();
+                  } catch(e) { tzLabel = ''; }
+                  return (
+                    <div key={h} style={{
+                      position: "absolute", top: (h - 7) * HOUR_HEIGHT, height: HOUR_HEIGHT,
+                      width: "100%", display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                      paddingRight: 4, paddingTop: 0, boxSizing: "border-box",
+                    }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: C.accent, lineHeight: 1, transform: "translateY(-5px)", opacity: 0.85, whiteSpace: "nowrap" }}>
+                        {tzLabel}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
+            {/* Local time column */}
+            <div style={{ width: 56, flexShrink: 0, position: "relative" }}>
+              {HOURS.map(h => (
+                <div key={h} style={{
+                  position: "absolute", top: (h - 7) * HOUR_HEIGHT, height: HOUR_HEIGHT,
+                  width: "100%", display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                  paddingRight: 8, paddingTop: 0, boxSizing: "border-box",
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: C.text3, lineHeight: 1, transform: "translateY(-5px)" }}>
+                    {h === 12 ? "12pm" : h > 12 ? `${h-12}pm` : `${h}am`}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Day columns */}
@@ -340,7 +377,7 @@ const WeekGrid = ({ weekStart, interviews, onSelectEvent, selectedEvent, avatarC
             return (
               <div key={dayIdx} style={{
                 flex: 1, position: "relative",
-                borderRight: dayIdx < 6 ? `1px solid ${C.border}` : "none",
+                borderRight: dayIdx < dayCount - 1 ? `1px solid ${C.border}` : "none",
                 background: isToday3 ? "rgba(124, 92, 252, 0.03)" : "transparent",
               }}>
                 {/* Hour lines */}
@@ -688,7 +725,8 @@ function InterviewerAvatar({ person, cache = {}, size = 22, border = '#fff', off
 
 // ── Main CalendarView Export ──────────────────────────────────────────────────
 export default function CalendarView({ interviews: interviewsProp, interviewTypes: typesProp, onEdit, onDelete, onSchedule, environment }) {
-  const [viewMode, setViewMode] = useState("week");   // month | week | day
+  const [viewMode, setViewMode] = useState("week");   // month | week | workweek | day
+  const [secTz, setSecTz] = useState("");           // secondary timezone IANA string e.g. "America/New_York"
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [popupRect, setPopupRect] = useState(null);
@@ -808,14 +846,14 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
   const goPrev = () => {
     const d = new Date(currentDate);
     if (viewMode === "month") d.setMonth(d.getMonth() - 1);
-    else if (viewMode === "week") d.setDate(d.getDate() - 7);
+    else if (viewMode === "week" || viewMode === "workweek") d.setDate(d.getDate() - 7);
     else d.setDate(d.getDate() - 1);
     setCurrentDate(d);
   };
   const goNext = () => {
     const d = new Date(currentDate);
     if (viewMode === "month") d.setMonth(d.getMonth() + 1);
-    else if (viewMode === "week") d.setDate(d.getDate() + 7);
+    else if (viewMode === "week" || viewMode === "workweek") d.setDate(d.getDate() + 7);
     else d.setDate(d.getDate() + 1);
     setCurrentDate(d);
   };
@@ -824,6 +862,8 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
     ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`
     : viewMode === "day"
       ? `${DAY_NAMES_FULL[(currentDate.getDay() + 6) % 7]}, ${currentDate.getDate()} ${MONTH_SHORT[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+      : viewMode === "workweek"
+      ? `${weekStart.getDate()} ${MONTH_SHORT[weekStart.getMonth()]} – ${addDays(weekStart, 4).getDate()} ${MONTH_SHORT[addDays(weekStart, 4).getMonth()]} ${weekStart.getFullYear()} (Work Week)`
       : `${weekStart.getDate()} ${MONTH_SHORT[weekStart.getMonth()]} – ${addDays(weekStart, 6).getDate()} ${MONTH_SHORT[addDays(weekStart, 6).getMonth()]} ${weekStart.getFullYear()}`;
 
   // Stats
@@ -884,31 +924,111 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
               <button onClick={goNext} style={navBtn}><Ic n="chevR" s={16} c={C.text2}/></button>
             </div>
           </div>
-          {/* View mode toggle */}
-          <div style={{ display: "flex", borderRadius: 12, border: `1.5px solid ${C.border}`, overflow: "hidden", background: C.bg }}>
-            {["Month", "Week", "Day"].map(v => (
-              <button key={v} onClick={() => setViewMode(v.toLowerCase())}
-                style={{
-                  padding: "7px 18px", border: "none",
-                  background: viewMode === v.toLowerCase() ? C.surface : "transparent",
-                  color: viewMode === v.toLowerCase() ? C.text1 : C.text3,
-                  fontSize: 12, fontWeight: viewMode === v.toLowerCase() ? 700 : 500,
-                  cursor: "pointer", fontFamily: FONT,
-                  boxShadow: viewMode === v.toLowerCase() ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
-                  transition: "all .12s",
-                }}>
-                {v}
-              </button>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Secondary timezone picker */}
+            {(viewMode === "week" || viewMode === "workweek" || viewMode === "day") && (
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
+                <Ic n="clock" s={13} c={C.text3}/>
+                <select
+                  value={secTz}
+                  onChange={e => setSecTz(e.target.value)}
+                  style={{
+                    fontSize: 11, fontWeight: 600, color: secTz ? C.accent : C.text3,
+                    border: `1.5px solid ${secTz ? C.accent : C.border}`,
+                    borderRadius: 8, padding: "4px 8px", fontFamily: FONT,
+                    background: secTz ? `${C.accent}08` : C.surface,
+                    cursor: "pointer", outline: "none", maxWidth: 160,
+                  }}>
+                  <option value="">+ Add timezone</option>
+                  <optgroup label="Middle East">
+                    <option value="Asia/Dubai">Dubai (GST +4)</option>
+                    <option value="Asia/Riyadh">Riyadh (AST +3)</option>
+                    <option value="Asia/Kuwait">Kuwait (+3)</option>
+                    <option value="Asia/Qatar">Qatar (+3)</option>
+                    <option value="Asia/Bahrain">Bahrain (+3)</option>
+                    <option value="Asia/Muscat">Muscat (+4)</option>
+                    <option value="Asia/Beirut">Beirut (+2)</option>
+                    <option value="Asia/Amman">Amman (+2)</option>
+                  </optgroup>
+                  <optgroup label="Europe">
+                    <option value="Europe/London">London (GMT/BST)</option>
+                    <option value="Europe/Paris">Paris (CET/CEST)</option>
+                    <option value="Europe/Berlin">Berlin (CET)</option>
+                    <option value="Europe/Amsterdam">Amsterdam (CET)</option>
+                    <option value="Europe/Madrid">Madrid (CET)</option>
+                    <option value="Europe/Rome">Rome (CET)</option>
+                    <option value="Europe/Stockholm">Stockholm (CET)</option>
+                    <option value="Europe/Zurich">Zurich (CET)</option>
+                    <option value="Europe/Athens">Athens (EET)</option>
+                    <option value="Europe/Moscow">Moscow (MSK +3)</option>
+                  </optgroup>
+                  <optgroup label="Americas">
+                    <option value="America/New_York">New York (EST/EDT)</option>
+                    <option value="America/Chicago">Chicago (CST/CDT)</option>
+                    <option value="America/Denver">Denver (MST/MDT)</option>
+                    <option value="America/Los_Angeles">Los Angeles (PST/PDT)</option>
+                    <option value="America/Toronto">Toronto (EST)</option>
+                    <option value="America/Vancouver">Vancouver (PST)</option>
+                    <option value="America/Sao_Paulo">São Paulo (BRT -3)</option>
+                    <option value="America/Mexico_City">Mexico City (CST)</option>
+                  </optgroup>
+                  <optgroup label="Asia Pacific">
+                    <option value="Asia/Kolkata">Mumbai/Delhi (IST +5:30)</option>
+                    <option value="Asia/Karachi">Karachi (PKT +5)</option>
+                    <option value="Asia/Dhaka">Dhaka (BST +6)</option>
+                    <option value="Asia/Colombo">Colombo (+5:30)</option>
+                    <option value="Asia/Bangkok">Bangkok (ICT +7)</option>
+                    <option value="Asia/Singapore">Singapore (SGT +8)</option>
+                    <option value="Asia/Hong_Kong">Hong Kong (HKT +8)</option>
+                    <option value="Asia/Shanghai">Shanghai (CST +8)</option>
+                    <option value="Asia/Tokyo">Tokyo (JST +9)</option>
+                    <option value="Asia/Seoul">Seoul (KST +9)</option>
+                    <option value="Australia/Sydney">Sydney (AEST +10)</option>
+                    <option value="Pacific/Auckland">Auckland (NZST +12)</option>
+                  </optgroup>
+                  <optgroup label="Africa">
+                    <option value="Africa/Cairo">Cairo (EET +2)</option>
+                    <option value="Africa/Johannesburg">Johannesburg (SAST +2)</option>
+                    <option value="Africa/Lagos">Lagos (WAT +1)</option>
+                    <option value="Africa/Nairobi">Nairobi (EAT +3)</option>
+                    <option value="Africa/Casablanca">Casablanca (WET)</option>
+                  </optgroup>
+                </select>
+                {secTz && (
+                  <button onClick={() => setSecTz('')}
+                    title="Remove secondary timezone"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: C.text3, fontSize: 14, padding: "0 2px", display: "flex" }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            )}
+            {/* View mode toggle */}
+            <div style={{ display: "flex", borderRadius: 12, border: `1.5px solid ${C.border}`, overflow: "hidden", background: C.bg }}>
+              {[["Month","month"],["Week","week"],["Work Week","workweek"],["Day","day"]].map(([label,v]) => (
+                <button key={v} onClick={() => setViewMode(v)}
+                  style={{
+                    padding: "5px 10px", border: "none",
+                    background: viewMode === v ? C.surface : "transparent",
+                    color: viewMode === v ? C.text1 : C.text3,
+                    fontSize: 12, fontWeight: viewMode === v ? 700 : 500,
+                    cursor: "pointer", fontFamily: FONT,
+                    boxShadow: viewMode === v ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+                    transition: "all .12s", borderRadius: 7, whiteSpace: "nowrap",
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Calendar grid */}
-        {viewMode === "week" && (
-          <WeekGrid weekStart={weekStart} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache}/>
+        {(viewMode === "week" || viewMode === "workweek") && (
+          <WeekGrid weekStart={weekStart} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache} workWeek={viewMode==="workweek"} secTz={secTz}/>
         )}
         {viewMode === "day" && (
-          <DayGrid date={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache}/>
+          <DayGrid date={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} selectedEvent={selectedEvent} avatarCache={avatarCache} secTz={secTz}/>
         )}
         {viewMode === "month" && (
           <MonthGrid currentDate={currentDate} interviews={filteredInterviews} onSelectEvent={handleSelectEvent} onDayClick={(d) => { setCurrentDate(d); setViewMode("day"); }}/>
