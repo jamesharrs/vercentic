@@ -700,6 +700,12 @@ SUPPORTED action_types and their required payload fields:
 
 IMPORTANT: Always use the record_id from CURRENT PAGE CONTEXT when acting on the current record.
 CRITICAL RULE — NEVER say "I don't see [Name] in the platform" when that person appears in CURRENT PAGE CONTEXT. CURRENT PAGE CONTEXT IS the ground truth — it reflects exactly what the user is looking at. If it says "VIEWING PERSON RECORD: Lewie Harrison (ID: abc123)", then Lewie Harrison IS in the platform with that ID. Trust it completely.
+
+JOB ASSOCIATION RULE — IMPORTANT:
+If the context shows "PERSON LINKED TO N JOB(S)/RECORD(S)", then whenever you are about to create or schedule ANYTHING for that person (interview, email, communication, note, form submission, task), ALWAYS ask first:
+"I can see [Name] is linked to [job title(s)]. Would you like to associate this [interview/email/note] with one of those roles, or keep it general?"
+Wait for their answer before proceeding. Include the job_id in the action block if they choose a role.
+Exception: if the user has already specified the job in their message, use it directly without asking.
 For "add_note", always use record_id from context and write the note content as the user described it.
 
 DOCUMENT ANALYSIS — CV & JOB DESCRIPTIONS:
@@ -1522,6 +1528,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [interviewTypes, setInterviewTypes] = useState([]);
   const [companyDocs,    setCompanyDocs]    = useState([]);
   const [companyProfile, setCompanyProfile] = useState(null); // from Settings → Company Profile
+  const [linkedJobs,     setLinkedJobs]     = useState([]);   // jobs/records this person is linked to
   const [userOrgUnit,    setUserOrgUnit]    = useState(null); // current user's org unit / team
   const _pcAI = _usePermCtxAI();
   const canRecord = (flag) => _pcAI ? _pcAI.canGlobal(flag) : true;
@@ -1619,6 +1626,14 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         if(v===null||v===undefined||v==='')return;
         const disp=Array.isArray(v)?v.join(', '):String(v);
         if(disp)parts.push('  '+k+': '+disp);
+      });
+    }
+    // Inject linked jobs so copilot can ask about job association
+    if(linkedJobs.length>0 && currentObject?.slug==='people'){
+      parts.push('');
+      parts.push(`PERSON LINKED TO ${linkedJobs.length} JOB(S)/RECORD(S) — when creating anything for this person (interview, email, note, form, communication), always ask if it should be associated with one of these:`);
+      linkedJobs.forEach(j=>{
+        parts.push(`  - "${j.title}" (${j.object_name||'Job'})${j.stage?' | Stage: '+j.stage:''} [record_id:${j.id}]`);
       });
     }
     if(pageContext){parts.push('');parts.push('ADDITIONAL PAGE CONTEXT:');parts.push(pageContext);}
@@ -1787,6 +1802,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
   },[open, currentRecord?.id, currentObject?.id, activeNav]);
 
+  // Reload linked jobs whenever the viewed record changes
+  useEffect(()=>{
+    if(!open || !currentRecord?.id || currentObject?.slug!=='people' || !environment?.id) { setLinkedJobs([]); return; }
+    api.get(`/records/linked-jobs?person_id=${currentRecord.id}&environment_id=${environment.id}`).then(d=>{ if(Array.isArray(d)) setLinkedJobs(d); }).catch(()=>{});
+  },[open, currentRecord?.id, environment?.id]);
+
   // ── Navigation change notification ─────────────────────────────────────────
   // When nav or record changes during an active conversation, inject a user+assistant
   // exchange into message history so Claude sees the context change in the API payload.
@@ -1872,6 +1893,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     if(environment?.id) api.get(`/company-research?environment_id=${environment.id}`).then(d=>{ if(d && !d.error) setCompanyProfile(d); }).catch(()=>{});
     // Load current user's org unit (for company context)
     if(_sessionUser?.org_unit_id) api.get(`/org-units?environment_id=${environment?.id||''}`).then(d=>{ if(Array.isArray(d)){ const u=d.find(o=>o.id===_sessionUser.org_unit_id); if(u) setUserOrgUnit(u); } }).catch(()=>{});
+    // Load linked jobs/records for the current person record
+    if(currentRecord?.id && currentObject?.slug==='people') {
+      api.get(`/records/linked-jobs?person_id=${currentRecord.id}&environment_id=${environment?.id||''}`).then(d=>{ if(Array.isArray(d)) setLinkedJobs(d); }).catch(()=>{});
+    } else {
+      setLinkedJobs([]);
+    }
     // (settings-section listener is in its own useEffect above)
   },[open]);
 
