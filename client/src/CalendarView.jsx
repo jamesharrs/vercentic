@@ -150,7 +150,7 @@ const MiniCalendar = ({ currentDate, selectedDate, onSelect, interviews }) => {
 const miniBtn = { background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
 
 // ── Event Detail Popup ────────────────────────────────────────────────────────
-const EventPopup = ({ event, color, rect, onClose, onEdit, onDelete }) => {
+const EventPopup = ({ event, color, rect, onClose, onEdit, onDelete, avatarCache = {} }) => {
   const ref = useRef(null);
   useEffect(() => {
     const handle = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -874,6 +874,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
           event={selectedEvent}
           color={popupColor}
           rect={popupRect}
+          avatarCache={avatarCache}
           onClose={() => setSelectedEvent(null)}
           onEdit={() => { onEdit?.(selectedEvent); setSelectedEvent(null); }}
           onDelete={() => { onDelete?.(selectedEvent.id); setSelectedEvent(null); }}

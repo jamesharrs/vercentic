@@ -60,8 +60,18 @@ router.get('/', (req, res) => {
   const { environment_id, candidate_id, job_id } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   let rows = query('interviews', i => i.environment_id === environment_id && !i.deleted_at);
-  if (candidate_id) rows = rows.filter(i => i.candidate_id === candidate_id);
-  if (job_id)       rows = rows.filter(i => i.job_id === job_id);
+  const { person_id } = req.query; // returns interviews where person is candidate OR interviewer
+  if (person_id) {
+    rows = rows.filter(i => {
+      if (i.candidate_id === person_id) return true;
+      // Check if person appears in interviewers array (supports both string and object formats)
+      const ivList = Array.isArray(i.interviewers) ? i.interviewers : [];
+      return ivList.some(iv => (typeof iv === 'string' ? iv : iv?.id) === person_id);
+    });
+  } else {
+    if (candidate_id) rows = rows.filter(i => i.candidate_id === candidate_id);
+  }
+  if (job_id) rows = rows.filter(i => i.job_id === job_id);
   // RBAC: filter interviews — user must be able to view people object
   const _user = req.currentUser;
   if (_user && !_isSA(_user) && !_hasPerm(_user, 'people', 'view')) rows = [];

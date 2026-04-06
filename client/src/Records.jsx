@@ -5023,7 +5023,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
     setLoading(true);
-    api.get(`/interviews?candidate_id=${record.id}&environment_id=${environment.id}`)
+    api.get(`/interviews?person_id=${record.id}&environment_id=${environment.id}`)
       .then(d => setInterviews(Array.isArray(d) ? d : []))
       .catch(() => setInterviews([]))
       .finally(() => setLoading(false));
@@ -5122,7 +5122,22 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
                           · {iv.job_name || linkedJobs.find(j=>j.id===iv.job_id)?.name}
                         </span>
                       )}
+                      {/* Show role badge — interviewer vs candidate */}
+                      {iv.candidate_id !== record.id && (
+                        <span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:"1px 6px",
+                          borderRadius:99,background:"#EFF6FF",color:"#3B82F6"}}>Interviewer</span>
+                      )}
                     </div>
+                    {/* Candidate name — shown when this person is interviewer */}
+                    {iv.candidate_id !== record.id && iv.candidate_name && (
+                      <div style={{fontSize:11,color:C.text3,marginBottom:1}}>
+                        Candidate:&nbsp;
+                        <button onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}));}}
+                          style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:11,fontWeight:600,textDecoration:"underline",fontFamily:"inherit"}}>
+                          {iv.candidate_name}
+                        </button>
+                      </div>
+                    )}
                     <div style={{fontSize:11,color:C.text3}}>{fmt(iv)}</div>
                   </div>
                   <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,
@@ -5134,11 +5149,24 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
                 {isOpen && (
                   <div style={{padding:"0 14px 14px",borderTop:`1px solid ${C.border}`,background:"white"}}>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+                      {/* Candidate row — full width, only when person is interviewer */}
+                      {iv.candidate_id !== record.id && iv.candidate_name && (
+                        <div style={{gridColumn:"1/-1",fontSize:12,padding:"8px 10px",borderRadius:8,
+                          background:"#F0F4FF",border:"1px solid #DBEAFE",display:"flex",alignItems:"center",gap:8}}>
+                          <Ic n="user" s={13} c={C.accent}/>
+                          <span style={{color:C.text3,fontWeight:600}}>Candidate:</span>
+                          <button onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}))}
+                            style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:12,fontWeight:700,textDecoration:"underline",fontFamily:"inherit"}}>
+                            {iv.candidate_name}
+                          </button>
+                          <span style={{marginLeft:"auto",fontSize:10,color:C.text4}}>→ Open record</span>
+                        </div>
+                      )}
                       {[
                         ["Format",   iv.format || "Video Call"],
                         ["Duration", `${iv.duration || 45} min`],
                         iv.job_name ? ["Role", iv.job_name] : null,
-                        ivList.length ? ["Interviewer(s)", ivList.map(i=>typeof i==="string"?i:i.name).join(", ")] : null,
+                        iv.candidate_id === record.id && ivList.length ? ["Interviewer(s)", ivList.map(i=>typeof i==="string"?i:i.name).join(", ")] : null,
                         iv.meeting_link ? ["Meeting link", iv.meeting_link] : null,
                         iv.notes ? ["Notes", iv.notes] : null,
                       ].filter(Boolean).map(([label, val]) => (
