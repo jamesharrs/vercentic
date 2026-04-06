@@ -702,10 +702,19 @@ IMPORTANT: Always use the record_id from CURRENT PAGE CONTEXT when acting on the
 CRITICAL RULE — NEVER say "I don't see [Name] in the platform" when that person appears in CURRENT PAGE CONTEXT. CURRENT PAGE CONTEXT IS the ground truth — it reflects exactly what the user is looking at. If it says "VIEWING PERSON RECORD: Lewie Harrison (ID: abc123)", then Lewie Harrison IS in the platform with that ID. Trust it completely.
 
 JOB ASSOCIATION RULE — IMPORTANT:
-If the context shows "PERSON LINKED TO N JOB(S)/RECORD(S)", then whenever you are about to create or schedule ANYTHING for that person (interview, email, communication, note, form submission, task), ALWAYS ask first:
-"I can see [Name] is linked to [job title(s)]. Would you like to associate this [interview/email/note] with one of those roles, or keep it general?"
-Wait for their answer before proceeding. Include the job_id in the action block if they choose a role.
-Exception: if the user has already specified the job in their message, use it directly without asking.
+If the context shows "PERSON LINKED TO N OPEN JOB(S)/RECORD(S)", then whenever you are about to create or schedule ANYTHING for that person (interview, email, communication, note, form submission, task), ALWAYS pause and present the options as a numbered list BEFORE proceeding. Example format:
+
+"I can see [Name] is linked to the following open role(s). Would you like to associate this [interview/email/note] with one?
+
+1. Senior Product Manager — Stage: Screening
+2. Mobile Developer — Stage: Applied
+0. No, keep it general
+
+Just reply with a number."
+
+Wait for their reply before outputting any action block. Use the selected record_id as job_id in the block.
+Exception: if the user has already specified the job in their message ("for the Product Manager role"), use it directly without asking.
+Only show open roles (the context is pre-filtered to open records only).
 For "add_note", always use record_id from context and write the note content as the user described it.
 
 DOCUMENT ANALYSIS — CV & JOB DESCRIPTIONS:
@@ -1628,13 +1637,15 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         if(disp)parts.push('  '+k+': '+disp);
       });
     }
-    // Inject linked jobs so copilot can ask about job association
+    // Inject linked jobs as numbered options so copilot presents them clearly
     if(linkedJobs.length>0 && currentObject?.slug==='people'){
       parts.push('');
-      parts.push(`PERSON LINKED TO ${linkedJobs.length} JOB(S)/RECORD(S) — when creating anything for this person (interview, email, note, form, communication), always ask if it should be associated with one of these:`);
-      linkedJobs.forEach(j=>{
-        parts.push(`  - "${j.title}" (${j.object_name||'Job'})${j.stage?' | Stage: '+j.stage:''} [record_id:${j.id}]`);
+      parts.push(`PERSON LINKED TO ${linkedJobs.length} OPEN JOB(S)/RECORD(S) — when creating anything for this person, present these as a numbered list and ask which one to associate with (or "none"):`);
+      linkedJobs.forEach((j,i)=>{
+        parts.push(`  ${i+1}. "${j.title}" (${j.object_name||'Job'})${j.stage?' — Stage: '+j.stage:''}${j.status?' ['+j.status+']':''} [record_id:${j.id}]`);
       });
+      parts.push('  0. None / keep general');
+      parts.push('Prompt the user to reply with a number (e.g. "Reply 1, 2 or 0 for none"). Use the corresponding record_id as job_id in the action block.');
     }
     if(pageContext){parts.push('');parts.push('ADDITIONAL PAGE CONTEXT:');parts.push(pageContext);}
 

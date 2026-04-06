@@ -236,11 +236,17 @@ router.get('/linked-jobs', (req, res) => {
     (l.person_id === person_id || l.person_record_id === person_id) &&
     (!environment_id || l.environment_id === environment_id)
   );
-  // Fetch the target records and return their titles
+  // Fetch the target records and return their titles + status
+  const { open_only } = req.query; // default: only open records
+  const showAll = open_only === 'false';
+  const CLOSED_STATUSES = new Set(['closed','filled','cancelled','rejected','withdrawn','archived','inactive','complete','completed','on hold']);
   const results = links.map(l => {
     const rec = (store.records || []).find(r => r.id === (l.record_id || l.target_record_id) && !r.deleted_at);
     if (!rec) return null;
     const d = rec.data || {};
+    const status = (d.status || '').toLowerCase();
+    const isClosed = CLOSED_STATUSES.has(status);
+    if (!showAll && isClosed) return null; // filter closed by default
     const obj = (store.objects || store.object_definitions || []).find(o => o.id === rec.object_id);
     return {
       id: rec.id,
@@ -248,6 +254,7 @@ router.get('/linked-jobs', (req, res) => {
       object_id: rec.object_id,
       object_name: obj?.name || obj?.plural_name || '',
       stage: l.stage || l.current_stage || null,
+      status: d.status || null,
     };
   }).filter(Boolean);
   res.json(results);
