@@ -185,7 +185,11 @@ router.post('/', async (req, res) => {
         console.log('[Interview] No attendee emails found — skipping ICS send');
       } else {
         // Build reschedule URL pointing to the interview record
-        const baseUrl = process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app';
+        // X-App-Origin from Vite proxy preserves real client origin for reschedule links
+        const origin = req.headers['x-app-origin'] || req.headers['origin'] || req.headers['referer'] || '';
+        const baseUrl = origin
+          ? origin.replace(/\/+$/, '').split('/').slice(0, 3).join('/')
+          : (process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app');
         // Generate unique tokens for each party so they see the right view
         const candToken = makeToken(rec.id, 'candidate');
         const ivToken   = makeToken(rec.id, 'interviewer');

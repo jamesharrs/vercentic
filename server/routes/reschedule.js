@@ -62,7 +62,11 @@ router.post('/:id/:token/propose', async (req, res) => {
 
   // Send email to OTHER party with the proposed slots
   const store    = getStore();
-  const baseUrl  = process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app';
+  // X-App-Origin set by Vite proxy preserves the real client origin (localhost in dev, prod domain in prod)
+  const _origin = req.headers['x-app-origin'] || req.headers['origin'] || req.headers['referer'] || '';
+  const baseUrl = _origin
+    ? _origin.replace(/\/+$/, '').split('/').slice(0, 3).join('/')
+    : (process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app');
   const apiUrl   = process.env.RAILWAY_URL || 'https://talentos-production-4045.up.railway.app';
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@vercentic.com';
 
@@ -170,7 +174,11 @@ router.post('/:id/:token/confirm', async (req, res) => {
 
   // Send confirmation to all parties
   const store    = getStore();
-  const baseUrl  = process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app';
+  // X-App-Origin set by Vite proxy preserves the real client origin (localhost in dev, prod domain in prod)
+  const _origin = req.headers['x-app-origin'] || req.headers['origin'] || req.headers['referer'] || '';
+  const baseUrl = _origin
+    ? _origin.replace(/\/+$/, '').split('/').slice(0, 3).join('/')
+    : (process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app');
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@vercentic.com';
 
   const d = new Date(`${chosen.date}T${chosen.time}`);

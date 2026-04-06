@@ -12,6 +12,13 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Pass the real client origin so the server can build correct reschedule URLs
+            const host = req.headers['host'] || 'localhost:3000';
+            proxyReq.setHeader('X-App-Origin', `http://${host}`);
+          });
+        },
       }
     }
   },
