@@ -1508,8 +1508,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
   const [interviewTypes, setInterviewTypes] = useState([]);
-  const [companyDocs, setCompanyDocs] = useState([]);
-  const [userOrgUnit, setUserOrgUnit] = useState(null); // current user's org unit / team
+  const [companyDocs,    setCompanyDocs]    = useState([]);
+  const [companyProfile, setCompanyProfile] = useState(null); // from Settings → Company Profile
+  const [userOrgUnit,    setUserOrgUnit]    = useState(null); // current user's org unit / team
   const _pcAI = _usePermCtxAI();
   const canRecord = (flag) => _pcAI ? _pcAI.canGlobal(flag) : true;
 
@@ -1842,6 +1843,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     api.get("/users").then(u=>{ if(Array.isArray(u)) setAdminUsers(u); }).catch(()=>{});
     if(environment?.id) api.get(`/interview-types?environment_id=${environment.id}`).then(t=>{ if(Array.isArray(t)) setInterviewTypes(t); }).catch(()=>{});
     if(environment?.id) api.get(`/company-documents?environment_id=${environment.id}`).then(d=>{ if(Array.isArray(d)) setCompanyDocs(d); }).catch(()=>{});
+    // Load company profile (Settings → Company Profile)
+    if(environment?.id) api.get(`/company-research?environment_id=${environment.id}`).then(d=>{ if(d && !d.error) setCompanyProfile(d); }).catch(()=>{});
     // Load current user's org unit (for company context)
     if(_sessionUser?.org_unit_id) api.get(`/org-units?environment_id=${environment?.id||''}`).then(d=>{ if(Array.isArray(d)){ const u=d.find(o=>o.id===_sessionUser.org_unit_id); if(u) setUserOrgUnit(u); } }).catch(()=>{});
     // (settings-section listener is in its own useEffect above)
@@ -2229,26 +2232,53 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         objects.length ? `\n\nLIVE OBJECTS (use these slugs and IDs for dashboard panels):\n${objects.map(o=>`- ${o.plural_name||o.name} | slug: ${o.slug} | id: ${o.id}`).join("\n")}` : "",
         // RBAC: inject user role so AI knows what actions are allowed
         _pcAI?.permissions?._roleSlug ? `\n\nUSER ROLE: ${_pcAI.permissions._roleSlug}${_pcAI.permissions._roleSlug==='super_admin'?' (full access)':_pcAI.permissions._roleSlug==='read_only'?' — READ ONLY, do NOT suggest any create/edit/delete actions':''}` : '',
-        // ── WHO YOU ARE TALKING TO ────────────────────────────────────────
+        // ── WHO YOU ARE TALKING TO + COMPANY PROFILE ─────────────────
         (() => {
-          const u = _sessionUser;
+          const u  = _sessionUser;
+          const cp = companyProfile;
+          const companyName = cp?.name || environment?.name || 'your company';
           const lines = [];
           lines.push("\n\nYOU ARE ASSISTING:");
           if (u.first_name || u.last_name) lines.push(`- Name: ${[u.first_name, u.last_name].filter(Boolean).join(' ')}`);
           if (u.email)                     lines.push(`- Email: ${u.email}`);
           if (_pcAI?.permissions?._roleSlug) lines.push(`- Platform role: ${_pcAI.permissions._roleSlug}`);
           if (userOrgUnit)                 lines.push(`- Team / Org unit: ${userOrgUnit.name} (type: ${userOrgUnit.type||'team'})`);
-          lines.push("\n\nCOMPANY / ENVIRONMENT:");
-          if (environment?.name)           lines.push(`- Environment name: ${environment.name}`);
-          if (environment?.locale)         lines.push(`- Locale / Region: ${environment.locale}`);
+          lines.push("\n\nCOMPANY PROFILE (from Settings → Company Profile):");
+          lines.push(`- Company name: ${companyName}`);
+          if (cp?.industry)     lines.push(`- Industry: ${cp.industry}${cp.sub_industry?' / '+cp.sub_industry:''}`);
+          if (cp?.size)         lines.push(`- Size: ${cp.size}`);
+          if (cp?.founded)      lines.push(`- Founded: ${cp.founded}`);
+          if (cp?.headquarters) lines.push(`- HQ: ${cp.headquarters}`);
+          if (cp?.locations?.length) {
+            const others = cp.locations.filter(l=>!l.is_hq).map(l=>`${l.city}, ${l.country}`).slice(0,4);
+            if (others.length)  lines.push(`- Other offices: ${others.join(' | ')}`);
+          }
+          if (cp?.website)      lines.push(`- Website: ${cp.website}`);
+          if (cp?.description)  lines.push(`- About: ${cp.description.slice(0,250)}${cp.description.length>250?'...':''}`);
+          if (cp?.evp?.headline)  lines.push(`- EVP headline: ${cp.evp.headline}`);
+          if (cp?.evp?.statement) lines.push(`- EVP statement: ${cp.evp.statement.slice(0,200)}`);
+          if (cp?.tone)         lines.push(`- Communication tone: ${cp.tone} — match this tone in all written content`);
+          if (cp?.key_benefits?.length) lines.push(`- Key benefits: ${[...cp.key_benefits].slice(0,4).join('; ')}`);
+          if (cp?.awards?.length)       lines.push(`- Awards: ${[...cp.awards].slice(0,3).join('; ')}`);
+          lines.push("\n\nENVIRONMENT:");
+          if (environment?.name)   lines.push(`- Environment: ${environment.name}`);
+          if (environment?.locale) lines.push(`- Locale: ${environment.locale}`);
           return lines.join("\n");
         })(),
         // ── BEHAVIOURAL GUIDANCE ──────────────────────────────────────────
-        `\n\nTONE & BEHAVIOUR:
-- Address the user by their first name occasionally to make responses feel personal.
-- When referring to the company or organisation, use the environment name (e.g. "your team at ${environment?.name||'your company'}").
-- Always tailor advice and suggestions to be relevant to this user's role and team context.
-- Never refer to yourself as Claude, ChatGPT or any other AI — you are Vercentic Copilot.`,
+        (() => {
+          const cp = companyProfile;
+          const companyName = cp?.name || environment?.name || 'your company';
+          const userName    = _sessionUser?.first_name || 'the user';
+          const tone        = cp?.tone || 'professional';
+          return `\n\nTONE & BEHAVIOUR:
+- The company is "${companyName}" — always use this name (never "the company", "your environment", or "your platform").
+- Occasionally address ${userName} by name to keep responses personal and direct.
+- Match the company's communication tone: ${tone}.
+- All drafted content (job descriptions, emails, portal copy, EVP statements) must reflect ${companyName}'s brand voice and EVP.
+- Never refer to yourself as Claude, ChatGPT or any other AI — you are Vercentic Copilot.
+- Vercentic is the platform, not the user's company.`;
+        })(),
       ].join("");
 
       // First AI call
