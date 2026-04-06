@@ -945,6 +945,11 @@ SCHEDULING RULES:
 - notes: optional string, can be empty ""
 - When the user confirms ("yes", "go ahead", "schedule it", "looks good", "correct") — output the SCHEDULE_INTERVIEW block immediately. Do NOT ask again.
 - If an interviewer is not an Employee, WARN the user before confirming — but proceed if they confirm anyway (some organisations use non-employees as interviewers).
+- AFTER outputting the SCHEDULE_INTERVIEW block, ALWAYS add a short "what happens next" message on the very next line (outside the JSON block), using the actual attendee names. Examples:
+  • Video Call: "✅ I'll send both Lewie Harrison and James Harrison a calendar invite with a video call link and an option to reschedule if needed."
+  • Phone: "✅ I'll send both Lewie Harrison and James Harrison a calendar invite for the call — they'll also get the option to reschedule."
+  • In Person: "✅ I'll send both Lewie Harrison and James Harrison a calendar invite with the location details and an option to reschedule."
+  Keep it to one sentence, warm and direct.
 
 FORM CREATION INSTRUCTIONS:
 When a user wants to create a form, questionnaire, scorecard, survey, or data capture template:
