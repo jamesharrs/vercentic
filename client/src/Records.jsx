@@ -3205,7 +3205,7 @@ const LinkedPeopleModal = ({ record, linkedInfo, environment, onClose, onNavigat
         <div style={{ padding:'20px 24px 0', display:'flex', alignItems:'flex-start', gap:12 }}>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>Linked People</div>
-            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>{recTitle} · {links.length} {links.length===1?'person':'people'}</div>
+            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>{recTitle} · {loadingPeople ? links.length : personRecords.length} {(loadingPeople ? links.length : personRecords.length)===1?'person':'people'}</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, padding:4, borderRadius:6, display:'flex' }}>
             <Ic n="x" s={18}/>
@@ -8341,9 +8341,14 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         const rev = {};
         links.forEach(l => {
           const tid = l.target_record_id;
-          if (tid) {
-            if (!rev[tid]) rev[tid] = { count: 0, links: [] };
-            rev[tid].count++;
+          const pid = l.person_record_id;
+          if (tid && pid) {
+            if (!rev[tid]) rev[tid] = { count: 0, links: [], _pids: new Set() };
+            // Only count each unique person once
+            if (!rev[tid]._pids.has(pid)) {
+              rev[tid].count++;
+              rev[tid]._pids.add(pid);
+            }
             rev[tid].links.push(l);
           }
         });

@@ -401,3 +401,23 @@ function migrateSkillsFieldType() {
   if (changed > 0) console.log(`✅ Migrated ${changed} skills field(s) from multi_select → skills`);
 }
 migrateSkillsFieldType();
+
+// ── Prune orphaned people_links on startup ───────────────────────────────────
+// Removes any people_link where the person_record or target_record no longer exists.
+function pruneOrphanedPeopleLinks() {
+  let pruned = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    const links   = store.people_links;
+    if (!links || !links.length) continue;
+    const recordIds = new Set((store.records || []).filter(r => !r.deleted_at).map(r => r.id));
+    const before    = links.length;
+    store.people_links = links.filter(l =>
+      l.person_record_id && recordIds.has(l.person_record_id) &&
+      l.target_record_id && recordIds.has(l.target_record_id)
+    );
+    const removed = before - store.people_links.length;
+    if (removed > 0) { pruned += removed; saveStore(key); }
+  }
+  if (pruned > 0) console.log(`🧹 Pruned ${pruned} orphaned people_link(s)`);
+}
+pruneOrphanedPeopleLinks();
