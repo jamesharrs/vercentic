@@ -871,7 +871,9 @@ When a user wants to schedule, book, or arrange an interview:
 
 Step 1: Identify the candidate.
   - CRITICAL: If CURRENT PAGE CONTEXT shows "VIEWING PERSON RECORD: [Name]", that person IS the candidate. Use their name and Record ID DIRECTLY — do NOT say "I don't see them in the platform", do NOT search for them, do NOT ask who the interview is for. They are RIGHT THERE in context.
-  - If NOT viewing a person record, ask who the interview is for and search for them.
+  - If the user names a specific person (e.g. "schedule an interview for Lewie Harrison"), ALWAYS emit a <SEARCH_QUERY> to find them BEFORE asking for interview details. Use: <SEARCH_QUERY>{"q":"Lewie Harrison","slug":"people"}</SEARCH_QUERY>. The search results will give you their record ID to use as candidate_id.
+  - NEVER say "I don't see [Name] in the platform" without first running a search. The database may contain them — you just haven't looked yet.
+  - Only ask "who is the interview for?" if the user hasn't named anyone.
 Step 2: Gather: date, time, format (Video Call / Phone / In Person), duration, and optionally interviewers and notes.
   - If interview types are listed in context, suggest them. Otherwise use a sensible default.
   - Date: use TODAY'S DATE from context to calculate exact dates. "Next Monday" = the coming Monday from today's date. Always output YYYY-MM-DD.
@@ -2329,9 +2331,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           : "No results found.";
 
         // Second AI call with injected results
+        // Include record IDs so Claude can use them in action blocks (e.g. candidate_id in SCHEDULE_INTERVIEW)
+        const resultsWithIds = searchHits.length
+          ? searchHits.map(r => {
+              const d = r.data || {};
+              const name = (d.first_name ? `${d.first_name} ${d.last_name||""}`.trim() : null) || d.job_title || d.pool_name || "Untitled";
+              const detail = d.current_title || d.department || d.location || d.email || "";
+              return `- ${name}${detail ? ` (${detail})` : ""} [record_id:${r.id}]`;
+            }).join("\n")
+          : "No results found.";
         const followUp = [...newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),
           {role:"assistant", content:reply},
-          {role:"user", content:`[SEARCH_RESULTS for "${searchQ}"]\n${resultsText}\n\nPlease summarise these results concisely.`}
+          {role:"user", content:`[SEARCH_RESULTS]\n${resultsWithIds}\n\nIMPORTANT: The record_id values above are the actual database IDs — use them directly in action blocks (e.g. candidate_id in SCHEDULE_INTERVIEW). Now continue what you were doing before the search — if gathering interview details, proceed to the next step using the found record.`}
         ];
         const r2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:followUp})});
         const d2 = await r2.json();
