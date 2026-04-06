@@ -701,6 +701,20 @@ SUPPORTED action_types and their required payload fields:
 IMPORTANT: Always use the record_id from CURRENT PAGE CONTEXT when acting on the current record.
 CRITICAL RULE — NEVER say "I don't see [Name] in the platform" when that person appears in CURRENT PAGE CONTEXT. CURRENT PAGE CONTEXT IS the ground truth — it reflects exactly what the user is looking at. If it says "VIEWING PERSON RECORD: Lewie Harrison (ID: abc123)", then Lewie Harrison IS in the platform with that ID. Trust it completely.
 
+DISAMBIGUATION RULE — when multiple people share a name:
+Present them as a clean numbered list. DO NOT show raw IDs to the user. Instead show:
+- Their name
+- Person type in parentheses (Employee, Candidate, etc.) — no "type:" prefix
+- Current job title and employer/company if known
+- Recommend Employees for interviewer roles, Candidates for interviewee roles
+Example format:
+  "I found a few people named James Harrison:
+  1. James Harrison (Employee) — VP of Sales at Apple Inc., Sales dept
+  2. James Harrison (Employee) — Recruiter
+  3. James Harrison (Candidate) — Sales Director
+  Employees (1 & 2) would be most suitable as interviewers. Which one do you mean?"
+Always prioritise Employees at the top of any disambiguation list.
+
 JOB ASSOCIATION RULE — IMPORTANT:
 If the context shows "PERSON LINKED TO N OPEN JOB(S)/RECORD(S)", then whenever you are about to create or schedule ANYTHING for that person (interview, email, communication, note, form submission, task), ALWAYS pause and present the options as a numbered list BEFORE proceeding. Example format:
 
@@ -1665,17 +1679,28 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     // Inject real AI match scores when on a person record so copilot uses same engine as AI Match widget
-    // Inject ALL people with their person_type so copilot can reason about candidates vs employees
+    // Inject ALL people — employees first, then candidates/others
+    // Shows employer/company instead of raw ID for cleaner disambiguation
     if(allPeople.length>0){
+      const TYPE_ORDER = { employee:0, recruiter:0, manager:0, 'hiring manager':0,
+                           candidate:1, contact:2, contractor:1, consultant:1 };
+      const sorted = [...allPeople].sort((a,b)=>{
+        const ta = (a.data?.person_type||'').toLowerCase();
+        const tb = (b.data?.person_type||'').toLowerCase();
+        return (TYPE_ORDER[ta]??3) - (TYPE_ORDER[tb]??3);
+      });
       parts.push('');
-      parts.push('ALL PEOPLE IN PLATFORM (person_type shown — use this to identify candidates vs employees vs contacts):');
-      allPeople.slice(0,100).forEach(p=>{
+      parts.push('ALL PEOPLE IN PLATFORM (employees listed first — use person_type to identify roles):');
+      sorted.slice(0,100).forEach(p=>{
         const d=p.data||{};
         const name=[d.first_name,d.last_name].filter(Boolean).join(' ')||d.email||'Unnamed';
-        const pt=(d.person_type||'not set');
+        const pt=d.person_type||'';
         const title=d.current_title||d.job_title||'';
+        const employer=d.company||d.current_employer||d.entity||d.organisation||'';
         const dept=d.department||'';
-        parts.push(`  - ${name} | type:${pt}${title?' | '+title:''}${dept?' | '+dept:''} [id:${p.id}]`);
+        // Build a human-readable detail line: Title at Employer | Dept
+        const detail=[title,employer?'at '+employer:'',dept].filter(Boolean).join(' | ');
+        parts.push(`  - ${name}${pt?' ('+pt+')':''}${detail?' — '+detail:''} [id:${p.id}]`);
       });
     }
     if(currentRecord && currentObject?.slug==='people' && allJobs.length>0){
