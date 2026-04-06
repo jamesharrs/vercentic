@@ -5013,12 +5013,17 @@ const INTERVIEW_STATUS_COLORS = {
   cancelled:  { color:"#DC2626", bg:"#FEF2F2" },
   rescheduled:{ color:"#D97706", bg:"#FFFBEB" },
 };
-const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
+const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJobContext }) => {
   const [interviews, setInterviews]   = useState([]);
   const [loading, setLoading]         = useState(true);
   const [jobFilter, setJobFilter]     = useState("all");
   const [timeFilter, setTimeFilter]   = useState("all"); // all | upcoming | past
   const [expanded, setExpanded]       = useState(null);
+
+  // Sync to activeJobContext when a job is clicked in the Linked Records panel (same as Notes)
+  useEffect(() => {
+    setJobFilter(activeJobContext || "all");
+  }, [activeJobContext]);
 
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
@@ -5070,9 +5075,22 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
 
   return (
     <div style={{fontSize:13,fontFamily:F}}>
-      {/* Filters */}
+      {/* Job filter tabs — identical to Notes panel pattern */}
+      {linkedJobs.length > 0 && (
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>
+          {[{id:"all",label:`All (${interviews.length})`},...linkedJobs.map(j=>({id:j.id,label:j.name}))].map(tab => (
+            <button key={tab.id} onClick={()=>setJobFilter(tab.id)}
+              style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:jobFilter===tab.id?700:500,
+                border:`1.5px solid ${jobFilter===tab.id?C.accent:C.border}`,
+                background:jobFilter===tab.id?C.accentLight:"transparent",
+                color:jobFilter===tab.id?C.accent:C.text3,cursor:"pointer",fontFamily:F}}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Time filter */}
       <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
-        {/* Time filter */}
         {["all","upcoming","past"].map(v => (
           <button key={v} onClick={()=>setTimeFilter(v)} style={{
             padding:"4px 10px",borderRadius:99,border:`1.5px solid ${timeFilter===v?C.accent:C.border}`,
@@ -5080,16 +5098,6 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords }) => {
             fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,
           }}>{v==="all"?"All":v==="upcoming"?"Upcoming":"Past"}</button>
         ))}
-        {/* Job filter */}
-        {linkedJobs.length > 0 && (
-          <select value={jobFilter} onChange={e=>setJobFilter(e.target.value)}
-            style={{padding:"4px 10px",borderRadius:99,border:`1.5px solid ${C.border}`,fontSize:11,fontWeight:600,
-              color:jobFilter!=="all"?C.accent:C.text3,cursor:"pointer",fontFamily:F,background:"white",
-              outline:"none",appearance:"none",paddingRight:20}}>
-            <option value="all">All roles</option>
-            {linkedJobs.map(j=><option key={j.id} value={j.id}>{j.name}</option>)}
-          </select>
-        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -7327,7 +7335,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
     ) : <AccessDeniedPanel label="Communications"/>;
     if (id==="coordination") return (
-      <PersonInterviewsPanel record={record} environment={environment} linkedJobRecords={linkedJobRecords}/>
+      <PersonInterviewsPanel record={record} environment={environment} linkedJobRecords={linkedJobRecords} activeJobContext={activeJobContext}/>
     );
     if (id==="notes") return canRecord('record_add_note') || canRecord('record_view_comms') ? (
       <NotesPanel record={record} notes={notes} onNotesChange={load} canAdd={canRecord('record_add_note')} canDelete={canRecord('record_delete_note')} linkedJobRecords={linkedJobRecords} activeJobContext={activeJobContext}/>
