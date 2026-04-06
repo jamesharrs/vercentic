@@ -5101,6 +5101,7 @@ const CoordinationPanel = ({ record, environment }) => {
 };
 
 export const PANEL_META = {
+  fields:       { icon:"edit",          label:"Profile Fields",      defaultOpen:true  },
   comms:        { icon:"mail",          label:"Communications",      defaultOpen:true  },
   coordination: { icon:"calendar",      label:"Interview Coordination", defaultOpen:false },
   notes:        { icon:"messageSquare", label:"Notes",               defaultOpen:true  },
@@ -6541,6 +6542,28 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch {}
   };
 
+  // ── Left column panel order (default: just fields) ──────────────────────
+  const leftStorageKey = `talentos_panels_left_${objectName}`;
+  const [leftPanelOrder, setLeftPanelOrder] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(leftStorageKey));
+      if (saved && Array.isArray(saved) && saved.length) return saved;
+    } catch {}
+    return ['fields'];
+  });
+  const saveLeftPanelOrder = (order) => {
+    setLeftPanelOrder(order);
+    try { localStorage.setItem(leftStorageKey, JSON.stringify(order)); } catch {}
+  };
+
+  // ── Column helpers ────────────────────────────────────────────────────────
+  // Find which column a panel ID lives in
+  const colOfId  = (id)    => leftPanelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id) ? 'left'
+                            : panelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id) ? 'right' : null;
+  // Find which column a repId (first id in slot) lives in
+  const colOfSlot = (repId) => leftPanelOrder.some(s => repIdOf(s) === repId) ? 'left'
+                            : panelOrder.some(s => repIdOf(s) === repId) ? 'right' : null;
+
   // ── Record search logic ────────────────────────────────────────────────────
   useEffect(() => {
     if (!recordSearch.trim()) { setRecordSearchResults([]); return; }
@@ -6826,20 +6849,34 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       }
 
       // Find what's currently in that slot
-      let newOrder = removePanel(panelOrder, fromId);
+      // Determine source and target columns
+      const fromCol = colOfId(fromId);
+      const toCol   = colOfSlot(slot);
+
+      // Remove fromId from its source column
+      let newLeft  = fromCol === 'left'  ? removePanel(leftPanelOrder, fromId) : [...leftPanelOrder];
+      let newRight = fromCol === 'right' ? removePanel(panelOrder,     fromId) : [...panelOrder];
 
       if (zone === "middle") {
-        // Merge into the target slot
-        newOrder = mergePanel(newOrder, slot, fromId);
+        // Merge into target slot
+        if (toCol === 'left')  newLeft  = mergePanel(newLeft,  slot, fromId);
+        else                   newRight = mergePanel(newRight, slot, fromId);
       } else {
-        // Insert as standalone before or after the target slot
-        const idx = newOrder.findIndex(s => repIdOf(s) === slot);
-        const insertIdx = zone === "bottom" ? idx + 1 : idx;
-        if (insertIdx < 0 || insertIdx > newOrder.length) newOrder.push(fromId);
-        else newOrder.splice(insertIdx, 0, fromId);
+        // Insert before/after target
+        const insertInto = (order) => {
+          const idx = order.findIndex(s => repIdOf(s) === slot);
+          const insertIdx = zone === "bottom" ? idx + 1 : Math.max(0, idx);
+          const copy = [...order];
+          if (insertIdx < 0 || insertIdx > copy.length) copy.push(fromId);
+          else copy.splice(insertIdx, 0, fromId);
+          return copy;
+        };
+        if (toCol === 'left')  newLeft  = insertInto(newLeft);
+        else                   newRight = insertInto(newRight);
       }
 
-      savePanelOrder(newOrder);
+      saveLeftPanelOrder(newLeft);
+      savePanelOrder(newRight);
       window.removeEventListener("mouseup",  onUp);
       window.removeEventListener("touchend", onUp);
     };
@@ -6850,7 +6887,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // Called by each card's onMouseMove to report its zone
   const reportZone = (repId, e, el) => {
-    if (!draggingRef.current || repIdOf(panelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current) || draggingRef.current) === repId) return;
+    if (!draggingRef.current) return;
+    // Find which slot the dragging panel belongs to (check both columns)
+    const mySlot = leftPanelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
+                || panelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
+                || draggingRef.current;
+    if (repIdOf(mySlot) === repId) return;
     const rect = el.getBoundingClientRect();
     const pct  = (e.clientY - rect.top) / rect.height;
     const zone = pct < 0.3 ? "top" : pct > 0.7 ? "bottom" : "middle";
@@ -7178,9 +7220,42 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       />
     );
 
+    if (id==="fields") return (
+      <div>
+        {(globalEdit) && (
+          <div style={{ display:"flex", gap:6, marginBottom:12, justifyContent:"flex-end" }}>
+            <button onClick={handleCancelGlobalEdit}
+              style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${C.border}`,
+                background:"transparent", color:C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+              Cancel
+            </button>
+            <button onClick={handleSaveAllFields} disabled={saving}
+              style={{ padding:"4px 12px", borderRadius:7, border:"none",
+                background:C.accent, color:"white", fontSize:12, fontWeight:700,
+                cursor:"pointer", fontFamily:F, opacity:saving?0.6:1 }}>
+              {saving?"Saving…":"Save all"}
+            </button>
+          </div>
+        )}
+        {!globalEdit && (
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+            <button onClick={handleEnterGlobalEdit}
+              style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px",
+                borderRadius:7, border:`1px solid ${C.border}`, background:"transparent",
+                color:C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F,
+                transition:"all .12s" }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; e.currentTarget.style.background="transparent"; }}>
+              <Ic n="edit" s={11} c="currentColor"/> Edit
+            </button>
+          </div>
+        )}
+        {fieldsPanelJSX}
+      </div>
+    );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError]);
+  }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving]);
 
 
   // PanelCard is defined at module level above RecordDetail
@@ -7570,44 +7645,45 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       {/* 2-col body */}
       <div ref={containerRef} style={{ display:"flex", minHeight:"60vh", userSelect:draggingCol.current?"none":"auto" }}>
 
-        {/* LEFT COL — Fields as panel card */}
+        {/* LEFT COL — draggable panels (default: Profile Fields) */}
         <div style={{ width:`${leftPct}%`, flexShrink:0, background:"#F4F6FB", display:"flex", flexDirection:"column", overflowX:"hidden", padding:"16px 0 24px 16px" }}>
-          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, overflow:"visible", boxShadow:"0 1px 4px rgba(0,0,0,.04)", flexShrink:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", borderBottom:`1px solid ${C.border}` }}>
-              <Ic n="edit" s={14} c={globalEdit ? C.accent : C.text3}/>
-              <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>Profile Fields</span>
-              {globalEdit ? (
-                <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={handleCancelGlobalEdit}
-                    style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${C.border}`,
-                      background:"transparent", color:C.text2, fontSize:12, fontWeight:600,
-                      cursor:"pointer", fontFamily:F }}>
-                    Cancel
-                  </button>
-                  <button onClick={handleSaveAllFields} disabled={saving}
-                    style={{ padding:"4px 12px", borderRadius:7, border:"none",
-                      background:C.accent, color:"white", fontSize:12, fontWeight:700,
-                      cursor:"pointer", fontFamily:F, opacity: saving ? 0.6 : 1 }}>
-                    {saving ? "Saving…" : "Save all"}
-                  </button>
+          {leftPanelOrder.map((slot, idx) => {
+            const prevSlot   = idx > 0 ? leftPanelOrder[idx-1] : null;
+            const prevRepId  = prevSlot ? repIdOf(prevSlot) : null;
+            if (Array.isArray(slot)) {
+              const validIds = slot.filter(id => PANEL_META[id]);
+              if (validIds.length === 0) return null;
+              if (validIds.length === 1) {
+                const id = validIds[0];
+                return <div key={id}>{DropIndicator({beforeRepId:id,afterRepId:prevRepId})}<PanelCard id={id} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
+              }
+              const repId = validIds[0];
+              return (
+                <div key={repId}>
+                  {DropIndicator({beforeRepId:repId,afterRepId:prevRepId})}
+                  <GroupCard ids={validIds} overSlot={overSlot} overZone={overZone} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} panelOrder={leftPanelOrder} savePanelOrder={saveLeftPanelOrder} removePanel={removePanel} renderPanel={renderPanel} startPanelDrag={startPanelDrag} clearZone={clearZone} reportZone={reportZone}/>
                 </div>
-              ) : (
-                <button onClick={handleEnterGlobalEdit}
-                  title="Edit all fields"
-                  style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px",
-                    borderRadius:7, border:`1px solid ${C.border}`, background:"transparent",
-                    color:C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F,
-                    transition:"all .12s" }}
-                  onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
-                  onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; e.currentTarget.style.background="transparent"; }}>
-                  <Ic n="edit" s={11} c="currentColor"/> Edit
-                </button>
-              )}
+              );
+            }
+            if (!PANEL_META[slot]) return null;
+            return (
+              <div key={slot}>
+                {DropIndicator({beforeRepId:slot,afterRepId:prevRepId})}
+                <PanelCard id={slot} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/>
+              </div>
+            );
+          })}
+          {/* Bottom drop zone for left column */}
+          {leftPanelOrder.length > 0 && (() => {
+            const last = leftPanelOrder[leftPanelOrder.length-1];
+            return DropIndicator({beforeRepId:null, afterRepId:repIdOf(last)});
+          })()}
+          {/* Empty drop target when left column has no panels */}
+          {leftPanelOrder.length === 0 && draggingPanel && (
+            <div style={{ border:`2px dashed ${C.border}`, borderRadius:12, padding:"32px 16px", textAlign:"center", color:C.text3, fontSize:12 }}>
+              Drop panel here
             </div>
-            <div style={{ padding:"16px" }}>
-              {fieldsPanelJSX}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* DRAG DIVIDER — with visible grip dots */}
