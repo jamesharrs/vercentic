@@ -6549,16 +6549,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [bottomRows, setBottomRows] = useState(() => { try { const s=JSON.parse(localStorage.getItem(bottomStorageKey)); return Array.isArray(s) ? s : []; } catch { return []; } });
   const saveTopRows    = (order) => { setTopRows(order);    try { localStorage.setItem(topStorageKey,    JSON.stringify(order)); } catch {} };
   const saveBottomRows = (order) => { setBottomRows(order); try { localStorage.setItem(bottomStorageKey, JSON.stringify(order)); } catch {} };
-  // Always-fresh snapshot used by drag closures to avoid stale state
-  panelOrdersRef.current = { left: leftPanelOrder, right: panelOrder, top: topRows, bottom: bottomRows };
-
   // ── Full-width row drop zone state ───────────────────────────────────────
-  // Simple hover detection on always-visible drop zone bars (no dwell timer)
-  const [fullWidthZone, setFullWidthZone] = useState(null); // 'top' | 'bottom' | null
-  const fullWidthDropRef  = useRef(null); // which zone is currently hovered (ref = always fresh in closures)
+  const [fullWidthZone, setFullWidthZone] = useState(null);
+  const fullWidthDropRef  = useRef(null);
   const outerLayoutRef    = useRef(null);
-  // Refs to hold fresh panel orders — prevents stale-closure duplicates
+  // Ref for fresh panel orders — declared first, assigned below after all state is ready
   const panelOrdersRef    = useRef(null);
+  // Always-fresh snapshot (written every render, used by drag closures to avoid stale state)
+  panelOrdersRef.current = { left: leftPanelOrder, right: panelOrder, top: topRows, bottom: bottomRows };
 
   // ── Left column panel order (default: just fields) ──────────────────────
   const leftStorageKey = `talentos_panels_left_${objectName}`;
