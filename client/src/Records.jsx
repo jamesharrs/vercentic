@@ -3240,7 +3240,7 @@ const LinkedPeopleModal = ({ record, linkedInfo, environment, onClose, onNavigat
             const stage = pr._link?.stage_name || '';
             return (
               <div key={pr.id}
-                onClick={() => { onNavigate?.(pr.id); onClose(); }}
+                onClick={() => { onNavigate?.(pr.id, pr.object_id); onClose(); }}
                 style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 24px', cursor:'pointer',
                   borderBottom: i < visiblePeople.length-1 ? `1px solid ${C.border}` : 'none', transition:'background .1s' }}
                 onMouseEnter={e => e.currentTarget.style.background='#f8f9fc'}
@@ -8707,7 +8707,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           linkedInfo={linkedPeopleModal.linkedInfo}
           environment={environment}
           onClose={() => setLinkedPeopleModal(null)}
-          onNavigate={(personId) => { setLinkedPeopleModal(null); onOpenRecord?.(personId); }}
+          onNavigate={(personId, personObjId) => { setLinkedPeopleModal(null); onOpenRecord?.(personId, personObjId); }}
         />
       )}
 
