@@ -68,6 +68,142 @@ router.post('/skills/seed', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── ESCO FULL TAXONOMY — In-Memory Search ─────────────────────────────────────
+let ESCO_FULL = [];
+let ESCO_INDEX = []; // [{name_lower, category, subcategory, words[], original}]
+try {
+  ESCO_FULL = require('../data/esco_full');
+  ESCO_INDEX = ESCO_FULL.map(s => ({
+    name_lower: s.name.toLowerCase(),
+    words: s.name.toLowerCase().split(/[\s\/\-\(\)&,]+/).filter(Boolean),
+    category: s.category,
+    subcategory: s.subcategory || '',
+    original: s
+  }));
+  console.log(`[skills] ESCO full taxonomy loaded: ${ESCO_FULL.length} skills`);
+} catch (e) {
+  console.warn('[skills] ESCO full taxonomy not found — server-side search disabled');
+}
+
+// Fast server-side search — returns max `limit` matching skills
+router.get('/skills/search', (req, res) => {
+  const { q = '', category, limit = 30 } = req.query;
+  const maxResults = Math.min(parseInt(limit) || 30, 100);
+  const query_lower = q.toLowerCase().trim();
+  if (!query_lower) {
+    // No query — return first N skills, optionally filtered by category
+    const pool = category ? ESCO_INDEX.filter(s => s.category === category) : ESCO_INDEX;
+    return res.json({ results: pool.slice(0, maxResults).map(s => s.original), total: pool.length });
+  }
+  const queryWords = query_lower.split(/\s+/).filter(Boolean);
+  // Score each skill
+  const scored = [];
+  for (const s of ESCO_INDEX) {
+    if (category && s.category !== category) continue;
+    let score = 0;
+    // Exact match
+    if (s.name_lower === query_lower) { score = 100; }
+    // Starts with query
+    else if (s.name_lower.startsWith(query_lower)) { score = 80; }
+    // All query words present
+    else if (queryWords.every(w => s.name_lower.includes(w))) {
+      score = 50 + queryWords.filter(w => s.words.some(sw => sw.startsWith(w))).length * 10;
+    }
+    // Any word starts with any query word
+    else if (queryWords.some(w => s.words.some(sw => sw.startsWith(w)))) { score = 30; }
+    // Contains query substring
+    else if (s.name_lower.includes(query_lower)) { score = 20; }
+    if (score > 0) scored.push({ ...s.original, _score: score });
+  }
+  scored.sort((a, b) => b._score - a._score);
+  const results = scored.slice(0, maxResults).map(({ _score, ...rest }) => rest);
+  res.json({ results, total: scored.length });
+});
+
+// Categories summary
+router.get('/skills/search/categories', (req, res) => {
+  const cats = {};
+  ESCO_INDEX.forEach(s => { cats[s.category] = (cats[s.category] || 0) + 1; });
+  res.json(Object.entries(cats).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
+});
+
+// Seed full ESCO taxonomy into the environment's skills store
+router.post('/skills/seed-full', (req, res) => {
+  const { environment_id } = req.body;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+  try {
+    const existing = query('skills', s => s.environment_id === environment_id);
+    const existingNames = new Set(existing.map(s => s.name.toLowerCase()));
+    let added = 0;
+    ESCO_FULL.forEach(s => {
+      if (!existingNames.has(s.name.toLowerCase())) {
+        insert('skills', { id: uuidv4(), name: s.name, category: s.category, subcategory: s.subcategory || null, description: null, aliases: [], proficiency_levels: ['Beginner','Intermediate','Advanced','Expert'], environment_id, is_active: true, created_at: ts(), updated_at: ts() });
+        added++;
+      }
+    });
+    res.json({ added, total: existing.length + added, skipped: ESCO_FULL.length - added });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// AI skill extraction using server-side search (no need to embed all skills in prompt)
+router.post('/skills/ai-extract', async (req, res) => {
+  const { job_title, department, level, description, existing_skills = [] } = req.body;
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+  try {
+    // Step 1: Ask AI to suggest skill keywords based on job context
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `You are a skills taxonomy expert. Given this job context, suggest 15-25 relevant skill keywords that should be on the job requirements. Return ONLY a JSON array of short skill name strings.
+
+Job Title: ${job_title || 'N/A'}
+Department: ${department || 'N/A'}
+Level: ${level || 'N/A'}
+Description: ${description || 'N/A'}
+Already assigned: ${existing_skills.join(', ') || 'None'}
+
+Return format: ["skill1", "skill2", ...]
+Return ONLY the JSON array, no explanation.` }]
+      })
+    });
+    const aiData = await aiRes.json();
+    const aiText = aiData.content?.[0]?.text || '[]';
+    let suggestedKeywords;
+    try { suggestedKeywords = JSON.parse(aiText.replace(/```json|```/g, '').trim()); } catch { suggestedKeywords = []; }
+
+    // Step 2: Match each AI keyword against the full ESCO taxonomy
+    const existingLower = new Set(existing_skills.map(s => s.toLowerCase()));
+    const matched = new Set();
+    const results = [];
+    for (const keyword of suggestedKeywords) {
+      const kw = keyword.toLowerCase().trim();
+      const kwWords = kw.split(/\s+/);
+      for (const s of ESCO_INDEX) {
+        if (matched.has(s.name_lower)) continue;
+        if (existingLower.has(s.name_lower)) continue;
+        let score = 0;
+        if (s.name_lower === kw) score = 100;
+        else if (s.name_lower.startsWith(kw)) score = 80;
+        else if (kwWords.every(w => s.name_lower.includes(w))) score = 60;
+        else if (kwWords.some(w => s.words.some(sw => sw.startsWith(w) && w.length >= 3))) score = 40;
+        if (score >= 40) {
+          matched.add(s.name_lower);
+          results.push({ ...s.original, _score: score, _keyword: keyword });
+        }
+      }
+    }
+    results.sort((a, b) => b._score - a._score);
+    res.json({ results: results.slice(0, 30).map(({ _score, _keyword, ...rest }) => rest), keywords: suggestedKeywords });
+  } catch (e) {
+    console.error('[skills/ai-extract]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COMPETENCIES ──────────────────────────────────────────────────────────────
 router.get('/competencies', (req, res) => {
   const { environment_id } = req.query;

@@ -134,6 +134,7 @@ app.use('/api/ai-interview',      require('./routes/ai_interview'));
 
 // ── Communications ────────────────────────────────────────────────────────────
 app.use('/api/comms',             require('./routes/communications'));
+app.use('/api/engagement',        require('./routes/engagement'));
 app.use('/api/inbox',             require('./routes/inbox'));
 app.use('/api/email-templates',   require('./routes/email-templates'));
 app.use('/api/email-builder',     require('./routes/email_builder'));

@@ -4,6 +4,7 @@ import ReactDOM from "react-dom";
 import RichTextEditor from "./RichTextEditor.jsx";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
+import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
 import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
@@ -399,7 +400,7 @@ const AddressInput = ({ field, value, onChange }) => {
   </div>;
 };
 
-const FieldEditor = ({ field, value, onChange, autoFocus, environment }) => {
+const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordData }) => {
   switch(field.field_type) {
     case "textarea":
       return <Inp multiline value={value} onChange={onChange} placeholder={field.placeholder||field.name} autoFocus={autoFocus}/>;
@@ -457,7 +458,7 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment }) => {
     case "dataset":
       return <DatasetPicker field={field} value={value} onChange={onChange}/>;
     case "skills":
-      return <SkillsPicker field={field} value={value} onChange={onChange} environment={environment}/>;
+      return <SkillsPicker field={field} value={value} onChange={onChange} environment={environment} recordData={recordData}/>;
       return <Inp type="url" value={value} onChange={onChange} placeholder="https://…" autoFocus={autoFocus}/>;
     case "phone":
       return <PhoneInput value={value} onChange={onChange} autoFocus={autoFocus}/>;
@@ -846,45 +847,58 @@ const DatasetPicker = ({ field, value, onChange }) => {
 };
 
 // ── SkillsPicker ──────────────────────────────────────────────────────────────
-// Searchable skills picker that pulls from the Skills Ontology.
-const SkillsPicker = ({ field, value, onChange, environment }) => {
+// Server-side typeahead — searches 2,400+ ESCO skills without loading all upfront
+const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   const [search, setSearch] = useState("");
-  const [skills, setSkills] = useState([]);
+  const [results, setResults] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [open, setOpen] = useState(false);
   const [filterCat, setFilterCat] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [aiTooltip, setAiTooltip] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState(null);
   const ref = useRef(null);
+  const debounceRef = useRef(null);
   const isMulti = field.skills_multi !== false && field.skills_multi !== "false";
   const selected = Array.isArray(value) ? value : (value ? [value] : []);
-  const allowedCats = field.skills_categories?.length > 0 ? field.skills_categories : null;
 
-  useEffect(() => {
-    const envId = environment?.id || window._currentEnvId;
-    if (!envId) return;
-    const cacheKey = `skills_v2_${envId}_${(allowedCats||[]).join(",")}`;
-    if (_skillsCache[cacheKey]) { setSkills(_skillsCache[cacheKey]); return; }
-    tFetch(`/api/enterprise/skills?environment_id=${envId}`).then(r=>r.json()).then(d => {
-      let all = Array.isArray(d) ? d.filter(s=>s.is_active!==false) : [];
-      if (allowedCats) all = all.filter(s => allowedCats.includes(s.category));
-      _skillsCache[cacheKey] = all;
-      setSkills(all);
-    });
-  }, [environment?.id, (field.skills_categories||[]).join(",")]);
-
+  // Close on outside click
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const cats = [...new Set(skills.map(s=>s.category))].sort();
-  const filtered = skills.filter(s => {
-    if (filterCat && s.category !== filterCat) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return s.name.toLowerCase().includes(q) || (s.aliases||[]).some(a=>a.toLowerCase().includes(q));
-  });
+  // Load categories on mount
+  useEffect(() => {
+    tFetch("/api/enterprise/skills/search/categories")
+      .then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); })
+      .catch(() => {});
+  }, []);
 
-  const CAT_COLORS = { Technology:"#4361EE", Business:"#0CA678", Design:"#7C3AED", "Soft Skills":"#F59F00", Languages:"#E03131", Certifications:"#1098AD" };
+  // Debounced server-side search
+  const doSearch = useCallback((q, cat) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ q: q || "", limit: "30" });
+        if (cat) params.set("category", cat);
+        const res = await tFetch(`/api/enterprise/skills/search?${params}`);
+        const data = await res.json();
+        setResults(data.results || []);
+      } catch { setResults([]); }
+      setLoading(false);
+    }, q ? 200 : 0); // instant for empty (browse mode), 200ms debounce for typing
+  }, []);
+
+  // Trigger search when dropdown opens, search changes, or category changes
+  useEffect(() => {
+    if (open) doSearch(search, filterCat);
+  }, [open, search, filterCat, doSearch]);
+
+  const CAT_COLORS = { Digital:"#4361EE", Technology:"#4361EE", Business:"#0CA678", Design:"#7C3AED", Transversal:"#F59F00", Languages:"#E03131", Certifications:"#1098AD", Engineering:"#3B5BDB", Healthcare:"#D6336C", Education:"#845EF7", Construction:"#E8590C", Hospitality:"#20C997", Media:"#BE4BDB" };
 
   const toggle = (name) => {
     if (isMulti) {
@@ -896,8 +910,40 @@ const SkillsPicker = ({ field, value, onChange, environment }) => {
   };
   const remove = (name, e) => { e.stopPropagation(); onChange(isMulti ? selected.filter(s=>s!==name) : ""); };
 
+  // AI skill extraction — calls server-side endpoint that extracts keywords then searches ESCO
+  const handleAiExtract = async (e) => {
+    e.stopPropagation();
+    if (extracting || !recordData) return;
+    setExtracting(true);
+    try {
+      const res = await tFetch("/api/enterprise/skills/ai-extract", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_title: recordData.job_title || recordData.title || recordData.name || "",
+          department: recordData.department || "",
+          level: recordData.job_level || recordData.seniority || "",
+          description: recordData.description || recordData.job_description || "",
+          existing_skills: selected,
+        }),
+      });
+      const data = await res.json();
+      if (data.results?.length > 0) {
+        const suggestions = data.results
+          .filter(s => !selected.includes(s.name))
+          .map(s => ({ name: s.name, category: s.category || "", checked: true }));
+        setAiSuggestions(suggestions.length > 0 ? suggestions : []);
+      } else {
+        setAiSuggestions([]);
+      }
+    } catch (err) { console.error("AI skill extraction failed:", err); }
+    setExtracting(false);
+  };
+
+  const hasContext = recordData && (recordData.description || recordData.job_description || recordData.job_title);
+
   return (
     <div ref={ref} style={{position:"relative"}}>
+      {/* Selected pills + input trigger */}
       <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",flexWrap:"wrap",gap:4,padding:"6px 8px",borderRadius:8,border:`1.5px solid ${open?C.accent:C.border}`,background:"white",cursor:"pointer",minHeight:36,alignItems:"center"}}>
         {selected.map(s => (
           <span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${C.accent}12`,border:`1px solid ${C.accent}28`,fontSize:12,fontWeight:600,color:C.accent}}>
@@ -905,48 +951,133 @@ const SkillsPicker = ({ field, value, onChange, environment }) => {
             <span onClick={e=>remove(s,e)} style={{cursor:"pointer",opacity:0.6,fontSize:13,lineHeight:1}}>×</span>
           </span>
         ))}
-        {selected.length===0 && <span style={{fontSize:13,color:C.text3,userSelect:"none"}}>{field.placeholder||`Add skills…`}</span>}
-      </div>
-      {open && (
-        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:200,background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",maxHeight:320,display:"flex",flexDirection:"column",minWidth:280}}>
-          <div style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:6,alignItems:"center"}}>
-            <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search skills or aliases…"
-              style={{flex:1,border:"none",outline:"none",fontSize:13,fontFamily:F,color:C.text1,background:"transparent"}}/>
-            {cats.length > 1 && (
-              <select value={filterCat} onChange={e=>setFilterCat(e.target.value)}
-                style={{fontSize:11,border:`1px solid ${C.border}`,borderRadius:6,padding:"2px 6px",fontFamily:F,color:C.text2,background:"white",outline:"none"}}>
-                <option value="">All</option>
-                {cats.map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
-            )}
-          </div>
-          <div style={{overflowY:"auto",flex:1}}>
-            {filtered.length === 0 && (
-              <div style={{padding:"16px",textAlign:"center",fontSize:12,color:C.text3}}>
-                {skills.length===0 ? "No skills in ontology yet — add them in Settings → Enterprise Settings" : "No matching skills"}
+        {selected.length===0 && <span style={{fontSize:13,color:C.text3,userSelect:"none"}}>{field.placeholder||"Add skills…"}</span>}
+        {/* AI extract button */}
+        {hasContext && (
+          <div style={{marginLeft:"auto",position:"relative",flexShrink:0}}
+            onMouseEnter={()=>setAiTooltip(true)} onMouseLeave={()=>setAiTooltip(false)}>
+            <button onClick={handleAiExtract} disabled={extracting}
+              style={{display:"flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:8,border:"none",
+                background:extracting?"#E9ECEF":"linear-gradient(135deg,#7C3AED,#4361EE)",cursor:extracting?"wait":"pointer",transition:"all .15s"}}>
+              {extracting ? <span style={{fontSize:12,color:C.text3}}>…</span> : <span style={{fontSize:14,filter:"brightness(10)"}}>✨</span>}
+            </button>
+            {aiTooltip && !extracting && (
+              <div style={{position:"absolute",bottom:"calc(100% + 8px)",right:0,width:220,padding:"10px 12px",borderRadius:10,background:"#1a1a2e",color:"white",fontSize:11,lineHeight:1.5,zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,0.25)"}}>
+                <strong style={{fontSize:12}}>AI Skill Extraction</strong><br/>
+                Analyses the job to suggest matching skills from the full ESCO taxonomy ({categories.reduce((s,c)=>s+c.count,0).toLocaleString()} skills).
               </div>
             )}
-            {filtered.map(s => {
-              const active = selected.includes(s.name);
-              const color = CAT_COLORS[s.category] || C.accent;
+          </div>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,maxHeight:340,background:"white",borderRadius:12,border:`1.5px solid ${C.border}`,boxShadow:"0 12px 40px rgba(0,0,0,0.12)",zIndex:800,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          {/* Search input */}
+          <div style={{padding:"8px 10px",borderBottom:`1px solid ${C.border}`}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} autoFocus
+              placeholder="Search 2,400+ skills…" style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none"}}/>
+          </div>
+          {/* Category filter pills */}
+          <div style={{display:"flex",gap:4,padding:"6px 10px",flexWrap:"wrap",borderBottom:`1px solid ${C.border}`,background:"#FAFBFC"}}>
+            <button onClick={()=>setFilterCat("")} style={{padding:"3px 10px",borderRadius:99,border:`1px solid ${filterCat?C.border:C.accent}`,background:filterCat?"white":`${C.accent}12`,color:filterCat?C.text3:C.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>All</button>
+            {categories.map(c=>(
+              <button key={c.name} onClick={()=>setFilterCat(f=>f===c.name?"":c.name)}
+                style={{padding:"3px 10px",borderRadius:99,border:`1px solid ${filterCat===c.name?(CAT_COLORS[c.name]||C.accent):C.border}`,
+                  background:filterCat===c.name?`${CAT_COLORS[c.name]||C.accent}12`:"white",
+                  color:filterCat===c.name?(CAT_COLORS[c.name]||C.accent):C.text3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+                {c.name} <span style={{opacity:0.5}}>({c.count})</span>
+              </button>
+            ))}
+          </div>
+          {/* Results list */}
+          <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
+            {loading ? (
+              <div style={{padding:"20px",textAlign:"center",fontSize:12,color:C.text3}}>Searching…</div>
+            ) : results.length === 0 ? (
+              <div style={{padding:"20px",textAlign:"center",fontSize:12,color:C.text3}}>
+                {search ? `No skills matching "${search}"` : "Type to search skills"}
+              </div>
+            ) : results.map(s => {
+              const isSelected = selected.includes(s.name);
+              const catColor = CAT_COLORS[s.category] || "#6B7280";
               return (
-                <div key={s.id} onClick={()=>toggle(s.name)}
-                  style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",background:active?`${C.accent}08`:"white",borderBottom:`1px solid ${C.border}50`}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,color:C.text1,fontWeight:active?600:400}}>{s.name}</div>
-                    {s.subcategory && <div style={{fontSize:10,color:C.text3}}>{s.category} · {s.subcategory}</div>}
-                  </div>
-                  {active && <span style={{color:C.accent,fontSize:16,flexShrink:0}}>✓</span>}
+                <div key={s.id||s.name} onClick={()=>toggle(s.name)}
+                  style={{padding:"7px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,
+                    background:isSelected?`${C.accent}08`:"transparent",borderLeft:isSelected?`3px solid ${C.accent}`:"3px solid transparent"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=isSelected?`${C.accent}12`:"#F7F8FA"}
+                  onMouseLeave={e=>e.currentTarget.style.background=isSelected?`${C.accent}08`:"transparent"}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:catColor,flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:isSelected?700:400,color:isSelected?C.accent:C.text1,flex:1}}>{s.name}</span>
+                  <span style={{fontSize:10,color:C.text3}}>{s.category}</span>
+                  {isSelected && <Ic n="check" s={13} c={C.accent}/>}
                 </div>
               );
             })}
           </div>
         </div>
       )}
+
+      {/* AI Suggestion modal */}
+      {aiSuggestions !== null && ReactDOM.createPortal(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={()=>setAiSuggestions(null)}>
+          <div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}
+            style={{width:440,maxHeight:"70vh",background:"white",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#7C3AED,#4361EE)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:16,filter:"brightness(10)"}}>✨</span>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text1}}>AI Skill Suggestions</div>
+                <div style={{fontSize:12,color:C.text3}}>{aiSuggestions.length} skills found from ESCO taxonomy</div>
+              </div>
+              {aiSuggestions.length > 0 && (
+                <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:C.text3,cursor:"pointer"}}>
+                  <input type="checkbox" checked={aiSuggestions.every(s=>s.checked)}
+                    onChange={e=>setAiSuggestions(prev=>prev.map(s=>({...s,checked:e.target.checked})))} /> Select all
+                </label>
+              )}
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+              {aiSuggestions.length === 0 ? (
+                <div style={{padding:"32px 20px",textAlign:"center",fontSize:13,color:C.text3}}>All matching skills are already added, or no taxonomy matches were found.</div>
+              ) : aiSuggestions.map((s,i) => {
+                const catColor = CAT_COLORS[s.category] || "#6B7280";
+                return (
+                  <div key={s.name} onClick={()=>setAiSuggestions(prev=>prev.map((x,j)=>j===i?{...x,checked:!x.checked}:x))}
+                    style={{padding:"8px 20px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",borderBottom:`1px solid ${C.border}20`}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F7F8FA"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <input type="checkbox" checked={s.checked} readOnly style={{accentColor:C.accent}}/>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:catColor,flexShrink:0}}/>
+                    <span style={{fontSize:13,fontWeight:500,color:C.text1,flex:1}}>{s.name}</span>
+                    <span style={{fontSize:10,color:catColor,fontWeight:600,padding:"2px 6px",borderRadius:4,background:`${catColor}12`}}>{s.category}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {aiSuggestions.length > 0 && (
+              <div style={{padding:"12px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:8}}>
+                <button onClick={()=>setAiSuggestions(null)} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${C.border}`,background:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:F,color:C.text2}}>Cancel</button>
+                <button onClick={()=>{
+                  const toAdd = aiSuggestions.filter(s=>s.checked).map(s=>s.name);
+                  if (toAdd.length) onChange(isMulti ? [...selected, ...toAdd] : toAdd[0]);
+                  setAiSuggestions(null);
+                }} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7C3AED,#4361EE)",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:F}}>
+                  Add {aiSuggestions.filter(s=>s.checked).length} skills
+                </button>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
+
 
 export const recordTitle = (record, fields) => {
   const nameField = fields.find(f=>["first_name","name","job_title","pool_name","title"].includes(f.api_key));
@@ -1418,7 +1549,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                       <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:6 }}>
                         {field.name}{!!field.is_required&&<span style={{color:"#ef4444",marginLeft:2}}>*</span>}
                       </label>
-                      <FieldEditor field={field} value={data[key]} onChange={v=>set(key,v)} environment={environment}/>
+                      <FieldEditor field={field} value={data[key]} onChange={v=>set(key,v)} environment={environment} recordData={data}/>
                     </div>
                   );
                 })}
@@ -1436,13 +1567,16 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
 };
 
 /* ─── Saved Lists ────────────────────────────────────────────────────────────── */
-const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, currentFilterLogic, currentFilterChip, currentVisibleFieldIds, currentViewMode, fields, onLoad, onClose }) => {
+const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, currentFilterLogic, currentFilterChip, currentVisibleFieldIds, currentViewMode, fields, onLoad, onClose, activeViewId, onViewUpdated }) => {
   const [views, setViews]       = useState([]);
   const [saving, setSaving]     = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveSharing, setSaveSharing] = useState({ visibility: "private", user_ids: [], group_ids: [] });
-  const [deleting, setDeleting] = useState(null);
+  const [deleting,   setDeleting]   = useState(null);
+  const [editingId,  setEditingId]  = useState(null);
+  const [editName,   setEditName]   = useState('');
+  const [updating,   setUpdating]   = useState(false);
   const ref = useRef(null);
 
   const load = useCallback(async () => {
@@ -1496,6 +1630,26 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
       sharing: { visibility: next, user_ids: view.sharing?.user_ids||[], group_ids: view.sharing?.group_ids||[] },
     });
     load();
+  };
+
+  const handleRename = async (view) => {
+    if (!editName.trim() || editName === view.name) { setEditingId(null); return; }
+    await api.patch(`/saved-views/${view.id}`, { name: editName.trim(), sharing: view.sharing });
+    setEditingId(null);
+    load();
+  };
+
+  const handleUpdateList = async (view) => {
+    setUpdating(true);
+    await api.patch(`/saved-views/${view.id}`, {
+      filters:           currentFilters,
+      visible_field_ids: currentVisibleFieldIds || [],
+      view_mode:         currentViewMode,
+      sharing:           view.sharing,
+    });
+    setUpdating(false);
+    load();
+    onViewUpdated?.();
   };
 
   const ibs = { padding:"6px 9px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:"white", width:"100%", boxSizing:"border-box" };
@@ -1555,13 +1709,26 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
         {views.length === 0 ? (
           <div style={{ padding:"20px 14px", textAlign:"center", fontSize:12, color:C.text3, fontStyle:"italic" }}>No saved lists yet</div>
         ) : views.map(view => (
-          <div key={view.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px",
-            borderBottom:`1px solid ${C.border}`, cursor:"pointer", transition:"background .1s" }}
+          <div key={view.id} style={{ display:"flex", flexDirection:"column", padding:"9px 12px",
+            borderBottom:`1px solid ${C.border}`, transition:"background .1s" }}
             onMouseEnter={e => e.currentTarget.style.background="#f8f9fc"}
             onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+            {editingId === view.id ? (
+              <div style={{ display:"flex", gap:6, marginBottom:4 }}>
+                <input value={editName} onChange={e => setEditName(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key==="Enter") handleRename(view); if (e.key==="Escape") setEditingId(null); }}
+                  style={{ ...ibs, flex:1 }} placeholder="List name…"/>
+                <button onClick={() => handleRename(view)} style={{ padding:"4px 10px", borderRadius:7, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F }}>Save</button>
+                <button onClick={() => setEditingId(null)} style={{ padding:"4px 8px", borderRadius:7, border:`1px solid ${C.border}`, background:"transparent", fontSize:12, cursor:"pointer", fontFamily:F, color:C.text2 }}>✕</button>
+              </div>
+            ) : (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             {/* Load button */}
-            <div onClick={() => { onLoad(view); onClose(); }} style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{view.name}</div>
+            <div onClick={() => { onLoad(view); onClose(); }} style={{ flex:1, minWidth:0, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ fontSize:13, fontWeight:600, color: activeViewId===view.id ? C.accent : C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{view.name}</div>
+                {activeViewId===view.id && <span style={{ fontSize:10, fontWeight:700, color:C.accent, background:`${C.accent}14`, padding:"1px 6px", borderRadius:99, flexShrink:0 }}>active</span>}
+              </div>
               <div style={{ fontSize:10, color:C.text3, marginTop:1, display:"flex", alignItems:"center", gap:6 }}>
                 <span>Table</span>
                 {(view.filters?.length > 0 || view.filter_chip) && <span>· {
@@ -1613,6 +1780,18 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
                 </button>
               )}
             </div>
+            </div>
+            )}
+            {activeViewId === view.id && !editingId && (
+              <button onClick={e => { e.stopPropagation(); handleUpdateList(view); }} disabled={updating}
+                style={{ marginTop:6, width:"100%", padding:"5px 10px", borderRadius:8,
+                  border:`1.5px solid ${C.accent}`, background:`${C.accent}08`, color:C.accent,
+                  fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F,
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Ic n="save" s={11} c={C.accent}/>
+                {updating ? "Saving…" : "Update list with current filters & columns"}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -2965,18 +3144,161 @@ const CompareModal = ({ records, fields, objectColor, onClose, onOpen }) => {
   );
 };
 
+
+/* ─── LinkedPeopleModal ──────────────────────────────────────────────────── */
+const LinkedPeopleModal = ({ record, linkedInfo, environment, onClose, onNavigate }) => {
+  const [personRecords, setPersonRecords] = useState([]);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [activeStage, setActiveStage]     = useState(null);
+
+  useEffect(() => {
+    const links = linkedInfo?.links || [];
+    if (!links.length || !environment?.id) { setLoadingPeople(false); return; }
+    const ids = [...new Set(links.map(l => l.person_record_id).filter(Boolean))];
+    api.get(`/objects?environment_id=${environment.id}`).then(objs => {
+      const personObj = (Array.isArray(objs) ? objs : []).find(o =>
+        o.slug === 'people' || o.name === 'Person' || o.name === 'People'
+      );
+      if (!personObj) { setLoadingPeople(false); return; }
+      api.get(`/records?object_id=${personObj.id}&environment_id=${environment.id}&limit=500`)
+        .then(res => {
+          setPersonRecords((res.records || []).filter(r => ids.includes(r.id)));
+          setLoadingPeople(false);
+        }).catch(() => setLoadingPeople(false));
+    }).catch(() => setLoadingPeople(false));
+  }, [linkedInfo, environment?.id]);
+
+  const links    = linkedInfo?.links || [];
+  const recTitle = record.data?.job_title || record.data?.name || record.data?.pool_name || record.data?.first_name || 'Record';
+  const linkMap  = Object.fromEntries(links.map(l => [l.person_record_id, l]));
+
+  const byStage = {};
+  personRecords.forEach(pr => {
+    const s = linkMap[pr.id]?.stage_name || 'No Stage';
+    if (!byStage[s]) byStage[s] = [];
+    byStage[s].push({ ...pr, _link: linkMap[pr.id] });
+  });
+
+  const orderedStages = (() => {
+    const steps = links[0]?.workflow_steps || [];
+    const names = steps.map(s => s.name);
+    const extras = Object.keys(byStage).filter(s => !names.includes(s));
+    return [...names.filter(s => byStage[s]), ...extras.filter(s => byStage[s])];
+  })();
+
+  const visiblePeople = activeStage ? (byStage[activeStage] || []) : personRecords;
+
+  const personName = (pr) => {
+    const d = pr.data || {};
+    return [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown';
+  };
+  const personSub = (pr) => { const d = pr.data || {}; return d.current_title || d.job_title || d.email || ''; };
+  const initials = (name) => name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?';
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1200, display:'flex', alignItems:'center',
+      justifyContent:'center', background:'rgba(15,23,41,.45)', backdropFilter:'blur(2px)' }}
+      onClick={onClose}>
+      <div style={{ background:'white', borderRadius:18, width:680, maxHeight:'82vh',
+        display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 64px rgba(0,0,0,.22)' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ padding:'20px 24px 0', display:'flex', alignItems:'flex-start', gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>Linked People</div>
+            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>{recTitle} · {links.length} {links.length===1?'person':'people'}</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, padding:4, borderRadius:6, display:'flex' }}>
+            <Ic n="x" s={18}/>
+          </button>
+        </div>
+        {orderedStages.length > 0 && (
+          <div style={{ display:'flex', gap:0, padding:'14px 24px 0', borderBottom:`1px solid ${C.border}`, overflowX:'auto', scrollbarWidth:'none' }}>
+            <button onClick={() => setActiveStage(null)}
+              style={{ padding:'7px 16px', border:'none', borderBottom: activeStage===null ? `2.5px solid ${C.accent}` : '2.5px solid transparent',
+                background:'transparent', fontSize:12, fontWeight: activeStage===null ? 700 : 500,
+                color: activeStage===null ? C.accent : C.text2, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+              All ({links.length})
+            </button>
+            {orderedStages.map(stage => (
+              <button key={stage} onClick={() => setActiveStage(stage)}
+                style={{ padding:'7px 16px', border:'none', borderBottom: activeStage===stage ? `2.5px solid ${C.accent}` : '2.5px solid transparent',
+                  background:'transparent', fontSize:12, fontWeight: activeStage===stage ? 700 : 500,
+                  color: activeStage===stage ? C.accent : C.text2, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+                {stage} ({byStage[stage]?.length||0})
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
+          {loadingPeople ? (
+            <div style={{ padding:'32px', textAlign:'center', color:C.text3, fontSize:13 }}>Loading people…</div>
+          ) : visiblePeople.length === 0 ? (
+            <div style={{ padding:'32px', textAlign:'center', color:C.text3, fontSize:13 }}>No people in this stage</div>
+          ) : visiblePeople.map((pr, i) => {
+            const name  = personName(pr);
+            const sub   = personSub(pr);
+            const stage = pr._link?.stage_name || '';
+            return (
+              <div key={pr.id}
+                onClick={() => { onNavigate?.(pr.id); onClose(); }}
+                style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 24px', cursor:'pointer',
+                  borderBottom: i < visiblePeople.length-1 ? `1px solid ${C.border}` : 'none', transition:'background .1s' }}
+                onMouseEnter={e => e.currentTarget.style.background='#f8f9fc'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                <div style={{ width:36, height:36, borderRadius:'50%', background:C.accent,
+                  display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:13, fontWeight:700, flexShrink:0 }}>
+                  {pr.data?.profile_photo || pr.data?.photo_url
+                    ? <img src={pr.data.profile_photo||pr.data.photo_url} alt="" style={{ width:36, height:36, borderRadius:'50%', objectFit:'cover' }}/>
+                    : initials(name)}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
+                  {sub && <div style={{ fontSize:11, color:C.text3, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{sub}</div>}
+                </div>
+                {stage && (
+                  <span style={{ padding:'3px 10px', borderRadius:99, background:`${C.accent}14`, color:C.accent, fontSize:11, fontWeight:600, flexShrink:0 }}>{stage}</span>
+                )}
+                <Ic n="chevR" s={13} c={C.text3}/>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ─── Table View ──────────────────────────────────────────────────────────── */
 // ── System columns (not field-based) ──────────────────────────────────────────
 const SYSTEM_COLS = [
-  { id: '_created', name: 'Created', apiKey: '_created', isSystem: true },
-  { id: '_updated', name: 'Updated',  apiKey: '_updated', isSystem: true },
-  { id: '_linked_job', name: 'Linked Job', apiKey: '_linked_job', isSystem: true },
-  { id: '_stage',  name: 'Stage', apiKey: '_stage', isSystem: true },
+  { id: '_created',      name: 'Created',            apiKey: '_created',      isSystem: true },
+  { id: '_updated',      name: 'Last Updated',       apiKey: '_updated',      isSystem: true },
+  { id: '_created_by',   name: 'Created By',         apiKey: '_created_by',   isSystem: true },
+  { id: '_days_old',     name: 'Age (Days)',          apiKey: '_days_old',     isSystem: true },
+  { id: '_days_active',  name: 'Days Since Update',  apiKey: '_days_active',  isSystem: true },
+  { id: '_linked_job',   name: 'Linked Job',         apiKey: '_linked_job',   isSystem: true },
+  { id: '_stage',        name: 'Stage',              apiKey: '_stage',        isSystem: true },
+  { id: '_linked_count', name: 'Linked People',      apiKey: '_linked_count', isSystem: true },
 ];
 
-function getSystemValue(record, col, linkedJobs) {
-  if (col === '_created') return record.created_at ? new Date(record.created_at).toLocaleDateString() : '—';
-  if (col === '_updated') return record.updated_at ? new Date(record.updated_at).toLocaleDateString() : '—';
+function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
+  if (col === '_created')    return record.created_at ? new Date(record.created_at).toLocaleDateString() : '—';
+  if (col === '_updated')    return record.updated_at ? new Date(record.updated_at).toLocaleDateString() : '—';
+  if (col === '_created_by') return record.created_by || '—';
+  if (col === '_days_old') {
+    if (!record.created_at) return '—';
+    const d = Math.floor((Date.now() - new Date(record.created_at)) / 86400000);
+    return d === 0 ? 'Today' : d + 'd';
+  }
+  if (col === '_days_active') {
+    if (!record.updated_at) return '—';
+    const d = Math.floor((Date.now() - new Date(record.updated_at)) / 86400000);
+    return d === 0 ? 'Today' : d + 'd ago';
+  }
+  if (col === '_linked_count') {
+    const info = linkedPeopleCounts?.[record.id];
+    return info?.count ? String(info.count) : null;
+  }
   if (col === '_linked_job') {
     const jobs = linkedJobs?.[record.id];
     if (!jobs?.length) return '—';
@@ -3159,8 +3481,8 @@ const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
 };
 
 // ── Enhanced TableView ─────────────────────────────────────────────────────────
-const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, dupMap = {},
-  onStageChange, onStatusUpdate }) => {
+const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, linkedPeopleCounts, onLinkedCountClick, dupMap = {},
+  onStageChange, onStatusUpdate, showEngagement, engagementScores, isPeopleObj }) => {
   const [hoveredRow, setHoveredRow] = useState(null);
   const statusField = fields.find(f => f.api_key === "status");
   const statusOptions = statusField?.options || [];
@@ -3264,6 +3586,16 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                 </th>
               );
             })}
+            {showEngagement && isPeopleObj && (
+              <th onClick={() => onSort("__engagement")}
+                style={{ padding:"10px 14px", textAlign:"left", fontSize:11, fontWeight:700,
+                  textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap",
+                  cursor:"pointer", userSelect:"none",
+                  background: sortBy==="__engagement" ? "#0ca67810" : "transparent",
+                  color: sortBy==="__engagement" ? "#0ca678" : C.text3 }}>
+                Engagement {sortBy==="__engagement" ? (sortDir==="asc" ? "↑" : "↓") : ""}
+              </th>
+            )}
             <th style={{ padding:"10px 14px", textAlign:"right", fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>Actions</th>
           </tr>
         </thead>
@@ -3318,6 +3650,24 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                                 </div>
                               );
                             })()
+                          : f.apiKey === '_linked_count'
+                          ? (() => {
+                              const info = linkedPeopleCounts?.[record.id];
+                              if (!info || info.count === 0) return <span style={{ fontSize:12, color:C.text3 }}>—</span>;
+                              return (
+                                <button
+                                  onClick={e => { e.stopPropagation(); onLinkedCountClick?.(record); }}
+                                  style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px',
+                                    borderRadius:99, border:'none', background:`${C.accent}14`, color:C.accent,
+                                    fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F, transition:'background .12s' }}
+                                  onMouseEnter={e => e.currentTarget.style.background=`${C.accent}28`}
+                                  onMouseLeave={e => e.currentTarget.style.background=`${C.accent}14`}
+                                  title="Click to see people by stage">
+                                  <Ic n="users" s={11} c={C.accent}/>
+                                  {info.count}
+                                </button>
+                              );
+                            })()
                           : f.apiKey === '_stage'
                           ? (() => {
                               const jobs = linkedJobs?.[record.id] || [];
@@ -3342,6 +3692,24 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                     </td>
                   );
                 })}
+                {showEngagement && isPeopleObj && (
+                  <td style={{ padding:"8px 12px", verticalAlign:"middle" }}>
+                    {engagementScores?.[record.id] ? (
+                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                        <svg width={14} height={14} style={{ transform:"rotate(-90deg)", flexShrink:0 }} viewBox="0 0 14 14">
+                          <circle cx={7} cy={7} r={5} fill="none" stroke="#e5e7eb" strokeWidth={2.5}/>
+                          <circle cx={7} cy={7} r={5} fill="none"
+                            stroke={engagementScores[record.id].color} strokeWidth={2.5}
+                            strokeDasharray={2*Math.PI*5}
+                            strokeDashoffset={2*Math.PI*5*(1-engagementScores[record.id].score/100)}
+                            strokeLinecap="round"/>
+                        </svg>
+                        <span style={{ fontSize:12, fontWeight:700, color:engagementScores[record.id].color }}>{engagementScores[record.id].score}</span>
+                        <span style={{ fontSize:10, color:C.text3 }}>{engagementScores[record.id].grade}</span>
+                      </div>
+                    ) : <span style={{ fontSize:11, color:C.text3 }}>—</span>}
+                  </td>
+                )}
                 <td style={{ padding:"12px 14px", textAlign:"right" }}>
                   <div style={{ display:"flex", gap:4, justifyContent:"flex-end", alignItems:"center" }}>
                     <Btn v="ghost" sz="sm" icon="expand" onClick={()=>onSelect(record)}/>
@@ -4749,6 +5117,7 @@ export const PANEL_META = {
   interview_plan: { icon:"calendar",    label:"Interview Plan",      defaultOpen:true  },
   screening:    { icon:"shield",        label:"Screening Rules",     defaultOpen:true  },
   insights: { icon:"barChart", label:"Insights", defaultOpen:true },
+  engagement: { icon:"activity", label:"Engagement Score", defaultOpen:true  },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
@@ -4756,6 +5125,7 @@ export const getDefaultPanelOrder = (objectName) => {
   if (objectName === "Person") base.splice(1, 0, "linked", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("scorecard");
+  if (objectName === "Person") base.push("engagement");
   if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); base.push("screening"); }
   if (objectName === "Job" || objectName === "Jobs") base.unshift("insights");
 
@@ -5532,6 +5902,7 @@ const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, rend
 
   return (
     <div ref={cardRef}
+      data-panel-id={id}
       onMouseMove={e => cardRef.current && reportZone(myRepId, e, cardRef.current)}
       onMouseLeave={() => clearZone(myRepId)}
       style={{
@@ -6602,7 +6973,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                         {isPickerField
                           ? <PeoplePicker field={field} value={originalVal} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)}/>
                           : isEditing
-                          ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)} autoFocus={!isClickSave} environment={environment}/>
+                          ? <FieldEditor field={field} value={val} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)} autoFocus={!isClickSave} environment={environment} recordData={record?.data}/>
                           : <div onClick={()=>!isReadonly&&setEditing(e=>({...e,[field.api_key]:originalVal}))} style={{ cursor:isReadonly?"default":"text", minHeight:22 }}>
                               <FieldValue field={field} value={val} allFieldValues={record?.data}/>
                             </div>
@@ -6792,6 +7163,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
+    if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="screening") return <ScreeningRulesPanel record={record} environment={environment}/>;
     if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
@@ -7025,6 +7397,18 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           )}
         </div>
         )} {/* end Person-only communicate */}
+
+        {/* Engagement Score badge — Person records only */}
+        {objectName === "Person" && (
+          <EngagementBadge
+            recordId={record?.id}
+            onClick={() => {
+              // scroll / open the engagement panel
+              const el = document.querySelector('[data-panel-id="engagement"]');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          />
+        )}
 
         {/* Spacer */}
         <div style={{ flex:1 }}/>
@@ -7487,6 +7871,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const [visibleFieldIds, setVisibleFieldIds] = useState(null);
   const [showColPicker, setShowColPicker]     = useState(false);
+  const [showEngagement,    setShowEngagement]    = useState(false);
+  const [engagementScores,  setEngagementScores]  = useState({});
+  const [loadingEngagement, setLoadingEngagement] = useState(false);
   const [activeFilters, setActiveFilters]     = useState([]);
   const [filterLogic, setFilterLogic]         = useState("AND");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -7503,7 +7890,13 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // Column order (drag to reorder)
   const [visibleColOrder, setVisibleColOrder] = useState(null);
   // Linked jobs for system columns
-  const [linkedJobs, setLinkedJobs] = useState({});
+  const [linkedJobs,          setLinkedJobs]          = useState({});
+  // Reverse map: target_record_id → { count, links[] } — for Jobs/Pools "Linked People" column
+  const [linkedPeopleCounts,  setLinkedPeopleCounts]  = useState({});
+  // Modal for clicking a "Linked People" count cell
+  const [linkedPeopleModal,   setLinkedPeopleModal]   = useState(null);
+  // Track which saved list is currently active
+  const [activeViewId,        setActiveViewId]        = useState(null);
   // Cross-object filter data
   const [linkedObjectFields, setLinkedObjectFields] = useState({});
   const [linkedObjectRecords, setLinkedObjectRecords] = useState({});
@@ -7645,6 +8038,18 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { setFilterChip(initialFilter || null); setPage(1); }, [initialFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
+  const isPeopleObj = (object?.slug||"").toLowerCase() === "people" || (object?.name||"").toLowerCase() === "people";
+  useEffect(() => {
+    if (!isPeopleObj || !records.length || !showEngagement) return;
+    setLoadingEngagement(true);
+    const ids = records.map(r => r.id).join(",");
+    api.get(`/engagement/batch/scores?record_ids=${ids}`)
+      .then(d => setEngagementScores(d || {}))
+      .catch(() => {})
+      .finally(() => setLoadingEngagement(false));
+  }, [records, isPeopleObj, showEngagement]);
 
   const handleCreate = async (data) => {
     const created = await api.post("/records", { object_id:object.id, environment_id:environment.id, data, created_by:"Admin" });
@@ -7822,12 +8227,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (sortBy) {
       recs = [...recs].sort((a, b) => {
         let av, bv;
-        if (sortBy.startsWith('_')) {
+        if (sortBy.startsWith('_') || sortBy === '__engagement') {
           // System column
           if (sortBy === '_created') { av = a.created_at||''; bv = b.created_at||''; }
           else if (sortBy === '_updated') { av = a.updated_at||''; bv = b.updated_at||''; }
           else if (sortBy === '_linked_job') { av = linkedJobs[a.id]?.title||''; bv = linkedJobs[b.id]?.title||''; }
           else if (sortBy === '_stage') { av = linkedJobs[a.id]?.stage||''; bv = linkedJobs[b.id]?.stage||''; }
+          else if (sortBy === '__engagement') {
+            av = engagementScores[a.id]?.score ?? -1;
+            bv = engagementScores[b.id]?.score ?? -1;
+            return sortDir === 'asc' ? av - bv : bv - av;
+          }
         } else {
           av = a.data?.[sortBy] ?? ''; bv = b.data?.[sortBy] ?? '';
         }
@@ -7836,7 +8246,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       });
     }
     return recs;
-  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs]);
+  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores]);
 
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
@@ -7847,6 +8257,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   }, [displayedRecords, fields]);
 
   const handleLoadView = (view) => {
+    setActiveViewId(view.id);
     skipColRestoreRef.current = true;
     if (view.filters)           setActiveFilters(view.filters);
     if (view.filter_logic)      setFilterLogic(view.filter_logic);
@@ -7926,6 +8337,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           });
         });
         setLinkedJobs(map);
+        // Reverse map: target_record_id → { count, links[] }
+        const rev = {};
+        links.forEach(l => {
+          const tid = l.target_record_id;
+          if (tid) {
+            if (!rev[tid]) rev[tid] = { count: 0, links: [] };
+            rev[tid].count++;
+            rev[tid].links.push(l);
+          }
+        });
+        setLinkedPeopleCounts(rev);
         // Also store flat people_links for cross-object filtering
         setPeopleLinksData(links.map(l => ({
           person_id:  l.person_record_id,
@@ -8091,6 +8513,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
               fields={fields}
               onLoad={handleLoadView}
               onClose={() => setShowViewsMenu(false)}
+              activeViewId={activeViewId}
+              onViewUpdated={() => {}}
             />
           )}
         </div>
@@ -8116,6 +8540,24 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
               />
             )}
           </div>
+        )}
+
+        {/* Engagement Score column toggle — People only */}
+        {isPeopleObj && (
+          <button
+            onClick={() => setShowEngagement(v => !v)}
+            title="Toggle Engagement Score column"
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+              border:`1px solid ${showEngagement ? '#0ca678' : C.border}`,
+              background: showEngagement ? '#0ca67810' : C.surface,
+              color: showEngagement ? '#0ca678' : C.text2,
+              fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s",
+              whiteSpace:"nowrap" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            {loadingEngagement ? "Loading…" : "Engagement"}
+          </button>
         )}
 
         {/* Export dropdown */}
@@ -8235,7 +8677,15 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             colWidths={colWidths} onResizeCol={handleResizeCol}
             visibleColOrder={visibleColOrder} onReorderCols={setVisibleColOrder}
             linkedJobs={linkedJobs}
-            onStageChange={(recordId, updated) => setLinkedJobs(prev => ({ ...prev, [recordId]: updated }))}/>
+              linkedPeopleCounts={linkedPeopleCounts}
+              onLinkedCountClick={(record) => {
+                const info = linkedPeopleCounts[record.id];
+                if (info?.count) setLinkedPeopleModal({ record, linkedInfo: info });
+              }}
+            onStageChange={(recordId, updated) => setLinkedJobs(prev => ({ ...prev, [recordId]: updated }))}
+            showEngagement={showEngagement}
+            engagementScores={engagementScores}
+            isPeopleObj={isPeopleObj}/>
         )}
       </div>
 
@@ -8249,6 +8699,17 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       )}
 
       </>}
+
+      {/* Linked People Modal */}
+      {linkedPeopleModal && (
+        <LinkedPeopleModal
+          record={linkedPeopleModal.record}
+          linkedInfo={linkedPeopleModal.linkedInfo}
+          environment={environment}
+          onClose={() => setLinkedPeopleModal(null)}
+          onNavigate={(personId) => { setLinkedPeopleModal(null); onOpenRecord?.(personId); }}
+        />
+      )}
 
       {/* Slide-out panel (expand icon) */}
       {selected && (

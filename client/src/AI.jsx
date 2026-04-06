@@ -1,7 +1,7 @@
 import { usePermissions as _usePermCtxAI } from "./PermissionContext.jsx";
 // RBAC: permission-aware copilot actions
 const _COPILOT_PERM_SLUG_MAP = { person:'people', job:'jobs', pool:'talent_pools', talent_pool:'talent_pools' };
-import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { buildHelpContext } from "./helpContent";
 import ScoreExplainer, { ScoreBadge } from "./ScoreExplainer";
 
@@ -547,6 +547,48 @@ const SearchResultCards = ({ results, onNavigate }) => {
               {sub && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub}</div>}
             </div>
             <span style={{ fontSize:10, fontWeight:700, color, background:`${color}15`, padding:"2px 7px", borderRadius:99, whiteSpace:"nowrap", textTransform:"capitalize", flexShrink:0 }}>{r.object_name||r.object_slug}</span>
+            <Ic n="arrowR" s={12} c={C.text3}/>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ─── Match Result Cards (scored candidate/job recommendations) ──────── */
+const MatchResultCards = ({ matches, onNavigate, label }) => {
+  if (!matches?.length) return null;
+  return (
+    <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:6 }}>
+      {label && <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{label}</div>}
+      {matches.map((m, i) => {
+        const d = m.record?.data || {};
+        const isPerson = !!d.first_name;
+        const name = isPerson ? [d.first_name, d.last_name].filter(Boolean).join(" ") : d.job_title || d.pool_name || d.name || "Untitled";
+        const sub = isPerson
+          ? [d.current_title, d.location].filter(Boolean).join(" · ")
+          : [d.location, d.department].filter(Boolean).join(" · ");
+        const sc = m.score ?? 0;
+        const col = sc >= 70 ? "#059669" : sc >= 40 ? "#d97706" : "#ef4444";
+        return (
+          <div key={m.record?.id || i} onClick={() => onNavigate?.(m.record)}
+            style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", background:"white",
+              borderRadius:10, border:`1.5px solid ${col}30`, cursor:"pointer", transition:"all .12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=`${col}60`; e.currentTarget.style.background=`${col}06`; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor=`${col}30`; e.currentTarget.style.background="white"; }}>
+            {/* Score ring with hover tooltip */}
+            <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+              <ScoreExplainer score={sc} reasons={m.reasons||[]} gaps={m.gaps||[]}
+                criteriaScores={m.criteriaScores} skillsDetail={m.skillsDetail}
+                candidateName={name} size={38} fontSize={11}/>
+            </div>
+            {/* Name + subtitle */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {i+1}. {name}
+              </div>
+              {sub && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub}</div>}
+            </div>
             <Ic n="arrowR" s={12} c={C.text3}/>
           </div>
         );
@@ -1456,6 +1498,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [fields,       setFields]       = useState({});
   const [allJobs,      setAllJobs]      = useState([]);
   const [allPools,     setAllPools]     = useState([]);
+  const [allPeople,    setAllPeople]    = useState([]);
   const [searchResults,setSearchResults]= useState({}); // keyed by message index
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
@@ -1478,6 +1521,16 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const prevNavRef = useRef(activeNav);   // track previous nav for change detection
   const prevRecRef = useRef(null);        // track previous record id
   const [dragOver, setDragOver] = useState(false);
+
+  // Pre-compute candidate match scores for the current job record
+  const candidateMatches = useMemo(() => {
+    if (!currentRecord || currentObject?.slug !== "jobs" || !allPeople.length) return [];
+    return allPeople
+      .map(p => ({ record: p, ...matchCandidateToJob(p, currentRecord) }))
+      .sort((a, b) => b.score - a.score)
+      .filter(m => m.score > 0)
+      .slice(0, 20);
+  }, [currentRecord, currentObject, allPeople]);
   const [settingsSection, setSettingsSection] = useState(null);
   const [editorContext,   setEditorContext]   = useState(null); // { type, name, ... } from sub-editors
   const [fileProcessing, setFileProcessing] = useState(false);
@@ -1493,8 +1546,10 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       // Pre-fetch jobs and pools so copilot can run real match scoring
       const jobsObj  = objs.find(o=>o.slug==='jobs');
       const poolsObj = objs.find(o=>o.slug==='talent-pools');
+      const pplObj   = objs.find(o=>o.slug==='people');
       if(jobsObj)  api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllJobs(r.records||[])).catch(()=>{});
       if(poolsObj) api.get(`/records?object_id=${poolsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPools(r.records||[])).catch(()=>{});
+      if(pplObj)   api.get(`/records?object_id=${pplObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPeople(r.records||[])).catch(()=>{});
     });
   },[environment?.id]);
 
@@ -1577,6 +1632,32 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
 
+    // Inject real CANDIDATE match scores when on a JOB record so copilot uses same engine
+    if(currentRecord && currentObject?.slug==='jobs' && allPeople.length>0){
+      const scored = allPeople
+        .map(p=>({ person:p, ...matchCandidateToJob(p, currentRecord) }))
+        .sort((a,b)=>b.score-a.score)
+        .slice(0,20);
+      parts.push('');
+      parts.push(`REAL CANDIDATE MATCH SCORES — ${allPeople.length} candidates scored against this job by the AI matching engine.`);
+      parts.push('When user asks to "suggest candidates", "who fits", "recommend people", "find candidates", or similar:');
+      parts.push('1. USE THESE SCORES DIRECTLY — do NOT use <SEARCH_QUERY>');
+      parts.push('2. Output <RECOMMEND_CANDIDATES/> on its own line — this renders an interactive scored card list');
+      parts.push('3. Then add a brief text summary highlighting the top 2-3 candidates and why they fit');
+      parts.push('4. Mention any notable gaps or considerations');
+      parts.push('Scored candidates:');
+      scored.forEach((m,i)=>{
+        const d=m.person.data||{};
+        const name=[d.first_name,d.last_name].filter(Boolean).join(' ')||d.email||'Unnamed';
+        const title=d.current_title||d.job_title||'';
+        const loc=d.location?` | ${d.location}`:'';
+        const status=d.status?` [${d.status}]`:'';
+        const why=m.reasons.slice(0,3).join(', ');
+        const gaps=m.gaps.slice(0,2).join(', ');
+        parts.push(`  #${i+1} ${name}${title?' — '+title:''}${loc}${status} — Score: ${m.score}/100${why?' ✓ '+why:''}${gaps?' ✗ '+gaps:''}`);
+      });
+    }
+
     // Inject pool matches when on a person record
     if(currentRecord && currentObject?.slug==='people' && allPools.length>0){
       parts.push('');
@@ -1605,7 +1686,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPools,settingsSection,editorContext,companyDocs]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPeople,allPools,settingsSection,editorContext,companyDocs]);
 
   // Receive live list summary from RecordsView so copilot knows what's visible
   useEffect(() => {
@@ -1937,6 +2018,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
+    .replace(/<RECOMMEND_CANDIDATES\s*\/?>/g,"")
     .trim();
 
   const runSearch = async ({ q, slug }) => {
@@ -2201,6 +2283,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const jdData        = parseParsedJD(reply);
       const propAction    = parseProposeAction(reply);
       const filterAction  = parseApplyFilter(reply);
+      const hasMatchRec   = /<RECOMMEND_CANDIDATES\s*\/?>/.test(reply);
       // Dispatch filter action immediately — no confirmation needed
       if (filterAction) {
         window.dispatchEvent(new CustomEvent("talentos:apply-filter", { detail: filterAction }));
@@ -2220,7 +2303,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         : "";
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
-      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasSearch:searchHits.length>0,searchIndex:msgIndex,
+      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
         interviewData, formData2, reportData, portalData, dashboardData}]);
       if(createData)    setPendingRecord(createData);
       if(workflowData)  setPendingWorkflow(workflowData);
@@ -3069,6 +3152,13 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 {msg.role==="assistant"&&msg.hasSearch&&searchResults[msg.searchIndex]&&(
                   <div style={{marginTop:8,marginLeft:34}}>
                     <SearchResultCards results={searchResults[msg.searchIndex]} onNavigate={onNavigateToRecord}/>
+                  </div>
+                )}
+
+                {/* Candidate/Job match recommendations */}
+                {msg.role==="assistant"&&msg.hasMatches&&candidateMatches.length>0&&(
+                  <div style={{marginTop:8,marginLeft:34}}>
+                    <MatchResultCards matches={candidateMatches} onNavigate={onNavigateToRecord} label={`Top ${Math.min(candidateMatches.length,10)} matches`}/>
                   </div>
                 )}
 

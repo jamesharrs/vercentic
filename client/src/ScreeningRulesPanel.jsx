@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom";
-import { tFetch } from "./apiClient.js";
+import api, { tFetch } from "./apiClient.js";
 
 const C = {
   accent:"var(--t-accent,#4361EE)", accentLight:"var(--t-accentLight,#eef2ff)",
@@ -12,11 +12,7 @@ const C = {
 };
 const F = "var(--t-font,'DM Sans',sans-serif)";
 
-const api = {
-  get: p => tFetch(p).then(r => r.json()),
-  post:(p,b) => tFetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  put: (p,b) => tFetch(p,{method:"PUT", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-};
+// Uses shared api client from apiClient.js (auto-prepends /api)
 
 const RULE_TYPES = [
   { value:"knockout", label:"Knockout",  color:"#ef4444", bg:"#fef2f2", desc:"Auto-reject if answer fails" },
@@ -200,7 +196,8 @@ function AutoActionsConfig({ autoActions, onChange }) {
 }
 
 /* ── Main Export ─────────────────────────────────────────────────────── */
-export default function ScreeningRulesPanel({ jobId }) {
+export default function ScreeningRulesPanel({ record, environment, jobId: jobIdProp }) {
+  const jobId = jobIdProp || record?.id;
   const [rules, setRules] = useState([]);
   const [autoActions, setAutoActions] = useState({ auto_reject_knockout:true, flag_for_review:true, auto_advance_threshold:70 });
   const [loading, setLoading] = useState(true);
@@ -210,7 +207,7 @@ export default function ScreeningRulesPanel({ jobId }) {
   const [fields, setFields] = useState([]);
 
   const load = useCallback(async () => {
-    if (!jobId) return;
+    if (!jobId) { setLoading(false); return; }
     setLoading(true);
     try {
       const data = await api.get(`/screening/job/${jobId}`);
