@@ -1663,7 +1663,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
     // Inject linked jobs — use ref so we always get latest value even if state is stale
-    const _lj = (typeof linkedJobsRef !== 'undefined' ? linkedJobsRef.current : linkedJobs) || [];
+    const _lj = linkedJobsRef.current || [];
+    if(process.env.NODE_ENV !== 'production') console.log('[CP] linked jobs for context:', _lj.length, _lj.map(j=>j.title));
     if(_lj.length>0 && currentObject?.slug==='people'){
       parts.push('');
       parts.push(`PERSON LINKED TO ${_lj.length} OPEN JOB(S)/RECORD(S) — when creating anything for this person, present these as a numbered list and ask which one to associate with (or "none"):`);
@@ -1850,11 +1851,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
   },[open, currentRecord?.id, currentObject?.id, activeNav]);
 
-  // Reload linked jobs whenever the viewed record changes
+  // Reload linked jobs whenever the viewed record changes — fetch immediately, don't wait for user to type
   useEffect(()=>{
-    if(!open || !currentRecord?.id || currentObject?.slug!=='people' || !environment?.id) { setLinkedJobs([]); return; }
+    if(!currentRecord?.id || currentObject?.slug!=='people' || !environment?.id) { setLinkedJobs([]); return; }
+    // Fetch even if copilot is closed — so data is ready when it opens
     api.get(`/records/linked-jobs?person_id=${currentRecord.id}&environment_id=${environment.id}`).then(d=>{ if(Array.isArray(d)) setLinkedJobs(d); }).catch(()=>{});
-  },[open, currentRecord?.id, environment?.id]);
+  },[currentRecord?.id, environment?.id]);
 
   // ── Navigation change notification ─────────────────────────────────────────
   // When nav or record changes during an active conversation, inject a user+assistant
@@ -1941,12 +1943,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     if(environment?.id) api.get(`/company-research?environment_id=${environment.id}`).then(d=>{ if(d && !d.error) setCompanyProfile(d); }).catch(()=>{});
     // Load current user's org unit (for company context)
     if(_sessionUser?.org_unit_id) api.get(`/org-units?environment_id=${environment?.id||''}`).then(d=>{ if(Array.isArray(d)){ const u=d.find(o=>o.id===_sessionUser.org_unit_id); if(u) setUserOrgUnit(u); } }).catch(()=>{});
-    // Load linked jobs/records for the current person record
-    if(currentRecord?.id && currentObject?.slug==='people') {
-      api.get(`/records/linked-jobs?person_id=${currentRecord.id}&environment_id=${environment?.id||''}`).then(d=>{ if(Array.isArray(d)) setLinkedJobs(d); }).catch(()=>{});
-    } else {
-      setLinkedJobs([]);
-    }
+    // linked jobs loaded by separate useEffect watching currentRecord?.id
     // (settings-section listener is in its own useEffect above)
   },[open, currentRecord?.id, currentObject?.slug]);
 
