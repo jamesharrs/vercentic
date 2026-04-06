@@ -6552,9 +6552,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Dwell-timer zone state for full-width row creation ────────────────────
   const [fullWidthZone, setFullWidthZone] = useState(null); // 'top' | 'bottom' | null
-  const fullWidthZoneRef  = useRef(null);
-  const dwellTimerRef     = useRef(null);
-  const outerLayoutRef    = useRef(null);
+  const fullWidthZoneRef       = useRef(null); // current hover zone (set immediately on cursor enter)
+  const fullWidthZoneActiveRef  = useRef(null); // activated zone (set only after 1.5s dwell fires)
+  const dwellTimerRef           = useRef(null);
+  const outerLayoutRef          = useRef(null);
 
   // ── Left column panel order (default: just fields) ──────────────────────
   const leftStorageKey = `talentos_panels_left_${objectName}`;
@@ -6855,21 +6856,23 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     // ── Dwell-zone mouse tracker ──────────────────────────────────────────
     const onDragMove = (e) => {
-      if (!outerLayoutRef.current) return;
-      const rect = outerLayoutRef.current.getBoundingClientRect();
-      const relY = e.clientY - rect.top;
-      const HOT  = 90; // px from top/bottom to trigger zone
-      const near = relY < HOT ? 'top' : relY > rect.height - HOT ? 'bottom' : null;
+      // Use VIEWPORT-relative position so the bottom zone is at the bottom of
+      // the visible screen, not the bottom of all scrollable content.
+      const HOT  = 100; // px from viewport top/bottom
+      const near = e.clientY < HOT ? 'top' : e.clientY > window.innerHeight - HOT ? 'bottom' : null;
 
       if (near !== fullWidthZoneRef.current) {
         // Cursor moved in/out of a hot zone — reset dwell timer
         clearTimeout(dwellTimerRef.current);
         dwellTimerRef.current = null;
         fullWidthZoneRef.current = near;
+        fullWidthZoneActiveRef.current = null; // reset active state
         if (!near) { setFullWidthZone(null); return; }
-        // Start dwell: show zone after 1.5s
+        // Show hint immediately, activate after 1.5s dwell
+        setFullWidthZone(near + '-hint'); // intermediate state: show hint bar
         dwellTimerRef.current = setTimeout(() => {
-          setFullWidthZone(near);
+          fullWidthZoneActiveRef.current = near; // mark as drop-ready
+          setFullWidthZone(near);               // expand to full drop zone
         }, 1500);
       }
     };
@@ -6888,12 +6891,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       window.removeEventListener('mousemove', onDragMove);
       clearTimeout(dwellTimerRef.current);
       dwellTimerRef.current = null;
-      const droppedInFullWidthZone = fullWidthZoneRef.current;
-      fullWidthZoneRef.current = null;
+      // Use activeRef — only activated after the 1.5s dwell completed
+      const droppedInFullWidthZone = fullWidthZoneActiveRef.current;
+      fullWidthZoneRef.current       = null;
+      fullWidthZoneActiveRef.current = null;
       setFullWidthZone(null);
 
-      // ── Full-width row drop ───────────────────────────────────────────
-      if (!slot && droppedInFullWidthZone && fromId) {
+      // ── Full-width row drop — takes priority even if hovering a panel card ──
+      if (droppedInFullWidthZone && fromId) {
         const fromCol = colOfId(fromId);
         let newLeft   = fromCol === 'left'   ? removePanel(leftPanelOrder, fromId) : [...leftPanelOrder];
         let newRight  = fromCol === 'right'  ? removePanel(panelOrder,     fromId) : [...panelOrder];
@@ -6950,6 +6955,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       saveLeftPanelOrder(newLeft); savePanelOrder(newRight);
       saveTopRows(newTop);         saveBottomRows(newBottom);
       window.removeEventListener('mousemove', onDragMove);
+      fullWidthZoneRef.current       = null;
+      fullWidthZoneActiveRef.current = null;
       window.removeEventListener("mouseup",  onUp);
       window.removeEventListener("touchend", onUp);
     };
@@ -7735,8 +7742,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       })}
 
       {/* Dwell drop zone — TOP */}
-      {draggingPanel && (
-        <div style={{ margin:"8px 20px 0", borderRadius:12, border:`2px dashed ${fullWidthZone==='top' ? C.accent : C.border}`,
+      {draggingPanel && (fullWidthZone === 'top' || fullWidthZone === 'top-hint') && (
+        <div style={{ margin:"8px 20px 0", borderRadius:12,
+          border:`2px dashed ${fullWidthZone==='top' ? C.accent : C.border}`,
           padding: fullWidthZone==='top' ? "20px 16px" : "10px 16px",
           background: fullWidthZone==='top' ? `${C.accent}08` : "transparent",
           display:"flex", alignItems:"center", justifyContent:"center", gap:8,
@@ -7744,7 +7752,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <Ic n="layout" s={fullWidthZone==='top'?18:13} c={fullWidthZone==='top'?C.accent:C.text3}/>
           <span style={{ fontSize:fullWidthZone==='top'?13:11, fontWeight:fullWidthZone==='top'?700:500,
             color:fullWidthZone==='top'?C.accent:C.text3 }}>
-            {fullWidthZone==='top' ? "Drop here to add a full-width row above" : "Hold here to add a full-width row above…"}
+            {fullWidthZone==='top' ? "Release to add a full-width row above ✓" : "Hold here to add a full-width row above…"}
           </span>
         </div>
       )}
@@ -7845,8 +7853,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       </div>
 
       {/* Dwell drop zone — BOTTOM */}
-      {draggingPanel && (
-        <div style={{ margin:"0 20px 8px", borderRadius:12, border:`2px dashed ${fullWidthZone==='bottom' ? C.accent : C.border}`,
+      {draggingPanel && (fullWidthZone === 'bottom' || fullWidthZone === 'bottom-hint') && (
+        <div style={{ margin:"0 20px 8px", borderRadius:12,
+          border:`2px dashed ${fullWidthZone==='bottom' ? C.accent : C.border}`,
           padding: fullWidthZone==='bottom' ? "20px 16px" : "10px 16px",
           background: fullWidthZone==='bottom' ? `${C.accent}08` : "transparent",
           display:"flex", alignItems:"center", justifyContent:"center", gap:8,
@@ -7854,7 +7863,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <Ic n="layout" s={fullWidthZone==='bottom'?18:13} c={fullWidthZone==='bottom'?C.accent:C.text3}/>
           <span style={{ fontSize:fullWidthZone==='bottom'?13:11, fontWeight:fullWidthZone==='bottom'?700:500,
             color:fullWidthZone==='bottom'?C.accent:C.text3 }}>
-            {fullWidthZone==='bottom' ? "Drop here to add a full-width row below" : "Hold here to add a full-width row below…"}
+            {fullWidthZone==='bottom' ? "Release to add a full-width row below ✓" : "Hold here to add a full-width row below…"}
           </span>
         </div>
       )}
