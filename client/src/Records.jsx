@@ -6150,7 +6150,15 @@ const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, rend
             try { localStorage.setItem(openPanelsKey, JSON.stringify(next)); } catch {}
             return next;
           })}>
-          <Ic n={meta.icon} s={14} c={C.accent}/>
+          {/* Icon — for 'fields' panel: clicking icon toggles global edit mode */}
+          <div onClick={e=>{ if(id==="fields"){ e.stopPropagation(); window.dispatchEvent(new CustomEvent("vercentic:fields-edit-toggle")); } }}
+            title={id==="fields"?"Toggle field editing":undefined}
+            style={{ display:"flex", cursor: id==="fields"?"pointer":"default", borderRadius:6, padding:2,
+              transition:"background .12s" }}
+            onMouseEnter={e=>{ if(id==="fields"){ e.currentTarget.style.background=C.accentLight; }}}
+            onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; }}>
+            <Ic n={meta.icon} s={14} c={C.accent}/>
+          </div>
           <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
           {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
           <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
@@ -6916,6 +6924,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     setEditing({});
     setGlobalEdit(false);
   };
+  // Stable ref so the event listener always sees the latest state
+  const _fieldsEditToggleRef = useRef(null);
+  _fieldsEditToggleRef.current = globalEdit ? handleCancelGlobalEdit : handleEnterGlobalEdit;
+  useEffect(() => {
+    const handler = () => _fieldsEditToggleRef.current?.();
+    window.addEventListener("vercentic:fields-edit-toggle", handler);
+    return () => window.removeEventListener("vercentic:fields-edit-toggle", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleSaveAllFields = async () => {
     setSaving(true);
     const changes = [];
@@ -7497,7 +7514,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     if (id==="fields") return (
       <div>
-        {(globalEdit) && (
+        {/* Cancel + Save shown inline in panel when global edit is active */}
+        {globalEdit && (
           <div style={{ display:"flex", gap:6, marginBottom:12, justifyContent:"flex-end" }}>
             <button onClick={handleCancelGlobalEdit}
               style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${C.border}`,
@@ -7509,19 +7527,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                 background:C.accent, color:"white", fontSize:12, fontWeight:700,
                 cursor:"pointer", fontFamily:F, opacity:saving?0.6:1 }}>
               {saving?"Saving…":"Save all"}
-            </button>
-          </div>
-        )}
-        {!globalEdit && (
-          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
-            <button onClick={handleEnterGlobalEdit}
-              style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px",
-                borderRadius:7, border:`1px solid ${C.border}`, background:"transparent",
-                color:C.text2, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F,
-                transition:"all .12s" }}
-              onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentLight; }}
-              onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.text2; e.currentTarget.style.background="transparent"; }}>
-              <Ic n="edit" s={11} c="currentColor"/> Edit
             </button>
           </div>
         )}
