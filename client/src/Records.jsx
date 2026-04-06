@@ -6542,6 +6542,20 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch {}
   };
 
+  // ── Top / bottom full-width rows ────────────────────────────────────────
+  const topStorageKey    = `talentos_panels_top_${objectName}`;
+  const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
+  const [topRows,    setTopRows]    = useState(() => { try { const s=JSON.parse(localStorage.getItem(topStorageKey));    return Array.isArray(s) ? s : []; } catch { return []; } });
+  const [bottomRows, setBottomRows] = useState(() => { try { const s=JSON.parse(localStorage.getItem(bottomStorageKey)); return Array.isArray(s) ? s : []; } catch { return []; } });
+  const saveTopRows    = (order) => { setTopRows(order);    try { localStorage.setItem(topStorageKey,    JSON.stringify(order)); } catch {} };
+  const saveBottomRows = (order) => { setBottomRows(order); try { localStorage.setItem(bottomStorageKey, JSON.stringify(order)); } catch {} };
+
+  // ── Dwell-timer zone state for full-width row creation ────────────────────
+  const [fullWidthZone, setFullWidthZone] = useState(null); // 'top' | 'bottom' | null
+  const fullWidthZoneRef  = useRef(null);
+  const dwellTimerRef     = useRef(null);
+  const outerLayoutRef    = useRef(null);
+
   // ── Left column panel order (default: just fields) ──────────────────────
   const leftStorageKey = `talentos_panels_left_${objectName}`;
   const [leftPanelOrder, setLeftPanelOrder] = useState(() => {
@@ -6557,12 +6571,17 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
 
   // ── Column helpers ────────────────────────────────────────────────────────
-  // Find which column a panel ID lives in
-  const colOfId  = (id)    => leftPanelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id) ? 'left'
-                            : panelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id) ? 'right' : null;
-  // Find which column a repId (first id in slot) lives in
-  const colOfSlot = (repId) => leftPanelOrder.some(s => repIdOf(s) === repId) ? 'left'
-                            : panelOrder.some(s => repIdOf(s) === repId) ? 'right' : null;
+  const colOfId = (id) =>
+    topRows.some(s => Array.isArray(s) ? s.includes(id) : s === id)         ? 'top'
+    : leftPanelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id) ? 'left'
+    : panelOrder.some(s => Array.isArray(s) ? s.includes(id) : s === id)    ? 'right'
+    : bottomRows.some(s => Array.isArray(s) ? s.includes(id) : s === id)    ? 'bottom' : null;
+
+  const colOfSlot = (repId) =>
+    topRows.some(s => repIdOf(s) === repId)         ? 'top'
+    : leftPanelOrder.some(s => repIdOf(s) === repId) ? 'left'
+    : panelOrder.some(s => repIdOf(s) === repId)    ? 'right'
+    : bottomRows.some(s => repIdOf(s) === repId)    ? 'bottom' : null;
 
   // ── Record search logic ────────────────────────────────────────────────────
   useEffect(() => {
@@ -6828,9 +6847,33 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     draggingRef.current  = id;
     overSlotRef.current  = null;
     overZoneRef.current  = null;
+    fullWidthZoneRef.current = null;
     setDraggingPanel(id);
     setOverSlot(null);
     setOverZone(null);
+    setFullWidthZone(null);
+
+    // ── Dwell-zone mouse tracker ──────────────────────────────────────────
+    const onDragMove = (e) => {
+      if (!outerLayoutRef.current) return;
+      const rect = outerLayoutRef.current.getBoundingClientRect();
+      const relY = e.clientY - rect.top;
+      const HOT  = 90; // px from top/bottom to trigger zone
+      const near = relY < HOT ? 'top' : relY > rect.height - HOT ? 'bottom' : null;
+
+      if (near !== fullWidthZoneRef.current) {
+        // Cursor moved in/out of a hot zone — reset dwell timer
+        clearTimeout(dwellTimerRef.current);
+        dwellTimerRef.current = null;
+        fullWidthZoneRef.current = near;
+        if (!near) { setFullWidthZone(null); return; }
+        // Start dwell: show zone after 1.5s
+        dwellTimerRef.current = setTimeout(() => {
+          setFullWidthZone(near);
+        }, 1500);
+      }
+    };
+    window.addEventListener('mousemove', onDragMove);
 
     const onUp = () => {
       const fromId = draggingRef.current;
@@ -6840,6 +6883,30 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       setDraggingPanel(null);
       setOverSlot(null);
       setOverZone(null);
+
+      // Clean up dwell tracking
+      window.removeEventListener('mousemove', onDragMove);
+      clearTimeout(dwellTimerRef.current);
+      dwellTimerRef.current = null;
+      const droppedInFullWidthZone = fullWidthZoneRef.current;
+      fullWidthZoneRef.current = null;
+      setFullWidthZone(null);
+
+      // ── Full-width row drop ───────────────────────────────────────────
+      if (!slot && droppedInFullWidthZone && fromId) {
+        const fromCol = colOfId(fromId);
+        let newLeft   = fromCol === 'left'   ? removePanel(leftPanelOrder, fromId) : [...leftPanelOrder];
+        let newRight  = fromCol === 'right'  ? removePanel(panelOrder,     fromId) : [...panelOrder];
+        let newTop    = fromCol === 'top'    ? removePanel(topRows,        fromId) : [...topRows];
+        let newBottom = fromCol === 'bottom' ? removePanel(bottomRows,     fromId) : [...bottomRows];
+        if (droppedInFullWidthZone === 'top')    newTop    = [...newTop,    fromId];
+        else                                     newBottom = [...newBottom, fromId];
+        saveLeftPanelOrder(newLeft); savePanelOrder(newRight);
+        saveTopRows(newTop);         saveBottomRows(newBottom);
+        window.removeEventListener("mouseup",  onUp);
+        window.removeEventListener("touchend", onUp);
+        return;
+      }
 
       if (!fromId || !slot) {
         // dropped outside any card — no change
@@ -6854,29 +6921,35 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       const toCol   = colOfSlot(slot);
 
       // Remove fromId from its source column
-      let newLeft  = fromCol === 'left'  ? removePanel(leftPanelOrder, fromId) : [...leftPanelOrder];
-      let newRight = fromCol === 'right' ? removePanel(panelOrder,     fromId) : [...panelOrder];
+      let newLeft   = fromCol === 'left'   ? removePanel(leftPanelOrder, fromId) : [...leftPanelOrder];
+      let newRight  = fromCol === 'right'  ? removePanel(panelOrder,     fromId) : [...panelOrder];
+      let newTop    = fromCol === 'top'    ? removePanel(topRows,        fromId) : [...topRows];
+      let newBottom = fromCol === 'bottom' ? removePanel(bottomRows,     fromId) : [...bottomRows];
+
+      const insertInto = (order) => {
+        const idx = order.findIndex(s => repIdOf(s) === slot);
+        const insertIdx = zone === "bottom" ? idx + 1 : Math.max(0, idx);
+        const copy = [...order];
+        if (insertIdx < 0 || insertIdx > copy.length) copy.push(fromId);
+        else copy.splice(insertIdx, 0, fromId);
+        return copy;
+      };
 
       if (zone === "middle") {
-        // Merge into target slot
-        if (toCol === 'left')  newLeft  = mergePanel(newLeft,  slot, fromId);
-        else                   newRight = mergePanel(newRight, slot, fromId);
+        if (toCol === 'top')    newTop    = mergePanel(newTop,    slot, fromId);
+        else if (toCol === 'left')  newLeft  = mergePanel(newLeft,  slot, fromId);
+        else if (toCol === 'right') newRight = mergePanel(newRight, slot, fromId);
+        else if (toCol === 'bottom') newBottom = mergePanel(newBottom, slot, fromId);
       } else {
-        // Insert before/after target
-        const insertInto = (order) => {
-          const idx = order.findIndex(s => repIdOf(s) === slot);
-          const insertIdx = zone === "bottom" ? idx + 1 : Math.max(0, idx);
-          const copy = [...order];
-          if (insertIdx < 0 || insertIdx > copy.length) copy.push(fromId);
-          else copy.splice(insertIdx, 0, fromId);
-          return copy;
-        };
-        if (toCol === 'left')  newLeft  = insertInto(newLeft);
-        else                   newRight = insertInto(newRight);
+        if (toCol === 'top')    newTop    = insertInto(newTop);
+        else if (toCol === 'left')  newLeft  = insertInto(newLeft);
+        else if (toCol === 'right') newRight = insertInto(newRight);
+        else if (toCol === 'bottom') newBottom = insertInto(newBottom);
       }
 
-      saveLeftPanelOrder(newLeft);
-      savePanelOrder(newRight);
+      saveLeftPanelOrder(newLeft); savePanelOrder(newRight);
+      saveTopRows(newTop);         saveBottomRows(newBottom);
+      window.removeEventListener('mousemove', onDragMove);
       window.removeEventListener("mouseup",  onUp);
       window.removeEventListener("touchend", onUp);
     };
@@ -6889,8 +6962,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const reportZone = (repId, e, el) => {
     if (!draggingRef.current) return;
     // Find which slot the dragging panel belongs to (check both columns)
-    const mySlot = leftPanelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
+    const mySlot = topRows.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
+                || leftPanelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
                 || panelOrder.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
+                || bottomRows.find(s => Array.isArray(s) ? s.includes(draggingRef.current) : s === draggingRef.current)
                 || draggingRef.current;
     if (repIdOf(mySlot) === repId) return;
     const rect = el.getBoundingClientRect();
@@ -7632,13 +7707,45 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   );
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", background:"#F4F6FB" }}>
+    <div ref={outerLayoutRef} style={{ display:"flex", flexDirection:"column", background:"#F4F6FB" }}>
       <FunctionalityBar/>
       <SuggestedActions record={record} environment={environment} objectName={objectName} objectColor={objectColor} onAction={handleSuggestedAction}/>
       {/* Full-width Linked People widget — funnel bar, non-Person objects only */}
       {objectName !== "Person" && (
         <div style={{ flexShrink:0, borderBottom:`1px solid ${C.border}` }}>
           <PeoplePipelineWidget record={record} objectId={record.object_id} environment={environment} onNavigate={onNavigate} hidePicker/>
+        </div>
+      )}
+
+      {/* TOP full-width rows */}
+      {topRows.map((slot, idx) => {
+        const prevRepId = idx > 0 ? repIdOf(topRows[idx-1]) : null;
+        if (Array.isArray(slot)) {
+          const validIds = slot.filter(id => PANEL_META[id]);
+          if (!validIds.length) return null;
+          if (validIds.length === 1) {
+            const id = validIds[0];
+            return <div key={id} style={{ padding:"0 20px 0" }}>{DropIndicator({beforeRepId:id,afterRepId:prevRepId})}<PanelCard id={id} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
+          }
+          const repId = validIds[0];
+          return <div key={repId} style={{ padding:"0 20px 0" }}>{DropIndicator({beforeRepId:repId,afterRepId:prevRepId})}<GroupCard ids={validIds} overSlot={overSlot} overZone={overZone} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} panelOrder={topRows} savePanelOrder={saveTopRows} removePanel={removePanel} renderPanel={renderPanel} startPanelDrag={startPanelDrag} clearZone={clearZone} reportZone={reportZone}/></div>;
+        }
+        if (!PANEL_META[slot]) return null;
+        return <div key={slot} style={{ padding:"12px 20px 0" }}>{DropIndicator({beforeRepId:slot,afterRepId:prevRepId})}<PanelCard id={slot} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
+      })}
+
+      {/* Dwell drop zone — TOP */}
+      {draggingPanel && (
+        <div style={{ margin:"8px 20px 0", borderRadius:12, border:`2px dashed ${fullWidthZone==='top' ? C.accent : C.border}`,
+          padding: fullWidthZone==='top' ? "20px 16px" : "10px 16px",
+          background: fullWidthZone==='top' ? `${C.accent}08` : "transparent",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+          transition:"all .3s", cursor:"default", minHeight: fullWidthZone==='top' ? 72 : 38 }}>
+          <Ic n="layout" s={fullWidthZone==='top'?18:13} c={fullWidthZone==='top'?C.accent:C.text3}/>
+          <span style={{ fontSize:fullWidthZone==='top'?13:11, fontWeight:fullWidthZone==='top'?700:500,
+            color:fullWidthZone==='top'?C.accent:C.text3 }}>
+            {fullWidthZone==='top' ? "Drop here to add a full-width row above" : "Hold here to add a full-width row above…"}
+          </span>
         </div>
       )}
 
@@ -7736,6 +7843,38 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           })()}
         </div>
       </div>
+
+      {/* Dwell drop zone — BOTTOM */}
+      {draggingPanel && (
+        <div style={{ margin:"0 20px 8px", borderRadius:12, border:`2px dashed ${fullWidthZone==='bottom' ? C.accent : C.border}`,
+          padding: fullWidthZone==='bottom' ? "20px 16px" : "10px 16px",
+          background: fullWidthZone==='bottom' ? `${C.accent}08` : "transparent",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+          transition:"all .3s", cursor:"default", minHeight: fullWidthZone==='bottom' ? 72 : 38 }}>
+          <Ic n="layout" s={fullWidthZone==='bottom'?18:13} c={fullWidthZone==='bottom'?C.accent:C.text3}/>
+          <span style={{ fontSize:fullWidthZone==='bottom'?13:11, fontWeight:fullWidthZone==='bottom'?700:500,
+            color:fullWidthZone==='bottom'?C.accent:C.text3 }}>
+            {fullWidthZone==='bottom' ? "Drop here to add a full-width row below" : "Hold here to add a full-width row below…"}
+          </span>
+        </div>
+      )}
+
+      {/* BOTTOM full-width rows */}
+      {bottomRows.map((slot, idx) => {
+        const prevRepId = idx > 0 ? repIdOf(bottomRows[idx-1]) : null;
+        if (Array.isArray(slot)) {
+          const validIds = slot.filter(id => PANEL_META[id]);
+          if (!validIds.length) return null;
+          if (validIds.length === 1) {
+            const id = validIds[0];
+            return <div key={id} style={{ padding:"0 20px 12px" }}>{DropIndicator({beforeRepId:id,afterRepId:prevRepId})}<PanelCard id={id} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
+          }
+          const repId = validIds[0];
+          return <div key={repId} style={{ padding:"0 20px 12px" }}>{DropIndicator({beforeRepId:repId,afterRepId:prevRepId})}<GroupCard ids={validIds} overSlot={overSlot} overZone={overZone} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} panelOrder={bottomRows} savePanelOrder={saveBottomRows} removePanel={removePanel} renderPanel={renderPanel} startPanelDrag={startPanelDrag} clearZone={clearZone} reportZone={reportZone}/></div>;
+        }
+        if (!PANEL_META[slot]) return null;
+        return <div key={slot} style={{ padding:"0 20px 12px" }}>{DropIndicator({beforeRepId:slot,afterRepId:prevRepId})}<PanelCard id={slot} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
+      })}
 
       {/* Talent Card modal */}
       {showTalentCard && (
