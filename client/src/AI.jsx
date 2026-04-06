@@ -1552,6 +1552,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [companyDocs,    setCompanyDocs]    = useState([]);
   const [companyProfile, setCompanyProfile] = useState(null); // from Settings → Company Profile
   const [linkedJobs,     setLinkedJobs]     = useState([]);   // jobs/records this person is linked to
+  const linkedJobsRef  = useRef([]);  // always-fresh ref for use in sendMessage closure
   const [userOrgUnit,    setUserOrgUnit]    = useState(null); // current user's org unit / team
   const _pcAI = _usePermCtxAI();
   const canRecord = (flag) => _pcAI ? _pcAI.canGlobal(flag) : true;
@@ -1562,6 +1563,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     catch { return {}; }
   }, []); // stable reference — session doesn't change mid-conversation
   const _sessionUser = _session?.user || {};
+  linkedJobsRef.current = linkedJobs;  // always-fresh — read in sendMessage to avoid stale closure
   const [pendingInterview, setPendingInterview] = useState(null);
   const [pendingForm,      setPendingForm]      = useState(null);
   const [pendingReport,    setPendingReport]    = useState(null);
@@ -1651,11 +1653,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         if(disp)parts.push('  '+k+': '+disp);
       });
     }
-    // Inject linked jobs as numbered options so copilot presents them clearly
-    if(linkedJobs.length>0 && currentObject?.slug==='people'){
+    // Inject linked jobs — use ref so we always get latest value even if state is stale
+    const _lj = (typeof linkedJobsRef !== 'undefined' ? linkedJobsRef.current : linkedJobs) || [];
+    if(_lj.length>0 && currentObject?.slug==='people'){
       parts.push('');
-      parts.push(`PERSON LINKED TO ${linkedJobs.length} OPEN JOB(S)/RECORD(S) — when creating anything for this person, present these as a numbered list and ask which one to associate with (or "none"):`);
-      linkedJobs.forEach((j,i)=>{
+      parts.push(`PERSON LINKED TO ${_lj.length} OPEN JOB(S)/RECORD(S) — when creating anything for this person, present these as a numbered list and ask which one to associate with (or "none"):`);
+      _lj.forEach((j,i)=>{
         parts.push(`  ${i+1}. "${j.title}" (${j.object_name||'Job'})${j.stage?' — Stage: '+j.stage:''}${j.status?' ['+j.status+']':''} [record_id:${j.id}]`);
       });
       parts.push('  0. None / keep general');
@@ -1936,7 +1939,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       setLinkedJobs([]);
     }
     // (settings-section listener is in its own useEffect above)
-  },[open]);
+  },[open, currentRecord?.id, currentObject?.slug]);
 
   // Generate proactive nudges when the copilot opens on a list page
   useEffect(()=>{
