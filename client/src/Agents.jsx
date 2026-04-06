@@ -166,11 +166,300 @@ function AgentAvatar({ agent, size = 40 }) {
   );
 }
 
-function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
-  const [running, setRunning] = useState(false);
-  const handleRun = async (e) => { e.stopPropagation(); setRunning(true); await onRun(agent.id); setRunning(false); };
+// ── Run Agent Modal ────────────────────────────────────────────────────────────
+function RunAgentModal({ agent, environment, onClose, onRun }) {
+  const [step, setStep]           = useState('config'); // config | running | done
+  const [objects, setObjects]     = useState([]);
+  const [selectedObj, setSelectedObj] = useState(null);
+  const [records, setRecords]     = useState([]);
+  const [loadingRec, setLoadingRec] = useState(false);
+  const [search, setSearch]       = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [triggerMode, setTriggerMode] = useState('now'); // now | schedule
+  const [schedDate, setSchedDate] = useState('');
+  const [schedTime, setSchedTime] = useState('09:00');
+  const [results, setResults]     = useState([]);
+  const [saving, setSaving]       = useState(false);
+
+  // Load objects on open
+  useEffect(() => {
+    if (!environment?.id) return;
+    api.get(`/objects?environment_id=${environment.id}`)
+      .then(d => {
+        const arr = Array.isArray(d) ? d : [];
+        setObjects(arr);
+        // Auto-select based on agent object_id
+        const match = arr.find(o => o.id === agent.object_id);
+        if (match) setSelectedObj(match);
+        else if (arr.length > 0) setSelectedObj(arr[0]);
+      }).catch(() => {});
+  }, [environment?.id]);
+
+  // Load records when object selected
+  useEffect(() => {
+    if (!selectedObj || !environment?.id) return;
+    setLoadingRec(true); setRecords([]); setSelectedIds([]);
+    api.get(`/records?object_id=${selectedObj.id}&environment_id=${environment.id}&limit=200`)
+      .then(d => {
+        const recs = Array.isArray(d) ? d : (d?.records || []);
+        setRecords(recs);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingRec(false));
+  }, [selectedObj?.id, environment?.id]);
+
+  // Derive action summary
+  const actionSummary = (() => {
+    const acts = agent.actions || [];
+    if (acts.length === 0) return 'No actions configured.';
+    const labels = acts.map(a => {
+      switch(a.type) {
+        case 'ai_interview': return '🎙 Conduct AI Interview';
+        case 'ai_summarise': return '✨ AI Summarise record';
+        case 'send_email':   return `📧 Send email${a.email_subject?' "'+a.email_subject+'"':''}`;
+        case 'add_note':     return '📝 Add note to record';
+        case 'update_field': return `✏️ Update field${a.field_key?' "'+a.field_key+'"':''}`;
+        case 'webhook':      return '🔗 Send webhook';
+        case 'run_agent':    return `▶ Run agent${a.agent_name?' "'+a.agent_name+'"':''}`;
+        default: return (a.type||'').replace(/_/g,' ');
+      }
+    });
+    return labels;
+  })();
+
+  const filteredRecords = records.filter(r => {
+    if (!search) return true;
+    const d = r.data || {};
+    const name = [d.first_name, d.last_name, d.full_name, d.name, d.title, d.job_title]
+      .filter(Boolean).join(' ').toLowerCase();
+    return name.includes(search.toLowerCase()) || (d.email||'').toLowerCase().includes(search.toLowerCase());
+  });
+
+  const toggleId = (id) => setSelectedIds(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+  const toggleAll = () => setSelectedIds(s => s.length === filteredRecords.length ? [] : filteredRecords.map(r=>r.id));
+
+  const getRecordName = (r) => {
+    const d = r.data || {};
+    return [d.first_name, d.last_name].filter(Boolean).join(' ')
+      || d.full_name || d.name || d.title || d.job_title || d.email || r.id.slice(0,8);
+  };
+  const getRecordSub = (r) => {
+    const d = r.data || {};
+    return d.email || d.job_title || d.current_title || d.department || '';
+  };
+
+  const handleRun = async () => {
+    setSaving(true); setStep('running');
+    try {
+      const res = await api.post(`/agents/${agent.id}/run`, {
+        environment_id: environment?.id,
+        record_ids: selectedIds.length > 0 ? selectedIds : undefined,
+        object_id: selectedObj?.id,
+        trigger_mode: triggerMode,
+        scheduled_at: triggerMode === 'schedule' ? `${schedDate}T${schedTime}` : undefined,
+      });
+      setResults(Array.isArray(res?.results) ? res.results : []);
+      setStep('done');
+      onRun && onRun();
+    } catch(e) {
+      setStep('done');
+    }
+    setSaving(false);
+  };
+
+  const INP = { width:'100%', padding:'8px 12px', borderRadius:9, border:`1.5px solid ${C.border}`,
+    fontSize:13, fontFamily:F, outline:'none', boxSizing:'border-box', background:'white' };
+  const LBL = { display:'block', fontSize:11, fontWeight:700, color:C.text3,
+    marginBottom:5, textTransform:'uppercase', letterSpacing:'0.05em' };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:2000,
+      display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}
+        style={{background:'white',borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90vh',
+          overflowY:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.18)',fontFamily:F}}>
+
+        {/* Header */}
+        <div style={{padding:'20px 24px 0',display:'flex',alignItems:'center',gap:12}}>
+          <AgentAvatar agent={agent} size={40}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.text1}}>{agent.name}</div>
+            {agent.description&&<div style={{fontSize:12,color:C.text3}}>{agent.description}</div>}
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:C.text3}}>×</button>
+        </div>
+
+        {/* Content */}
+        <div style={{padding:'20px 24px'}}>
+
+          {step === 'config' && (<>
+            {/* Object + Record picker */}
+            <div style={{marginBottom:16}}>
+              <label style={LBL}>Run on object</label>
+              <select value={selectedObj?.id||''} onChange={e=>setSelectedObj(objects.find(o=>o.id===e.target.value)||null)}
+                style={{...INP,background:'white'}}>
+                {objects.map(o=><option key={o.id} value={o.id}>{o.plural_name||o.name}</option>)}
+              </select>
+            </div>
+
+            {selectedObj && (<>
+              <div style={{marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <label style={{...LBL,margin:0}}>Select records ({selectedIds.length} selected)</label>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={toggleAll} style={{fontSize:11,color:C.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:F}}>
+                    {selectedIds.length===filteredRecords.length?'Deselect all':'Select all'}
+                  </button>
+                </div>
+              </div>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${selectedObj.plural_name||selectedObj.name}…`} style={{...INP,marginBottom:8}}/>
+              <div style={{border:`1.5px solid ${C.border}`,borderRadius:10,maxHeight:200,overflowY:'auto',marginBottom:16}}>
+                {loadingRec ? (
+                  <div style={{padding:'24px',textAlign:'center',color:C.text3,fontSize:12}}>Loading…</div>
+                ) : filteredRecords.length === 0 ? (
+                  <div style={{padding:'24px',textAlign:'center',color:C.text3,fontSize:12}}>No records found</div>
+                ) : filteredRecords.map(r => {
+                  const name = getRecordName(r);
+                  const sub  = getRecordSub(r);
+                  const checked = selectedIds.includes(r.id);
+                  return (
+                    <div key={r.id} onClick={()=>toggleId(r.id)}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',
+                        borderBottom:`1px solid ${C.border}`,cursor:'pointer',
+                        background:checked?`${C.accent}08`:'white',transition:'background .1s'}}
+                      onMouseEnter={e=>{if(!checked)e.currentTarget.style.background='#fafafa';}}
+                      onMouseLeave={e=>{if(!checked)e.currentTarget.style.background='white';}}>
+                      <input type="checkbox" checked={checked} onChange={()=>toggleId(r.id)}
+                        style={{accentColor:C.accent,width:14,height:14,flexShrink:0}}/>
+                      <div style={{width:28,height:28,borderRadius:8,background:`${C.accent}15`,
+                        display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <span style={{fontSize:11,fontWeight:800,color:C.accent}}>
+                          {(name[0]||'?').toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{name}</div>
+                        {sub&&<div style={{fontSize:11,color:C.text3}}>{sub}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>)}
+
+            {/* Trigger timing */}
+            <div style={{marginBottom:16}}>
+              <label style={LBL}>When to run</label>
+              <div style={{display:'flex',gap:8}}>
+                {[{v:'now',label:'Run now'},
+                  {v:'schedule',label:'Schedule for later'}].map(({v,label})=>(
+                  <button key={v} onClick={()=>setTriggerMode(v)}
+                    style={{flex:1,padding:'9px 12px',borderRadius:9,border:`1.5px solid ${triggerMode===v?C.accent:C.border}`,
+                      background:triggerMode===v?`${C.accent}08`:'white',color:triggerMode===v?C.accent:C.text2,
+                      fontSize:12,fontWeight:triggerMode===v?700:500,cursor:'pointer',fontFamily:F,transition:'all .12s'}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {triggerMode==='schedule' && (
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:10}}>
+                  <div>
+                    <label style={LBL}>Date</label>
+                    <input type="date" value={schedDate} onChange={e=>setSchedDate(e.target.value)} style={INP}/>
+                  </div>
+                  <div>
+                    <label style={LBL}>Time</label>
+                    <input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)} style={INP}/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* What happens next summary */}
+            <div style={{background:`${C.accent}06`,border:`1.5px solid ${C.accent}20`,borderRadius:12,padding:'14px 16px',marginBottom:20}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:'.06em',textTransform:'uppercase',marginBottom:8}}>What happens next</div>
+              {Array.isArray(actionSummary) ? (
+                <ol style={{margin:0,padding:'0 0 0 18px'}}>
+                  {actionSummary.map((s,i)=>(
+                    <li key={i} style={{fontSize:12,color:C.text2,marginBottom:4,lineHeight:1.4}}>{s}</li>
+                  ))}
+                </ol>
+              ) : (
+                <div style={{fontSize:12,color:C.text3}}>{actionSummary}</div>
+              )}
+              {selectedIds.length > 0 && (
+                <div style={{fontSize:12,color:C.text3,marginTop:8,paddingTop:8,borderTop:`1px solid ${C.accent}20`}}>
+                  Applied to <strong style={{color:C.text1}}>{selectedIds.length}</strong> record{selectedIds.length!==1?'s':''}.
+                  {triggerMode==='schedule'&&schedDate ? ` Scheduled for ${schedDate} at ${schedTime}.` : ' Starting immediately.'}
+                </div>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={onClose}
+                style={{flex:1,padding:'11px',borderRadius:10,border:`1.5px solid ${C.border}`,
+                  background:'transparent',color:C.text2,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F}}>
+                Cancel
+              </button>
+              <button onClick={handleRun}
+                disabled={saving||(selectedIds.length===0&&records.length>0)||(triggerMode==='schedule'&&!schedDate)}
+                style={{flex:2,padding:'11px',borderRadius:10,border:'none',
+                  background:saving||selectedIds.length===0&&records.length>0?'#9ca3af':C.accent,
+                  color:'white',fontSize:13,fontWeight:700,
+                  cursor:saving||selectedIds.length===0&&records.length>0?'not-allowed':'pointer',fontFamily:F,
+                  display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                <Ic n="play" s={13} c="white"/>
+                {triggerMode==='schedule'?'Schedule Run':`Run on ${selectedIds.length||'all'} record${selectedIds.length!==1?'s':''}`}
+              </button>
+            </div>
+          </>)}
+
+          {step === 'running' && (
+            <div style={{textAlign:'center',padding:'40px 0'}}>
+              <div style={{width:48,height:48,borderRadius:16,background:`${C.accent}15`,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:14}}>
+                <Ic n="loader" s={24} c={C.accent}/>
+              </div>
+              <div style={{fontSize:15,fontWeight:700,color:C.text1,marginBottom:6}}>Running agent…</div>
+              <div style={{fontSize:13,color:C.text3}}>Executing actions on {selectedIds.length} record{selectedIds.length!==1?'s':''}.</div>
+            </div>
+          )}
+
+          {step === 'done' && (
+            <div style={{textAlign:'center',padding:'32px 0'}}>
+              <div style={{width:48,height:48,borderRadius:16,background:`${C.green}15`,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:14}}>
+                <Ic n="check" s={24} c={C.green}/>
+              </div>
+              <div style={{fontSize:15,fontWeight:700,color:C.text1,marginBottom:6}}>
+                {triggerMode==='schedule'?'Scheduled successfully':'Run complete'}
+              </div>
+              <div style={{fontSize:13,color:C.text3,marginBottom:20}}>
+                {triggerMode==='schedule'
+                  ? `Agent will run on ${schedDate} at ${schedTime}.`
+                  : `Agent executed on ${selectedIds.length} record${selectedIds.length!==1?'s':''}.`}
+              </div>
+              <button onClick={onClose}
+                style={{padding:'10px 28px',borderRadius:10,border:'none',background:C.accent,
+                  color:'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F}}>
+                Done
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function AgentCard({ agent, onEdit, onDelete, onRun, onRunWithOptions, environment, onSelect, selected }) {
+  const [running, setRunning]     = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const handleRun = (e) => { e.stopPropagation(); setShowRunModal(true); };
+  const handleRunDone = async () => { setShowRunModal(false); await onRun(agent.id); };
   const trigColor = TRIGGER_COLORS[agent.trigger_type] || C.accent;
   return (
+    <>
     <div onClick={() => onSelect(agent)} style={{ background:"white", borderRadius:14, border:`1.5px solid ${selected?C.accent:C.border}`, padding:0, cursor:"pointer", transition:"all .15s", overflow:"hidden", boxShadow:selected?`0 0 0 3px ${C.accentLight}`:"0 1px 4px rgba(0,0,0,.04)" }}
       onMouseEnter={e=>{if(!selected)e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";}}
       onMouseLeave={e=>{if(!selected)e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)";}}>
@@ -219,6 +508,10 @@ function AgentCard({ agent, onEdit, onDelete, onRun, onSelect, selected }) {
         </div>
       </div>
     </div>
+    {showRunModal && (
+      <RunAgentModal agent={agent} environment={environment} onClose={()=>setShowRunModal(false)} onRun={handleRunDone}/>
+    )}
+    </>
   );
 }
 
@@ -1035,7 +1328,7 @@ export default function AgentsModule({ environment }) {
             ) : (
               <div style={{display:"grid",gridTemplateColumns:selectedAgent?"1fr":"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
                 {filtered.map(a=>(
-                  <AgentCard key={a.id} agent={a} onEdit={handleEdit} onDelete={handleDelete} onRun={handleRun} onSelect={setSelectedAgent} selected={selectedAgent?.id===a.id}/>
+                  <AgentCard key={a.id} agent={a} onEdit={handleEdit} onDelete={handleDelete} onRun={handleRun} environment={environment} onSelect={setSelectedAgent} selected={selectedAgent?.id===a.id}/>
                 ))}
               </div>
             )}
