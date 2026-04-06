@@ -699,6 +699,7 @@ SUPPORTED action_types and their required payload fields:
 - "create_object" → { environment_id, name, plural_name?, slug?, description?, icon?, color? }
 
 IMPORTANT: Always use the record_id from CURRENT PAGE CONTEXT when acting on the current record.
+CRITICAL RULE — NEVER say "I don't see [Name] in the platform" when that person appears in CURRENT PAGE CONTEXT. CURRENT PAGE CONTEXT IS the ground truth — it reflects exactly what the user is looking at. If it says "VIEWING PERSON RECORD: Lewie Harrison (ID: abc123)", then Lewie Harrison IS in the platform with that ID. Trust it completely.
 For "add_note", always use record_id from context and write the note content as the user described it.
 
 DOCUMENT ANALYSIS — CV & JOB DESCRIPTIONS:
@@ -868,7 +869,9 @@ ADMIN RULES:
 INTERVIEW SCHEDULING INSTRUCTIONS:
 When a user wants to schedule, book, or arrange an interview:
 
-Step 1: Identify the candidate. If viewing a record, use that person. Otherwise ask who the interview is for.
+Step 1: Identify the candidate.
+  - CRITICAL: If CURRENT PAGE CONTEXT shows "VIEWING PERSON RECORD: [Name]", that person IS the candidate. Use their name and Record ID DIRECTLY — do NOT say "I don't see them in the platform", do NOT search for them, do NOT ask who the interview is for. They are RIGHT THERE in context.
+  - If NOT viewing a person record, ask who the interview is for and search for them.
 Step 2: Gather: date, time, format (Video Call / Phone / In Person), duration, and optionally interviewers and notes.
   - If interview types are listed in context, suggest them. Otherwise use a sensible default.
   - Date: use TODAY'S DATE from context to calculate exact dates. "Next Monday" = the coming Monday from today's date. Always output YYYY-MM-DD.
@@ -1627,6 +1630,24 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     // Inject real AI match scores when on a person record so copilot uses same engine as AI Match widget
+    // Inject employee list for interviewer suggestions (always useful on person records)
+    if(allPeople.length>0){
+      const employees = allPeople.filter(p => {
+        const pt = (p.data?.person_type||'').toLowerCase();
+        return pt === 'employee' || pt === '';  // include unset person_type as potential employee
+      }).slice(0,50);
+      if(employees.length>0){
+        parts.push('');
+        parts.push('AVAILABLE EMPLOYEES (for interviewer selection — only employees can be interviewers):');
+        employees.forEach(p=>{
+          const d=p.data||{};
+          const name=[d.first_name,d.last_name].filter(Boolean).join(' ')||d.email||'Unnamed';
+          const title=d.current_title||d.job_title||'';
+          const dept=d.department||'';
+          parts.push(`  - ${name}${title?' | '+title:''}${dept?' (${dept})':''} [id:${p.id}]`);
+        });
+      }
+    }
     if(currentRecord && currentObject?.slug==='people' && allJobs.length>0){
       const scored = allJobs
         .map(j=>({ job:j, ...matchCandidateToJob(currentRecord, j) }))
@@ -1852,9 +1873,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   // Generate proactive nudges when the copilot opens on a list page
   useEffect(()=>{
-    if(!open || !environment?.id || currentRecord) return;
+    if(!open || !environment?.id) return;
     // Need objects to be loaded — if empty, skip (will re-run when objects loads)
     if(!objects.length) return;
+    // If on a record page, skip the full nudge analysis (currentRecord handles that)
+    if(currentRecord) return;
 
     setNudges([]);
     // Match active nav to an object slug
