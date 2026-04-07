@@ -63,22 +63,38 @@ function BucketRow({ label, score, weight, color, details, expanded, onToggle })
 
 // ── Compact badge for the identity/functionality bar ─────────────────────────
 export function EngagementBadge({ recordId, onClick }) {
-  const [data, setData] = useState(null);
+  const [data,    setData]    = useState(null);
+  const [hovered, setHovered] = useState(false);
   useEffect(() => {
     if (!recordId) return;
     api.get(`/engagement/${recordId}`).then(d => setData(d)).catch(() => {});
   }, [recordId]);
   if (!data) return null;
   return (
-    <div onClick={onClick} title={`Engagement: ${data.grade} (${data.score}/100)`}
-      style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px 4px 6px', borderRadius:99,
-        background:data.color+'12', border:`1.5px solid ${data.color}28`,
-        cursor:onClick?'pointer':'default', transition:'all .15s', userSelect:'none' }}
-      onMouseEnter={e=>{ if(onClick){ e.currentTarget.style.background=data.color+'20'; e.currentTarget.style.borderColor=data.color+'50'; } }}
-      onMouseLeave={e=>{ e.currentTarget.style.background=data.color+'12'; e.currentTarget.style.borderColor=data.color+'28'; }}>
-      {/* Simple coloured dot instead of the full ring */}
-      <div style={{ width:8, height:8, borderRadius:'50%', background:data.color, flexShrink:0 }}/>
-      <span style={{ fontSize:12, fontWeight:700, color:data.color, lineHeight:1 }}>{data.score}</span>
+    <div style={{ position:'relative', display:'inline-flex' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}>
+      <div onClick={onClick}
+        style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px 4px 6px', borderRadius:99,
+          background: hovered ? data.color+'20' : data.color+'12',
+          border:`1.5px solid ${hovered ? data.color+'50' : data.color+'28'}`,
+          cursor:onClick?'pointer':'default', transition:'all .15s', userSelect:'none' }}>
+        <div style={{ width:8, height:8, borderRadius:'50%', background:data.color, flexShrink:0 }}/>
+        <span style={{ fontSize:12, fontWeight:700, color:data.color, lineHeight:1 }}>{data.score}</span>
+      </div>
+      {/* Custom tooltip */}
+      {hovered && (
+        <div style={{ position:'absolute', bottom:'calc(100% + 7px)', left:'50%', transform:'translateX(-50%)',
+          background:'#1a1a2e', color:'#fff', fontSize:11, fontWeight:600, whiteSpace:'nowrap',
+          padding:'5px 10px', borderRadius:7, pointerEvents:'none', zIndex:9999,
+          boxShadow:'0 4px 12px rgba(0,0,0,.25)' }}>
+          Engagement: {data.grade} ({data.score}/100)
+          {/* Arrow */}
+          <div style={{ position:'absolute', top:'100%', left:'50%', transform:'translateX(-50%)',
+            width:0, height:0, borderLeft:'5px solid transparent',
+            borderRight:'5px solid transparent', borderTop:'5px solid #1a1a2e' }}/>
+        </div>
+      )}
     </div>
   );
 }
