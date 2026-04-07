@@ -8173,20 +8173,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             Campaign link
           </button>
         )}
-        {objectName === "Person" && (
-          <ActionBtn icon="fileText" label="Talent Card" onClick={() => setShowTalentCard(true)}/>
-        )}
 
-        {/* LinkedIn Finder — only on Person records */}
-        {objectName === "Person" && (
-          <LinkedInFinderButton
-            record={record}
-            fields={fields}
-            onFound={(url) => {
-              setRecord(prev => prev ? { ...prev, data: { ...prev.data, linkedin: url } } : prev);
-            }}
-          />
-        )}
 
         {/* Last activity indicator */}
         {lastCommDate && (
@@ -8477,16 +8464,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         if (!PANEL_META[slot]) return null;
         return <div key={slot} style={{ padding:"0 20px 12px" }}>{DropIndicator({beforeRepId:slot,afterRepId:prevRepId})}<PanelCard id={slot} openPanels={openPanels} setOpenPanels={setOpenPanels} openPanelsKey={openPanelsKey} renderPanel={renderPanel} startPanelDrag={startPanelDrag} overSlot={overSlot} overZone={overZone} draggingPanel={draggingPanel} notes={notes} attachments={attachments} clearZone={clearZone} reportZone={reportZone}/></div>;
       })}
-
-      {/* Talent Card modal */}
-      {showTalentCard && (
-        <TalentCardModal
-          record={record}
-          fields={fields}
-          environment={environment}
-          onClose={() => setShowTalentCard(false)}
-        />
-      )}
 
       {/* Campaign Links modal — pre-populated from this record */}
       {showCampaignLinks && (
