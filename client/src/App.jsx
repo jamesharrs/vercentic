@@ -2247,7 +2247,8 @@ function App() {
           activeNav.startsWith("record_")   ? "page-record" :
           activeNav.startsWith("obj_")      ? "page-obj" :
           `page-${activeNav}`
-        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: "auto",
+        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0,
+          overflow: (activeNav === "dashboard" || activeNav.startsWith("dashboard_")) ? "auto" : "visible",
           background: activeNav === "dashboard" || activeNav.startsWith("dashboard_") ? "#F8F7FF" : undefined }}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
