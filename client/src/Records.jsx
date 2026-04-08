@@ -6965,10 +6965,40 @@ const SlideOutHeader = ({ title, subtitle, objectColor, status, statusField, rec
 function _DropIndicator({ beforeRepId, afterRepId, draggingPanel, overSlot, overZone }) {
   if (!draggingPanel) return null;
   if (overZone === "middle") return null;
+  // Only show on "top" zone of the card AFTER the gap — prevents double-trigger flicker
+  // where both the bottom of card A and top of card B toggle the same indicator
   const showBefore = beforeRepId && overSlot === beforeRepId && overZone === "top";
-  const showAfter  = afterRepId  && overSlot === afterRepId  && overZone === "bottom";
+  // Only use showAfter for the very last card (no card after it has a beforeRepId)
+  const showAfter  = !beforeRepId && afterRepId && overSlot === afterRepId && overZone === "bottom";
   if (!showBefore && !showAfter) return null;
-  return <div style={{ height:3, borderRadius:2, background:C.accent, margin:"0 0 12px", boxShadow:`0 0 8px ${C.accent}70` }}/>;
+  return (
+    <div style={{
+      height: 28, margin: "0 0 12px", position: "relative",
+      display: "flex", alignItems: "center",
+    }}>
+      {/* Wide invisible hover target (full height) */}
+      <div style={{ position: "absolute", inset: 0 }}/>
+      {/* Visible line */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, top: "50%", height: 3,
+        borderRadius: 2, background: C.accent,
+        boxShadow: `0 0 8px ${C.accent}90, 0 0 0 3px ${C.accent}20`,
+        transform: "translateY(-50%)",
+      }}/>
+      {/* Drop here label */}
+      <div style={{
+        position: "absolute", left: "50%", top: "50%",
+        transform: "translate(-50%, -50%)",
+        background: C.accent, color: "#fff",
+        fontSize: 9, fontWeight: 700, letterSpacing: "0.05em",
+        padding: "2px 8px", borderRadius: 99,
+        boxShadow: `0 1px 4px ${C.accent}60`,
+        pointerEvents: "none", whiteSpace: "nowrap",
+      }}>
+        INSERT HERE
+      </div>
+    </div>
+  );
 }
 
 const ActionBtn = ({ icon, label, onClick, accent, danger }) => (
@@ -7045,6 +7075,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const draggingRef = useRef(null);
   const overSlotRef = useRef(null);
   const overZoneRef = useRef(null);
+  const zoneDebounceRef = useRef(null);   // debounce timer for zone state to prevent flicker
   const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
@@ -7455,19 +7486,24 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       if (card) {
         const repId = card.getAttribute('data-panel-id');
         if (repId === draggingRef.current) {
-          // Hovering own card — clear
+          // Hovering own card — clear immediately
+          if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
           if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
           return;
         }
         const rect = card.getBoundingClientRect();
         const pct  = (clientY - rect.top) / rect.height;
-        const zone = pct < 0.3 ? "top" : pct > 0.7 ? "bottom" : "middle";
-        if (overSlotRef.current !== repId || overZoneRef.current !== zone) {
+        const zone = pct < 0.45 ? "top" : pct > 0.55 ? "bottom" : "middle";
+        // Debounce zone commits — prevents rapid flicker at card boundaries
+        if (overSlotRef.current === repId && overZoneRef.current === zone) return; // already set
+        if (zoneDebounceRef.current) clearTimeout(zoneDebounceRef.current);
+        zoneDebounceRef.current = setTimeout(() => {
+          zoneDebounceRef.current = null;
           overSlotRef.current = repId;
           overZoneRef.current = zone;
           setOverSlot(repId);
           setOverZone(zone);
-        }
+        }, 60);
         return;
       }
 
@@ -7479,6 +7515,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     window.addEventListener("touchmove", onMove, { passive: true });
 
     const onUp = () => {
+      // Cancel any pending debounced zone commit — read current refs directly
+      if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
       const fromId = draggingRef.current;
       const slot   = overSlotRef.current;
       const zone   = overZoneRef.current;
@@ -7578,7 +7616,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (repIdOf(mySlot) === repId) return;
     const rect = el.getBoundingClientRect();
     const pct  = (e.clientY - rect.top) / rect.height;
-    const zone = pct < 0.3 ? "top" : pct > 0.7 ? "bottom" : "middle";
+    const zone = pct < 0.45 ? "top" : pct > 0.55 ? "bottom" : "middle";
     if (overSlotRef.current !== repId || overZoneRef.current !== zone) {
       overSlotRef.current = repId;
       overZoneRef.current = zone;
