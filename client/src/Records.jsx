@@ -7489,7 +7489,26 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         return;
       }
 
-      // 3. Over nothing useful — clear card hover
+      // 3. Check if cursor is over the left column container (empty background below cards)
+      //    elementFromPoint finds the bg div — no data-panel-id — so we fall back to the
+      //    last panel in the left column and treat it as a "bottom" drop (append).
+      const leftColEl = target?.closest('[data-panel-col="left"]');
+      if (leftColEl) {
+        const leftOrder = panelOrdersRef.current?.left ?? [];
+        const lastSlot  = leftOrder.length ? leftOrder[leftOrder.length - 1] : null;
+        const lastRepId = lastSlot ? repIdOf(lastSlot) : null;
+        if (lastRepId && lastRepId !== draggingRef.current) {
+          if (overSlotRef.current !== lastRepId || overZoneRef.current !== 'bottom') {
+            overSlotRef.current = lastRepId;
+            overZoneRef.current = 'bottom';
+            setOverSlot(lastRepId);
+            setOverZone('bottom');
+          }
+          return;
+        }
+      }
+
+      // 4. Over nothing useful — clear card hover
       if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
     };
 
@@ -8427,7 +8446,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       <div ref={containerRef} style={{ display:"flex", minHeight:"60vh", userSelect:draggingCol.current?"none":"auto" }}>
 
         {/* LEFT COL — draggable panels (default: Profile Fields) */}
-        <div style={{ width:`${leftPct}%`, flexShrink:0, background:"#F4F6FB", display:"flex", flexDirection:"column", overflowX:"hidden", padding:"16px 0 24px 16px" }}>
+        <div data-panel-col="left" style={{ width:`${leftPct}%`, flexShrink:0, background:"#F4F6FB", display:"flex", flexDirection:"column", overflowX:"hidden", padding:"16px 0 24px 16px" }}>
           {leftPanelOrder.map((slot, idx) => {
             const prevSlot   = idx > 0 ? leftPanelOrder[idx-1] : null;
             const prevRepId  = prevSlot ? repIdOf(prevSlot) : null;
