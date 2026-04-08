@@ -551,7 +551,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
   );
 
   return (
-    <div style={{ background: V.bg, minHeight: "100vh", padding: "28px 32px 80px 32px", fontFamily: "'DM Sans',-apple-system,sans-serif" }}>
+    <div style={{ background: V.bg, flex: 1, minHeight: "100%", padding: "28px 32px 80px 32px", fontFamily: "'DM Sans',-apple-system,sans-serif" }}>
 
       {/* ── Greeting header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>

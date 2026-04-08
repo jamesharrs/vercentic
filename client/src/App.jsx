@@ -2247,7 +2247,7 @@ function App() {
           activeNav.startsWith("record_")   ? "page-record" :
           activeNav.startsWith("obj_")      ? "page-obj" :
           `page-${activeNav}`
-        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: "visible" }}>
+        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: "auto" }}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
         ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" ? (
