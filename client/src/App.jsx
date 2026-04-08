@@ -2236,7 +2236,7 @@ function App() {
                />
              } />
         {/* Page content */}
-        <div style={{ flex: 1, display:"flex", flexDirection:"column", padding: (activeNav.startsWith("record_") || activeNav.startsWith("obj_") || activeNav === "activity_journal") ? 0 : "28px 32px", overflow: (activeNav.startsWith("dashboard")) ? "auto" : "visible", minHeight: 0, position: "relative", zIndex: 0 }}>
+        <div style={{ flex: 1, display:"flex", flexDirection:"column", padding: (activeNav.startsWith("record_") || activeNav.startsWith("obj_") || activeNav === "activity_journal") ? 0 : "28px 32px", overflow: "auto", minHeight: 0, position: "relative", zIndex: 0 }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#9ca3af" }}>Loading…</div>
         ) : !selectedEnv ? (
@@ -2247,8 +2247,7 @@ function App() {
           activeNav.startsWith("record_")   ? "page-record" :
           activeNav.startsWith("obj_")      ? "page-obj" :
           `page-${activeNav}`
-        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0,
-          overflow: (activeNav === "dashboard" || activeNav.startsWith("dashboard_")) ? "auto" : "visible",
+        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow:"auto",
           background: activeNav === "dashboard" || activeNav.startsWith("dashboard_") ? "#F8F7FF" : undefined }}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
