@@ -6046,7 +6046,7 @@ const ACT_META = {
   updated:       { icon:"edit",      bg:"#eff6ff", ic:"#3b5bdb" },
 };
 
-const ActivityPanel = memo(({ record }) => {
+const ActivityPanel = memo(({ record, onViewAll }) => {
   const [items,    setItems]    = useState([]);
   const [total,    setTotal]    = useState(0);
   const [pages,    setPages]    = useState(1);
@@ -6054,93 +6054,98 @@ const ActivityPanel = memo(({ record }) => {
   const [search,   setSearch]   = useState("");
   const [category, setCategory] = useState("all");
   const [loading,  setLoading]  = useState(false);
-  const searchRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!record?.id) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page, limit: 10, search, category });
+      const params = new URLSearchParams({ page, limit: 20, search, category });
       const d = await api.get(`/records/${record.id}/activity?${params}`);
-      // Support both old (array) and new (paginated) response shapes
-      if (Array.isArray(d)) {
-        setItems(d); setTotal(d.length); setPages(1);
-      } else {
-        setItems(d.items || []); setTotal(d.total || 0); setPages(d.pages || 1);
-      }
+      if (Array.isArray(d)) { setItems(d); setTotal(d.length); setPages(1); }
+      else { setItems(d.items||[]); setTotal(d.total||0); setPages(d.pages||1); }
     } catch { setItems([]); }
     setLoading(false);
   }, [record?.id, page, search, category]);
 
   useEffect(() => { load(); }, [load]);
-  // Reset to page 1 when filter/search changes
   useEffect(() => { setPage(1); }, [search, category]);
 
-  const formatVal = v => {
-    if (v === null || v === undefined || v === "") return <em style={{color:C.text3}}>empty</em>;
-    if (Array.isArray(v)) return v.join(", ") || <em style={{color:C.text3}}>empty</em>;
-    return String(v).slice(0, 80);
-  };
-
   const relTime = ts => {
-    const diff = Date.now() - new Date(ts);
-    if (diff < 60000)   return "just now";
-    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
-    if (diff < 86400000)return `${Math.floor(diff/3600000)}h ago`;
-    if (diff < 604800000) return `${Math.floor(diff/86400000)}d ago`;
+    const s = (Date.now() - new Date(ts)) / 1000;
+    if (s < 60)    return "just now";
+    if (s < 3600)  return `${Math.floor(s/60)}m ago`;
+    if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+    if (s < 604800) return `${Math.floor(s/86400)}d ago`;
     return new Date(ts).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
   };
 
+  const calDate = ts => new Date(ts).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+
   const actionLabel = a => {
+    const ch = a.changes || {};
     if (a.action==="created")        return "created this record";
-    if (a.action==="field_changed")  return `updated ${a.changes?.field_name||a.changes?.field_key||"a field"}`;
+    if (a.action==="field_changed")  return `${ch.field_name||ch.field_key||"Field"} changed`;
     if (a.action==="note_added")     return "added a note";
     if (a.action==="note_deleted")   return "deleted a note";
-    if (a.action==="email_sent")     return `sent an email${a.changes?.subject ? `: "${a.changes.subject}"` : ""}`;
+    if (a.action==="email_sent")     return ch.subject ? `Email: ${ch.subject}` : "sent an email";
     if (a.action==="sms_sent")       return "sent an SMS";
     if (a.action==="whatsapp_sent")  return "sent a WhatsApp";
     if (a.action==="call_logged")    return "logged a call";
-    if (a.action==="file_uploaded")  return `uploaded a file${a.changes?.name ? `: ${a.changes.name}` : ""}`;
+    if (a.action==="file_uploaded")  return ch.name ? `Uploaded: ${ch.name}` : "uploaded a file";
     if (a.action==="file_deleted")   return "deleted a file";
-    if (a.action==="stage_changed")  return `moved to ${a.changes?.stage||"a new stage"}`;
+    if (a.action==="stage_changed")  return `→ ${ch.stage||"new stage"}`;
     if (a.action==="linked")         return "linked to a record";
     if (a.action==="unlinked")       return "unlinked a record";
-    if (a.action==="status_changed") return `changed status to ${a.changes?.new_value||""}`;
+    if (a.action==="status_changed") return `Status → ${ch.new_value||""}`;
     return "updated this record";
+  };
+
+  const fmtDetail = a => {
+    const ch = a.changes || {};
+    if (a.action==="field_changed" && (ch.old_value!==undefined || ch.new_value!==undefined)) {
+      const from = ch.old_value!=null&&ch.old_value!==""
+        ? (Array.isArray(ch.old_value)?ch.old_value.join(", "):String(ch.old_value)).slice(0,40)
+        : null;
+      const to   = ch.new_value!=null&&ch.new_value!==""
+        ? (Array.isArray(ch.new_value)?ch.new_value.join(", "):String(ch.new_value)).slice(0,40)
+        : null;
+      if (from && to)  return `${from} → ${to}`;
+      if (to)          return `→ ${to}`;
+      if (from)        return `${from} → (cleared)`;
+    }
+    if (a.action==="note_added" && ch.preview) return `"${ch.preview.slice(0,60)}"`;
+    return null;
   };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:0}}>
 
-      {/* Search + filter header */}
-      <div style={{marginBottom:12}}>
-        {/* Search */}
+      {/* Search + categories */}
+      <div style={{marginBottom:10}}>
         <div style={{position:"relative",marginBottom:8}}>
-          <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
-            <Ic n="search" s={13} c={C.text3}/>
+          <div style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+            <Ic n="search" s={12} c={C.text3}/>
           </div>
-          <input ref={searchRef} value={search} onChange={e=>setSearch(e.target.value)}
+          <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search activity…"
-            style={{width:"100%",boxSizing:"border-box",padding:"7px 10px 7px 30px",
-              borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,
+            style={{width:"100%",boxSizing:"border-box",padding:"6px 10px 6px 28px",
+              borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:11.5,
               fontFamily:F,background:"#f8f9fc",color:C.text1,outline:"none"}}/>
           {search && (
             <button onClick={()=>setSearch("")}
-              style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
+              style={{position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",
                 background:"none",border:"none",cursor:"pointer",padding:2,display:"flex"}}>
-              <Ic n="x" s={12} c={C.text3}/>
+              <Ic n="x" s={11} c={C.text3}/>
             </button>
           )}
         </div>
-
-        {/* Category chips */}
         <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
           {ACTIVITY_CATEGORIES.map(cat => (
             <button key={cat.id} onClick={()=>setCategory(cat.id)}
-              style={{padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:600,
+              style={{padding:"2px 8px",borderRadius:99,fontSize:10.5,fontWeight:600,
                 cursor:"pointer",fontFamily:F,border:"1.5px solid",
                 borderColor: category===cat.id ? cat.color : C.border,
-                background: category===cat.id ? `${cat.color}15` : "transparent",
+                background: category===cat.id ? `${cat.color}12` : "transparent",
                 color: category===cat.id ? cat.color : C.text3,
                 transition:"all .1s"}}>
               {cat.label}
@@ -6149,78 +6154,69 @@ const ActivityPanel = memo(({ record }) => {
         </div>
       </div>
 
-      {/* Results summary */}
-      <div style={{fontSize:11,color:C.text3,marginBottom:8}}>
-        {loading ? "Loading…" : `${total} event${total!==1?"s":""}`}
-        {(search||category!=="all") ? " matching filters" : ""}
+      {/* Count + view-all */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+        marginBottom:6,fontSize:11,color:C.text3}}>
+        <span>{loading?"Loading…":`${total} event${total!==1?"s":""}`}</span>
+        {onViewAll && (
+          <button onClick={onViewAll}
+            style={{fontSize:11,fontWeight:600,color:C.accent,background:"none",
+              border:"none",cursor:"pointer",fontFamily:F,padding:0}}>
+            View all →
+          </button>
+        )}
       </div>
 
-      {/* Item list */}
+      {/* Compact feed */}
       {loading ? (
-        <div style={{textAlign:"center",padding:"20px 0",color:C.text3,fontSize:13}}>Loading…</div>
-      ) : items.length === 0 ? (
-        <div style={{textAlign:"center",padding:"28px 0",color:C.text3,fontSize:13}}>
+        <div style={{padding:"18px 0",textAlign:"center",color:C.text3,fontSize:12}}>Loading…</div>
+      ) : items.length===0 ? (
+        <div style={{padding:"24px 0",textAlign:"center",color:C.text3,fontSize:12}}>
           {search||category!=="all" ? "No matching activity" : "No activity yet"}
         </div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+        <div>
           {items.map((event, idx) => {
-            const meta = ACT_META[event.action] || ACT_META.updated;
-            const ch   = event.changes || {};
+            const meta   = ACT_META[event.action] || ACT_META.updated;
+            const label  = actionLabel(event);
+            const detail = fmtDetail(event);
+            const isLast = idx===items.length-1;
             return (
               <div key={event.id}
-                style={{display:"flex",gap:10,padding:"11px 0",
-                  borderBottom: idx<items.length-1 ? `1px solid ${C.border}` : "none"}}>
-                <div style={{width:28,height:28,borderRadius:"50%",background:meta.bg,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  flexShrink:0,marginTop:1}}>
-                  <Ic n={meta.icon} s={12} c={meta.ic}/>
+                style={{display:"flex",alignItems:"center",gap:9,
+                  padding:"8px 4px",
+                  borderBottom:isLast?"none":`0.5px solid ${C.border}`,
+                  transition:"background 0.1s",borderRadius:6}}
+                onMouseEnter={e=>e.currentTarget.style.background="#f8f9fc"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+
+                {/* Icon */}
+                <div style={{width:26,height:26,borderRadius:8,background:meta.bg,
+                  flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <Ic n={meta.icon} s={11} c={meta.ic}/>
                 </div>
+
+                {/* Content inline */}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                    <span style={{fontSize:12,fontWeight:700,color:C.text1}}>
-                      {event.actor || "System"}
+                  <div style={{display:"flex",alignItems:"baseline",gap:5,flexWrap:"wrap"}}>
+                    <span style={{fontSize:11.5,fontWeight:700,color:C.text1,
+                      whiteSpace:"nowrap",flexShrink:0}}>
+                      {event.actor||"System"}
                     </span>
-                    <span style={{fontSize:12,color:C.text2}}>{actionLabel(event)}</span>
-                    <span style={{fontSize:11,color:C.text3,marginLeft:"auto",whiteSpace:"nowrap"}}>
-                      {relTime(event.created_at)}
-                    </span>
+                    <span style={{fontSize:11,color:C.text2,fontWeight:500}}>{label}</span>
+                    {detail && (
+                      <span style={{fontSize:10.5,color:C.text3,fontStyle:"italic",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>
+                        {detail}
+                      </span>
+                    )}
                   </div>
+                </div>
 
-                  {/* Field change diff */}
-                  {event.action==="field_changed" && (ch.old_value!==undefined||ch.new_value!==undefined) && (
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,
-                      padding:"5px 8px",background:"#f8f9fc",borderRadius:7,
-                      border:`1px solid ${C.border}`,fontSize:11,flexWrap:"wrap"}}>
-                      <span style={{padding:"2px 6px",borderRadius:5,background:"#fee2e2",
-                        color:"#b91c1c",fontWeight:500,maxWidth:160,overflow:"hidden",
-                        textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {formatVal(ch.old_value)}
-                      </span>
-                      <Ic n="chevR" s={10} c={C.text3}/>
-                      <span style={{padding:"2px 6px",borderRadius:5,background:"#dcfce7",
-                        color:"#15803d",fontWeight:500,maxWidth:160,overflow:"hidden",
-                        textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {formatVal(ch.new_value)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Note preview */}
-                  {event.action==="note_added" && ch.preview && (
-                    <div style={{marginTop:4,padding:"5px 8px",background:"#fffbeb",
-                      borderRadius:7,border:`1px solid #fde68a`,fontSize:11,
-                      color:"#92400e",lineHeight:1.4}}>
-                      "{ch.preview}{ch.preview?.length>=100?"…":""}"
-                    </div>
-                  )}
-
-                  {/* Comm subject */}
-                  {["email_sent","sms_sent","whatsapp_sent"].includes(event.action) && ch.subject && (
-                    <div style={{marginTop:4,fontSize:11,color:C.text3,fontStyle:"italic"}}>
-                      {ch.subject}
-                    </div>
-                  )}
+                {/* Time */}
+                <div style={{flexShrink:0,textAlign:"right"}}>
+                  <div style={{fontSize:10,color:C.text3,whiteSpace:"nowrap"}}>{relTime(event.created_at)}</div>
+                  <div style={{fontSize:9.5,color:C.text3,whiteSpace:"nowrap"}}>{calDate(event.created_at)}</div>
                 </div>
               </div>
             );
@@ -6231,29 +6227,30 @@ const ActivityPanel = memo(({ record }) => {
       {/* Pagination */}
       {pages > 1 && (
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-          marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          marginTop:10,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
           <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}
-            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",
+            style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",
               borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",
-              fontSize:12,fontWeight:600,cursor:page<=1?"not-allowed":"pointer",
+              fontSize:11,fontWeight:600,cursor:page<=1?"not-allowed":"pointer",
               color:page<=1?C.text3:C.text2,fontFamily:F,opacity:page<=1?0.5:1}}>
-            <Ic n="chevL" s={12} c={page<=1?C.text3:C.text2}/> Prev
+            <Ic n="chevL" s={11} c={page<=1?C.text3:C.text2}/> Prev
           </button>
-          <span style={{fontSize:11,color:C.text3}}>
-            Page {page} of {pages} · {total} total
+          <span style={{fontSize:10,color:C.text3}}>
+            {page} / {pages} · {total} total
           </span>
           <button onClick={()=>setPage(p=>Math.min(pages,p+1))} disabled={page>=pages}
-            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",
+            style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",
               borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",
-              fontSize:12,fontWeight:600,cursor:page>=pages?"not-allowed":"pointer",
+              fontSize:11,fontWeight:600,cursor:page>=pages?"not-allowed":"pointer",
               color:page>=pages?C.text3:C.text2,fontFamily:F,opacity:page>=pages?0.5:1}}>
-            Next <Ic n="chevR" s={12} c={page>=pages?C.text3:C.text2}/>
+            Next <Ic n="chevR" s={11} c={page>=pages?C.text3:C.text2}/>
           </button>
         </div>
       )}
     </div>
   );
 }, (prev, next) => prev.record?.id === next.record?.id);
+
 
 // ── Notes Panel — defined OUTSIDE RecordDetail to prevent remount on every keystroke ──
 const NotesPanel = ({ record, notes, onNotesChange, canAdd=true, canDelete=true, linkedJobRecords=[], activeJobContext=null }) => {

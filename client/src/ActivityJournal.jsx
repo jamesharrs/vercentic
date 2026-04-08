@@ -225,7 +225,7 @@ export default function ActivityJournal({ environment, onOpenRecord }) {
         {/* Title */}
         <div style={{ padding:"0 6px 16px" }}>
           <div style={{ fontSize:15, fontWeight:800, color:C.text1, letterSpacing:"-0.02em" }}>
-            Activity Journal
+            Activity
           </div>
           <div style={{ fontSize:10.5, color:C.text3, marginTop:3 }}>
             Full platform history

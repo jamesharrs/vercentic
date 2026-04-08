@@ -362,7 +362,7 @@ function ActivityFeedCard({ activity, onOpenRecord, onViewAll }) {
             fontFamily: "inherit", transition: "all 0.12s" }}
           onMouseEnter={e => { e.currentTarget.style.background = "#f5f6fa"; e.currentTarget.style.color = V.purple; }}
           onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = V.gray2; }}>
-          +{extra} more · View full journal →
+          +{extra} more · View full activity →
         </button>
       )}
     </div>
