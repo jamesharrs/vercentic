@@ -2247,11 +2247,11 @@ function App() {
           activeNav.startsWith("record_")   ? "page-record" :
           activeNav.startsWith("obj_")      ? "page-obj" :
           `page-${activeNav}`
-        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: "auto" }}>
+        } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow: "auto",
+          background: activeNav === "dashboard" || activeNav.startsWith("dashboard_") ? "#F8F7FF" : undefined }}>
         { activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
         ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" ? (
-          <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F8F7FF", minHeight:"100%" }}>
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <DashboardHub
               tab={activeNav === "dashboard" ? "overview" : activeNav.replace("dashboard_", "")}
@@ -2275,7 +2275,6 @@ function App() {
               }}
             />
           </Suspense>
-          </div>
         ) : activeNav.startsWith("obj_") ? (() => {
           const _obj = navObjects.find(o => `obj_${o.id}` === activeNav);
           if (!_obj) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>;
