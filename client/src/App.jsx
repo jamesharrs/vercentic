@@ -24,6 +24,7 @@ const SettingsPage    = lazyWithRetry(() => import("./Settings.jsx"));
 const OrgChart        = lazyWithRetry(() => import("./OrgChart.jsx"));
 const SearchPage      = lazyWithRetry(() => import("./Search.jsx"));
 const Dashboard          = lazyWithRetry(() => import("./Dashboard.jsx"));
+const ActivityJournal    = lazyWithRetry(() => import("./ActivityJournal.jsx"));
 const AdminDashboard      = lazyWithRetry(() => import("./AdminDashboard.jsx"));
 const InterviewDashboard = lazyWithRetry(() => import("./InterviewDashboard.jsx"));
 const OfferDashboard     = lazyWithRetry(() => import("./OfferDashboard.jsx"));
@@ -2258,6 +2259,7 @@ function App() {
               onOpenRecord={openRecord}
               builderMode={dashBuilderMode}
               setBuilderMode={setDashBuilderMode}
+              onViewAll={() => setActiveNav("activity_journal")}
               onNavigate={(slug) => {
                 if (slug === "matching") { setActiveNav("matching"); return; }
                 if (slug === "search")   { setActiveNav("search");   return; }
@@ -2369,6 +2371,10 @@ function App() {
           <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", padding:"0 32px" }}>
             <AgentsModule environment={selectedEnv} />
           </div>
+        ) : activeNav === "activity_journal" ? (
+          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
+            <ActivityJournal environment={selectedEnv} onOpenRecord={openRecord} />
+          </Suspense>
         ) : activeNav === "calendar" ? (
           <div style={{ flex:1, overflow:"auto" }}>
             <CalendarModule environment={selectedEnv} />

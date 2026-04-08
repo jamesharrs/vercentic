@@ -19,11 +19,11 @@ const Loader = () => (
   </div>
 );
 
-export default function DashboardHub({ tab = "overview", onTabChange, environment, session, onOpenRecord, onNavigate, builderMode, setBuilderMode }) {
+export default function DashboardHub({ tab = "overview", onTabChange, environment, session, onOpenRecord, onNavigate, builderMode, setBuilderMode, onViewAll }) {
   return (
     <Suspense fallback={<Loader/>}>
       {tab === "overview" && (
-        <Dashboard environment={environment} session={session} onOpenRecord={onOpenRecord} onNavigate={onNavigate}/>
+        <Dashboard environment={environment} session={session} onOpenRecord={onOpenRecord} onNavigate={onNavigate} onViewAll={onViewAll}/>
       )}
       {tab === "interviews" && (
         <InterviewDashboard environment={environment} session={session} onNavigate={onNavigate}/>

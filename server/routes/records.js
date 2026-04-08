@@ -223,14 +223,194 @@ router.get('/', (req, res) => {
   res.json({records:visibleRecords,pagination:{total,page:parseInt(page),limit:parseInt(limit),pages:Math.ceil(total/parseInt(limit))}});
 });
 
-// Global activity feed for dashboard — must be before /:id
+// Global activity feed for dashboard — enriched with record/object/actor context
 router.get('/activity/feed', (req, res) => {
-  const { environment_id, limit=20 } = req.query;
+  const { environment_id, limit = 25, types } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  const feed = query('activity', a => a.environment_id === environment_id)
-    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, Number(limit));
-  res.json(feed);
+  const store = getStore();
+  const n = Number(limit);
+
+  // Build lookup maps — include deleted records so we can still show their names
+  const recordMap = {};
+  (store.records || []).filter(r => r.environment_id === environment_id)
+    .forEach(r => { recordMap[r.id] = r; });
+  const objectMap = {};
+  (store.objects || store.object_definitions || []).filter(o => o.environment_id === environment_id)
+    .forEach(o => { objectMap[o.id] = o; });
+  const userMap = {};
+  (store.users || []).forEach(u => { userMap[u.id] = u; });
+
+  const stripEmoji = s => (s || "").replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F300}-\u{1F9FF}]/gu, "").trim();
+
+  // Helper: get display name for a record
+  const getRecordName = (rec) => {
+    if (!rec) return 'Unknown record';
+    const d = rec.data || {};
+    return [d.first_name, d.last_name].filter(Boolean).join(' ')
+      || d.job_title || d.pool_name || d.name || d.title || rec.id.slice(0, 8);
+  };
+  // Helper: resolve actor
+  const resolveActor = (actorId) => {
+    if (!actorId) return null;
+    const u = userMap[actorId];
+    if (u) return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email;
+    return actorId; // may already be a name string
+  };
+
+  const entries = [];
+
+  // 1. Activity log entries
+  const rawActivity = query('activity', a => a.environment_id === environment_id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, n * 3); // over-fetch so we can enrich and dedupe
+
+  rawActivity.forEach(a => {
+    const rec = recordMap[a.record_id];
+    const obj = objectMap[a.object_id];
+    const recordName = getRecordName(rec);
+    const actor = resolveActor(a.actor);
+
+    // Map raw action to a friendly type + label
+    let type = a.action;
+    let label = '';
+    let detail = '';
+    let icon = 'edit';
+    let color = '#4361EE';
+
+    switch (a.action) {
+      case 'created':
+        label = 'Added'; icon = 'plus'; color = '#0CA678'; break;
+      case 'updated':
+        label = 'Updated'; icon = 'edit'; color = '#4361EE'; break;
+      case 'field_changed': {
+        const ch = a.changes || {};
+        const fieldName = stripEmoji(ch.field_name || ch.field_key || 'Field');
+        label = `${fieldName} changed`;
+        const rawVal = ch.new_value != null ? ch.new_value : (ch.old_value != null ? ch.old_value : '');
+        detail = Array.isArray(rawVal) ? rawVal.join(', ').slice(0, 60) : String(rawVal).slice(0, 60);
+        icon = 'edit'; color = '#4361EE'; break;
+      }
+      case 'note_added':
+        label = 'Note added'; icon = 'message-square'; color = '#7C3AED';
+        detail = (a.changes?.preview || '').slice(0, 80); break;
+      case 'email_sent':
+        label = 'Email sent'; icon = 'mail'; color = '#2563EB';
+        detail = a.changes?.subject || ''; break;
+      case 'sms_sent':
+        label = 'SMS sent'; icon = 'message-circle'; color = '#059669'; break;
+      case 'whatsapp_sent':
+        label = 'WhatsApp sent'; icon = 'message-circle'; color = '#25D366'; break;
+      case 'call_logged':
+        label = 'Call logged'; icon = 'phone'; color = '#D97706'; break;
+      case 'applied':
+        label = 'Applied'; icon = 'file-text'; color = '#7C3AED';
+        detail = a.details?.job_title || ''; break;
+      default:
+        label = a.action.replace(/_/g, ' '); icon = 'activity'; color = '#6B7280';
+    }
+
+    entries.push({
+      id: a.id, type, label,
+      record_id: a.record_id, record_name: recordName,
+      object_name: obj?.plural_name || obj?.name || 'Record',
+      object_color: obj?.color || '#4361EE',
+      object_slug: obj?.slug || '',
+      object_id: a.object_id,
+      actor, detail, icon, color,
+      created_at: a.created_at,
+      source: 'activity',
+    });
+  });
+
+  // 2. Recent interviews (up to n/2)
+  const interviews = (store.interviews || [])
+    .filter(i => {
+      const rec = recordMap[i.candidate_id];
+      return rec && rec.environment_id === environment_id;
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, Math.ceil(n / 2));
+
+  interviews.forEach(i => {
+    const rec = recordMap[i.candidate_id];
+    if (!rec) return;
+    const obj = objectMap[rec.object_id];
+    const d = i.date ? new Date(i.date) : null;
+    const dateStr = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+    entries.push({
+      id: `int_${i.id}`, type: 'interview_scheduled', label: 'Interview scheduled',
+      record_id: i.candidate_id, record_name: getRecordName(rec),
+      object_name: obj?.plural_name || 'People', object_color: obj?.color || '#4361EE',
+      object_slug: obj?.slug || 'people', object_id: rec.object_id,
+      actor: resolveActor(i.created_by),
+      detail: [i.interview_type, dateStr, i.format].filter(Boolean).join(' · '),
+      icon: 'calendar', color: '#7C3AED',
+      created_at: i.created_at, source: 'interview',
+    });
+  });
+
+  // 3. Recent offers
+  const offers = (store.offers || [])
+    .filter(o => {
+      const rec = recordMap[o.candidate_id];
+      return rec && rec.environment_id === environment_id;
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, Math.ceil(n / 3));
+
+  offers.forEach(o => {
+    const rec = recordMap[o.candidate_id];
+    if (!rec) return;
+    const obj = objectMap[rec.object_id];
+    const statusLabels = { draft: 'Offer drafted', pending_approval: 'Offer pending approval',
+      sent: 'Offer sent', accepted: 'Offer accepted', declined: 'Offer declined',
+      withdrawn: 'Offer withdrawn', expired: 'Offer expired' };
+    const statusColors = { accepted: '#0CA678', declined: '#E03131', sent: '#2563EB', default: '#D97706' };
+    entries.push({
+      id: `off_${o.id}`, type: `offer_${o.status}`, label: statusLabels[o.status] || 'Offer updated',
+      record_id: o.candidate_id, record_name: getRecordName(rec),
+      object_name: obj?.plural_name || 'People', object_color: obj?.color || '#4361EE',
+      object_slug: obj?.slug || 'people', object_id: rec.object_id,
+      actor: resolveActor(o.updated_by || o.created_by),
+      detail: o.base_salary ? `${o.currency || 'AED'} ${Number(o.base_salary).toLocaleString()}` : '',
+      icon: 'file-check', color: statusColors[o.status] || statusColors.default,
+      created_at: o.updated_at || o.created_at, source: 'offer',
+    });
+  });
+
+  // 4. Pipeline stage changes from people_links
+  const stageChanges = (store.people_links || [])
+    .filter(l => l.environment_id === environment_id && l.stage_name && l.updated_at)
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .slice(0, Math.ceil(n / 3));
+
+  stageChanges.forEach(l => {
+    const personRec = recordMap[l.person_record_id];
+    const targetRec = recordMap[l.target_record_id];
+    if (!personRec || !targetRec) return;
+    const obj = objectMap[personRec.object_id];
+    const targetObj = objectMap[targetRec.object_id];
+    const targetName = getRecordName(targetRec);
+    entries.push({
+      id: `stg_${l.id}`, type: 'stage_changed', label: 'Stage moved',
+      record_id: l.person_record_id, record_name: getRecordName(personRec),
+      object_name: obj?.plural_name || 'People', object_color: obj?.color || '#4361EE',
+      object_slug: obj?.slug || 'people', object_id: personRec.object_id,
+      actor: null,
+      detail: `${l.stage_name} · ${targetObj?.name || 'Job'}: ${targetName}`,
+      icon: 'arrow-right', color: '#F08C00',
+      created_at: l.updated_at, source: 'stage',
+    });
+  });
+
+  // Merge, sort, dedupe, limit
+  const typeFilter = types ? types.split(',') : null;
+  const sorted = entries
+    .filter(e => !typeFilter || typeFilter.includes(e.source))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, n);
+
+  res.json(sorted);
 });
 
 // People-links for Client Hub — must be before /:id

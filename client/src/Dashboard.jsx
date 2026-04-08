@@ -26,7 +26,8 @@ const V = {
 
 const ACCENT = [V.purple, V.rose, V.teal, V.amber, V.purpleL];
 
-let _cache = null, _cacheEnv = null;
+let _cache = null, _cacheEnv = null, _cacheTS = 0;
+const CACHE_TTL = 60000; // 1 minute
 
 // ── Greeting ──────────────────────────────────────────────────────────────
 function greeting() {
@@ -113,6 +114,261 @@ function KpiCard({ label, value, sub, sub2, color, iconPath, tag, tagUp, onClick
   );
 }
 
+// ── Activity feed icon paths ──────────────────────────────────────────────
+const ACT_ICONS = {
+  plus:            "M12 5v14M5 12h14",
+  edit:            "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  mail:            "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
+  "message-square":"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  "message-circle":"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
+  phone:           "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.16 6.16l.91-1.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z",
+  calendar:        "M3 9h18M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zM8 2v4M16 2v4",
+  "file-check":    "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15l2 2 4-4",
+  "file-text":     "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  "arrow-right":   "M5 12h14M12 5l7 7-7 7",
+  activity:        "M22 12h-4l-3 9L9 3l-3 9H2",
+};
+
+function ActIcon({ name, color, size = 13 }) {
+  const d = ACT_ICONS[name] || ACT_ICONS.activity;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function relTime(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60)   return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+const SOURCE_FILTERS = [
+  { id: "all",       label: "All" },
+  { id: "activity",  label: "Records" },
+  { id: "interview", label: "Interviews" },
+  { id: "offer",     label: "Offers" },
+  { id: "stage",     label: "Stages" },
+];
+
+// ── Object icon paths (Lucide) ────────────────────────────────────────────
+const OBJ_ICONS = {
+  people:      "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+  jobs:        "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
+  "talent-pools":"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+  default:     "M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z",
+};
+
+// Strip emoji characters from a string
+const stripEmoji = s => (s||"").replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F300}-\u{1F9FF}🧪]/gu, "").trim();
+
+// Format detail value nicely
+const fmtDetail = (detail, type) => {
+  if (!detail) return "";
+  const s = Array.isArray(detail) ? detail.join(", ") : String(detail);
+  if (type === "field_changed") return `→ ${s.slice(0, 50)}`;
+  return s.slice(0, 60);
+};
+
+// Group events for the same record within a 2h window into a single entry
+const groupActivity = (events) => {
+  const WINDOW = 7200000; // 2 hours
+  const groups = [];
+  const keyToIdx = {}; // `${record_id}:${dayBucket}` → group index
+
+  events.forEach(e => {
+    const rid = e.record_id;
+    if (!rid) { groups.push({ ...e, count: 1, changes: [e] }); return; }
+
+    // Bucket by record_id + calendar date so different days aren't merged
+    const day = e.created_at ? e.created_at.slice(0, 10) : "unknown";
+    const key = `${rid}:${day}`;
+    const idx = keyToIdx[key];
+
+    if (idx !== undefined) {
+      const grp = groups[idx];
+      const diff = Math.abs(new Date(grp.created_at) - new Date(e.created_at));
+      if (diff <= WINDOW) {
+        grp.count++;
+        grp.changes = grp.changes || [];
+        grp.changes.push(e);
+        // Prefer non-field_changed label (created/interview etc. is more informative)
+        if (e.type !== "field_changed" && grp.type === "field_changed") {
+          grp.label  = e.label;
+          grp.icon   = e.icon;
+          grp.color  = e.color;
+          grp.type   = e.type;
+          grp.detail = e.detail;
+        }
+        // Always use the most recent timestamp shown
+        if (new Date(e.created_at) > new Date(grp.created_at)) grp.created_at = e.created_at;
+        return;
+      }
+    }
+    // New group
+    keyToIdx[key] = groups.length;
+    groups.push({ ...e, count: 1, changes: [e] });
+  });
+
+  return groups;
+};
+
+function ActivityFeedCard({ activity, onOpenRecord, onViewAll }) {
+  const [filter, setFilter] = useState("all");
+  const filtered = filter === "all" ? activity : activity.filter(a => a.source === filter);
+  const grouped  = groupActivity(filtered);
+  const shown    = grouped.slice(0, 5);
+  const extra    = grouped.length - shown.length;
+
+  return (
+    <div style={{ background: V.card, border: `0.5px solid ${V.border}`, borderRadius: 16,
+      padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Recent Activity</div>
+          <div style={{ fontSize: 11, color: V.gray, marginTop: 1 }}>Live changes across the platform</div>
+        </div>
+        <button onClick={onViewAll}
+          style={{ fontSize: 11, fontWeight: 600, color: V.purple, background: "none",
+            border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+          View all →
+        </button>
+      </div>
+
+      {/* Filter pills */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
+        {SOURCE_FILTERS.map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            style={{ fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+              border: `1.5px solid ${filter === f.id ? V.purple : V.border}`,
+              background: filter === f.id ? `${V.purple}12` : "transparent",
+              color: filter === f.id ? V.purple : V.gray,
+              cursor: "pointer", fontFamily: "inherit", transition: "all 0.12s" }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Feed — 5 grouped entries */}
+      {!shown.length ? (
+        <div style={{ padding: "32px 0", textAlign: "center", color: V.gray, fontSize: 12 }}>
+          No activity yet
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {shown.map((a, i) => {
+            const isLast    = i === shown.length - 1;
+            const iconBg    = `${a.color || V.purple}14`;
+            const objIcon   = OBJ_ICONS[a.object_slug] || OBJ_ICONS.default;
+            const cleanLabel = stripEmoji(a.label);
+            const detail    = fmtDetail(a.detail, a.type);
+            const isMulti   = a.count > 1;
+
+            return (
+              <div key={a.id}
+                onClick={() => a.record_id && a.object_id && onOpenRecord?.(a.record_id, a.object_id)}
+                style={{ display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "10px 6px",
+                  borderBottom: isLast ? "none" : `0.5px solid ${V.border}`,
+                  cursor: a.record_id ? "pointer" : "default",
+                  borderRadius: 8, transition: "background 0.1s" }}
+                onMouseEnter={e => { if (a.record_id) e.currentTarget.style.background = "#f5f6fa"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+
+                {/* Action icon — stacked if multiple */}
+                <div style={{ position: "relative", flexShrink: 0, marginTop: 1 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: iconBg,
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <ActIcon name={a.icon || "activity"} color={a.color || V.purple} size={13} />
+                  </div>
+                  {isMulti && (
+                    <div style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14,
+                      borderRadius: "50%", background: a.color || V.purple,
+                      color: "white", fontSize: 8, fontWeight: 800,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      border: "1.5px solid white" }}>
+                      {a.count > 9 ? "9+" : a.count}
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Name + badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+                      {a.record_name && a.record_name !== "Unknown record" ? a.record_name : "Deleted record"}
+                    </span>
+                    {a.object_name && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                        fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 99,
+                        background: `${a.object_color || V.purple}15`,
+                        color: a.object_color || V.purple, flexShrink: 0, whiteSpace: "nowrap" }}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none"
+                          stroke={a.object_color || V.purple} strokeWidth="2.5"
+                          strokeLinecap="round" strokeLinejoin="round">
+                          <path d={objIcon} />
+                        </svg>
+                        {a.object_name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action label — summarise if grouped */}
+                  <div style={{ fontSize: 11, color: "#475569", fontWeight: 500, lineHeight: 1.3 }}>
+                    {isMulti ? `${a.count} changes · ${cleanLabel || a.label}` : (cleanLabel || a.label)}
+                  </div>
+
+                  {/* Detail */}
+                  {!isMulti && detail && (
+                    <div style={{ fontSize: 10.5, color: "#64748b", marginTop: 2, fontStyle: "italic",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190 }}>
+                      {detail}
+                    </div>
+                  )}
+
+                  {/* Actor */}
+                  {a.actor && a.actor !== "null" && (
+                    <div style={{ fontSize: 10, color: V.gray, marginTop: 2 }}>by {a.actor}</div>
+                  )}
+                </div>
+
+                {/* Timestamp */}
+                <div style={{ fontSize: 10, color: V.gray, flexShrink: 0, paddingTop: 3,
+                  whiteSpace: "nowrap", minWidth: 40, textAlign: "right" }}>
+                  {relTime(a.created_at)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* More link */}
+      {extra > 0 && (
+        <button onClick={onViewAll}
+          style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 9,
+            border: `1px solid ${V.border}`, background: "transparent",
+            color: V.gray2, fontSize: 11, fontWeight: 600, cursor: "pointer",
+            fontFamily: "inherit", transition: "all 0.12s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#f5f6fa"; e.currentTarget.style.color = V.purple; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = V.gray2; }}>
+          +{extra} more · View full journal →
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Card wrapper ──────────────────────────────────────────────────────────
 function Card({ children, style }) {
   return (
@@ -163,19 +419,19 @@ function ActionBtn({ label, color, iconPath, onClick }) {
 }
 
 // ── Main Dashboard ────────────────────────────────────────────────────────
-export default function Dashboard({ environment, session, onNavigate, onOpenRecord, onReport }) {
+export default function Dashboard({ environment, session, onNavigate, onOpenRecord, onReport, onViewAll }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const isMounted = useRef(true);
 
   const load = useCallback(async (force = false) => {
     if (!environment?.id) return;
-    if (!force && _cache && _cacheEnv === environment.id) { setData(_cache); setLoading(false); return; }
+    if (!force && _cache && _cacheEnv === environment.id && Date.now() - _cacheTS < CACHE_TTL) { setData(_cache); setLoading(false); return; }
     setLoading(true);
     try {
       const [objRes, actRes] = await Promise.all([
         api.get(`/objects?environment_id=${environment.id}`),
-        api.get(`/records/activity/feed?environment_id=${environment.id}&limit=8`),
+        api.get(`/records/activity/feed?environment_id=${environment.id}&limit=25`),
       ]);
       const objects  = Array.isArray(objRes) ? objRes : [];
       const activity = Array.isArray(actRes) ? actRes : [];
@@ -239,7 +495,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
         hiringActivity, jobStatus: statusMap(jobsObj), peopleStatus: statusMap(peopleObj),
         deptBreakdown: deptMap(jobsObj), momPeople: mom(peopleObj), momJobs: mom(jobsObj) };
 
-      _cache = result; _cacheEnv = environment.id;
+      _cache = result; _cacheEnv = environment.id; _cacheTS = Date.now();
       if (isMounted.current) { setData(result); setLoading(false); }
     } catch(e) { console.error('[Dashboard] load error:', e); if (isMounted.current) setLoading(false); }
   }, [environment?.id]);
@@ -560,37 +816,8 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           )}
         </Card>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardTitle title="Recent Activity" sub="Latest changes across all objects" />
-          {data?.activity?.length ? (
-            <div>
-              {data.activity.slice(0, 6).map((a, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
-                  borderBottom: i < 5 ? `0.5px solid ${V.border}` : "none" }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 8, flexShrink: 0,
-                    background: a.action === "create" ? V.tealFaint : a.action === "delete" ? V.roseFaint : V.purpleFaint,
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%",
-                      background: a.action === "create" ? V.teal : a.action === "delete" ? V.rose : V.purple }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: V.gray2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {a.action === "create" ? "Added" : a.action === "delete" ? "Removed" : "Updated"} · {a.object_name || "Record"}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10, color: V.gray, flexShrink: 0 }}>
-                    {a.created_at ? new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ height: 140, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: V.gray }}>
-              <div style={{ fontSize: 12 }}>No recent activity</div>
-            </div>
-          )}
-        </Card>
+        {/* Recent Activity — rich feed */}
+        <ActivityFeedCard activity={data?.activity || []} onOpenRecord={onOpenRecord} onViewAll={onViewAll} />
       </div>
 
       {/* ── Bottom action bar ── */}
