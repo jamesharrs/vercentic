@@ -7063,25 +7063,32 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
-  const storageKey = `talentos_panels_${objectName}`;
-  // Version stamp — bump this whenever new panels are added to PANEL_META or getDefaultPanelOrder.
-  // Mismatch → stale localStorage is discarded and fresh defaults load automatically.
-  const PANEL_VERSION = "v9"; // 17 panels as of Apr 2026
-  const versionKey = `talentos_panels_version_${objectName}`;
+  const storageKey       = `talentos_panels_${objectName}`;
+  const leftStorageKey   = `talentos_panels_left_${objectName}`;
+  const topStorageKey    = `talentos_panels_top_${objectName}`;
+  const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
+  const PANEL_VERSION    = "v11"; // bumped — clears ALL four keys on mismatch
+  const versionKey       = `talentos_panels_version_${objectName}`;
+
+  // On version mismatch wipe ALL four storage keys so nothing stale persists
+  const _storedVersion = localStorage.getItem(versionKey);
+  if (_storedVersion !== PANEL_VERSION) {
+    try {
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(leftStorageKey);
+      localStorage.removeItem(topStorageKey);
+      localStorage.removeItem(bottomStorageKey);
+      localStorage.setItem(versionKey, PANEL_VERSION);
+    } catch {}
+  }
+
   const [panelOrder, setPanelOrder] = useState(() => {
     try {
-      const storedVersion = localStorage.getItem(versionKey);
       const saved = JSON.parse(localStorage.getItem(storageKey));
-      // Version mismatch or no saved data → reset to fresh defaults
-      if (!saved || storedVersion !== PANEL_VERSION) {
-        localStorage.setItem(versionKey, PANEL_VERSION);
-        return getDefaultPanelOrder(objectName);
-      }
-      // Version matches — merge any new panels not yet in saved order
-      const defaults = getDefaultPanelOrder(objectName);
+      if (!saved) return getDefaultPanelOrder(objectName);
+      const defaults  = getDefaultPanelOrder(objectName);
       const savedFlat = flatPanelIds(saved);
-      const merged = [...saved, ...defaults.filter(id => !savedFlat.includes(id))];
-      return merged;
+      return [...saved, ...defaults.filter(id => !savedFlat.includes(id))];
     }
     catch { return getDefaultPanelOrder(objectName); }
   });
@@ -7092,8 +7099,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
 
   // ── Top / bottom full-width rows ────────────────────────────────────────
-  const topStorageKey    = `talentos_panels_top_${objectName}`;
-  const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
   const [topRows,    setTopRows]    = useState(() => { try { const s=JSON.parse(localStorage.getItem(topStorageKey));    return Array.isArray(s) ? s : []; } catch { return []; } });
   const [bottomRows, setBottomRows] = useState(() => { try { const s=JSON.parse(localStorage.getItem(bottomStorageKey)); return Array.isArray(s) ? s : []; } catch { return []; } });
   const saveTopRows    = (order) => { setTopRows(order);    try { localStorage.setItem(topStorageKey,    JSON.stringify(order)); } catch {} };
@@ -7106,7 +7111,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const panelOrdersRef    = useRef(null);
 
   // ── Left column panel order (default: just fields) ──────────────────────
-  const leftStorageKey = `talentos_panels_left_${objectName}`;
   const [leftPanelOrder, setLeftPanelOrder] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(leftStorageKey));
