@@ -143,6 +143,7 @@ export default function ScreeningDashboard({ environment, onNavigate }) {
               <span style={{width:6,height:6,borderRadius:"50%",background:color,flexShrink:0}}/>{label}
             </button>
           ))}
+          <button onClick={load} style={{fontSize:11,padding:"6px 12px",borderRadius:20,border:"0.5px solid rgba(0,0,0,0.06)",background:"white",color:"#888780",cursor:"pointer",fontFamily:F}}>↻</button>
         </div>
       </div>
       {/* Quick Links */}
