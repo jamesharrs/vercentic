@@ -7075,7 +7075,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const draggingRef = useRef(null);
   const overSlotRef = useRef(null);
   const overZoneRef = useRef(null);
-  const zoneDebounceRef = useRef(null);   // debounce timer for zone state to prevent flicker
   const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
@@ -7474,8 +7473,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           fullWidthDropRef.current = pos;
           setFullWidthZone(pos);
         }
-        // Clear any card hover — cancel pending debounce first
-        if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
         if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
         return;
       }
@@ -7488,28 +7485,22 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         const repId = card.getAttribute('data-panel-id');
         if (repId === draggingRef.current) {
           // Hovering own card — clear immediately
-          if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
           if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
           return;
         }
         const rect = card.getBoundingClientRect();
         const pct  = (clientY - rect.top) / rect.height;
         const zone = pct < 0.45 ? "top" : pct > 0.55 ? "bottom" : "middle";
-        // Debounce zone commits — prevents rapid flicker at card boundaries
-        if (overSlotRef.current === repId && overZoneRef.current === zone) return; // already set
-        if (zoneDebounceRef.current) clearTimeout(zoneDebounceRef.current);
-        zoneDebounceRef.current = setTimeout(() => {
-          zoneDebounceRef.current = null;
+        if (overSlotRef.current !== repId || overZoneRef.current !== zone) {
           overSlotRef.current = repId;
           overZoneRef.current = zone;
           setOverSlot(repId);
           setOverZone(zone);
-        }, 60);
+        }
         return;
       }
 
-      // 3. Over nothing useful — cancel pending debounce and clear card hover
-      if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
+      // 3. Over nothing useful — clear card hover
       if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
     };
 
@@ -7517,8 +7508,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     window.addEventListener("touchmove", onMove, { passive: true });
 
     const onUp = () => {
-      // Cancel any pending debounced zone commit — read current refs directly
-      if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
       const fromId = draggingRef.current;
       const slot   = overSlotRef.current;
       const zone   = overZoneRef.current;
