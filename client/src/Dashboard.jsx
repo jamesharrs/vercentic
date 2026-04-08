@@ -551,7 +551,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
   );
 
   return (
-    <div style={{ background: V.bg, minHeight: "100vh", padding: "28px 32px", fontFamily: "'DM Sans',-apple-system,sans-serif" }}>
+    <div style={{ background: V.bg, minHeight: "100vh", padding: "28px 32px 80px 32px", fontFamily: "'DM Sans',-apple-system,sans-serif" }}>
 
       {/* ── Greeting header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
@@ -564,16 +564,25 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           </div>
         </div>
         <div data-tour="dashboard-stats" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Stat pills */}
-          <StatPill color={V.rose} value={openRoles}
-            label="open roles"
-            icon={<><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></>} />
-          <StatPill color={V.purple} value={activeCandidates}
-            label="active candidates"
-            icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />
-          <StatPill color={V.teal} value={interviewsToday}
-            label="interviews today"
-            icon={<><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>} />
+          {/* Dashboard nav pills — navigate to sub-dashboards */}
+          {[
+            { label:"Screening",   color: V.purple, nav: "screening"   },
+            { label:"Interviews",  color: V.teal,   nav: "interviews"  },
+            { label:"Offers",      color: V.rose,   nav: "offers"      },
+            { label:"Onboarding",  color: V.amber,  nav: "onboarding"  },
+          ].map(({ label, color, nav }) => (
+            <button key={nav}
+              onClick={() => onNavigate?.(nav)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 13px", borderRadius:20,
+                border:`1.5px solid ${color}40`, background:`${color}10`, color,
+                fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                transition:"all .15s", letterSpacing:"0.01em" }}
+              onMouseEnter={e => { e.currentTarget.style.background = `${color}20`; e.currentTarget.style.borderColor = color; }}
+              onMouseLeave={e => { e.currentTarget.style.background = `${color}10`; e.currentTarget.style.borderColor = `${color}40`; }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", background:color, flexShrink:0 }}/>
+              {label}
+            </button>
+          ))}
           <button onClick={() => { _cache = null; load(true); }}
             style={{ fontSize: 11, padding: "6px 12px", borderRadius: 20, border: `0.5px solid ${V.border}`,
               background: V.card, color: V.gray, cursor: "pointer", fontFamily: "inherit" }}>
@@ -746,77 +755,163 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
         </div>
       )}
 
-      {/* ── Bottom row: Candidate Pipeline + Open Reqs by Dept + Recent Activity ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginBottom: 16 }}>
+      {/* ── Bottom section: 3-col grid — left/mid stack 2 cards each, right = activity ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginBottom: 12, alignItems: "start" }}>
 
-        {/* Candidate Pipeline */}
-        <Card>
-          <CardTitle title="Candidate Pipeline"
-            sub={`${activeCandidates} total`}
-            action={
-              <button onClick={() => goTo("people", "", "")}
-                style={{ fontSize: 11, color: V.purple, background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
-                View all →
-              </button>
-            }
-          />
-          {data?.peopleStatus?.length ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {data.peopleStatus.slice(0, 6).map((s, i) => {
-                const total = data.peopleStatus.reduce((a, b) => a + b.value, 0) || 1;
-                const pct   = Math.round((s.value / total) * 100);
-                const col   = ACCENT[i % ACCENT.length];
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontSize: 11, color: V.gray, width: 72, textAlign: "right", flexShrink: 0 }}>{s.name}</div>
-                    <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.05)", borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 99, transition: "width 0.7s ease" }} />
+        {/* COL 1: Candidate Pipeline + Top Sources stacked */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Candidate Pipeline */}
+          <Card>
+            <CardTitle title="Candidate Pipeline"
+              sub={`${activeCandidates} total`}
+              action={
+                <button onClick={() => goTo("people", "", "")}
+                  style={{ fontSize: 11, color: V.purple, background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                  View all →
+                </button>
+              }
+            />
+            {data?.peopleStatus?.length ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {data.peopleStatus.slice(0, 6).map((s, i) => {
+                  const total = data.peopleStatus.reduce((a, b) => a + b.value, 0) || 1;
+                  const pct   = Math.round((s.value / total) * 100);
+                  const col   = ACCENT[i % ACCENT.length];
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 11, color: V.gray, width: 72, textAlign: "right", flexShrink: 0 }}>{s.name}</div>
+                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.05)", borderRadius: 99, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 99, transition: "width 0.7s ease" }} />
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", width: 28, flexShrink: 0 }}>{s.value}</div>
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", width: 28, flexShrink: 0 }}>{s.value}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ height: 140, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: V.gray }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={V.purpleL} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              </svg>
-              <div style={{ fontSize: 12 }}>No candidates yet</div>
-            </div>
-          )}
-        </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ height: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: V.gray }}>
+                <div style={{ fontSize: 12 }}>No candidates yet</div>
+              </div>
+            )}
+          </Card>
 
-        {/* Open Reqs by Dept */}
-        <Card>
-          <CardTitle title="Open Reqs by Dept" sub={`${openRoles} open roles`} />
-          {data?.deptBreakdown?.length ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {data.deptBreakdown.slice(0, 6).map((d, i) => {
-                const max = Math.max(...data.deptBreakdown.map(x => x.open + x.filled)) || 1;
-                const pct = Math.round((d.open / max) * 100);
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontSize: 11, color: V.gray, width: 72, textAlign: "right", flexShrink: 0 }}>{d.dept}</div>
-                    <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.05)", borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: V.rose, borderRadius: 99 }} />
+          {/* Top Candidate Sources */}
+          <Card>
+            <CardTitle title="Top Candidate Sources"
+              sub="where candidates come from"
+              action={
+                <button onClick={() => openRpt?.({ object:"people", title:"Candidates by source", groupBy:"source", chartType:"bar" })}
+                  style={{ fontSize:11, color:V.purple, background:"none", border:"none", cursor:"pointer", fontWeight:700, fontFamily:"inherit" }}>
+                  Report →
+                </button>
+              }
+            />
+            {(() => {
+              const sourceCounts = {};
+              (data?.people?.records || []).forEach(p => {
+                const s = p.data?.source || "Unknown";
+                sourceCounts[s] = (sourceCounts[s] || 0) + 1;
+              });
+              const rows = Object.entries(sourceCounts).sort((a,b) => b[1]-a[1]).slice(0, 6);
+              const max  = rows[0]?.[1] || 1;
+              const cols = [V.purple, V.rose, V.teal, V.amber, V.purpleL, V.gray];
+              return rows.length ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {rows.map(([src, cnt], i) => (
+                    <div key={src} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ fontSize:11, color:V.gray, width:72, textAlign:"right", flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{src}</div>
+                      <div style={{ flex:1, height:6, background:"rgba(0,0,0,0.05)", borderRadius:99, overflow:"hidden" }}>
+                        <div style={{ width:`${Math.round((cnt/max)*100)}%`, height:"100%", background:cols[i%cols.length], borderRadius:99, transition:"width 0.7s ease" }}/>
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#111827", width:28, flexShrink:0 }}>{cnt}</div>
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", width: 28, flexShrink: 0 }}>{d.open}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ height: 140, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: V.gray }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={V.purpleL} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
-              <div style={{ fontSize: 12 }}>No department data yet</div>
-            </div>
-          )}
-        </Card>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ height:80, display:"flex", alignItems:"center", justifyContent:"center", color:V.gray, fontSize:12 }}>No source data yet</div>
+              );
+            })()}
+          </Card>
+        </div>
 
-        {/* Recent Activity — rich feed */}
+        {/* COL 2: Open Reqs by Dept + Candidate Skills stacked */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Open Reqs by Dept */}
+          <Card>
+            <CardTitle title="Open Reqs by Dept" sub={`${openRoles} open roles`}
+              action={
+                <button onClick={() => openRpt?.({ object:"jobs", title:"Jobs by department", groupBy:"department", chartType:"bar" })}
+                  style={{ fontSize:11, color:V.rose, background:"none", border:"none", cursor:"pointer", fontWeight:700, fontFamily:"inherit" }}>
+                  Report →
+                </button>
+              }
+            />
+            {data?.deptBreakdown?.length ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {data.deptBreakdown.slice(0, 6).map((d, i) => {
+                  const max = Math.max(...data.deptBreakdown.map(x => x.open + x.filled)) || 1;
+                  const pct = Math.round((d.open / max) * 100);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 11, color: V.gray, width: 72, textAlign: "right", flexShrink: 0 }}>{d.dept}</div>
+                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.05)", borderRadius: 99, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: V.rose, borderRadius: 99 }} />
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", width: 28, flexShrink: 0 }}>{d.open}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center", color: V.gray, fontSize: 12 }}>
+                No department data yet
+              </div>
+            )}
+          </Card>
+
+          {/* Candidate Skills */}
+          <Card>
+            <CardTitle title="Candidate Skills"
+              sub="top skills across candidates"
+              action={
+                <button onClick={() => openRpt?.({ object:"people", title:"Candidates by skill", groupBy:"skills", chartType:"bar" })}
+                  style={{ fontSize:11, color:V.teal, background:"none", border:"none", cursor:"pointer", fontWeight:700, fontFamily:"inherit" }}>
+                  Report →
+                </button>
+              }
+            />
+            {(() => {
+              const skillCounts = {};
+              (data?.people?.records || []).forEach(p => {
+                const skills = p.data?.skills || [];
+                const arr = Array.isArray(skills) ? skills : (typeof skills === "string" ? skills.split(",") : []);
+                arr.forEach(s => { const t = s.trim(); if (t) skillCounts[t] = (skillCounts[t]||0)+1; });
+              });
+              const rows = Object.entries(skillCounts).sort((a,b)=>b[1]-a[1]).slice(0, 10);
+              const colors = [V.teal, V.purple, V.rose, V.amber, V.purpleL];
+              return rows.length ? (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7, paddingTop:2 }}>
+                  {rows.map(([skill, cnt], i) => {
+                    const col = colors[i % colors.length];
+                    return (
+                      <div key={skill} style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 10px",
+                        borderRadius:20, background:`${col}12`, border:`1px solid ${col}28` }}>
+                        <span style={{ fontSize:11, fontWeight:700, color:col }}>{skill}</span>
+                        <span style={{ fontSize:10, color:V.gray }}>{cnt}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ height:80, display:"flex", alignItems:"center", justifyContent:"center", color:V.gray, fontSize:12 }}>No skills data yet</div>
+              );
+            })()}
+          </Card>
+        </div>
+
+        {/* COL 3: Recent Activity — full height */}
         <ActivityFeedCard activity={data?.activity || []} onOpenRecord={onOpenRecord} onViewAll={onViewAll} />
       </div>
 

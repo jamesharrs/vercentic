@@ -2263,6 +2263,12 @@ function App() {
               onNavigate={(slug) => {
                 if (slug === "matching") { setActiveNav("matching"); return; }
                 if (slug === "search")   { setActiveNav("search");   return; }
+                // Dashboard sub-tab navigation from pill buttons
+                const dashTabs = ["screening","interviews","offers","onboarding","insights","agents","admin"];
+                if (dashTabs.includes(slug)) {
+                  setActiveNav(`dashboard_${slug}`);
+                  return;
+                }
                 const obj = navObjects.find(o => o.slug === slug || o.plural_name.toLowerCase() === slug);
                 if (obj) setActiveNav(`obj_${obj.id}`);
               }}

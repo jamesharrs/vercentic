@@ -2126,7 +2126,7 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
 };
 
 /* ─── Column Picker Dropdown ───────────────────────────────────────────────── */
-const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose }) => {
+const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleObj = false }) => {
   const ref = useRef(null);
   useEffect(() => {
     const h = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -2171,7 +2171,7 @@ const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose }) => {
       })}
       {/* System columns divider */}
       <div style={{ padding:"6px 14px 6px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>System</div>
-      {SYSTEM_COLS.map(f => {
+      {SYSTEM_COLS.filter(f => !f.isPeopleOnly || isPeopleObj).map(f => {
         const on = visibleIds.includes(f.id);
         return (
           <div key={f.id} onClick={() => toggleField(f.id)}
@@ -3605,6 +3605,7 @@ const SYSTEM_COLS = [
   { id: '_linked_job',   name: 'Linked Job',         apiKey: '_linked_job',   isSystem: true },
   { id: '_stage',        name: 'Stage',              apiKey: '_stage',        isSystem: true },
   { id: '_linked_count', name: 'Linked People',      apiKey: '_linked_count', isSystem: true },
+  { id: '__engagement',  name: 'Engagement Score',   apiKey: '__engagement',  isSystem: true, isPeopleOnly: true, field_type: 'number' },
 ];
 
 function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
@@ -8775,7 +8776,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const [visibleFieldIds, setVisibleFieldIds] = useState(null);
   const [showColPicker, setShowColPicker]     = useState(false);
-  const [showEngagement,    setShowEngagement]    = useState(false);
+  // Engagement column is now driven by the Columns picker (system col '__engagement')
+  const showEngagement = isPeopleObj && (visibleFieldIds || []).includes('__engagement');
   const [engagementScores,  setEngagementScores]  = useState({});
   const [loadingEngagement, setLoadingEngagement] = useState(false);
   const [activeFilters, setActiveFilters]     = useState([]);
@@ -9446,28 +9448,13 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
                 visibleIds={visibleFieldIds || []}
                 onChange={handleColChange}
                 onClose={() => setShowColPicker(false)}
+                isPeopleObj={isPeopleObj}
               />
             )}
           </div>
         )}
 
-        {/* Engagement Score column toggle — People only */}
-        {isPeopleObj && (
-          <button
-            onClick={() => setShowEngagement(v => !v)}
-            title="Toggle Engagement Score column"
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
-              border:`1px solid ${showEngagement ? '#0ca678' : C.border}`,
-              background: showEngagement ? '#0ca67810' : C.surface,
-              color: showEngagement ? '#0ca678' : C.text2,
-              fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F, transition:"all .12s",
-              whiteSpace:"nowrap" }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-            {loadingEngagement ? "Loading…" : "Engagement"}
-          </button>
-        )}
+        {/* Engagement is now a system column — toggle via Columns picker */}
 
         {/* Export dropdown */}
         <div ref={exportRef} style={{ position:"relative" }}>
