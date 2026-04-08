@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import api from './apiClient.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const C = { card:"#fff", accent:"var(--t-accent,#4361ee)", text1:"var(--t-text1,#111827)", text2:"var(--t-text2,#374151)", text3:"var(--t-text3,#9ca3af)", border:"var(--t-border,#f0f0f0)", green:"#0ca678", amber:"#f59f00", red:"#e03131", purple:"#7c3aed", blue:"#3b82f6", teal:"#0d9488" };
