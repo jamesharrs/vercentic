@@ -295,7 +295,7 @@ initDB().then(() => {
   // Apply saved integration credentials to process.env
   for (const fields of Object.values(store.integrations || {})) {
     for (const [k, v] of Object.entries(fields)) {
-      if (v && !v.startsWith('YOUR_')) process.env[k] = v;
+      if (v && typeof v === 'string' && !v.startsWith('YOUR_')) process.env[k] = v;
     }
   }
 
