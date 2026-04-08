@@ -7474,7 +7474,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           fullWidthDropRef.current = pos;
           setFullWidthZone(pos);
         }
-        // Clear any card hover
+        // Clear any card hover — cancel pending debounce first
+        if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
         if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
         return;
       }
@@ -7507,7 +7508,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         return;
       }
 
-      // 3. Over nothing useful — clear card hover
+      // 3. Over nothing useful — cancel pending debounce and clear card hover
+      if (zoneDebounceRef.current) { clearTimeout(zoneDebounceRef.current); zoneDebounceRef.current = null; }
       if (overSlotRef.current) { overSlotRef.current = null; overZoneRef.current = null; setOverSlot(null); setOverZone(null); }
     };
 
