@@ -106,6 +106,27 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
 
   return (
     <div style={{ fontFamily:F, color:C.text1, width:"100%" }}>
+      {/* Dashboard nav pills */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+        {[
+          { label:"Overview",    nav:"overview",    color:"#6B7280" },
+          { label:"Screening",   nav:"screening",   color:"#7F77DD" },
+          { label:"Interviews",  nav:"interviews",  color:"#1D9E75" },
+          { label:"Offers",      nav:"offers",      color:"#D4537E" },
+          { label:"Onboarding",  nav:"onboarding",  color:"#EF9F27", current:true },
+        ].map(({ label, nav:n, color, current }) => (
+          <button key={n} onClick={() => nav(n)}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 13px", borderRadius:20,
+              border: current ? `1.5px solid ${color}` : `1.5px solid ${color}40`,
+              background: current ? `${color}18` : `${color}10`, color,
+              fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit", transition:"all .15s" }}
+            onMouseEnter={e => { e.currentTarget.style.background=`${color}22`; e.currentTarget.style.borderColor=color; }}
+            onMouseLeave={e => { e.currentTarget.style.background=current?`${color}18`:`${color}10`; e.currentTarget.style.borderColor=current?color:`${color}40`; }}>
+            <span style={{ width:6, height:6, borderRadius:"50%", background:color, flexShrink:0 }}/>
+            {label}
+          </button>
+        ))}
+      </div>
       {/* Quick Links */}
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"14px 18px", background:C.card, borderRadius:14, border:`1px solid ${C.border}` }}>
         <span style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>

@@ -566,19 +566,21 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
         <div data-tour="dashboard-stats" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Dashboard nav pills — navigate to sub-dashboards */}
           {[
-            { label:"Screening",   color: V.purple, nav: "screening"   },
-            { label:"Interviews",  color: V.teal,   nav: "interviews"  },
-            { label:"Offers",      color: V.rose,   nav: "offers"      },
-            { label:"Onboarding",  color: V.amber,  nav: "onboarding"  },
-          ].map(({ label, color, nav }) => (
+            { label:"Overview",    color: "#6B7280", nav: "overview",    current: true },
+            { label:"Screening",   color: V.purple,  nav: "screening"   },
+            { label:"Interviews",  color: V.teal,    nav: "interviews"  },
+            { label:"Offers",      color: V.rose,    nav: "offers"      },
+            { label:"Onboarding",  color: V.amber,   nav: "onboarding"  },
+          ].map(({ label, color, nav, current }) => (
             <button key={nav}
               onClick={() => onNavigate?.(nav)}
               style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 13px", borderRadius:20,
-                border:`1.5px solid ${color}40`, background:`${color}10`, color,
+                border: current ? `1.5px solid ${color}` : `1.5px solid ${color}40`,
+                background: current ? `${color}18` : `${color}10`, color,
                 fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
                 transition:"all .15s", letterSpacing:"0.01em" }}
-              onMouseEnter={e => { e.currentTarget.style.background = `${color}20`; e.currentTarget.style.borderColor = color; }}
-              onMouseLeave={e => { e.currentTarget.style.background = `${color}10`; e.currentTarget.style.borderColor = `${color}40`; }}>
+              onMouseEnter={e => { e.currentTarget.style.background = `${color}22`; e.currentTarget.style.borderColor = color; }}
+              onMouseLeave={e => { e.currentTarget.style.background = current ? `${color}18` : `${color}10`; e.currentTarget.style.borderColor = current ? color : `${color}40`; }}>
               <span style={{ width:6, height:6, borderRadius:"50%", background:color, flexShrink:0 }}/>
               {label}
             </button>
