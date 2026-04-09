@@ -73,10 +73,15 @@ const createFieldSchema = z.object({
   condition_value:  strOpt(200),
   related_object:   strOpt(50),
   multi:            z.boolean().optional(),
-});
+  // Section separator fields
+  section_label:    strOpt(200),
+  collapsible:      z.boolean().optional(),
+  as_panel:         z.boolean().optional(),
+}).passthrough();
 
 const patchFieldSchema = z.object({
   name:             strOpt(100),
+  api_key:          z.string().trim().min(1).max(50).regex(/^[a-z][a-z0-9_]*$/).optional(),
   field_type:       z.enum(VALID_FIELD_TYPES, { errorMap: () => ({ message: 'Invalid field_type' }) }).optional(),
   is_required:      boolInt(),
   is_unique:        boolInt(),
@@ -90,7 +95,11 @@ const patchFieldSchema = z.object({
   sort_order:       z.number().int().nonnegative().optional(),
   condition_field:  strOpt(50),
   condition_value:  strOpt(200),
-});
+  // Section separator fields
+  section_label:    strOpt(200),
+  collapsible:      z.boolean().optional(),
+  as_panel:         z.boolean().optional(),
+}).passthrough();
 
 // ── Records ───────────────────────────────────────────────────────────────────
 const recordDataValue = z.union([
