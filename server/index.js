@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
+const helmet  = require('helmet');
 const { initDB, getStore } = require('./db/init');
 const tenantMiddleware = require('./middleware/tenant');
 const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
@@ -46,6 +47,38 @@ app.use((req, res, next) => {
   corsMiddleware(req, res, next);
 });
 app.use(express.json({ limit: '10mb' }));
+
+// ── Security headers (helmet) ─────────────────────────────────────────────────
+app.use(helmet({
+  // Content-Security-Policy — allow the app's own scripts/styles + Anthropic API
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Vite needs these in dev
+      styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:        ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc:         ["'self'", 'data:', 'blob:', 'https:'],
+      connectSrc:     ["'self'", 'https://api.anthropic.com', 'wss:', 'ws:'],
+      frameSrc:       ["'none'"],
+      objectSrc:      ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+    },
+  },
+  // Cross-Origin headers — needed for portal renderer on a different port/domain
+  crossOriginEmbedderPolicy:  false,   // relaxed — portal renderer embeds content
+  crossOriginResourcePolicy:  { policy: 'cross-origin' },
+  // HSTS — only enforce in production (not dev where we use HTTP)
+  strictTransportSecurity: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true }
+    : false,
+  // Remove X-Powered-By: Express fingerprint
+  hidePoweredBy: true,
+  // Standard protections
+  xContentTypeOptions:   true,
+  xFrameOptions:         { action: 'deny' },
+  xXssProtection:        true,
+  referrerPolicy:        { policy: 'strict-origin-when-cross-origin' },
+}));
 
 // ── Request timeout (25s — Railway hard limit is 30s) ──────────────────────
 app.use((req, res, next) => {

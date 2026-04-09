@@ -1,12 +1,9 @@
 const express = require('express');
 const router  = express.Router();
 const { trackAIUsage } = require('./admin_dashboard');
-const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-
-const UPLOAD_DIR = path.join(__dirname, '../uploads');
-const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 20 * 1024 * 1024 } });
+const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
 
 const IMAGE_EXTS  = new Set(['.jpg','.jpeg','.png','.gif','.webp','.bmp','.tiff','.tif']);
 const IMAGE_MIMES = new Set(['image/jpeg','image/png','image/gif','image/webp','image/bmp','image/tiff']);
@@ -90,7 +87,10 @@ async function callClaudeText(apiKey, text, prompt) {
 
 router.post('/', (req, res, next) => {
   if (req.is('application/json')) return next();
-  upload.single('file')(req, res, next);
+  upload.single('file')(req, res, (err) => {
+    if (err) return next(err);
+    verifyMime(req, res, next);
+  });
 }, async (req, res) => {
   const { attachment_id, file_type_id } = req.body;
   const mappings = typeof req.body.mappings === 'string' ? JSON.parse(req.body.mappings) : (req.body.mappings || []);
@@ -161,4 +161,5 @@ router.post('/', (req, res, next) => {
   }
 });
 
+router.use(handleMulterError);
 module.exports = router;

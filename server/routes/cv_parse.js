@@ -1,12 +1,9 @@
 const express  = require('express');
 const router   = express.Router();
 const { trackAIUsage } = require('./admin_dashboard');
-const multer   = require('multer');
 const path     = require('path');
 const fs       = require('fs');
-
-const UPLOAD_DIR = path.join(__dirname, '../uploads');
-const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 20 * 1024 * 1024 } });
+const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
 
 // ── Extract text from file ────────────────────────────────────────────────────
 async function extractText(filePath, mimetype) {
@@ -53,7 +50,10 @@ async function extractText(filePath, mimetype) {
 router.post('/', (req, res, next) => {
   // If Content-Type is JSON, skip multer and go straight to handler
   if (req.is('application/json')) return next();
-  upload.single('file')(req, res, next);
+  upload.single('file')(req, res, (err) => {
+    if (err) return next(err);
+    verifyMime(req, res, next);
+  });
 }, async (req, res) => {
   const attachment_id = req.body?.attachment_id;
 
@@ -201,4 +201,5 @@ IMPORTANT: The skills array and work_history array should be populated even if e
   }
 });
 
+router.use(handleMulterError);
 module.exports = router;

@@ -1,36 +1,16 @@
 const express  = require('express');
 const router    = express.Router();
-const multer    = require('multer');
 const path      = require('path');
 const fs        = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, remove, getStore, saveStore } = require('../db/init');
+const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
 
-// ── Upload directory ──────────────────────────────────────────────────────────
-// Use persistent volume on Railway (/data), fall back to local uploads/
-const UPLOAD_DIR = process.env.DATA_PATH
+// Ensure persistent-volume upload dir exists (Railway: /data/uploads)
+const ATTACH_DIR = process.env.DATA_PATH
   ? path.join(process.env.DATA_PATH, 'uploads')
-  : path.join(__dirname, '../uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname).toLowerCase();
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}_${uuidv4().slice(0,8)}_${safe}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
-  fileFilter: (req, file, cb) => {
-    const allowed = ['pdf','doc','docx','jpg','jpeg','png','gif','zip','xlsx','xls','csv','txt','ppt','pptx'];
-    const ext = path.extname(file.originalname).toLowerCase().replace('.','');
-    cb(null, allowed.includes(ext));
-  },
-});
+  : UPLOAD_DIR;
+if (!fs.existsSync(ATTACH_DIR)) fs.mkdirSync(ATTACH_DIR, { recursive: true });
 
 // ── List attachments ──────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
@@ -41,7 +21,7 @@ router.get('/', (req, res) => {
 });
 
 // ── Upload file ───────────────────────────────────────────────────────────────
-router.post('/upload', upload.single('file'), (req, res) => {
+router.post('/upload', upload.single('file'), verifyMime, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
   const { record_id, file_type_id, file_type_name, uploaded_by, environment_id } = req.body;
   if (!record_id) return res.status(400).json({ error: 'record_id required' });
@@ -93,5 +73,8 @@ router.delete('/:id', (req, res) => {
   remove('attachments', x => x.id === req.params.id);
   res.json({ deleted: true });
 });
+
+// Multer / MIME errors → clean JSON instead of Express HTML page
+router.use(handleMulterError);
 
 module.exports = router;
