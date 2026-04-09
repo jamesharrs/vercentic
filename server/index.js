@@ -1,7 +1,9 @@
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const helmet  = require('helmet');
+const express       = require('express');
+const cors          = require('cors');
+const helmet        = require('helmet');
+const cookieParser  = require('cookie-parser');
+const session       = require('express-session');
 const { initDB, getStore } = require('./db/init');
 const tenantMiddleware = require('./middleware/tenant');
 const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
@@ -89,8 +91,21 @@ app.use((req, res, next) => {
 });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
+app.use(cookieParser());
+app.use(session({
+  name:   'vercentic_sid',
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,                                           // not accessible via JS — XSS safe
+    secure:   process.env.NODE_ENV === 'production',          // HTTPS only in prod
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // cross-origin for Vercel↔Railway
+    maxAge:   8 * 60 * 60 * 1000,                            // 8 hours
+  },
+}));
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
-app.use(attachUser);              // attach current user to req
+app.use(attachUser);              // attach current user to req (reads session OR X-User-Id header)
 app.use(auditResponseMiddleware); // log 403 responses to security audit log
 
 // ── Portal session middleware — resolves x-portal-token to req.portalUser ────
@@ -108,7 +123,7 @@ app.use((req, res, next) => {
 // ── Auth guard ────────────────────────────────────────────────────────────────
 const AUTH_EXEMPT = [
   '/auth/login', '/auth/me',
-  '/users/login', '/users/auth/login',
+  '/users/login', '/users/auth/login', '/users/logout',
   '/health', '/environments',
   '/portals/public', '/portals/by-slug', '/portals/slug',
   '/portals/job-alerts', '/portals/application-status', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
@@ -129,13 +144,6 @@ app.use('/api', (req, res, next) => {
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/session$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/jobs($|\/)/)) return next();
-  if (req.method === 'GET' && (
-    req.path.startsWith('/objects') || req.path.startsWith('/records') ||
-    req.path.startsWith('/fields')  || req.path.startsWith('/saved-views') ||
-    req.path.startsWith('/analytics') ||
-    req.path.startsWith('/company-documents/search') ||
-    req.path.startsWith('/company-documents/meta')
-  )) return next();
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   next();

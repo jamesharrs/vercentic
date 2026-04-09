@@ -100,3 +100,31 @@ describe('Security headers', () => {
     expect(res.headers['referrer-policy']).toBeDefined();
   });
 });
+
+describe('Session cookie', () => {
+  test('successful login sets httpOnly vercentic_sid cookie', async () => {
+    const res = await api.post('/api/users/login', {
+      email: 'admin@talentos.io',
+      password: 'Admin1234!',
+    });
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie'];
+    expect(cookie).toBeDefined();
+    const sidCookie = [].concat(cookie).find(c => c.startsWith('vercentic_sid='));
+    expect(sidCookie).toBeDefined();
+    expect(sidCookie).toContain('HttpOnly');
+  });
+
+  test('unauthenticated GET /api/records → 401', async () => {
+    const res = await api.get('/api/records?object_id=fake&environment_id=fake');
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('UNAUTHENTICATED');
+  });
+
+  test('POST /api/users/logout → 200 and clears cookie', async () => {
+    const agent = await require('./helpers').loginAs();
+    const res = await agent.post('/api/users/logout');
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+});

@@ -25,7 +25,8 @@ const GLOBAL_ACTIONS = [
 const SUPER_ADMIN_SLUG = 'super_admin';
 
 function resolveUser(req) {
-  const userId = req.headers['x-user-id'];
+  // Session cookie takes priority; fall back to X-User-Id header (mobile app / Chrome extension)
+  const userId = req.session?.userId || req.headers['x-user-id'];
   if (!userId) return null;
   try {
     const user = findOne('users', u => u.id === userId && u.status !== 'deactivated');

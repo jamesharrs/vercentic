@@ -24,11 +24,16 @@ const api = {
   delete: (path, headers = {}) => request(getApp()).delete(path).set(headers),
 };
 
-// Login and return headers with X-User-Id set
+// Login and return a supertest agent that carries the session cookie automatically
 async function loginAs(email = 'admin@talentos.io', password = 'Admin1234!') {
-  const res = await api.post('/api/users/login', { email, password });
-  if (!res.body?.id) throw new Error(`Login failed for ${email}: ${JSON.stringify(res.body)}`);
-  return { 'X-User-Id': res.body.id };
+  // Use a persistent agent so the Set-Cookie from login is replayed on subsequent requests
+  const agent = request.agent(getApp());
+  const res = await agent.post('/api/users/login').send({ email, password });
+  if (res.status !== 200) throw new Error(`Login failed for ${email}: ${JSON.stringify(res.body)}`);
+  // Also expose X-User-Id header for routes that still accept it (backward compat)
+  agent._userId = res.body.id;
+  agent._authHeaders = { 'X-User-Id': res.body.id };
+  return agent;
 }
 
 // Get the first environment id from the store

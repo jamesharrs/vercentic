@@ -2,17 +2,17 @@
  * apiClient.js — shared authenticated API helper
  *
  * Automatically attaches:
- *   X-User-Id     — from talentos_session in localStorage
+ *   credentials: 'include'  — sends httpOnly session cookie (primary auth)
+ *   X-User-Id     — from talentos_session in localStorage (backward compat: mobile/Chrome ext)
  *   X-Tenant-Slug — from session or URL subdomain
  *   Content-Type  — application/json (for mutations)
  *
- * All methods now THROW on non-2xx responses so callers can catch errors
- * rather than silently receiving { error: "..." } objects.
- * The thrown error always has:
- *   err.message  — human-readable error text
+ * All methods THROW an ApiError on non-2xx so callers can catch properly.
+ *   err.message  — human-readable text
  *   err.status   — HTTP status code
- *   err.body     — full response body (may include err.body.errors[] for validation failures)
- *   err.detail   — short summary (Zod "detail" field or message)
+ *   err.body     — full response body
+ *   err.detail   — short summary
+ *   err.errors   — Zod validation errors array
  */
 
 function getSession() {
@@ -87,12 +87,12 @@ async function handleResponse(res) {
 }
 
 const api = {
-  get:    (path)       => fetch(`/api${path}`, { headers: authHeaders()  }).then(handleResponse),
-  post:   (path, body) => fetch(`/api${path}`, { method: 'POST',   headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  patch:  (path, body) => fetch(`/api${path}`, { method: 'PATCH',  headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  put:    (path, body) => fetch(`/api${path}`, { method: 'PUT',    headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  del:    (path)       => fetch(`/api${path}`, { method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
-  delete: (path)       => fetch(`/api${path}`, { method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
+  get:    (path)       => fetch(`/api${path}`, { credentials: 'include', headers: authHeaders()  }).then(handleResponse),
+  post:   (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'POST',   headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  patch:  (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PATCH',  headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  put:    (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PUT',    headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  del:    (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
+  delete: (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
 };
 
 // ── Backward-compatible silent variant ────────────────────────────────────────
@@ -112,8 +112,8 @@ api.quietly = quietly;
 export default api;
 export { authHeaders, jsonHeaders, getTenantSlug, getSession, ApiError };
 
-// Bare fetch wrapper — attaches tenant + user headers without throwing
+// Bare fetch wrapper — attaches tenant + user headers + credentials without throwing
 export function tFetch(url, opts = {}) {
   const h = { ...authHeaders(), ...(opts.headers || {}) };
-  return fetch(url, { ...opts, headers: h });
+  return fetch(url, { credentials: 'include', ...opts, headers: h });
 }

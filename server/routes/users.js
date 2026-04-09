@@ -128,6 +128,10 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
   update('users', u => u.id === user.id, { last_login: new Date().toISOString(), login_count: (user.login_count||0)+1 });
   insert('audit_log', { id:uuidv4(), action:'auth.login', actor:email, target_id:user.id, target_type:'user', details:{ tenant: tenantSlug }, created_at:new Date().toISOString() });
   const role = findOne('roles', r => r.id === user.role_id);
+  // Set httpOnly session cookie (primary auth mechanism)
+  req.session.userId     = user.id;
+  req.session.tenantSlug = tenantSlug;
+  // Also return token/user in body for backward compat (mobile app, Chrome extension, existing clients)
   res.json({ token, user: { ...user, password_hash: undefined, role }, tenant_slug: tenantSlug, must_change_password: user.must_change_password });
 });
 
@@ -169,7 +173,9 @@ router.post('/exchange-impersonation', (req, res) => {
   });
 });
 
-module.exports = router;
+// ── Export ────────────────────────────────────────────────────────────────────
+// NOTE: intentionally at TOP — routes defined below are still registered because
+// router is exported by reference. module.exports here is purely conventional.
 
 // POST /api/users/login — credential check across current tenant store + fallback search
 router.post('/login', validate(loginSchema), (req, res) => {
@@ -213,5 +219,20 @@ router.post('/login', validate(loginSchema), (req, res) => {
     insert('audit_log', { id:require('uuid').v4(), action:'user.login', actor:u.id, target_id:u.id, target_type:'user', details:{ email }, created_at:new Date().toISOString() });
   });
 
+  // Set httpOnly session cookie (primary auth mechanism going forward)
+  req.session.userId     = u.id;
+  req.session.tenantSlug = resolvedTenantSlug;
+
   res.json({ ...u, password_hash: undefined, role, permissions, tenant_slug: resolvedTenantSlug });
 });
+
+// POST /api/users/logout — destroy session cookie
+router.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) console.error('[logout] session destroy error', err);
+    res.clearCookie('vercentic_sid');
+    res.json({ ok: true });
+  });
+});
+
+module.exports = router;
