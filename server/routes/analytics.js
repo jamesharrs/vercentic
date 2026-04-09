@@ -266,7 +266,7 @@ router.get('/global', (req, res) => {
 
     const allDurations = Object.values(globalStageDurations).flat();
     const overallMedian = median(allDurations);
-    const processFunnel = funnelSteps.map(s => {
+    const processFunnel = funnelSteps.filter(s => s.name?.trim()).map(s => {
       const count = globalStageCounts[s.name] || 0;
       const durs = globalStageDurations[s.name] || [];
       const avgD = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;

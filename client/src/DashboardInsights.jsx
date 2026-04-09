@@ -47,7 +47,7 @@ export default function DashboardInsights({ environment, onNavigate }) {
     { name:"Medium", value:data.candidate_risk?.medium||0, color:V.amber },
     { name:"Engaged", value:data.candidate_risk?.low||0, color:V.green },
   ].filter(d => d.value > 0);
-  const funnelMax = Math.max(...(data.process_funnel||[]).map(s=>s.count), 1);
+  const funnelMax = Math.max(...(data.process_funnel||[]).filter(s=>s.name?.trim()).map(s=>s.count), 1);
 
   return (
     <div style={{ fontFamily:F, padding:"28px 32px", boxSizing:"border-box", maxWidth:1100, margin:"0 auto" }}>
@@ -95,24 +95,28 @@ export default function DashboardInsights({ environment, onNavigate }) {
                 </div>
               ))}
             </div>}
-          </div> : <div style={{ height:100, display:"flex", alignItems:"center", justifyContent:"center", color:V.gray, fontSize:12 }}>Complete more roles to see TTF data</div>}
+          </div> : <div style={{ height:80, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:V.gray, fontSize:12, gap:4 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={V.border} strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Complete more roles to see TTF data
+          </div>}
         </Card>
 
         <Card>
           <CardTitle title="Hiring Funnel" sub={`${data.total_in_process||0} candidates across all roles`}/>
-          {data.process_funnel?.length>0 ? <div>
-            {data.process_funnel.map((stage,i) => {
+          {data.process_funnel?.filter(s=>s.name?.trim()).length>0 ? <div>
+            {data.process_funnel.filter(s=>s.name?.trim()).map((stage,i) => {
               const pct = funnelMax>0?(stage.count/funnelMax)*100:0;
               const color = ACCENT[i%ACCENT.length];
               const isBneck = data.bottlenecks?.some(b=>b.stage===stage.name);
+              const hasCount = stage.count > 0;
               return (
                 <div key={stage.name} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
-                  <span style={{ fontSize:12, color:V.gray2, width:85, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:isBneck?700:400 }}>{stage.name}</span>
+                  <span style={{ fontSize:12, color:V.gray2, width:110, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:isBneck?700:400 }}>{stage.name}</span>
                   <div style={{ flex:1, height:24, borderRadius:6, background:"#f3f4f6", overflow:"hidden", position:"relative" }}>
-                    <div style={{ height:"100%", borderRadius:6, width:`${Math.max(pct,3)}%`, background:isBneck?`repeating-linear-gradient(45deg,${V.amber},${V.amber} 4px,${V.amber}80 4px,${V.amber}80 8px)`:color }}/>
-                    <span style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:700, color:pct>15?"white":V.gray2 }}>{stage.count}</span>
+                    {hasCount && <div style={{ height:"100%", borderRadius:6, width:`${Math.max(pct,5)}%`, background:isBneck?`repeating-linear-gradient(45deg,${V.amber},${V.amber} 4px,${V.amber}80 4px,${V.amber}80 8px)`:color, transition:"width .3s ease" }}/>}
+                    <span style={{ position:"absolute", left:hasCount?8:6, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:700, color:hasCount&&pct>30?"white":V.gray }}>{stage.count}</span>
                   </div>
-                  {stage.avg_days!=null && <span style={{ fontSize:10, color:isBneck?V.amber:V.gray, minWidth:35, textAlign:"right", fontWeight:isBneck?700:400 }}>{stage.avg_days}d avg</span>}
+                  {stage.avg_days!=null && <span style={{ fontSize:10, color:isBneck?V.amber:V.gray, minWidth:38, textAlign:"right", fontWeight:isBneck?700:400 }}>{stage.avg_days}d avg</span>}
                 </div>
               );
             })}
