@@ -47,6 +47,14 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '10mb' }));
 
+// ── Request timeout (25s — Railway hard limit is 30s) ──────────────────────
+app.use((req, res, next) => {
+  res.setTimeout(25000, () => {
+    if (!res.headersSent) res.status(408).json({ error: 'Request timeout', code: 'TIMEOUT' });
+  });
+  next();
+});
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
 app.use(attachUser);              // attach current user to req
@@ -366,3 +374,25 @@ initDB().then(() => {
   } catch (e) { console.warn('[Scheduler] Init:', e.message); }
 
 }).catch(err => { console.error('[Boot] DB init failed:', err.message); });
+
+// ── Global error handler ──────────────────────────────────────────────────────
+// Catches anything thrown inside wrap()-ed routes or forwarded via next(err).
+// Must be the LAST middleware registered (4-argument signature is required).
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    console.error('[ERROR]', req.method, req.path, '->', status, err.message);
+    if (process.env.NODE_ENV !== 'production') console.error(err.stack);
+  }
+  if (res.headersSent) return;
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  res.status(status).json({
+    error: process.env.NODE_ENV === 'production'
+      ? 'An unexpected error occurred'
+      : err.message,
+    code: err.code || 'INTERNAL_ERROR',
+  });
+});

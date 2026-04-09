@@ -1,4 +1,6 @@
 const { hasGlobalAction } = require("../middleware/rbac");
+const { validate } = require('../middleware/validate');
+const { createFieldSchema, patchFieldSchema } = require('../validation/schemas');
 function checkGlobal(req,res,action){const u=req.currentUser;if(!u)return null;if(!hasGlobalAction(u,action)){res.status(403).json({error:"Permission denied",code:"FORBIDDEN",required:{action}});return false;}return null;}
 const express = require('express');
 const router = express.Router();
@@ -43,7 +45,7 @@ router.get('/', (req, res) => {
   res.json(fields);
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(createFieldSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_settings') === false) return;
   const { object_id, environment_id, name, api_key, field_type, is_required, is_unique, show_in_list, show_in_form, options, lookup_object_id, default_value, placeholder, help_text, sort_order } = req.body;
   if (!object_id||!environment_id||!name||!api_key||!field_type) return res.status(400).json({error:'Missing required fields'});
@@ -54,7 +56,7 @@ router.post('/', (req, res) => {
   res.status(201).json(insert('fields', {id:uuidv4(),object_id,environment_id,name,api_key,field_type,is_required:is_required?1:0,is_unique:is_unique?1:0,is_system:0,show_in_list:show_in_list!==undefined?(show_in_list?1:0):1,show_in_form:show_in_form!==undefined?(show_in_form?1:0):1,options:options||null,lookup_object_id:lookup_object_id||null,default_value:default_value||null,placeholder:placeholder||null,help_text:help_text||null,sort_order:sort_order!==undefined?sort_order:maxOrder+1,conditions:conditions||null,table_columns:table_columns||null,table_template:table_template||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()}));
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(patchFieldSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_settings') === false) return; const f = update('fields', x=>x.id===req.params.id, req.body); f ? res.json(f) : res.status(404).json({error:'Not found'}); });
 
 router.delete('/:id', (req, res) => {

@@ -1,4 +1,6 @@
 const express = require('express');
+const { validate } = require('../middleware/validate');
+const { createUserSchema, patchUserSchema, resetPasswordSchema, loginSchema } = require('../validation/schemas');
 const { hasGlobalAction } = require('../middleware/rbac');
 
 function checkGlobal(req, res, action) {
@@ -53,7 +55,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST invite/create user
-router.post('/', (req, res) => {
+router.post('/', validate(createUserSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_users') === false) return;
   const { email, first_name, last_name, role_id, auth_provider = 'local' } = req.body;
   if (!email || !first_name || !last_name || !role_id) return res.status(400).json({ error: 'email, first_name, last_name, role_id required' });
@@ -73,7 +75,7 @@ router.post('/', (req, res) => {
 });
 
 // PATCH update user
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(patchUserSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_users') === false) return;
   const { first_name, last_name, role_id, status, mfa_enabled, org_unit_id, environment_id, password } = req.body;
   const updates = {};
@@ -92,7 +94,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // POST reset password
-router.post('/:id/reset-password', (req, res) => {
+router.post('/:id/reset-password', validate(resetPasswordSchema), (req, res) => {
   const { password } = req.body;
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   update('users', x => x.id === req.params.id, { password_hash: hashPassword(password), must_change_password: 0 });
@@ -111,7 +113,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST login
-router.post('/auth/login', (req, res) => {
+router.post('/auth/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   const user = findOne('users', u => u.email === email);
@@ -170,7 +172,7 @@ router.post('/exchange-impersonation', (req, res) => {
 module.exports = router;
 
 // POST /api/users/login — credential check across current tenant store + fallback search
-router.post('/login', (req, res) => {
+router.post('/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 

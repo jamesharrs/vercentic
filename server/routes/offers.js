@@ -1,4 +1,6 @@
 const { hasGlobalAction: _hasGA, hasPermission: _hasPerm, isSuperAdmin: _isSA } = require('../middleware/rbac');
+const { validate } = require('../middleware/validate');
+const { createOfferSchema, patchOfferSchema, offerApprovalSchema, offerStatusSchema } = require('../validation/schemas');
 function _checkGA(req, res, action) {
   const user = req.currentUser;
   if (!user) { res.status(401).json({ error: "Authentication required", code: "UNAUTHENTICATED" }); return false; }
@@ -55,7 +57,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST / — Create offer
-router.post('/', (req, res) => {
+router.post('/', validate(createOfferSchema), (req, res) => {
   if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const {
@@ -125,7 +127,7 @@ router.post('/', (req, res) => {
 });
 
 // PATCH /:id — Update offer fields
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(patchOfferSchema), (req, res) => {
   if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const allowed = [
@@ -141,7 +143,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // PATCH /:id/status — Status transitions
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', validate(offerStatusSchema), async (req, res) => {
   if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const { status, reason, user } = req.body;
@@ -231,7 +233,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // PATCH /:id/approve — Approver decision
-router.patch('/:id/approve', (req, res) => {
+router.patch('/:id/approve', validate(offerApprovalSchema), (req, res) => {
   if (_checkGA(req, res, 'manage_settings') === false) return;
   ensure();
   const { decision, comment, approver_email, user } = req.body;

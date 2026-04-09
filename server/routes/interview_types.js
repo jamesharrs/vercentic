@@ -1,4 +1,6 @@
 const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
+const { validate } = require('../middleware/validate');
+const { createInterviewTypeSchema } = require('../validation/schemas');
 function _checkGA(req, res, action) {
   const user = req.currentUser;
   if (!user) { res.status(401).json({ error: "Authentication required", code: "UNAUTHENTICATED" }); return false; }
@@ -26,7 +28,7 @@ router.get('/', (req, res) => {
     .sort((a,b) => new Date(a.created_at) - new Date(b.created_at)));
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(createInterviewTypeSchema), (req, res) => {
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const { environment_id, name, interview_format, duration, format, description, location,

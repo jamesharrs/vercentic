@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const { validate } = require('../middleware/validate');
+const { createRecordSchema, patchRecordSchema } = require('../validation/schemas');
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { hasPermission, hasGlobalAction, applyFieldVisibility, applyFieldVisibilityBulk, isSuperAdmin, getHiddenFieldKeys } = require('../middleware/rbac');
@@ -483,7 +485,7 @@ router.get('/:id', (req, res) => {
   res.json(req.currentUser ? applyFieldVisibility(req.currentUser, r, r.object_id) : r);
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(createRecordSchema), (req, res) => {
   const { object_id, environment_id, data={}, created_by, user_id } = req.body;
   if (!object_id||!environment_id) return res.status(400).json({error:'object_id and environment_id required'});
   if (checkPerm(req, res, object_id, 'create') === false) return;
@@ -507,7 +509,7 @@ router.post('/', (req, res) => {
   res.status(201).json(record);
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(patchRecordSchema), (req, res) => {
   const record = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!record) return res.status(404).json({error:'Not found'});
   if (checkPerm(req, res, record.object_id, 'edit') === false) return;
