@@ -170,6 +170,7 @@ const authLimiter = rateLimit({
   // Also skip in test environment so Jest suites can run without hitting limits.
   skip: (req) =>
     process.env.NODE_ENV === 'test' ||
+    process.env.PLAYWRIGHT_TEST === '1' ||
     (!!process.env.INTERNAL_API_KEY &&
      req.headers['x-internal-key'] === process.env.INTERNAL_API_KEY),
 });
@@ -186,6 +187,7 @@ const writeLimiter = rateLimit({
   },
   skip: (req) =>
     process.env.NODE_ENV === 'test' ||
+    process.env.PLAYWRIGHT_TEST === '1' ||
     req.method === 'GET' ||
     req.method === 'OPTIONS',
 });

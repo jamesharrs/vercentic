@@ -4,9 +4,12 @@
   "description": "React components for Vercentic recruitment platform with company context-aware copilot",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "test:e2e":         "playwright test",
+    "test:e2e:headed":  "playwright test --headed",
+    "test:e2e:ui":      "playwright test --ui",
+    "test:e2e:auth":    "playwright test e2e/core/auth.spec.js",
+    "test:e2e:records": "playwright test e2e/core/records.spec.js",
+    "test:all":         "cd server && NODE_ENV=test npx jest --forceExit && cd .. && playwright test"
   },
   "keywords": [
     "recruitment",
@@ -19,14 +22,28 @@
   "author": "Vercentic",
   "license": "MIT",
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "lucide-react": "^0.294.0",
     "next": "^14.0.0",
-    "lucide-react": "^0.294.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "typescript": "^5.0.0"
-  }
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jamesharrs/talentos.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jamesharrs/talentos/issues"
+  },
+  "homepage": "https://github.com/jamesharrs/talentos#readme"
 }
