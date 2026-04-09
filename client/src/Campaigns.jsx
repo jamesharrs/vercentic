@@ -926,7 +926,7 @@ export default function Campaigns({ environment }) {
   );
 
   return (
-    <div style={{ padding:"28px 32px", fontFamily:F, minHeight:"100vh", background:C.bg }}>
+    <div style={{ padding:"28px 32px", fontFamily:F, boxSizing:"border-box", maxWidth:1280, margin:"0 auto" }}>
       {/* Page header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
         <div>

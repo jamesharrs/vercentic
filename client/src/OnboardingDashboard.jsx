@@ -126,19 +126,6 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
           <button onClick={load} style={{fontSize:11,padding:"6px 12px",borderRadius:20,border:"0.5px solid rgba(0,0,0,0.06)",background:"white",color:"#888780",cursor:"pointer",fontFamily:F}}>↻</button>
         </div>
       </div>
-      {/* Quick Links */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"14px 18px", background:C.card, borderRadius:14, border:`1px solid ${C.border}` }}>
-        <span style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>
-        <QuickLink icon="users"     label="All People"          color={C.accent} onClick={()=>nav("people")}/>
-        <QuickLink icon="check"     label="Accepted Offers"     color={C.green}  onClick={()=>nav("offers")} badge={acceptedOffers.length}/>
-        <QuickLink icon="file"      label="Docs Pending"        color={C.amber}  onClick={()=>nav("people")} badge={docsNeeded.length}/>
-        <QuickLink icon="calendar"  label="Starting This Month" color={C.teal}   onClick={()=>nav("people")} badge={startingThisMonth.length}/>
-        <QuickLink icon="clipboard" label="Onboarding Tasks"    color={C.purple} comingSoon/>
-        <QuickLink icon="shield"    label="Right to Work"       color={C.blue}   comingSoon/>
-        <QuickLink icon="star"      label="Probation Reviews"   color={C.amber}  onClick={()=>nav("people")} badge={probationDue.length||null}/>
-        <QuickLink icon="mail"      label="Welcome Email"       color={C.green}  comingSoon/>
-      </div>
-
       {/* Phase toggle */}
       <div style={{ display:"flex", gap:4, marginBottom:24, background:C.card, padding:4, borderRadius:10, border:`1px solid ${C.border}`, width:"fit-content" }}>
         {[{id:"pre",label:"Pre-boarding"},{id:"post",label:"Post-start"}].map(p=>(

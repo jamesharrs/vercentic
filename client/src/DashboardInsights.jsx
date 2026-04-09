@@ -50,7 +50,7 @@ export default function DashboardInsights({ environment, onNavigate }) {
   const funnelMax = Math.max(...(data.process_funnel||[]).map(s=>s.count), 1);
 
   return (
-    <div style={{ fontFamily:F }}>
+    <div style={{ fontFamily:F, padding:"28px 32px", boxSizing:"border-box", maxWidth:1100, margin:"0 auto" }}>
       {/* Section header */}
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, marginTop:8 }}>
         <div style={{ width:32, height:32, borderRadius:10, background:V.purpleFaint, display:"flex", alignItems:"center", justifyContent:"center" }}>

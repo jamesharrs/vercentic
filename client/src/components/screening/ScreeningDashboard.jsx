@@ -163,18 +163,6 @@ export default function ScreeningDashboard({ environment, onNavigate }) {
 
   return (
     <div style={{ fontFamily:F, color:C.text1, width:"100%" }}>
-      {/* Quick links */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"16px 20px", background:C.card, borderRadius:14, border:`1px solid ${C.border}` }}>
-        <span style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>
-        <QuickLink icon="users"    label="All Candidates"    color={C.accent}  onClick={()=>nav("people")} badge={people.length}/>
-        <QuickLink icon="eye"      label="Awaiting Review"  color={C.amber}   onClick={()=>nav("people")} badge={awaitingReview.length}/>
-        <QuickLink icon="search"   label="Search"           color={C.purple}  onClick={()=>nav("search")}/>
-        <QuickLink icon="calendar" label="Schedule Interview" color={C.green} onClick={()=>nav("interviews")}/>
-        <QuickLink icon="briefcase" label="Open Jobs"       color={C.blue}    onClick={()=>nav("jobs")}/>
-        <QuickLink icon="robot"    label="AI Screening"     color="#7c3aed"   onClick={()=>nav("people")} badge={aiPending.length||null}/>
-        <QuickLink icon="filter"   label="Advanced Search"  color={C.text2}   onClick={()=>nav("search")}/>
-      </div>
-
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
         <StatCard icon="users"  value={awaitingReview.length} label="Awaiting Review"    color={C.amber}  sub="manual screening needed"/>
