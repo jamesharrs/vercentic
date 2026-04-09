@@ -21,6 +21,7 @@ import InsightsPanel from "./InsightsPanel.jsx";
 
 import api from './apiClient.js';
 import { authHeaders } from './apiClient.js';
+import { sanitizeHtml, sanitizeCopilot, sanitizeInline } from './sanitize.js';
 import TalentCardModal from './TalentCard.jsx';
 import ScreeningRulesPanel from './ScreeningRulesPanel.jsx';
 import LinkedInFinderButton from './LinkedInFinder.jsx';
@@ -585,7 +586,7 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
       return <span style={{fontSize:13}}><span style={{color:"#6b7280",fontSize:11,marginRight:2}}>{field.date_range_start_label||"Start"}</span>{s||"—"}<span style={{margin:"0 6px",color:"#d1d5db"}}>→</span><span style={{color:"#6b7280",fontSize:11,marginRight:2}}>{field.date_range_end_label||"End"}</span>{e||"—"}</span>;
     }
     case "rich_text": {
-      const html = String(value);
+      const html = sanitizeHtml(String(value));
       return (
         <div style={{ fontSize:13, lineHeight:1.65, color:"#111827" }}
           dangerouslySetInnerHTML={{ __html: html }}/>

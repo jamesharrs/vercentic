@@ -5,6 +5,7 @@ import ScoreExplainer, { ScoreBadge } from "./ScoreExplainer";
 import { matchCandidateToJob } from "./AI.jsx";
 import SharePicker from "./SharePicker.jsx";
 import api from './apiClient.js';
+import { sanitizeInline } from './sanitize.js';
 import WorkflowCanvas from "./WorkflowCanvas.jsx";
 import StageCategoriesSection from "./settings/StageCategoriesSection.jsx";
 import TalentProfileView from "./TalentProfileView.jsx";
@@ -355,7 +356,7 @@ function EmailBodyEditor({ subject, body, onSubjectChange, onBodyChange, extraVa
         {/* Preview mode */}
         {showPreview ? (
           <div style={{ minHeight:80, padding:"10px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, lineHeight:1.7, color:C.text1, background:"#fafafa", whiteSpace:"pre-wrap" }}
-            dangerouslySetInnerHTML={{ __html: previewText(body) }}/>
+            dangerouslySetInnerHTML={{ __html: sanitizeInline(previewText(body)) }}/>
         ) : (
           <textarea
             ref={bodyRef}

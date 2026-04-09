@@ -14,6 +14,7 @@ const C = {
 };
 
 import api from './apiClient.js';
+import { sanitizeCopilot } from './sanitize.js';
 import { tFetch } from './apiClient.js';
 
 
@@ -3303,7 +3304,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 {msg.role==="system_notice"&&(
                   <div style={{display:"flex",justifyContent:"center",margin:"2px 0"}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.18)",fontSize:10,fontWeight:600,color:"#7c3aed",fontFamily:F}}
-                      dangerouslySetInnerHTML={{__html:renderMessage(msg.content)}}/>
+                      dangerouslySetInnerHTML={{__html:sanitizeCopilot(renderMessage(msg.content))}}/>
                   </div>
                 )}
                 {/* ── Hidden API context messages — not rendered in UI ── */}
@@ -3318,7 +3319,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                   <div style={{maxWidth:"82%",position:"relative"}}>
                     {msg.content&&(
                       <div style={{padding:"11px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"4px 14px 14px 14px",background:msg.role==="user"?"linear-gradient(135deg,#5b21b6,#4338ca)":msg.error?"#fef2f2":"white",color:msg.role==="user"?"white":msg.error?"#dc2626":C.text1,fontSize:13,lineHeight:1.45,boxShadow:msg.role==="user"?"0 2px 12px rgba(91,33,182,.3)":"0 1px 4px rgba(0,0,0,.06)",borderLeft:msg.role==="assistant"&&!msg.error?"3px solid rgba(124,58,237,.25)":undefined}}
-                        dangerouslySetInnerHTML={{__html:renderMessage(msg.content)}}/>
+                        dangerouslySetInnerHTML={{__html:sanitizeCopilot(renderMessage(msg.content))}}/>
                     )}
                     {msg.role==="assistant"&&!msg.error&&msg.content&&(
                       <div style={{display:"flex",justifyContent:"flex-end",marginTop:3}}>

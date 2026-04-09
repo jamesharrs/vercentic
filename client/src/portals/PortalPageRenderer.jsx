@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
+import { sanitizeInline } from '../sanitize.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -177,7 +178,7 @@ const RichTextWidget = ({ cfg, theme }) => {
     const flushList = () => {
       if (listItems.length) {
         elements.push(<ul key={elements.length} style={{ margin:'0 0 16px', paddingLeft:20 }}>
-          {listItems.map((li,i)=><li key={i} style={{ marginBottom:6, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html:li }}/>)}
+          {listItems.map((li,i)=><li key={i} style={{ marginBottom:6, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html:sanitizeInline(li) }}/>)}
         </ul>);
         listItems = [];
       }
@@ -192,7 +193,7 @@ const RichTextWidget = ({ cfg, theme }) => {
       else if (/^# (.+)/.test(line))  { flushList(); elements.push(<h1 key={i} style={{ margin:'0 0 16px', fontSize:28, fontWeight:800, color:tc }}>{line.slice(2)}</h1>); }
       else if (/^[-*] (.+)/.test(line)) { listItems.push(inline.slice(2)); }
       else if (line.trim()==='') { flushList(); }
-      else { flushList(); elements.push(<p key={i} style={{ margin:'0 0 16px', lineHeight:1.75 }} dangerouslySetInnerHTML={{ __html:inline }}/>); }
+      else { flushList(); elements.push(<p key={i} style={{ margin:'0 0 16px', lineHeight:1.75 }} dangerouslySetInnerHTML={{ __html:sanitizeInline(inline) }}/>); }
     });
     flushList();
     return elements;

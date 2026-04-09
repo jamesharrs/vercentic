@@ -3,6 +3,39 @@ const router = express.Router();
 const { validate } = require('../middleware/validate');
 const { createRecordSchema, patchRecordSchema } = require('../validation/schemas');
 const { v4: uuidv4 } = require('uuid');
+const sanitizeHtml = require('sanitize-html');
+
+// Allowed HTML in rich_text fields — same allowlist as the client DOMPurify config
+const RICH_TEXT_OPTIONS = {
+  allowedTags: [
+    ...sanitizeHtml.defaults.allowedTags,
+    'h1','h2','h3','h4','h5','h6',
+    'u','s','strike','del',
+    'table','thead','tbody','tr','th','td',
+    'img','pre','code',
+  ],
+  allowedAttributes: {
+    ...sanitizeHtml.defaults.allowedAttributes,
+    '*':  ['style','class'],
+    'a':  ['href','target','rel'],
+    'img':['src','alt','width','height'],
+    'th': ['colspan','rowspan','style'],
+    'td': ['colspan','rowspan','style'],
+  },
+  allowedSchemes: ['http','https','mailto'],
+};
+
+/** Strip dangerous HTML from rich_text fields before storing. */
+function sanitizeRecordData(data, fields) {
+  if (!data || typeof data !== 'object') return data;
+  const out = { ...data };
+  (fields || []).forEach(f => {
+    if (f.field_type === 'rich_text' && typeof out[f.api_key] === 'string') {
+      out[f.api_key] = sanitizeHtml(out[f.api_key], RICH_TEXT_OPTIONS);
+    }
+  });
+  return out;
+}
 const { query, findOne, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { hasPermission, hasGlobalAction, applyFieldVisibility, applyFieldVisibilityBulk, isSuperAdmin, getHiddenFieldKeys } = require('../middleware/rbac');
 
@@ -495,8 +528,9 @@ router.post('/', validate(createRecordSchema), (req, res) => {
   // Inherit org_unit_id from creating user
   const creator = user_id ? findOne('users', u => u.id === user_id) : null;
   const org_unit_id = creator?.org_unit_id || null;
-  // Resolve auto_number fields
-  const resolvedData = resolveAutoNumbers(object_id, data);
+  // Resolve auto_number fields, then sanitise rich_text HTML before storing
+  const fields        = query('fields', f => f.object_id === object_id);
+  const resolvedData  = sanitizeRecordData(resolveAutoNumbers(object_id, data), fields);
   // Auto-assign sequential record_number per object (used for clean URLs)
   const _existingNums = query('records', r => r.object_id === object_id && r.environment_id === environment_id)
     .map(r => r.record_number || 0).filter(n => typeof n === 'number' && !isNaN(n));
@@ -514,7 +548,10 @@ router.patch('/:id', validate(patchRecordSchema), (req, res) => {
   if (!record) return res.status(404).json({error:'Not found'});
   if (checkPerm(req, res, record.object_id, 'edit') === false) return;
   const { data, updated_by, field_changes } = req.body;
-  const updated = update('records', r=>r.id===req.params.id, {data:{...record.data,...data},updated_at:new Date().toISOString()});
+  // Sanitise rich_text HTML in the patch data before merging into stored record
+  const objFields  = query('fields', f => f.object_id === record.object_id);
+  const cleanData  = sanitizeRecordData(data, objFields);
+  const updated = update('records', r=>r.id===req.params.id, {data:{...record.data,...cleanData},updated_at:new Date().toISOString()});
   // If frontend sends rich field_changes array, log one event per field; otherwise log a generic updated event
   if (field_changes && Array.isArray(field_changes) && field_changes.length > 0) {
     for (const fc of field_changes) {

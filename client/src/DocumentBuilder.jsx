@@ -1,6 +1,7 @@
 // client/src/DocumentBuilder.jsx — Document Builder & Generator
 import { useState, useEffect, useCallback } from "react";
 import api from "./apiClient.js";
+import { sanitizeHtml } from './sanitize.js';
 
 const F = "'DM Sans',-apple-system,sans-serif";
 const C = {
@@ -27,7 +28,7 @@ function RenderDoc({ markdown }) {
     .replace(/---/g,'<hr style="border:none;border-top:1px solid #E5E7EB;margin:16px 0"/>')
     .replace(/\n\n/g,'<br/><br/>').replace(/\n/g,'<br/>');
   return <div style={{ fontSize:13, lineHeight:1.75, color:C.text1, fontFamily:"Georgia,serif" }}
-    dangerouslySetInnerHTML={{ __html:html }}/>;
+    dangerouslySetInnerHTML={{ __html:sanitizeHtml(html) }}/>;
 }
 
 function VarInput({ variable, value, onChange }) {

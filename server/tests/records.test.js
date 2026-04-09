@@ -101,3 +101,53 @@ describe('DELETE /api/records/:id', () => {
     expect([200, 204]).toContain(res.status);
   });
 });
+
+describe('XSS — rich_text field sanitisation', () => {
+  test('script tag in rich_text field is stripped before storing', async () => {
+    // Create a record with a malicious rich_text value
+    const res = await agent.post('/api/records').send({
+      object_id:      objectId,
+      environment_id: envId,
+      data: {
+        first_name: 'XSSTest',
+        last_name:  'User',
+        email:      'xsstest@example.com',
+        // rich_text field with XSS payload (field exists on People object)
+        test_rich_text: '<p>Hello</p><script>alert("xss")</script><img src=x onerror=alert(1)>',
+      },
+    });
+    // Either created (200/201) or missing field (200 without it) — never 500
+    expect(res.status).not.toBe(500);
+    if (res.body?.id) {
+      // Fetch the stored record and verify script is stripped
+      const get = await agent.get(`/api/records/${res.body.id}`);
+      const stored = get.body?.data?.test_rich_text || '';
+      expect(stored).not.toContain('<script>');
+      expect(stored).not.toContain('onerror=');
+      // Safe content preserved
+      expect(stored).toContain('Hello');
+      // Clean up
+      await agent.delete(`/api/records/${res.body.id}?environment_id=${envId}`);
+    }
+  });
+
+  test('javascript: URL in rich_text href is stripped', async () => {
+    const res = await agent.post('/api/records').send({
+      object_id:      objectId,
+      environment_id: envId,
+      data: {
+        first_name: 'XSSLink',
+        last_name:  'Test',
+        email:      'xsslink@example.com',
+        test_rich_text: '<a href="javascript:alert(1)">click me</a>',
+      },
+    });
+    expect(res.status).not.toBe(500);
+    if (res.body?.id) {
+      const get = await agent.get(`/api/records/${res.body.id}`);
+      const stored = get.body?.data?.test_rich_text || '';
+      expect(stored).not.toContain('javascript:');
+      await agent.delete(`/api/records/${res.body.id}?environment_id=${envId}`);
+    }
+  });
+});
