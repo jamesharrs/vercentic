@@ -8,6 +8,7 @@ const { initDB, getStore } = require('./db/init');
 const tenantMiddleware = require('./middleware/tenant');
 const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
 const { auditResponseMiddleware } = require('./middleware/security-audit');
+const { attachCsrfCookie, verifyCsrf } = require('./middleware/csrf');
 
 const app = express();
 
@@ -106,6 +107,8 @@ app.use(session({
 }));
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
 app.use(attachUser);              // attach current user to req (reads session OR X-User-Id header)
+app.use(attachCsrfCookie);        // set vercentic_csrf cookie when user is authenticated
+app.use(verifyCsrf);              // enforce CSRF token on state-changing requests
 app.use(auditResponseMiddleware); // log 403 responses to security audit log
 
 // ── Portal session middleware — resolves x-portal-token to req.portalUser ────
@@ -163,10 +166,12 @@ const authLimiter = rateLimit({
     error: 'Too many login attempts. Please wait 15 minutes before trying again.',
     code:  'RATE_LIMITED',
   },
-  // Only skip when key is explicitly set AND matches — never skip on missing key
+  // Only skip when key is explicitly set AND matches — never skip on missing key.
+  // Also skip in test environment so Jest suites can run without hitting limits.
   skip: (req) =>
-    !!process.env.INTERNAL_API_KEY &&
-    req.headers['x-internal-key'] === process.env.INTERNAL_API_KEY,
+    process.env.NODE_ENV === 'test' ||
+    (!!process.env.INTERNAL_API_KEY &&
+     req.headers['x-internal-key'] === process.env.INTERNAL_API_KEY),
 });
 
 // General write operations — 200 mutating requests per minute per IP
@@ -179,7 +184,10 @@ const writeLimiter = rateLimit({
     error: 'Too many requests. Please slow down.',
     code:  'RATE_LIMITED',
   },
-  skip: (req) => req.method === 'GET' || req.method === 'OPTIONS',
+  skip: (req) =>
+    process.env.NODE_ENV === 'test' ||
+    req.method === 'GET' ||
+    req.method === 'OPTIONS',
 });
 
 // Apply auth limiter to all login routes

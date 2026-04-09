@@ -2,6 +2,18 @@ const express = require('express');
 const { validate } = require('../middleware/validate');
 const { createUserSchema, patchUserSchema, resetPasswordSchema, loginSchema } = require('../validation/schemas');
 const { hasGlobalAction } = require('../middleware/rbac');
+const crypto = require('crypto');
+
+// Set the CSRF double-submit cookie on a successful login response
+function setCsrfCookie(res) {
+  const token = crypto.randomBytes(32).toString('hex');
+  res.cookie('vercentic_csrf', token, {
+    httpOnly: false,   // must be JS-readable (that's the whole point)
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge:   8 * 60 * 60 * 1000,
+  });
+}
 
 function checkGlobal(req, res, action) {
   const user = req.currentUser;
@@ -14,7 +26,6 @@ function checkGlobal(req, res, action) {
 }
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
 const { query, findOne, insert, update, remove } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
@@ -131,6 +142,7 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
   // Set httpOnly session cookie (primary auth mechanism)
   req.session.userId     = user.id;
   req.session.tenantSlug = tenantSlug;
+  setCsrfCookie(res);  // also set the JS-readable CSRF double-submit token
   // Also return token/user in body for backward compat (mobile app, Chrome extension, existing clients)
   res.json({ token, user: { ...user, password_hash: undefined, role }, tenant_slug: tenantSlug, must_change_password: user.must_change_password });
 });
@@ -219,9 +231,10 @@ router.post('/login', validate(loginSchema), (req, res) => {
     insert('audit_log', { id:require('uuid').v4(), action:'user.login', actor:u.id, target_id:u.id, target_type:'user', details:{ email }, created_at:new Date().toISOString() });
   });
 
-  // Set httpOnly session cookie (primary auth mechanism going forward)
+  // Set httpOnly session cookie (primary auth mechanism)
   req.session.userId     = u.id;
   req.session.tenantSlug = resolvedTenantSlug;
+  setCsrfCookie(res);  // JS-readable CSRF double-submit token
 
   res.json({ ...u, password_hash: undefined, role, permissions, tenant_slug: resolvedTenantSlug });
 });

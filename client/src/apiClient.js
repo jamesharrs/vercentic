@@ -19,6 +19,14 @@ function getSession() {
   try { return JSON.parse(localStorage.getItem('talentos_session') || 'null'); } catch { return null; }
 }
 
+/** Read the CSRF token the server set in the vercentic_csrf cookie. */
+function getCsrfToken() {
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)vercentic_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch { return null; }
+}
+
 function getTenantSlug() {
   const host  = window.location.hostname;
   const parts = host.split('.');
@@ -47,6 +55,14 @@ function authHeaders(extra = {}) {
 
 function jsonHeaders() {
   return { 'Content-Type': 'application/json', ...authHeaders() };
+}
+
+/** Headers for state-changing requests — includes CSRF token. */
+function mutationHeaders(extra = {}) {
+  const h = jsonHeaders();
+  const csrf = getCsrfToken();
+  if (csrf) h['X-CSRF-Token'] = csrf;
+  return { ...h, ...extra };
 }
 
 /**
@@ -87,12 +103,12 @@ async function handleResponse(res) {
 }
 
 const api = {
-  get:    (path)       => fetch(`/api${path}`, { credentials: 'include', headers: authHeaders()  }).then(handleResponse),
-  post:   (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'POST',   headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  patch:  (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PATCH',  headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  put:    (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PUT',    headers: jsonHeaders(), body: JSON.stringify(body) }).then(handleResponse),
-  del:    (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
-  delete: (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: authHeaders()  }).then(handleResponse),
+  get:    (path)       => fetch(`/api${path}`, { credentials: 'include', headers: authHeaders()          }).then(handleResponse),
+  post:   (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'POST',   headers: mutationHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  patch:  (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PATCH',  headers: mutationHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  put:    (path, body) => fetch(`/api${path}`, { credentials: 'include', method: 'PUT',    headers: mutationHeaders(), body: JSON.stringify(body) }).then(handleResponse),
+  del:    (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: { ...authHeaders(), 'X-CSRF-Token': getCsrfToken() || '' } }).then(handleResponse),
+  delete: (path)       => fetch(`/api${path}`, { credentials: 'include', method: 'DELETE', headers: { ...authHeaders(), 'X-CSRF-Token': getCsrfToken() || '' } }).then(handleResponse),
 };
 
 // ── Backward-compatible silent variant ────────────────────────────────────────
@@ -110,10 +126,13 @@ const quietly = {
 api.quietly = quietly;
 
 export default api;
-export { authHeaders, jsonHeaders, getTenantSlug, getSession, ApiError };
+export { authHeaders, jsonHeaders, mutationHeaders, getCsrfToken, getTenantSlug, getSession, ApiError };
 
-// Bare fetch wrapper — attaches tenant + user headers + credentials without throwing
+// Bare fetch wrapper — attaches tenant + user headers + credentials + CSRF without throwing
 export function tFetch(url, opts = {}) {
-  const h = { ...authHeaders(), ...(opts.headers || {}) };
+  const method = (opts.method || 'GET').toUpperCase();
+  const csrf   = method !== 'GET' && method !== 'HEAD' ? getCsrfToken() : null;
+  const h      = { ...authHeaders(), ...(opts.headers || {}) };
+  if (csrf) h['X-CSRF-Token'] = csrf;
   return fetch(url, { credentials: 'include', ...opts, headers: h });
 }

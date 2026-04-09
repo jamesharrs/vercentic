@@ -128,3 +128,55 @@ describe('Session cookie', () => {
     expect(res.body.ok).toBe(true);
   });
 });
+
+describe('CSRF protection', () => {
+  let csrfAgent;   // agent with valid session + csrf cookie
+  let csrfToken;   // the actual token value
+
+  beforeAll(async () => {
+    const request = require('supertest');
+    const { getApp } = require('./helpers');
+    csrfAgent = request.agent(getApp());
+    const login = await csrfAgent
+      .post('/api/users/login')
+      .send({ email: 'admin@talentos.io', password: 'Admin1234!' });
+    expect(login.status).toBe(200);
+    // Extract CSRF token from Set-Cookie response header
+    const cookies = [].concat(login.headers['set-cookie'] || []);
+    const csrfCookie = cookies.find(c => c.startsWith('vercentic_csrf='));
+    expect(csrfCookie).toBeDefined();
+    csrfToken = csrfCookie.split('=')[1].split(';')[0];
+    expect(csrfToken.length).toBe(64); // 32 bytes hex
+  });
+
+  test('POST without X-CSRF-Token header → 403 CSRF_MISSING', async () => {
+    const res = await csrfAgent.post('/api/records').send({});
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_MISSING');
+  });
+
+  test('POST with wrong CSRF token → 403 CSRF_INVALID', async () => {
+    const wrongToken = 'b'.repeat(64); // same length, different value
+    const res = await csrfAgent
+      .post('/api/records')
+      .set('X-CSRF-Token', wrongToken)
+      .send({});
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_INVALID');
+  });
+
+  test('POST with correct CSRF token → CSRF passes (400 = validation error, not 403)', async () => {
+    const res = await csrfAgent
+      .post('/api/records')
+      .set('X-CSRF-Token', csrfToken)
+      .send({ object_id: 'not-a-uuid', environment_id: 'test', data: {} });
+    expect(res.status).toBe(400);   // Zod validation fails, but CSRF passed
+    expect(res.body.code).not.toBe('CSRF_MISSING');
+    expect(res.body.code).not.toBe('CSRF_INVALID');
+  });
+
+  test('GET never requires CSRF token', async () => {
+    const res = await csrfAgent.get('/api/health');
+    expect(res.status).toBe(200);
+  });
+});
