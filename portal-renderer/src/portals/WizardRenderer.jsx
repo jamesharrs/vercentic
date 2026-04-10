@@ -510,7 +510,8 @@ export default function WizardRenderer({ portal, wizard, job, api, onBack, onSuc
       const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/cv-parse', { method:'POST', body:fd, credentials:'include' });
       const data = res.ok ? await res.json() : null;
-      const result = data?.result || data;
+      const outer = data?.result || data;
+      const result = outer?.parsed || outer;
       if (result && typeof result === 'object') {
         ['first_name','last_name','email','phone','location','current_title','linkedin_url',
          'years_experience','skills','summary'].forEach(k => { if (result[k]) set(k, result[k]); });

@@ -129,12 +129,14 @@ const AUTH_EXEMPT = [
   '/users/login', '/users/auth/login', '/users/logout',
   '/health', '/environments',
   '/portals/public', '/portals/by-slug', '/portals/slug',
-  '/portals/job-alerts', '/portals/application-status', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
+  '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/campaign-links',
     '/integrations',  
   '/superadmin', '/bot', '/analytics',
   '/attachments/file',
+  '/attachments/upload',
+  '/cv-parse',
   '/comms/webhook',
   '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
   '/error-logs', '/ai', '/translate', '/linkedin-search',
@@ -145,6 +147,9 @@ const AUTH_EXEMPT = [
 app.use('/api', (req, res, next) => {
   if (AUTH_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
+  if (req.path.match(/^\/portals\/[^/]+\/wizard\//)) return next();
+  if (req.path.match(/^\/portals\/[^/]+\/apply\/check-email$/)) return next();
+  if (req.path.match(/^\/portals\/[^/]+\/draft/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/session$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/jobs($|\/)/)) return next();
   if (req.method === 'OPTIONS') return next();
