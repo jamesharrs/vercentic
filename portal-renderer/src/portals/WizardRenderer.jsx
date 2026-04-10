@@ -128,22 +128,26 @@ const EntryMethodBlock = ({ config={}, formData, set, onMethodChosen, parsing, c
   if (config.allow_manual!==false)    methods.push({ id:'manual',    iconN:'edit',      label:'Fill in the form manually',  sub:'Complete the application yourself' });
   if (config.allow_returning!==false) methods.push({ id:'returning', iconN:'userCheck', label:'Returning applicant',        sub:'Continue or update your existing profile', dashed:true });
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
       {methods.map(m=>{
         if (m.id==='cv') return (
-          <label key="cv" style={{display:'flex',alignItems:'flex-start',gap:14,padding:'16px 18px',background:'white',borderRadius:14,
-            border:`2px solid ${color}`,cursor:'pointer',boxShadow:`0 2px 12px ${color}14`}}>
+          <label key="cv" style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:12,padding:'20px',background:'white',borderRadius:14,
+            border:`2px solid ${color}`,cursor:'pointer',boxShadow:`0 2px 12px ${color}14`,transition:'all .15s'}}
+            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 6px 20px ${color}22`;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=`0 2px 12px ${color}14`;}}>
             <input type="file" accept=".pdf,.doc,.docx" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f){onCvFile&&onCvFile(f);onMethodChosen('cv');}e.target.value='';}}/>
-            <div style={{width:40,height:40,borderRadius:10,background:`${color}14`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><WzIc n={m.iconN} s={20} c={color}/></div>
-            <div><div style={{fontSize:15,fontWeight:700,color:'#0F1729',marginBottom:2}}>{parsing?'Reading your CV…':m.label}</div><div style={{fontSize:13,color:'#6B7280'}}>{m.sub}</div></div>
+            <div style={{width:44,height:44,borderRadius:12,background:`${color}14`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><WzIc n={m.iconN} s={22} c={color}/></div>
+            <div><div style={{fontSize:14,fontWeight:700,color:'#0F1729',marginBottom:4}}>{parsing?'Reading your CV…':m.label}</div><div style={{fontSize:12,color:'#6B7280',lineHeight:1.5}}>{m.sub}</div></div>
           </label>
         );
         return (
           <button key={m.id} onClick={()=>onMethodChosen(m.id)}
-            style={{display:'flex',alignItems:'flex-start',gap:14,padding:`${m.dashed?'14px':'16px'} 18px`,background:m.dashed?'#FAFBFF':'white',borderRadius:14,
-              border:m.dashed?`1.5px dashed #C7D0E8`:'1.5px solid #E8ECF8',cursor:'pointer',textAlign:'left',width:'100%',fontFamily:'inherit'}}>
-            <div style={{width:40,height:40,borderRadius:10,background:`${color}14`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><WzIc n={m.iconN} s={18} c={color}/></div>
-            <div><div style={{fontSize:15,fontWeight:700,color:'#0F1729',marginBottom:2}}>{m.label}</div><div style={{fontSize:13,color:'#6B7280'}}>{m.sub}</div></div>
+            style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:12,padding:'20px',background:m.dashed?'#FAFBFF':'white',borderRadius:14,
+              border:m.dashed?`1.5px dashed #C7D0E8`:'1.5px solid #E8ECF8',cursor:'pointer',textAlign:'left',width:'100%',fontFamily:'inherit',transition:'all .15s'}}
+            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow=`0 6px 20px ${color}18`;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.borderColor=m.dashed?'#C7D0E8':'#E8ECF8';e.currentTarget.style.boxShadow='none';}}>
+            <div style={{width:44,height:44,borderRadius:12,background:`${color}14`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><WzIc n={m.iconN} s={22} c={color}/></div>
+            <div><div style={{fontSize:14,fontWeight:700,color:'#0F1729',marginBottom:4}}>{m.label}</div><div style={{fontSize:12,color:'#6B7280',lineHeight:1.5}}>{m.sub}</div></div>
           </button>
         );
       })}
