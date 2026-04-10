@@ -283,6 +283,166 @@ router.get('/:id/draft/:token', (req, res) => {
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
+// ─── Wizard Submit — generic record creation (target object varies) ──────────
+// POST /api/portals/:id/wizard/submit
+router.post('/:id/wizard/submit', async (req, res) => {
+  try {
+    const store = getStore();
+    const portal = (store.portals||[]).find(p=>p.id===req.params.id && !p.deleted_at);
+    if (!portal) return res.status(404).json({ error:'Portal not found' });
+
+    const wizard = portal.wizard || {};
+    const { target_object='people', link_to_job=true } = wizard;
+    const { form_data={}, job_id, meta={} } = req.body;
+
+    // Find the target object for this environment
+    const targetObj = (store.objects||[]).find(
+      o => o.environment_id===portal.environment_id && (o.slug===target_object || o.slug===target_object.replace('_','-'))
+    );
+    if (!targetObj) return res.status(400).json({ error:`Object '${target_object}' not found` });
+
+    // For people: de-duplicate on email
+    let record;
+    if (target_object==='people') {
+      const email = form_data.email?.toLowerCase().trim();
+      if (!email || !form_data.first_name)
+        return res.status(400).json({ error:'first_name and email are required' });
+
+      const existing = (store.records||[]).find(
+        r=>r.object_id===targetObj.id && r.data?.email?.toLowerCase()===email
+      );
+      if (existing) {
+        // Merge any new data onto existing record
+        existing.data = { ...existing.data, ...form_data };
+        existing.updated_at = new Date().toISOString();
+        record = existing;
+      } else {
+        record = {
+          id:uid(), object_id:targetObj.id, environment_id:portal.environment_id,
+          data:{ status:'Active', source:'Portal', person_type:'Candidate', ...form_data },
+          created_by:'portal', created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+        };
+        if (!store.records) store.records=[];
+        store.records.push(record);
+      }
+    } else {
+      // For other objects (jobs, etc.) always create new
+      record = {
+        id:uid(), object_id:targetObj.id, environment_id:portal.environment_id,
+        data:{ status:'Draft', source:'Portal', ...form_data },
+        created_by:'portal', created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+      };
+      if (!store.records) store.records=[];
+      store.records.push(record);
+    }
+
+    // Link to a job record if requested
+    if (link_to_job && job_id && target_object==='people') {
+      if (!store.people_links) store.people_links=[];
+      const alreadyLinked = store.people_links.find(l=>l.person_id===record.id && l.record_id===job_id);
+      if (!alreadyLinked) {
+        store.people_links.push({
+          id:uid(), person_id:record.id, record_id:job_id,
+          stage_id:null, workflow_id:null, added_by:'portal', added_at:new Date().toISOString(),
+        });
+      }
+    }
+
+    // Save activity log entry
+    if (!store.activity) store.activity=[];
+    store.activity.push({
+      id:uid(), record_id:record.id, object_id:targetObj.id,
+      environment_id:portal.environment_id,
+      action:'wizard_submit', actor:'portal',
+      details:{ portal_id:portal.id, portal_name:portal.name, job_id:job_id||null, ...meta },
+      created_at:new Date().toISOString(),
+    });
+
+    // Save any form responses (from form_response blocks)
+    const formResponses = req.body.form_responses || [];
+    for (const fr of formResponses) {
+      if (!fr.form_id || !fr.answers) continue;
+      if (!store.form_responses) store.form_responses=[];
+      store.form_responses.push({
+        id:uid(), form_id:fr.form_id, record_id:record.id,
+        object_id:targetObj.id, environment_id:portal.environment_id,
+        answers:fr.answers, submitted_by:'portal', created_at:new Date().toISOString(),
+      });
+    }
+
+    // Clear any saved wizard draft for this session
+    if (req.body.draft_token) {
+      const di = (store.wizard_drafts||[]).findIndex(d=>d.token===req.body.draft_token);
+      if (di!==-1) { store.wizard_drafts[di].submitted_at=new Date().toISOString(); }
+    }
+
+    saveStore();
+    res.json({ success:true, record_id:record.id, is_new:!(target_object==='people' && !!record.created_at<new Date().toISOString()) });
+  } catch(e) {
+    console.error('Wizard submit error:',e);
+    res.status(500).json({ error:e.message });
+  }
+});
+
+// ─── Wizard Draft — save & resume progress ───────────────────────────────────
+// POST /api/portals/:id/wizard/draft
+router.post('/:id/wizard/draft', async (req, res) => {
+  try {
+    const store = getStore();
+    const portal = (store.portals||[]).find(p=>p.id===req.params.id && !p.deleted_at);
+    if (!portal) return res.status(404).json({ error:'Portal not found' });
+
+    const { email, form_data={}, page_id, job_id } = req.body;
+    if (!email) return res.status(400).json({ error:'email required to save progress' });
+
+    if (!store.wizard_drafts) store.wizard_drafts=[];
+    const existing = store.wizard_drafts.find(
+      d=>d.email===email && d.portal_id===req.params.id && !d.submitted_at && (job_id?d.job_id===job_id:true)
+    );
+    const token = existing?.token || require('crypto').randomBytes(24).toString('hex');
+    const draft = {
+      id:existing?.id||uid(), token, portal_id:req.params.id,
+      email, job_id:job_id||null, form_data, page_id:page_id||null,
+      created_at:existing?.created_at||new Date().toISOString(),
+      updated_at:new Date().toISOString(),
+      expires_at:new Date(Date.now()+7*24*60*60*1000).toISOString(),
+    };
+    if (existing) {
+      const idx = store.wizard_drafts.findIndex(d=>d.id===existing.id);
+      store.wizard_drafts[idx]=draft;
+    } else {
+      store.wizard_drafts.push(draft);
+    }
+
+    // Try to send a resume email
+    try {
+      const resumeUrl = `${req.headers.origin||''}?resume_token=${token}&job_id=${job_id||''}`;
+      const { sendEmail } = require('../services/messaging');
+      await sendEmail(email, `Continue your application — ${portal.branding?.company_name||portal.name}`,
+        `<p>Hi there,</p><p>You saved your application progress. Click below to continue where you left off:</p><p><a href="${resumeUrl}" style="padding:10px 20px;background:#4361EE;color:white;border-radius:8px;text-decoration:none;font-weight:700;">Continue my application →</a></p><p>This link expires in 7 days.</p>`,
+        process.env.SENDGRID_FROM_EMAIL||'noreply@vercentic.com'
+      );
+    } catch(emailErr) { console.warn('Draft email skipped:',emailErr.message); }
+
+    saveStore();
+    res.json({ token, expires_at:draft.expires_at });
+  } catch(e) {
+    res.status(500).json({ error:e.message });
+  }
+});
+
+// GET /api/portals/:id/wizard/draft/:token — resume saved progress
+router.get('/:id/wizard/draft/:token', (req, res) => {
+  try {
+    const store = getStore();
+    const draft = (store.wizard_drafts||[]).find(d=>d.token===req.params.token && d.portal_id===req.params.id);
+    if (!draft) return res.status(404).json({ error:'Draft not found or expired' });
+    if (new Date(draft.expires_at)<new Date()) return res.status(410).json({ error:'This link has expired. Please start a new application.' });
+    if (draft.submitted_at) return res.status(410).json({ error:'This application has already been submitted.' });
+    res.json(draft);
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
 module.exports = router;
 
 // ── Portal session auth (for HM portal login) ────────────────────────────────

@@ -1,6 +1,7 @@
 // client/src/portals/CareerSite.jsx
 import { useState, useEffect, useRef } from 'react'
 import { css, Badge, Btn, Section, STATUS_COLORS, recordTitle } from './shared.jsx'
+import WizardRenderer from './WizardRenderer.jsx'
 
 // ── Equal Opportunities templates ─────────────────────────────────────────────
 const EO_TEMPLATES = {
@@ -504,7 +505,14 @@ export default function CareerSite({ portal, objects, api }) {
   const depts = [...new Set(jobs.map(j=>j.data?.department).filter(Boolean))]
   const filtered = jobs.filter(j=>(!search||(j.data?.job_title||'').toLowerCase().includes(search.toLowerCase()))&&(!dept||j.data?.department===dept))
 
-  if (view==='apply') return <ApplyForm job={selected} portal={portal} api={api} onBack={()=>setView('detail')} onSuccess={()=>setView('list')}/>
+  if (view==='apply') {
+    // Use the configurable WizardRenderer when wizard is enabled, else fall back to ApplyForm
+    if (portal.wizard?.enabled && portal.wizard?.pages?.length) {
+      return <WizardRenderer wizard={portal.wizard} portal={portal} job={selected} api={api}
+        onBack={()=>setView('detail')} onSuccess={()=>{ setView('list'); setSelected(null); }}/>;
+    }
+    return <ApplyForm job={selected} portal={portal} api={api} onBack={()=>setView('detail')} onSuccess={()=>setView('list')}/>
+  }
   if (view==='detail') return <JobDetail job={selected} portal={portal} onApply={()=>setView('apply')} onBack={()=>setView('list')}/>
 
   return (

@@ -3137,8 +3137,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     html = html.replace(/^---+$/gm, `<hr style="border:none;border-top:1px solid #e5e7eb;margin:10px 0;"/>`);
 
     // ── Paragraphs ────────────────────────────────────────────────────────────
-    html = html.replace(/\n\n/g, `</p><p style="margin:6px 0;">`);
+    html = html.replace(/\n\n/g, `</p><p style="margin:4px 0;">`);
     html = html.replace(/\n/g, "<br/>");
+    // Remove <br/> tags sandwiched between block-level divs (bullet/numbered items)
+    // so consecutive list items don't get double-spaced
+    html = html.replace(/<br\/?>\s*(<div)/g, "$1");
+    html = html.replace(/(<\/div>)\s*<br\/?>/g, "$1");
     html = `<p style="margin:0;">${html}</p>`;
 
     return html;

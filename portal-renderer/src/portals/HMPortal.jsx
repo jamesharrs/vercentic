@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { css, Badge, Btn, Avatar, Section, STATUS_COLORS, recordTitle } from './shared.jsx'
+import WizardRenderer from './WizardRenderer.jsx'
 
 const ScoreBtn = ({ n, active, color, onClick }) => (
   <button onClick={onClick} style={{
@@ -204,6 +205,13 @@ export default function HMPortal({ portal, api }) {
   const [loading, setLoading] = useState(true)
   const [activeReq, setActiveReq] = useState(null)
   const [tab, setTab] = useState('reqs')
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+
+  // Show job creation wizard when configured
+  if (showCreateWizard && portal.wizard?.enabled && portal.wizard?.pages?.length) {
+    return <WizardRenderer wizard={portal.wizard} portal={portal} job={null} api={api}
+      onBack={()=>setShowCreateWizard(false)} onSuccess={()=>{ setShowCreateWizard(false); }}/>;
+  }
 
   useEffect(() => {
     Promise.all([
@@ -270,7 +278,15 @@ export default function HMPortal({ portal, api }) {
           <div style={{ textAlign:'center', padding:60, color:'#9DA8C7' }}>Loading…</div>
         ) : tab === 'reqs' ? (
           <div>
-            <h2 style={{ margin:'0 0 20px', fontSize:18, fontWeight:800, color:'#0F1729' }}>My Requisitions</h2>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+              <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:'#0F1729' }}>My Requisitions</h2>
+              {portal.wizard?.enabled && portal.wizard?.pages?.length>0 && (
+                <button onClick={()=>setShowCreateWizard(true)}
+                  style={{ padding:'8px 16px', borderRadius:9, background:c.primary, color:'white', fontSize:13, fontWeight:700, border:'none', cursor:'pointer', fontFamily:c.font }}>
+                  + New Requisition
+                </button>
+              )}
+            </div>
             {openReqs.length === 0 ? (
               <div style={{ textAlign:'center', padding:'48px 0', color:'#9DA8C7' }}>
                 <div style={{ fontSize:40, marginBottom:12 }}>📋</div>

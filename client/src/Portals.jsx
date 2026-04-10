@@ -3,6 +3,7 @@ import { CampaignLinksModal } from "./CampaignLinks.jsx";
 import { ABTestModal } from "./ABTestPanel.jsx";
 import { FeedbackConfigPanel, FeedbackReports } from './portals/FeedbackConfig.jsx';
 import PortalTemplatePicker from './PortalTemplatePicker.jsx';
+import WizardBuilder from './WizardBuilder.jsx';
 import { PORTAL_TEMPLATES, getTemplatesForType, applyTemplate } from './portalTemplates.js';
 import api from './apiClient.js';
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
@@ -532,7 +533,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           </button>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,overflowX:"auto",flexShrink:0}}>
-          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["eo","Equal Opps"],["feedback","Feedback"],["copilot","Copilot"],["hub","Hub"]].map(([id,l])=>(
+          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["eo","Equal Opps"],["feedback","Feedback"],["copilot","Copilot"],["hub","Hub"],["wizard","🧙 Wizard"]].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"10px 16px",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent",whiteSpace:"nowrap"}}>{l}</button>
           ))}
         </div>
@@ -723,6 +724,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             </div>
           </>);
         })()}
+        {tab==="wizard"&&<WizardBuilder portal={portal} onChange={onChange}/>}
         </div>
       </div>
     </div>
