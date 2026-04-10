@@ -155,6 +155,32 @@ router.get('/jobs/:job_id', (req, res) => {
   res.json(merged);
 });
 
+// Alias — WizardRenderer calls /jobs/:job_id/questions (with /questions suffix)
+router.get('/jobs/:job_id/questions', (req, res) => {
+  req.params.job_id = req.params.job_id; // already set
+  // Re-use same logic — just forward to the handler above by re-calling
+  const store = require('../db/init').getStore();
+  const jobId = req.params.job_id;
+  const assignments = (store.job_questions||[]).filter(jq=>jq.job_id===jobId);
+  const qIds = assignments.map(a=>a.question_id);
+  const libraryQs = (store.question_bank_v2||[]).filter(q=>qIds.includes(q.id));
+  const ordered = assignments.map(a=>{
+    if (a.question_data) return { ...a.question_data, id: a.question_id, order: a.order, _job_only: true };
+    const q = libraryQs.find(q=>q.id===a.question_id);
+    return q ? { ...q, order: a.order } : null;
+  }).filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0));
+  const screeningRules = (store.screening_job_rules||[]).filter(r => r.record_id === jobId && r.question_text);
+  const screeningQs = screeningRules.map(r => ({
+    id: r.id, type: r.question_type||'competency', text: r.question_text,
+    options: r.question_options||[], pass_value: r.pass_value||null, weight: r.weight||5,
+    _from_screening_rules: true,
+  }));
+  const existingIds = new Set(ordered.map(q=>q.id));
+  const merged = [...ordered, ...screeningQs.filter(q=>!existingIds.has(q.id))];
+  merged.sort((a,b)=>(a.type==='knockout'&&b.type!=='knockout')?-1:(a.type!=='knockout'&&b.type==='knockout')?1:0);
+  res.json(merged);
+});
+
 router.put('/jobs/:job_id', async (req, res) => {
   const { question_ids } = req.body;
   if (!Array.isArray(question_ids)) return res.status(400).json({error:'question_ids array required'});
