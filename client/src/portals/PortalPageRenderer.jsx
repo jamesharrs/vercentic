@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
+import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -333,6 +334,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
   const [location, setLocation] = useState('all');
   const [selected, setSelected] = useState(null);
   const [applying, setApplying] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const ff = theme.fontFamily || "'DM Sans', sans-serif";
   const pr = theme.primaryColor || '#4361EE';
   const tc = theme.textColor || '#1a1a2e';
@@ -432,14 +434,32 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
         <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
         {renderDetailFields(d)}
         <div style={{ marginTop:20 }}>
-          {!applying ? (
-            <button onClick={() => { setApplying(true); if(track) track('job_click', { job_id: selected.id, title: d.job_title }); }}
-              style={{ padding:'12px 28px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Apply Now</button>
-          ) : (
+          {wizardOpen && portal.wizard?.enabled && portal.wizard?.pages?.length ? (
+            <WizardRenderer
+              wizard={portal.wizard}
+              portal={portal}
+              job={selected}
+              api={api}
+              onBack={() => setWizardOpen(false)}
+              onSuccess={() => { setWizardOpen(false); setSelected(null); setApplying(true); }}
+            />
+          ) : applying ? (
             <div style={{ padding:16, background:pr+'08', borderRadius:br, border:'1px solid '+pr+'20' }}>
               <p style={{ margin:'0 0 8px', fontSize:14, fontWeight:600, color:tc }}>Application submitted!</p>
               <p style={{ margin:0, fontSize:13, color:tc+'80' }}>Thank you. We'll be in touch.</p>
             </div>
+          ) : (
+            <button onClick={() => {
+                if(track) track('job_click', { job_id: selected.id, title: d.job_title });
+                if (portal.wizard?.enabled && portal.wizard?.pages?.length) {
+                  setWizardOpen(true);
+                } else {
+                  setApplying(true);
+                }
+              }}
+              style={{ padding:'12px 28px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff }}>
+              {portal.wizard?.trigger?.apply_label || 'Apply Now'}
+            </button>
           )}
         </div>
       </div>
