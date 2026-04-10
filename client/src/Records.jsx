@@ -7956,7 +7956,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                         onSave={()=>handleSaveField(field.api_key, record.data?.[field.api_key])}
                         onCancel={()=>setEditing(p=>{const n={...p};delete n[field.api_key];return n;})}/>
                     ) : (
-                      <FieldValue field={field} value={val} onPillClick={onPillClick}/>
+                      <FieldValue field={field} value={val} allFieldValues={record.data || {}}/>
                     )}
                   </div>
                 </div>
