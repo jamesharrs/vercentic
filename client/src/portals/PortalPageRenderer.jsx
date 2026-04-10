@@ -379,6 +379,19 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
 
   const isJobs = objMeta?.slug === 'jobs';
   const isPeople = objMeta?.slug === 'people';
+
+  // Listen for vrc:openJob events fired by FeaturedJobsWidget / other widgets
+  useEffect(() => {
+    if (!isJobs) return;
+    const handler = (e) => {
+      const job = e.detail;
+      if (!job) return;
+      // Use the job directly from the event (may not be in filtered view)
+      setSelected(job);
+    };
+    window.addEventListener('vrc:openJob', handler);
+    return () => window.removeEventListener('vrc:openJob', handler);
+  }, [isJobs]);
   const depts = [...new Set(records.map(r => r.data?.department).filter(Boolean))];
   const locs = [...new Set(records.map(r => r.data?.location).filter(Boolean))];
   const filtered = records.filter(r => {
@@ -843,8 +856,11 @@ const FaqWidget = ({ cfg, theme }) => {
 
 // ── Featured / Latest Jobs Strip ──────────────────────────────────────────────
 const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
-  const [jobs,    setJobs]    = useState([])
-  const [loading, setLoading] = useState(true)
+  const [jobs,        setJobs]        = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [wizardOpen,  setWizardOpen]  = useState(false)
+  const [applied,     setApplied]     = useState(false)
   const { saved, toggle, isSaved } = useSavedJobs()
   const pr = theme.primaryColor || '#3B5BDB'
   const tc = theme.textColor    || '#0F1729'
@@ -862,13 +878,23 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
       .then(data => {
         if (!data) return
         let all = (data?.records||data||[]).filter(r => r.data?.status!=='Closed' && r.data?.status!=='Filled')
-        if (cfg.department) all = all.filter(j => j.data?.department === cfg.department)
-        all.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
-        setJobs(all.slice(0, cfg.limit || 5))
+
+        // Manual selection mode — show only pinned job IDs in the configured order
+        if (cfg.selectionMode === 'manual' && cfg.pinnedJobIds?.length) {
+          const pinned = cfg.pinnedJobIds
+          all = pinned.map(id => all.find(j => j.id === id)).filter(Boolean)
+        } else {
+          // Auto mode — filter by dept, sort by newest, slice
+          if (cfg.department) all = all.filter(j => j.data?.department === cfg.department)
+          all.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+          all = all.slice(0, cfg.limit || 5)
+        }
+
+        setJobs(all)
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [portal?.environment_id])
+  }, [portal?.environment_id, cfg.selectionMode, cfg.pinnedJobIds?.join(','), cfg.department, cfg.limit])
 
   const fmtDate = d => {
     if (!d) return ''
@@ -885,6 +911,40 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
 
   if (loading) return <div style={{ height:160, display:'flex', alignItems:'center', justifyContent:'center' }}><div style={{ width:28, height:28, border:`3px solid ${pr}30`, borderTop:`3px solid ${pr}`, borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/></div>
 
+  // Job detail view
+  if (selectedJob) {
+    const d = selectedJob.data || {}
+    return (
+      <div style={{ fontFamily:ff }}>
+        <button onClick={() => { setSelectedJob(null); setWizardOpen(false); setApplied(false); }}
+          style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:16 }}>
+          ← {heading || 'Back'}
+        </button>
+        <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || 'Untitled role'}</h2>
+        <div style={{ fontSize:13, color:tc+'99', marginBottom:20 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+        {d.description && <p style={{ fontSize:14, color:tc, lineHeight:1.7, marginBottom:20 }}>{d.description}</p>}
+        {d.salary_range && <div style={{ fontSize:13, fontWeight:600, color:pr, marginBottom:16 }}>{d.salary_range}</div>}
+        <div style={{ marginTop:8 }}>
+          {wizardOpen && portal.wizard?.enabled && portal.wizard?.pages?.length ? (
+            <WizardRenderer wizard={portal.wizard} portal={portal} job={selectedJob} api={api}
+              onBack={() => setWizardOpen(false)}
+              onSuccess={() => { setWizardOpen(false); setSelectedJob(null); setApplied(true); }}/>
+          ) : applied ? (
+            <div style={{ padding:16, background:pr+'10', borderRadius:br, border:`1px solid ${pr}30` }}>
+              <p style={{ margin:'0 0 4px', fontSize:14, fontWeight:600, color:tc }}>Application submitted!</p>
+              <p style={{ margin:0, fontSize:13, color:tc+'80' }}>Thank you — we'll be in touch.</p>
+            </div>
+          ) : (
+            <button onClick={() => portal.wizard?.enabled && portal.wizard?.pages?.length ? setWizardOpen(true) : setApplied(true)}
+              style={{ padding:'12px 28px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff }}>
+              {portal.wizard?.trigger?.apply_label || 'Apply Now'}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ fontFamily:ff }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
@@ -896,7 +956,7 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
       {layout === 'list' ? (
         <div style={{ display:'flex', flexDirection:'column' }}>
           {jobs.map((job, i) => (
-            <a key={job.id||i} onClick={e => { e.preventDefault(); window.dispatchEvent(new CustomEvent('vrc:openJob', { detail: job })) }} href="#"
+            <a key={job.id||i} onClick={e => { e.preventDefault(); setSelectedJob(job); }} href="#"
               style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 0', borderBottom:'1px solid #F3F4F6', textDecoration:'none', cursor:'pointer' }}>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:tc, marginBottom:4 }}>{job.data?.job_title||'Untitled role'}</div>
@@ -918,7 +978,7 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
           {jobs.map((job, i) => (
             <div key={job.id||i} style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12 }}
-              onClick={() => window.dispatchEvent(new CustomEvent('vrc:openJob', { detail: job }))}
+              onClick={() => setSelectedJob(job)}
               onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 8px 24px ${pr}16`; e.currentTarget.style.borderColor=`${pr}40`; e.currentTarget.style.transform='translateY(-2px)' }}
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; e.currentTarget.style.borderColor='#F3F4F6'; e.currentTarget.style.transform='none' }}
             >

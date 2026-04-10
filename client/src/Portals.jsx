@@ -2087,9 +2087,27 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
           {lbl("Heading")}<input value={cfg.heading||""} onChange={e=>set("heading",e.target.value)} placeholder="Latest opportunities" style={inp}/>
           {lbl("Layout")}
           <select value={cfg.layout||"cards"} onChange={e=>set("layout",e.target.value)} style={inp}><option value="cards">Cards</option><option value="list">List</option></select>
-          {lbl("Max jobs to show")}
-          <select value={cfg.limit||5} onChange={e=>set("limit",Number(e.target.value))} style={inp}><option value="3">3</option><option value="5">5</option><option value="8">8</option><option value="10">10</option></select>
-          {lbl("Filter by department (optional)")}<input value={cfg.department||""} onChange={e=>set("department",e.target.value)} placeholder="e.g. Engineering" style={inp}/>
+          {lbl("Job selection")}
+          <select value={cfg.selectionMode||"auto"} onChange={e=>set("selectionMode",e.target.value)} style={inp}>
+            <option value="auto">Auto — latest / filtered</option>
+            <option value="manual">Manual — pick specific jobs</option>
+          </select>
+          {(!cfg.selectionMode||cfg.selectionMode==="auto")&&<>
+            {lbl("Max jobs to show")}
+            <select value={cfg.limit||5} onChange={e=>set("limit",Number(e.target.value))} style={inp}><option value="3">3</option><option value="5">5</option><option value="8">8</option><option value="10">10</option></select>
+            {lbl("Filter by department (optional)")}<input value={cfg.department||""} onChange={e=>set("department",e.target.value)} placeholder="e.g. Engineering" style={inp}/>
+          </>}
+          {cfg.selectionMode==="manual"&&<>
+            {lbl("Pinned job IDs")}
+            <div style={{fontSize:11,color:C.text3,marginTop:-6}}>Enter one Job record ID per line. Copy IDs from the Jobs list in Vercentic.</div>
+            <textarea
+              value={(cfg.pinnedJobIds||[]).join("\n")}
+              onChange={e=>set("pinnedJobIds",e.target.value.split("\n").map(s=>s.trim()).filter(Boolean))}
+              rows={4} placeholder={"abc123\ndef456\nghi789"} style={{...inp,resize:"vertical",fontFamily:"monospace",fontSize:11}}/>
+            <div style={{fontSize:11,color:C.text3}}>
+              {(cfg.pinnedJobIds||[]).length} job{(cfg.pinnedJobIds||[]).length!==1?"s":""} pinned
+            </div>
+          </>}
           {lbl("View all link")}<input value={cfg.viewAllHref||""} onChange={e=>set("viewAllHref",e.target.value)} placeholder="#jobs or /vacancies" style={inp}/>
           {lbl("View all button text")}<input value={cfg.viewAllText||""} onChange={e=>set("viewAllText",e.target.value)} placeholder="View all jobs" style={inp}/>
         </div>
