@@ -32,7 +32,14 @@ function QuestionPickerModal({ onPick, onClose, alreadyAdded=[] }) {
 
   useEffect(() => {
     api.get("/question-bank/questions").then(d => {
-      setQuestions(Array.isArray(d) ? d : (d.questions||[]));
+      const raw = Array.isArray(d) ? d : (d.questions||[]);
+      // Server stores as .text/.type; component expects .question_text/.question_type
+      const normalized = raw.map(q => ({
+        ...q,
+        question_text: q.question_text || q.text || '',
+        question_type: q.question_type || q.type || '',
+      }));
+      setQuestions(normalized);
       setLoading(false);
     }).catch(()=>setLoading(false));
   }, []);
