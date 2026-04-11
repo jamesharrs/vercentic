@@ -111,6 +111,9 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     user:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
     users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
     layers:"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+    calendar:"M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+    listChecks:"M3 7l2 2 4-4M3 12l2 2 4-4M3 17l2 2 4-4M13 8h8M13 13h8M13 18h8",
+    clipboardCheck:"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM9 12l2 2 4-4",
   };
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -5689,8 +5692,8 @@ export const PANEL_META = {
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true  },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:true  },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
-  questions:    { icon:"help-circle",   label:"Screening & Interview Questions", defaultOpen:false },
-  interview_plan: { icon:"calendar",    label:"Interview Plan",      defaultOpen:true  },
+  questions:    { icon:"listChecks",     label:"Screening & Interview Questions", defaultOpen:false },
+  interview_plan: { icon:"calendar",      label:"Interview Plan",      defaultOpen:true  },
   insights: { icon:"barChart", label:"Insights", defaultOpen:true },
   engagement: { icon:"activity", label:"Engagement Score", defaultOpen:true  },
 };
