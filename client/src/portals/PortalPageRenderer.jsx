@@ -2160,6 +2160,29 @@ const AISummaryWidget = ({ cfg, theme, portal, api }) => {
   )
 }
 
+// ── HTML Embed Widget ──────────────────────────────────────────────────────────
+const HtmlEmbedWidget = ({ cfg, theme }) => {
+  const t = theme || {};
+  if (!cfg.html) return null;
+  const vars = [
+    `--primary:${t.primaryColor||'#4361EE'}`,
+    `--text:${t.textColor||'#0F1729'}`,
+    `--bg:${t.bgColor||'#FFFFFF'}`,
+    `--font:${t.fontFamily||'sans-serif'}`,
+    `--radius:${t.borderRadius?t.borderRadius+'px':'8px'}`,
+  ].join(';');
+  const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>:root{${vars}}*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font,sans-serif);color:var(--text,#0F1729);background:transparent;}
+${cfg.css||''}</style></head><body>${cfg.html}</body></html>`;
+  return (
+    <iframe srcDoc={doc} sandbox="allow-scripts allow-same-origin" title="html-widget"
+      style={{width:'100%',border:'none',display:'block',minHeight:40}}
+      onLoad={e=>{try{const b=e.target.contentDocument?.body;if(b)e.target.style.height=b.scrollHeight+'px';}catch(_){}}}/>
+  );
+};
+
 const Widget = ({ cell, theme, portal, api, track }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
@@ -2178,6 +2201,7 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'job_list':       return <JobsWidget    cfg={{...cfg, compact:true}} theme={theme} portal={portal} api={api} track={track}/>
     case 'hm_profile':     return <TeamWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
     case 'multistep_form': return <MultistepFormWidget cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
+    case 'html_embed':     return <HtmlEmbedWidget     cfg={cfg} theme={theme}/>
     case 'testimonials':   return <TestimonialsWidget cfg={cfg} theme={theme}/>
     case 'rich_text':      return <RichTextWidget     cfg={cfg} theme={theme}/>
     case 'map_embed':      return <MapEmbedWidget     cfg={cfg}/>

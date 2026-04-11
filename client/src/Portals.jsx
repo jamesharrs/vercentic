@@ -67,6 +67,7 @@ const WIDGET_TYPES = [
   { type:"spacer",       label:"Spacer",         icon:"square",    desc:"Blank vertical space" },
   { type:"files",        label:"Files / Docs",   icon:"paperclip", desc:"Display record attachments by file type" },
   { type:"multistep_form",label:"Multi-step Form",icon:"layers",    desc:"Step-by-step form with validation" },
+  { type:"html_embed",   label:"HTML / Code",   icon:"code",      desc:"Custom HTML with AI generation" },
 ];
 
 const FONT_OPTS = [
@@ -204,6 +205,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     list:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
     grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
     layers:"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+    code:"M10 20l4-16M4 15l4-4-4-4M20 15l-4-4 4-4",
     chevU:"M18 15l-6-6-6 6",
     library:"M4 19V5h16v14M4 9h16M9 5v14",
     award:"M12 15a7 7 0 100-14 7 7 0 000 14zM8.21 13.89L7 23l5-3 5 3-1.21-9.12",
@@ -964,6 +966,24 @@ const WidgetPreview = ({ cell, theme }) => {
       <span style={{fontSize:10,color:C.text3}}>Spacer · {cfg.height||"48px"}</span>
     </div>
   );
+
+  if (cell.widgetType==="html_embed") {
+    const html = cfg.html||'';
+    const css  = cfg.css||'';
+    const t2 = theme||{};
+    if (!html) return (
+      <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:6,color:C.text3}}>
+        <Ic n="code" s={22} c={C.text3}/>
+        <div style={{fontSize:11}}>HTML / Code block · Click to configure</div>
+      </div>
+    );
+    const fullDoc = `<!DOCTYPE html><html><head><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:${t2.fontFamily||'sans-serif'};padding:12px;}${css}</style></head><body>${html}</body></html>`;
+    return (
+      <iframe srcDoc={fullDoc} sandbox="allow-scripts" title="html-preview"
+        style={{width:'100%',border:'none',minHeight:100,display:'block',pointerEvents:'none'}}
+        onLoad={e=>{try{e.target.style.height=e.target.contentDocument.body.scrollHeight+'px';}catch{}}}/>
+    );
+  }
 
   const wt = WIDGET_TYPES.find(w=>w.type===cell.widgetType);
   const NEW_PREVIEW_TYPES = { dept_grid:'Dept Grid', benefits_grid:'Benefits Grid', faq:'FAQ Accordion', featured_jobs:'Featured Jobs', trust_bar:'Stats Bar', job_alerts:'Job Alerts', image_gallery:'Image Gallery', app_status:'App Status', saved_jobs:'Saved Jobs', tabs:'Tabs', files:'Files / Docs Widget' };
@@ -1756,6 +1776,128 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
   );
 };
 
+// ─── HTML Embed Config ─────────────────────────────────────────────────────────
+const HtmlEmbedConfig = ({ cfg, set, inp, lbl }) => {
+  const [tab,       setTab]      = useState(cfg.html ? 'html' : 'ai');
+  const [prompt,    setPrompt]   = useState('');
+  const [styleMode, setStyleMode]= useState(cfg.styleMode || 'portal');
+  const [loading,   setLoading]  = useState(false);
+  const [err,       setErr]      = useState(null);
+
+  const STYLE_MODES = [
+    { id:'portal', label:'Inherit portal theme', desc:'Uses portal colours & font via CSS vars' },
+    { id:'custom', label:'Custom CSS',           desc:'Write your own scoped styles'            },
+    { id:'none',   label:'No extra styles',      desc:'Raw HTML only'                           },
+  ];
+
+  const generateHtml = async () => {
+    if (!prompt.trim()) return;
+    setLoading(true); setErr(null);
+    try {
+      const system = styleMode === 'portal'
+        ? `You are an expert HTML/CSS developer building portal widgets.
+The portal injects CSS custom properties on :root — use them in your styles:
+  --primary (brand colour), --text (text colour), --bg (page bg), --font (font family), --radius (border radius).
+Write clean self-contained HTML with an embedded <style> block that references var(--primary) etc.
+Output ONLY valid HTML — no markdown fences, no explanation.`
+        : styleMode === 'custom'
+        ? `You are an expert HTML/CSS developer. Write clean self-contained HTML with an embedded <style> block.
+Output ONLY valid HTML — no markdown fences, no explanation.`
+        : `You are an expert HTML developer. Write clean HTML with minimal styling.
+Output ONLY valid HTML — no markdown fences, no explanation.`;
+      const res  = await fetch('/api/ai/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ messages:[{role:'user',content:prompt}], system, max_tokens:2000 }),
+      });
+      const data = await res.json();
+      const raw  = (data?.content?.[0]?.text || data?.reply || '').trim();
+      const html = raw.replace(/^```html?\n?/i,'').replace(/```$/,'').trim();
+      set('html', html);
+      set('styleMode', styleMode);
+      setTab('html');
+    } catch(e) { setErr('Generation failed — check API key / connection'); }
+    finally     { setLoading(false); }
+  };
+
+  const TABS = [{id:'html',label:'HTML'},{id:'ai',label:'✨ AI Generate'},{id:'css',label:'CSS'},{id:'preview',label:'Preview'}];
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <div style={{display:'flex',gap:4,borderBottom:`1px solid ${C.border}`,paddingBottom:8}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:'4px 12px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:F,fontSize:12,
+              fontWeight:tab===t.id?700:400,background:tab===t.id?C.accent:'transparent',
+              color:tab===t.id?'white':C.text3}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab==='html' && (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {lbl('HTML Code')}
+          <textarea value={cfg.html||''} onChange={e=>set('html',e.target.value)} rows={14}
+            placeholder={'<div class="widget">\n  <h2>Hello from HTML</h2>\n</div>'}
+            style={{...inp,fontFamily:'monospace',fontSize:12,resize:'vertical',lineHeight:1.5}}/>
+          <div style={{fontSize:11,color:C.text3}}>Use <code>var(--primary)</code>, <code>var(--font)</code> etc. to align with the portal theme.</div>
+        </div>
+      )}
+
+      {tab==='ai' && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {lbl('Style alignment')}
+          {STYLE_MODES.map(m=>(
+            <label key={m.id} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'8px 10px',borderRadius:8,
+              border:`1.5px solid ${styleMode===m.id?C.accent:C.border}`,background:styleMode===m.id?C.accentLight:C.surface}}>
+              <input type="radio" checked={styleMode===m.id} onChange={()=>setStyleMode(m.id)} style={{marginTop:2,accentColor:C.accent}}/>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{m.label}</div>
+                <div style={{fontSize:11,color:C.text3}}>{m.desc}</div>
+              </div>
+            </label>
+          ))}
+          {lbl('Describe what you want')}
+          <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} rows={4}
+            placeholder="e.g. A card showing 3 company values with icons, using the portal's primary colour for the icon backgrounds..."
+            style={{...inp,resize:'vertical',lineHeight:1.5}}/>
+          {err && <div style={{fontSize:12,color:C.red,padding:'6px 10px',background:C.redLight,borderRadius:6}}>{err}</div>}
+          <button onClick={generateHtml} disabled={loading||!prompt.trim()}
+            style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'10px',borderRadius:8,border:'none',
+              background:loading||!prompt.trim()?C.border:C.accent,color:'white',fontFamily:F,fontSize:13,fontWeight:700,
+              cursor:loading||!prompt.trim()?'not-allowed':'pointer'}}>
+            {loading ? <>Generating…</> : <><Ic n="sparkles" s={13} c="white"/> Generate HTML</>}
+          </button>
+          {cfg.html && <div style={{fontSize:11,color:C.green,display:'flex',alignItems:'center',gap:4}}><Ic n="check" s={11} c={C.green}/> HTML generated — check the HTML or Preview tab</div>}
+        </div>
+      )}
+
+      {tab==='css' && (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {lbl('Custom CSS (scoped to this widget)')}
+          <textarea value={cfg.css||''} onChange={e=>set('css',e.target.value)} rows={12}
+            placeholder={'.widget { color: var(--primary); }\n\n/* Portal CSS vars:\n   var(--primary)  brand colour\n   var(--text)     text colour\n   var(--font)     font family\n   var(--radius)   border-radius */'}
+            style={{...inp,fontFamily:'monospace',fontSize:12,resize:'vertical',lineHeight:1.5}}/>
+        </div>
+      )}
+
+      {tab==='preview' && (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {lbl('Live preview')}
+          {!cfg.html
+            ? <div style={{padding:'24px',textAlign:'center',color:C.text3,fontSize:12,border:`1.5px dashed ${C.border}`,borderRadius:8}}>No HTML yet — use the HTML or AI Generate tab first</div>
+            : <iframe
+                srcDoc={`<!DOCTYPE html><html><head><style>*{box-sizing:border-box;margin:0;padding:0;}body{padding:16px;font-family:sans-serif;}${cfg.css||''}</style></head><body>${cfg.html}</body></html>`}
+                sandbox="allow-scripts" title="preview"
+                style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,minHeight:160}}
+                onLoad={e=>{try{e.target.style.height=e.target.contentDocument.body.scrollHeight+32+'px';}catch{}}}/>
+          }
+        </div>
+      )}
+    </div>
+  );
+};
+
 const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   // Keep local cfg state so sequential set() calls accumulate rather than overwrite each other
   const [localCfg, setLocalCfg] = useState(cell.widgetConfig || {});
@@ -1781,7 +1923,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
   );
   const WIDGET_LABELS = {
     hero:"Hero Banner", text:"Rich Text", image:"Image", stats:"Stats",
-    video:"Video", jobs:"Job List", job_list:"Job List", people:"People List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer", files:"Files / Docs",
+    video:"Video", jobs:"Job List", job_list:"Job List", people:"People List", team:"Team", form:"Form", divider:"Divider", spacer:"Spacer", files:"Files / Docs", html_embed:"HTML / Code",
     content:"Content Block", accordion:"Accordion", cta:"CTA Section", hm_widget:"HM Widget",
     report_widget:"Report", ai_summary:"AI Briefing",
   };
@@ -2307,6 +2449,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
           </div>
         </div>
       );
+      case "html_embed":     return <HtmlEmbedConfig cfg={cfg} set={set} inp={inp} lbl={lbl} cell={cell} onUpdate={onUpdate}/>;
       default: return <p style={{ fontSize:12, color:C.text3, margin:0 }}>No settings for this widget.</p>;
     }
   };
