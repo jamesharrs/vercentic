@@ -515,6 +515,7 @@ const FeedbackTab = ({ portal, onChange, accent, api: apiProp }) => {
 // ─── Portal Settings Modal ────────────────────────────────────────────────────
 const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   const [tab, setTab] = useState("branding");
+  const [showDomainSetup, setShowDomainSetup] = useState(false);
   const gdpr = portal.gdpr || {};
   const br = portal.branding || {};
   const setG = (k,v) => onChange({ ...portal, gdpr: { ...gdpr, [k]: v } });
@@ -623,6 +624,27 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             <code style={{flex:1,padding:"8px 10px",borderRadius:8,background:"#0F1729",fontSize:11,color:"#A5F3FC",border:"none",wordBreak:"break-all",lineHeight:1.6}}>{embedCode}</code>
             <button onClick={()=>navigator.clipboard?.writeText(embedCode)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",flexShrink:0,fontFamily:F,fontSize:12,color:C.text2,marginTop:2}}>Copy</button>
           </div>
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:10}}/>
+          {lbl("Custom domain")}
+          {portal.custom_domain ? (
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{flex:1,display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:9,background:"#F0FDF4",border:"1.5px solid #86EFAC"}}>
+                <Ic n="check" s={14} c="#166534"/>
+                <span style={{fontSize:13,fontWeight:700,color:"#166534"}}>{portal.custom_domain}</span>
+                <span style={{fontSize:11,color:"#15803D",marginLeft:2}}>· Active</span>
+              </div>
+              <button onClick={()=>setShowDomainSetup(true)} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontFamily:F,fontSize:12,color:C.text2,flexShrink:0}}>Change</button>
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:12,color:C.text3,lineHeight:1.6}}>Connect a custom domain (e.g. <code style={{background:C.surface2,padding:"1px 5px",borderRadius:4}}>careers.yourcompany.com</code>) so the portal is served from your own URL.</div>
+              <button onClick={()=>setShowDomainSetup(true)}
+                style={{alignSelf:"flex-start",display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:9,border:`1.5px solid ${C.accent}`,background:C.accentLight,cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:700,color:C.accent}}>
+                <Ic n="link" s={13} c={C.accent}/>Set up custom domain
+              </button>
+            </div>
+          )}
+          {showDomainSetup&&<DomainWizard portal={portal} onSave={updated=>{onChange(updated);setShowDomainSetup(false);}} onClose={()=>setShowDomainSetup(false)}/>}
         </>}
         {tab==="gdpr"&&<>
           <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
