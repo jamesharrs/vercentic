@@ -736,7 +736,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
 // ─── Widget Picker Modal ───────────────────────────────────────────────────────
 const WIDGET_CATEGORIES = [
   { id:"layout",     label:"Layout",      color:"#64748b", icon:"grid",      widgets:["divider","spacer","tabs"] },
-  { id:"content",    label:"Content",     color:"#7c3aed", icon:"align",     widgets:["hero","text","rich_text","image","image_gallery","video","stats","trust_bar","testimonials","benefits_grid","faq","cta_banner","content","accordion","cta"] },
+  { id:"content",    label:"Content",     color:"#7c3aed", icon:"align",     widgets:["hero","text","rich_text","image","image_gallery","video","stats","trust_bar","testimonials","benefits_grid","faq","cta_banner","content","accordion","cta","html_embed"] },
   { id:"recruitment",label:"Recruitment", color:"#0891b2", icon:"briefcase", widgets:["jobs","featured_jobs","dept_grid","job_alerts","app_status","saved_jobs","hm_widget"] },
   { id:"people",     label:"People",      color:"#059669", icon:"users2",    widgets:["people","team"] },
   { id:"forms",      label:"Forms",       color:"#d97706", icon:"form",      widgets:["form","multistep_form","files","map_embed"] },
@@ -746,14 +746,30 @@ const WIDGET_TYPE_MAP = Object.fromEntries(WIDGET_TYPES.map(w=>[w.type,w]));
 
 const WidgetPicker = ({ onSelect, onClose }) => {
   const [activeCat, setActiveCat] = useState("content");
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const isSearching = q.length > 0;
+
+  // All widgets across every category, deduplicated (hm_widget appears in multiple cats)
+  const allWidgets = Object.values(WIDGET_TYPE_MAP);
+
   const cat = WIDGET_CATEGORIES.find(c=>c.id===activeCat)||WIDGET_CATEGORIES[0];
   const catWidgets = cat.widgets.map(t=>WIDGET_TYPE_MAP[t]).filter(Boolean);
+
+  const searchWidgets = allWidgets.filter(w=>
+    w.label.toLowerCase().includes(q) || (w.desc||"").toLowerCase().includes(q)
+  );
+
+  // In search mode we lose the category context for hover colours — use accent
+  const displayWidgets = isSearching ? searchWidgets : catWidgets;
+  const hoverColor     = isSearching ? C.accent : cat.color;
+
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.42)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.42)",zIndex:800,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 16px 16px"}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:C.surface,borderRadius:18,width:650,maxWidth:"96vw",maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 72px rgba(0,0,0,.22)",overflow:"hidden"}}>
+      <div style={{background:C.surface,borderRadius:18,width:760,maxWidth:"96vw",maxHeight:"calc(100vh - 80px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 72px rgba(0,0,0,.22)",overflow:"hidden"}}>
         {/* Header */}
-        <div style={{padding:"18px 22px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{padding:"18px 22px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0,borderBottom:`1px solid ${C.border}`}}>
           <div>
             <div style={{fontSize:16,fontWeight:800,color:C.text1}}>Add Widget</div>
             <div style={{fontSize:12,color:C.text3,marginTop:2}}>Pick a widget to add to this section</div>
@@ -762,40 +778,106 @@ const WidgetPicker = ({ onSelect, onClose }) => {
             <Ic n="x" s={12}/>Close
           </button>
         </div>
-        {/* Category tabs */}
-        <div style={{display:"flex",gap:1,padding:"10px 16px 0",borderBottom:`1px solid ${C.border}`,flexShrink:0,overflowX:"auto"}}>
-          {WIDGET_CATEGORIES.map(c=>(
-            <button key={c.id} onClick={()=>setActiveCat(c.id)}
-              style={{padding:"8px 16px",borderRadius:"8px 8px 0 0",border:"none",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:700,
-                background:activeCat===c.id?C.surface:"transparent",
-                color:activeCat===c.id?c.color:C.text3,
-                borderBottom:activeCat===c.id?`2.5px solid ${c.color}`:"2.5px solid transparent",
-                whiteSpace:"nowrap",transition:"all .12s",display:"flex",alignItems:"center",gap:6}}>
-              <Ic n={c.icon} s={13} c={activeCat===c.id?c.color:C.text3}/>
-              {c.label}
-              <span style={{fontSize:10,background:activeCat===c.id?c.color+"18":"transparent",color:activeCat===c.id?c.color:C.text3,padding:"0 5px",borderRadius:99,fontWeight:activeCat===c.id?700:400}}>
-                {c.widgets.filter(t=>WIDGET_TYPE_MAP[t]).length}
-              </span>
-            </button>
-          ))}
-        </div>
-        {/* Widget grid */}
-        <div style={{padding:14,display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,overflowY:"auto",flex:1}}>
-          {catWidgets.map(w=>(
-            <div key={w.type} onClick={()=>onSelect(w.type)}
-              style={{padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.border}`,cursor:"pointer",
-                display:"flex",alignItems:"flex-start",gap:10,transition:"all .15s",background:C.surface,userSelect:"none"}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=cat.color;e.currentTarget.style.background=cat.color+"0d";e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=`0 4px 12px ${cat.color}18`;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
-              <div style={{width:36,height:36,borderRadius:10,background:cat.color+"14",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <Ic n={w.icon} s={16} c={cat.color}/>
+        {/* Body: sidebar + right panel */}
+        <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+          {/* Left sidebar — category list; subdued while searching */}
+          <div style={{
+            width:172,flexShrink:0,borderRight:`1px solid ${C.border}`,
+            overflowY:"auto",padding:"10px 8px",display:"flex",flexDirection:"column",gap:2,
+            background:C.surface2,
+            opacity:isSearching?0.4:1,
+            pointerEvents:isSearching?"none":"auto",
+            transition:"opacity .15s",
+          }}>
+            {WIDGET_CATEGORIES.map(c=>{
+              const isActive = activeCat===c.id;
+              const count = c.widgets.filter(t=>WIDGET_TYPE_MAP[t]).length;
+              return (
+                <button key={c.id} onClick={()=>setActiveCat(c.id)}
+                  style={{
+                    display:"flex",alignItems:"center",gap:9,
+                    padding:"9px 10px",borderRadius:10,border:"none",
+                    cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:isActive?700:500,
+                    background:isActive?c.color+"12":"transparent",
+                    color:isActive?c.color:C.text2,
+                    transition:"all .12s",
+                    textAlign:"left",width:"100%",
+                  }}
+                  onMouseEnter={e=>{ if(!isActive){ e.currentTarget.style.background=C.border; e.currentTarget.style.color=C.text1; }}}
+                  onMouseLeave={e=>{ if(!isActive){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color=C.text2; }}}>
+                  <div style={{width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isActive?c.color+"20":C.border}}>
+                    <Ic n={c.icon} s={13} c={isActive?c.color:C.text3}/>
+                  </div>
+                  <span style={{flex:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.label}</span>
+                  <span style={{
+                    fontSize:10,fontWeight:isActive?700:500,
+                    background:isActive?c.color+"20":C.border,
+                    color:isActive?c.color:C.text3,
+                    padding:"1px 6px",borderRadius:99,flexShrink:0,
+                  }}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Right panel — search bar + widget grid */}
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Search input */}
+            <div style={{padding:"10px 14px 0",flexShrink:0}}>
+              <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+                <div style={{position:"absolute",left:10,pointerEvents:"none",display:"flex",alignItems:"center"}}>
+                  <Ic n="search" s={13} c={C.text3}/>
+                </div>
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={e=>setQuery(e.target.value)}
+                  placeholder="Search widgets…"
+                  style={{
+                    width:"100%",padding:"8px 10px 8px 32px",
+                    borderRadius:9,border:`1.5px solid ${isSearching?C.accent:C.border}`,
+                    fontFamily:F,fontSize:12,color:C.text1,background:C.surface,
+                    outline:"none",transition:"border-color .15s",boxSizing:"border-box",
+                  }}
+                  onFocus={e=>{ e.target.style.borderColor=C.accent; }}
+                  onBlur={e=>{ e.target.style.borderColor=isSearching?C.accent:C.border; }}
+                />
+                {isSearching && (
+                  <button onClick={()=>setQuery("")}
+                    style={{position:"absolute",right:8,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:2,borderRadius:4}}>
+                    <Ic n="x" s={11} c={C.text3}/>
+                  </button>
+                )}
               </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:3}}>{w.label}</div>
-                <div style={{fontSize:10,color:C.text3,lineHeight:1.45}}>{w.desc}</div>
-              </div>
+              {isSearching && (
+                <div style={{fontSize:11,color:C.text3,marginTop:6,paddingLeft:2}}>
+                  {searchWidgets.length} result{searchWidgets.length!==1?"s":""} across all categories
+                </div>
+              )}
             </div>
-          ))}
+            {/* Widget grid */}
+            <div style={{flex:1,overflowY:"auto",padding:14,display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,alignContent:"start"}}>
+              {displayWidgets.length===0 && (
+                <div style={{gridColumn:"1/-1",textAlign:"center",padding:"32px 0",color:C.text3,fontSize:12}}>
+                  No widgets match <strong style={{color:C.text2}}>"{query}"</strong>
+                </div>
+              )}
+              {displayWidgets.map(w=>(
+                <div key={w.type} onClick={()=>onSelect(w.type)}
+                  style={{padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.border}`,cursor:"pointer",
+                    display:"flex",alignItems:"flex-start",gap:10,transition:"all .15s",background:C.surface,userSelect:"none"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=hoverColor;e.currentTarget.style.background=hoverColor+"0d";e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=`0 4px 12px ${hoverColor}18`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:hoverColor+"14",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Ic n={w.icon} s={16} c={hoverColor}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:3}}>{w.label}</div>
+                    <div style={{fontSize:10,color:C.text3,lineHeight:1.45}}>{w.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1810,7 +1892,7 @@ Output ONLY valid HTML — no markdown fences, no explanation.`;
         body: JSON.stringify({ messages:[{role:'user',content:prompt}], system, max_tokens:2000 }),
       });
       const data = await res.json();
-      const raw  = (data?.content?.[0]?.text || data?.reply || '').trim();
+      const raw  = (data?.content || data?.content?.[0]?.text || data?.reply || '').trim();
       const html = raw.replace(/^```html?\n?/i,'').replace(/```$/,'').trim();
       set('html', html);
       set('styleMode', styleMode);
