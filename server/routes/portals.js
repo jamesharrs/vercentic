@@ -365,6 +365,15 @@ router.post('/:id/wizard/submit', async (req, res) => {
     const { target_object='people', link_to_job=true } = wizard;
     const { form_data={}, job_id, meta={} } = req.body;
 
+    // Extract screening answers (sq_*) from form_data immediately so they
+    // don't pollute the candidate record's profile fields
+    const screeningAnswers = {};
+    const cleanFormData = {};
+    for (const [k, v] of Object.entries(form_data)) {
+      if (k.startsWith('sq_')) screeningAnswers[k.replace('sq_', '')] = v;
+      else cleanFormData[k] = v;
+    }
+
     // Find the target object for this environment
     const targetObj = (store.objects||[]).find(
       o => o.environment_id===portal.environment_id && (o.slug===target_object || o.slug===target_object.replace('_','-'))
@@ -428,16 +437,7 @@ router.post('/:id/wizard/submit', async (req, res) => {
       created_at:new Date().toISOString(),
     });
 
-    // ── Extract and store screening question responses ────────────────────────
-    // sq_* keys in form_data are screening answers — strip them from the record
-    // and store in dedicated screening_responses collection
-    const screeningAnswers = {};
-    const cleanFormData = {};
-    for (const [k, v] of Object.entries(form_data)) {
-      if (k.startsWith('sq_')) screeningAnswers[k.replace('sq_', '')] = v;
-      else cleanFormData[k] = v;
-    }
-
+    // ── Store screening responses ─────────────────────────────────────────────
     if (Object.keys(screeningAnswers).length > 0 && job_id) {
       // Load the screening rules to compute pass/fail
       const jobRules = (store.screening_job_rules||[]).filter(r=>r.record_id===job_id);
