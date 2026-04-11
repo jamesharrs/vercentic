@@ -8528,19 +8528,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {/* Slim divider before destructive actions */}
         <div style={{ width:1, height:20, background:C.border, flexShrink:0, margin:"0 4px" }}/>
 
-        {/* Reset layout */}
-        <button onClick={resetLayout} title="Reset panel layout to default"
-          style={{ height:30, padding:"0 8px", borderRadius:7, border:"none", background:"transparent",
-            cursor:"pointer", display:"flex", alignItems:"center", gap:4,
-            transition:"all .15s", color:"#9CA3AF", fontSize:11, fontWeight:600, fontFamily:F }}
-          onMouseEnter={e=>{ e.currentTarget.style.background="#F1F5F9"; e.currentTarget.style.color="#475569"; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9CA3AF"; }}>
-          <Ic n="refresh" s={12} c="currentColor"/> Layout
-        </button>
-
-        {/* Slim divider before destructive actions */}
-        <div style={{ width:1, height:20, background:C.border, flexShrink:0, margin:"0 4px" }}/>
-
         {/* Delete + Close */}
         <button onClick={()=>onDelete(record.id)} title="Delete record"
           style={{ width:30, height:30, borderRadius:7, border:"none", background:"transparent",
