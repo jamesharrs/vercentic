@@ -23,7 +23,7 @@ import api from './apiClient.js';
 import { authHeaders } from './apiClient.js';
 import { sanitizeHtml, sanitizeCopilot, sanitizeInline } from './sanitize.js';
 import TalentCardModal from './TalentCard.jsx';
-import ScreeningRulesPanel from './ScreeningRulesPanel.jsx';
+import ScreeningRulesPanel from './ScreeningRulesPanel.jsx'; // kept for ScreeningTab inside JobQuestionsPanel
 import LinkedInFinderButton from './LinkedInFinder.jsx';
 const InterviewPlanPanelLazy = lazy(() => import('./InterviewPlanPanel.jsx').then(m => ({ default: m.InterviewPlanPanel })));
 
@@ -5096,6 +5096,7 @@ const GeneratePreviewModal = ({ preview, onConfirm, onClose, saving }) => {
 };
 
 const JobQuestionsPanel = ({ record, environment }) => {
+  const [mainTab, setMainTab]     = useState("screening"); // "screening" | "interview"
   const [view, setView]           = useState("assigned"); // "assigned" | "bank" | "templates"
   const [assigned, setAssigned]   = useState([]);
   const [bankQs, setBankQs]       = useState([]);
@@ -5221,7 +5222,21 @@ const JobQuestionsPanel = ({ record, environment }) => {
 
   return (
     <div style={{fontFamily:"'DM Sans',sans-serif"}}>
-      {/* Tabs */}
+      {/* Top-level tab: Screening | Interview Questions */}
+      <div style={{display:"flex",gap:4,marginBottom:16,background:"#f1f5f9",borderRadius:9,padding:4}}>
+        <button onClick={()=>setMainTab("screening")} style={tabSt(mainTab==="screening")}>Screening</button>
+        <button onClick={()=>setMainTab("interview")} style={tabSt(mainTab==="interview")}>Interview Questions</button>
+      </div>
+
+      {/* ── Screening tab — delegates to ScreeningRulesPanel ── */}
+      {mainTab==="screening" && (
+        <ScreeningRulesPanel record={record} environment={environment}/>
+      )}
+
+      {/* ── Interview Questions tab — existing question bank UI ── */}
+      {mainTab==="interview" && (
+      <div>
+      {/* Sub-tabs */}
       <div style={{display:"flex",gap:4,marginBottom:16,background:"#f1f5f9",borderRadius:9,padding:4}}>
         {[["assigned",`Assigned (${assigned.length})`],["bank","Question Bank"],["templates","Templates"]].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)} style={tabSt(view===v)}>{l}</button>
@@ -5363,9 +5378,10 @@ const JobQuestionsPanel = ({ record, environment }) => {
           }
         </div>
       )}
-
       {/* Generate Preview Modal */}
       {genPreview && <GeneratePreviewModal preview={genPreview} onConfirm={confirmGenerated} onClose={()=>setGenPreview(null)} saving={saving}/>}
+    </div>
+    )} {/* end interview tab */}
     </div>
   );
 };
@@ -5673,9 +5689,8 @@ export const PANEL_META = {
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true  },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:true  },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
-  questions:    { icon:"help-circle",   label:"Interview Questions", defaultOpen:false },
+  questions:    { icon:"help-circle",   label:"Screening & Interview Questions", defaultOpen:false },
   interview_plan: { icon:"calendar",    label:"Interview Plan",      defaultOpen:true  },
-  screening:    { icon:"shield",        label:"Screening Rules",     defaultOpen:true  },
   insights: { icon:"barChart", label:"Insights", defaultOpen:true },
   engagement: { icon:"activity", label:"Engagement Score", defaultOpen:true  },
 };
@@ -5686,7 +5701,7 @@ export const getDefaultPanelOrder = (objectName) => {
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("scorecard");
   if (objectName === "Person") base.push("engagement");
-  if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); base.push("screening"); }
+  if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); }
   if (objectName === "Job" || objectName === "Jobs") base.unshift("insights");
 
   return base;
@@ -7106,7 +7121,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const leftStorageKey   = `talentos_panels_left_${objectName}`;
   const topStorageKey    = `talentos_panels_top_${objectName}`;
   const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
-  const PANEL_VERSION    = "v13"; // bumped — fixes stale-closure race that caused duplicates
+  const PANEL_VERSION    = "v14"; // bumped — merged Screening Rules into Questions panel
   const versionKey       = `talentos_panels_version_${objectName}`;
 
   // ── Single atomic layout load — deduplicates all 4 zones together ───────
@@ -8128,7 +8143,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
-    if (id==="screening") return <ScreeningRulesPanel record={record} environment={environment}/>;
     if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
 
     if (id==="match") return (
