@@ -1060,10 +1060,24 @@ const WidgetPreview = ({ cell, theme }) => {
       </div>
     );
     const fullDoc = `<!DOCTYPE html><html><head><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:${t2.fontFamily||'sans-serif'};padding:12px;}${css}</style></head><body>${html}</body></html>`;
+    const autoResize = (e) => {
+      try {
+        const doc = e.target.contentDocument;
+        const h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+        if (h > 0) e.target.style.height = h + 'px';
+        // Retry after images/fonts finish loading
+        setTimeout(() => {
+          try {
+            const h2 = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+            if (h2 > 0) e.target.style.height = h2 + 'px';
+          } catch(_){}
+        }, 400);
+      } catch(_){}
+    };
     return (
       <iframe srcDoc={fullDoc} sandbox="allow-scripts" title="html-preview"
-        style={{width:'100%',border:'none',minHeight:100,display:'block',pointerEvents:'none'}}
-        onLoad={e=>{try{e.target.style.height=e.target.contentDocument.body.scrollHeight+'px';}catch{}}}/>
+        style={{width:'100%',border:'none',minHeight:80,display:'block',pointerEvents:'none'}}
+        onLoad={autoResize}/>
     );
   }
 
@@ -2600,7 +2614,7 @@ const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environm
         </div>
       ) : (
         <div
-          style={{position:"relative",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.surface,overflow:"hidden",minHeight:80,cursor:isEditing?"pointer":"default"}}
+          style={{position:"relative",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.surface,overflow:cell.widgetType==="html_embed"?"visible":"hidden",minHeight:80,cursor:isEditing?"pointer":"default"}}
           onClick={()=>isEditing&&setShowConfig(true)}
           onMouseEnter={e=>{if(isEditing){
             e.currentTarget.style.borderColor=C.accent;
