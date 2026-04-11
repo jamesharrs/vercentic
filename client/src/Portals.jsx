@@ -3995,7 +3995,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
               border:`1px solid ${C.border}`,background:isEditing?C.accentLight:"transparent",color:isEditing?C.accent:C.text2}}>
             <Ic n="eye" s={12} c={isEditing?C.accent:C.text2}/>{isEditing?"Editing":"Preview"}
           </button>
-          {/* More menu — Brand, Domain, Settings */}
+          {/* More menu — Settings only (Brand Kit moved to Theme, Domain moved to Settings) */}
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowMoreMenu(m=>!m)}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:showMoreMenu?C.accentLight:"transparent",color:showMoreMenu?C.accent:C.text2}}>
@@ -4003,10 +4003,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             </button>
             {showMoreMenu&&<>
               <div onClick={()=>setShowMoreMenu(false)} style={{position:"fixed",inset:0,zIndex:699}}/>
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.surface,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,.15)",border:`1px solid ${C.border}`,zIndex:700,minWidth:160,padding:4}}>
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.surface,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,.15)",border:`1px solid ${C.border}`,zIndex:700,minWidth:140,padding:4}}>
                 {[
-                  {icon:"sparkles",label:"Brand Kit",onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
-                  {icon:"externalLink",label:"Domain",onClick:()=>{setShowDomainWizard(true);setShowMoreMenu(false);}},
                   {icon:"settings",label:"Settings",onClick:()=>{setShowPortalSettings(s=>!s);setShowTheme(false);setShowMoreMenu(false);}},
                 ].map(item=>(
                   <button key={item.label} onClick={item.onClick}
@@ -4025,6 +4023,11 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
               border:`1px solid ${C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2}}>
             <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
+          </button>
+          <button onClick={()=>setShowBrandKit(true)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
+              border:`1px solid ${C.border}`,background:"transparent",color:C.text2}}>
+            <Ic n="sparkles" s={12} c={C.text2}/>Brand Kit
           </button>
           <Btn v="secondary" s="sm" icon="library" onClick={()=>setShowLibrary(true)}>Sections</Btn>
           <Btn v="primary" s="sm" onClick={handleSave} disabled={saving}>{saving?"Saving…":isDirty?"Save":"Saved ✓"}</Btn>

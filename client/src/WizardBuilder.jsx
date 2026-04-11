@@ -122,13 +122,13 @@ const Sel = ({label,value,onChange,options}) => (
 );
 
 const Toggle = ({label,checked,onChange,hint}) => (
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',gap:16}}>
     <div>
       <div style={{fontSize:12,fontWeight:600,color:C.text1}}>{label}</div>
       {hint&&<div style={{fontSize:11,color:C.text3}}>{hint}</div>}
     </div>
     <div onClick={()=>onChange(!checked)}
-      style={{width:36,height:20,borderRadius:10,background:checked?C.accent:C.border,cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+      style={{width:36,height:20,borderRadius:10,background:checked?C.accent:C.border,cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0,marginLeft:8}}>
       <div style={{position:'absolute',top:2,left:checked?18:2,width:16,height:16,borderRadius:'50%',background:'white',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
     </div>
   </div>
@@ -393,22 +393,30 @@ export default function WizardBuilder({ portal, onChange }) {
     );
   }
 
+  const [triggerOpen, setTriggerOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14,paddingBottom:12}}>
       {/* Top controls */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <Toggle label="Wizard enabled" checked={!!wizard.enabled} onChange={v=>setW('enabled',v)}/>
+          <Toggle label="Flows enabled" checked={!!wizard.enabled} onChange={v=>setW('enabled',v)}/>
         </div>
-        <SmBtn onClick={()=>setW('enabled',false)} variant='danger' icon='🗑'>Disable wizard</SmBtn>
+        <SmBtn onClick={()=>setW('enabled',false)} variant='danger' icon='✕'>Disable flow</SmBtn>
       </div>
 
       {/* ── Trigger configuration ── */}
-      <div style={{padding:'12px 14px',background:'#FFFBEB',borderRadius:10,border:'1.5px solid #FDE68A',display:'flex',flexDirection:'column',gap:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <WzIc n="zap" s={14} c="#92400E"/>
-          <span style={{fontSize:11,fontWeight:700,color:'#92400E',textTransform:'uppercase',letterSpacing:'0.05em'}}>How is this wizard triggered?</span>
-        </div>
+      <div style={{borderRadius:10,border:'1.5px solid #FDE68A',overflow:'hidden'}}>
+        <button onClick={()=>setTriggerOpen(o=>!o)}
+          style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'#FFFBEB',border:'none',cursor:'pointer',fontFamily:F}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <WzIc n="zap" s={14} c="#92400E"/>
+            <span style={{fontSize:11,fontWeight:700,color:'#92400E',textTransform:'uppercase',letterSpacing:'0.05em'}}>How is this flow triggered?</span>
+          </div>
+          <WzIc n={triggerOpen?'chevUp':'chevDown'} s={13} c="#92400E"/>
+        </button>
+        {triggerOpen&&<div style={{padding:'12px 14px',background:'#FFFBEB',display:'flex',flexDirection:'column',gap:10,borderTop:'1px solid #FDE68A'}}>
 
         <Sel label="Trigger mode" value={wizard.trigger?.mode||'job_apply'} onChange={v=>setW('trigger',{...(wizard.trigger||{}),mode:v})}
           options={[
@@ -460,13 +468,19 @@ export default function WizardBuilder({ portal, onChange }) {
             )}
           </div>
         )}
+        </div>}
       </div>
 
       {/* ── Global settings ── */}
-      <div style={{padding:'10px 12px',background:C.surface2,borderRadius:10,border:`1px solid ${C.border}`,display:'flex',flexDirection:'column',gap:8}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.05em'}}>Global settings</div>
+      <div style={{borderRadius:10,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+        <button onClick={()=>setSettingsOpen(o=>!o)}
+          style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:C.surface2,border:'none',cursor:'pointer',fontFamily:F}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.05em'}}>Global settings</span>
+          <WzIc n={settingsOpen?'chevUp':'chevDown'} s={13} c={C.text3}/>
+        </button>
+        {settingsOpen&&<div style={{padding:'10px 12px',background:C.surface2,display:'flex',flexDirection:'column',gap:8,borderTop:`1px solid ${C.border}`}}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <Sel label="Wizard type" value={wizard.type||'candidate_apply'} onChange={v=>setW('type',v)}
+          <Sel label="Flow type" value={wizard.type||'candidate_apply'} onChange={v=>setW('type',v)}
             options={[{value:'candidate_apply',label:'Candidate application'},{value:'hm_create_job',label:'HM job creation'},{value:'custom',label:'Custom'}]}/>
           <Sel label="Target object" value={wizard.target_object||'people'} onChange={v=>setW('target_object',v)}
             options={[{value:'people',label:'People'},{value:'jobs',label:'Jobs'},{value:'talent_pools',label:'Talent Pools'}]}/>
@@ -475,6 +489,7 @@ export default function WizardBuilder({ portal, onChange }) {
           <Toggle label="Show progress bar" checked={wizard.show_progress!==false} onChange={v=>setW('show_progress',v)} hint="Show step indicators at the top of each page"/>
           <Toggle label="Allow save & continue later" checked={wizard.allow_save_draft!==false} onChange={v=>setW('allow_save_draft',v)} hint="Sends a resume link to the applicant's email"/>
         </div>
+        </div>}
       </div>
 
       {/* Page list + page editor */}
