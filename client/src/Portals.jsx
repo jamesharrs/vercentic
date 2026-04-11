@@ -197,6 +197,8 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     gift:"M20 12v10H4V12M22 7H2v5h20V7zM12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z",
     help:"M12 22a10 10 0 100-20 10 10 0 000 20zM9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01",
     star:"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z",
+    workflow:"M22 12h-4l-3 9L9 3l-3 9H2",
+    link:"M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
     award:"M12 15a6 6 0 100-12 6 6 0 000 12zM8.21 13.89L7 23l5-3 5 3-1.21-9.12",
     bell:"M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
     photos:"M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zM4 11h16M9 5v11",
@@ -524,8 +526,9 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,.4)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:C.surface,borderRadius:18,width:760,maxWidth:"calc(100vw - 48px)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
-        <div style={{padding:"18px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{background:C.surface,borderRadius:18,width:900,maxWidth:"calc(100vw - 48px)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
+        {/* Header */}
+        <div style={{padding:"18px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <Ic n="settings" s={16} c={C.accent}/>
             <span style={{fontSize:16,fontWeight:800,color:C.text1}}>Portal Settings</span>
@@ -534,12 +537,34 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             <Ic n="x" s={12}/> Close
           </button>
         </div>
-        <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,overflowX:"auto",flexShrink:0}}>
-          {[["branding","Branding"],["access","Access"],["domain","Domain & Embed"],["gdpr","GDPR"],["eo","Equal Opps"],["feedback","Feedback"],["copilot","Copilot"],["hub","Hub"],["wizard","🧙 Wizard"]].map(([id,l])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"10px 16px",border:"none",background:"transparent",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,color:tab===id?C.accent:C.text3,borderBottom:tab===id?`2px solid ${C.accent}`:"2px solid transparent",whiteSpace:"nowrap"}}>{l}</button>
-          ))}
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
+        {/* Body: left nav + content */}
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          {/* Left nav */}
+          <div style={{width:190,flexShrink:0,borderRight:`1px solid ${C.border}`,padding:"12px 8px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
+            {[
+              ["branding","palette","Branding"],
+              ["access","shield","Access"],
+              ["domain","link","Domain & Embed"],
+              ["gdpr","lock","GDPR"],
+              ["eo","users","Equal Opps"],
+              ["feedback","star","Feedback"],
+              ["copilot","sparkles","Copilot"],
+              ["hub","grid","Hub"],
+              ["wizard","workflow","Flows"],
+            ].map(([id,icon,label])=>(
+              <button key={id} onClick={()=>setTab(id)} style={{
+                display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 12px",
+                borderRadius:9,border:"none",background:tab===id?C.accentLight:"transparent",
+                color:tab===id?C.accent:C.text2,fontSize:13,fontWeight:tab===id?700:500,
+                cursor:"pointer",fontFamily:F,textAlign:"left",transition:"all .12s"
+              }}>
+                <Ic n={icon} s={14} c={tab===id?C.accent:C.text3}/>
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Content */}
+          <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
           {tab==="branding"&&<>
           {lbl("Company name")}<input value={br.company_name||""} onChange={e=>setBr("company_name",e.target.value)} placeholder="Acme Corp" style={inp}/>
           {lbl("Contact email (shown on app status page)")}<input value={br.contact_email||""} onChange={e=>setBr("contact_email",e.target.value)} placeholder="careers@acme.com" style={inp}/>
@@ -727,6 +752,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           </>);
         })()}
         {tab==="wizard"&&<WizardBuilder portal={portal} onChange={onChange}/>}
+          </div>
         </div>
       </div>
     </div>
