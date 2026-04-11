@@ -30,6 +30,31 @@ const Q_COLORS = { knockout:"#ef4444", competency:"#3b82f6", technical:"#8b5cf6"
 const Q_LABELS = { knockout:"Eligibility", competency:"Competency", technical:"Technical", culture:"Culture Fit" };
 const Q_TYPES  = ["knockout","competency","technical","culture"];
 
+// Lucide SVG icon helper — no emoji anywhere in UI
+const PATHS = {
+  clipboardList: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01",
+  clipboardListRect: null, // drawn separately below
+  info: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 9v4m0-8h.01",
+  check: "M20 6L9 17l-5-5",
+  x: "M18 6L6 18M6 6l12 12",
+  plus: "M12 5v14M5 12h14",
+  sparkles: "M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0L9.937 15.5z",
+};
+const Ic = ({ n, s=16, c="currentColor", style={} }) => {
+  // clipboard-list needs a <rect> child — handle specially
+  if (n === "clipboardList") return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
+      <path d={PATHS.clipboardList}/>
+    </svg>
+  );
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d={PATHS[n]||""}/>
+    </svg>
+  );
+};
+
 /* ── AI Generate Preview Modal ──────────────────────────────────────── */
 function ScreeningGeneratePreview({ items, onConfirm, onClose }) {
   const [rows, setRows] = useState(() => items.map(q => ({
@@ -485,7 +510,9 @@ export default function ScreeningRulesPanel({ record, environment, jobId: jobIdP
         <div>
           {templates.length===0 ? (
             <div style={{border:`1.5px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:10}}>📋</div>
+              <div style={{width:48,height:48,borderRadius:12,background:C.surface2,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                <Ic n="clipboardList" s={24} c={C.text3}/>
+              </div>
               <div style={{fontWeight:700,fontSize:13,color:C.text1,marginBottom:6,fontFamily:F}}>No screening templates yet</div>
               <div style={{fontSize:12,color:C.text3,maxWidth:320,margin:"0 auto",fontFamily:F,lineHeight:1.5}}>
                 Go to <strong>Assigned</strong>, configure your rules, then click <strong>Save as Template</strong> to reuse them across jobs.
