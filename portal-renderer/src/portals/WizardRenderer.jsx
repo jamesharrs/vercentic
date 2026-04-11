@@ -531,14 +531,26 @@ export default function WizardRenderer({ portal, wizard, job, api, onBack, onSuc
     });
   }, [portal.id, job?.id]);
 
-  // Load screening questions if this wizard has a screening block
+  // Load screening questions from Screening Rules panel (not interview bank)
   useEffect(() => {
     const hasScreening = pages.some(p => p.blocks?.some(b => b.type === 'screening_questions'));
     if (!hasScreening || !job?.id) return;
-    api.get(`/question-bank/jobs/${job.id}/questions`).then(data => {
-      const qs = Array.isArray(data) ? data : [];
-      setQuestions([...qs.filter(q=>q.type==='knockout'), ...qs.filter(q=>q.type!=='knockout')]);
+    api.get(`/screening/job/${job.id}`).then(data => {
+      const rules = Array.isArray(data?.rules) ? data.rules : [];
+      const qs = rules.map(r => ({
+        id:        r.id || r.question_id,
+        text:      r.question_text,
+        type:      r.rule_type === 'knockout' ? 'knockout' : (r.question_type || 'competency'),
+        options:   r.question_options || [],
+        pass_value: r.pass_value || null,
+        rule_type:  r.rule_type,
+        weight:    r.weight || 5,
+      })).filter(q => q.text);
+      const order = { knockout: 0, required: 1, preferred: 2 };
+      qs.sort((a, b) => (order[a.rule_type] ?? 1) - (order[b.rule_type] ?? 1));
+      setQuestions(qs);
     }).catch(() => {});
+  }, [job?.id]);
   }, [job?.id]);
 
   // Resume from draft token in URL

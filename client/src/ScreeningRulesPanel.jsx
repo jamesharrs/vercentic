@@ -397,6 +397,16 @@ export default function ScreeningRulesPanel({ record, environment, jobId: jobIdP
   return (
     <div style={{fontFamily:F}}>
 
+      {/* Context callout */}
+      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:9,
+        background:"#EFF6FF",border:"1px solid #BFDBFE",marginBottom:14}}>
+        <span style={{fontSize:14,flexShrink:0,marginTop:1}}>ℹ</span>
+        <span style={{fontFamily:F,fontSize:12,color:"#1E40AF",lineHeight:1.5}}>
+          These questions appear on your <strong>candidate portal</strong> during applications.
+          Knockout rules auto-reject candidates who don't pass. Required rules flag for review. Preferred rules add to the match score.
+        </span>
+      </div>
+
       {/* Header row */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div>

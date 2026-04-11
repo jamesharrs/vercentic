@@ -139,6 +139,7 @@ const AUTH_EXEMPT = [
   '/cv-parse',
   '/comms/webhook',
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal
+  '/screening/job',      // wizard fetches screening rules for portal screening block
   '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
   '/error-logs', '/ai', '/translate', '/linkedin-search',
   '/chrome-import',
