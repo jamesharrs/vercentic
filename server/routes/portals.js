@@ -382,14 +382,14 @@ router.post('/:id/wizard/submit', async (req, res) => {
         r=>r.object_id===targetObj.id && r.data?.email?.toLowerCase()===email
       );
       if (existing) {
-        // Merge any new data onto existing record
-        existing.data = { ...existing.data, ...form_data };
+        // Merge any new data onto existing record (not sq_ answers)
+        existing.data = { ...existing.data, ...cleanFormData };
         existing.updated_at = new Date().toISOString();
         record = existing;
       } else {
         record = {
           id:uid(), object_id:targetObj.id, environment_id:portal.environment_id,
-          data:{ status:'Active', source:'Portal', person_type:'Candidate', ...form_data },
+          data:{ status:'Active', source:'Portal', person_type:'Candidate', ...cleanFormData },
           created_by:'portal', created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
         };
         if (!store.records) store.records=[];
@@ -399,7 +399,7 @@ router.post('/:id/wizard/submit', async (req, res) => {
       // For other objects (jobs, etc.) always create new
       record = {
         id:uid(), object_id:targetObj.id, environment_id:portal.environment_id,
-        data:{ status:'Draft', source:'Portal', ...form_data },
+        data:{ status:'Draft', source:'Portal', ...cleanFormData },
         created_by:'portal', created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
       };
       if (!store.records) store.records=[];
@@ -427,6 +427,53 @@ router.post('/:id/wizard/submit', async (req, res) => {
       details:{ portal_id:portal.id, portal_name:portal.name, job_id:job_id||null, ...meta },
       created_at:new Date().toISOString(),
     });
+
+    // ── Extract and store screening question responses ────────────────────────
+    // sq_* keys in form_data are screening answers — strip them from the record
+    // and store in dedicated screening_responses collection
+    const screeningAnswers = {};
+    const cleanFormData = {};
+    for (const [k, v] of Object.entries(form_data)) {
+      if (k.startsWith('sq_')) screeningAnswers[k.replace('sq_', '')] = v;
+      else cleanFormData[k] = v;
+    }
+
+    if (Object.keys(screeningAnswers).length > 0 && job_id) {
+      // Load the screening rules to compute pass/fail
+      const jobRules = (store.screening_job_rules||[]).filter(r=>r.record_id===job_id);
+      let score = 0, totalWeight = 0, knockedOut = false;
+      const results = {};
+      for (const rule of jobRules) {
+        const answerId = rule.id || rule.question_id;
+        const answer = screeningAnswers[answerId];
+        const hasOptions = (rule.question_options||[]).length > 0;
+        let passed = true;
+        if (hasOptions && rule.pass_value && answer !== undefined) {
+          passed = String(answer).toLowerCase() === String(rule.pass_value).toLowerCase();
+        }
+        if (rule.rule_type === 'knockout' && hasOptions && !passed) knockedOut = true;
+        if (rule.rule_type === 'preferred' && hasOptions && passed) {
+          score += (rule.weight || 5);
+        }
+        totalWeight += (rule.rule_type === 'preferred' ? (rule.weight || 5) : 0);
+        results[answerId] = { answer, passed, rule_type: rule.rule_type };
+      }
+      const scorePercent = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : null;
+
+      if (!store.screening_responses) store.screening_responses = [];
+      store.screening_responses.push({
+        id: uid(),
+        record_id: record.id,
+        job_id,
+        portal_id: req.params.id,
+        environment_id: portal.environment_id,
+        answers: screeningAnswers,
+        results,
+        score: scorePercent,
+        knocked_out: knockedOut,
+        submitted_at: new Date().toISOString(),
+      });
+    }
 
     // Save any form responses (from form_response blocks)
     const formResponses = req.body.form_responses || [];

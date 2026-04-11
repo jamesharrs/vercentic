@@ -438,4 +438,21 @@ function getOptions(rule) {
   return ['Yes', 'No'];
 }
 
+// ── Screening responses (submitted by candidates via portal) ──────────────────
+router.get('/responses/record/:record_id', (req, res) => {
+  const store = getStore();
+  const responses = (store.screening_responses||[])
+    .filter(r => r.record_id === req.params.record_id)
+    .sort((a,b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+  res.json(responses);
+});
+
+router.get('/responses/job/:job_id', (req, res) => {
+  const store = getStore();
+  const responses = (store.screening_responses||[])
+    .filter(r => r.job_id === req.params.job_id)
+    .sort((a,b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+  res.json(responses);
+});
+
 module.exports = router;

@@ -97,7 +97,7 @@ function ScreeningGeneratePreview({ items, onConfirm, onClose }) {
                         <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:2}}>RULE TYPE</label>
                         <select value={row.rule_type} onChange={e=>sf(i,"rule_type",e.target.value)}
                           style={{padding:"4px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,background:C.surface,outline:"none"}}>
-                          {RULE_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                          {(row.question_options?.length>0 ? RULE_TYPES : RULE_TYPES.filter(t=>t.value!=="knockout")).map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                       </div>
                       {row.question_options?.length>0&&<div>
@@ -108,7 +108,7 @@ function ScreeningGeneratePreview({ items, onConfirm, onClose }) {
                           {row.question_options.map((o,j)=><option key={j} value={o}>{o}</option>)}
                         </select>
                       </div>}
-                      {row.rule_type==="preferred"&&<div>
+                      {row.question_options?.length>0 && row.rule_type==="preferred"&&<div>
                         <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:2}}>WEIGHT (1-10)</label>
                         <input type="number" min={1} max={10} value={row.weight} onChange={e=>sf(i,"weight",Number(e.target.value))}
                           style={{width:60,padding:"4px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,outline:"none"}}/>
@@ -188,6 +188,9 @@ function SaveTemplateModal({ rules, onSave, onClose }) {
 /* ── Rule Card ──────────────────────────────────────────────────────── */
 function RuleCard({ rule, onChange, onRemove }) {
   const rt = RULE_TYPE_MAP[rule.rule_type]||RULE_TYPES[0];
+  const hasOptions = (rule.question_options||[]).length > 0;
+  // Free-text questions: no knockout (can't auto-detect wrong answer), no weight (can't auto-score)
+  const availableRuleTypes = hasOptions ? RULE_TYPES : RULE_TYPES.filter(t=>t.value!=="knockout");
   return (
     <div style={{border:`1.5px solid ${rt.color}22`,borderRadius:12,background:rt.bg,padding:"14px 16px",marginBottom:8}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
@@ -204,10 +207,11 @@ function RuleCard({ rule, onChange, onRemove }) {
               <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:3}}>RULE TYPE</label>
               <select value={rule.rule_type} onChange={e=>onChange({...rule,rule_type:e.target.value})}
                 style={{padding:"5px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,background:C.surface,outline:"none"}}>
-                {RULE_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                {availableRuleTypes.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            {rule.question_options?.length>0&&<div>
+            {/* Pass answer — multiple choice only */}
+            {hasOptions&&<div>
               <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:3}}>PASS ANSWER</label>
               <select value={rule.pass_value||""} onChange={e=>onChange({...rule,pass_value:e.target.value})}
                 style={{padding:"5px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,background:C.surface,outline:"none"}}>
@@ -215,10 +219,15 @@ function RuleCard({ rule, onChange, onRemove }) {
                 {rule.question_options.map((o,i)=><option key={i} value={o}>{o}</option>)}
               </select>
             </div>}
-            {rule.rule_type==="preferred"&&<div>
+            {/* Weight — multiple choice + preferred only */}
+            {hasOptions && rule.rule_type==="preferred" &&<div>
               <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:3}}>WEIGHT (1-10)</label>
               <input type="number" min={1} max={10} value={rule.weight||5} onChange={e=>onChange({...rule,weight:Number(e.target.value)})}
                 style={{width:60,padding:"5px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,outline:"none"}}/>
+            </div>}
+            {/* Free-text hint */}
+            {!hasOptions&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:"#f8fafc",border:`1px solid ${C.border}`}}>
+              <span style={{fontFamily:F,fontSize:11,color:C.text3}}>Free text — recruiter reviews manually</span>
             </div>}
             <div style={{flex:1,minWidth:120}}>
               <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:3}}>LABEL (optional)</label>
