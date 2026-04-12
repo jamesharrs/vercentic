@@ -219,14 +219,31 @@ function applyFieldVisibility(user, record, objectId) {
   try {
     const store = require('../db/init').getStore();
     if (!store.field_visibility || store.field_visibility.length === 0) return record;
-    const fieldIds = query('fields', f => f.object_id === objectId).map(f => f.id);
+
+    // All fields for this object sorted by sort_order
+    const allFields = query('fields', f => f.object_id === objectId)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
     const hiddenFieldIds = new Set(
       store.field_visibility
-        .filter(r => r.role_id === user.role_id && r.hidden && fieldIds.includes(r.field_id))
+        .filter(r => r.role_id === user.role_id && r.hidden && allFields.some(f => f.id === r.field_id))
         .map(r => r.field_id)
     );
     if (hiddenFieldIds.size === 0) return record;
-    const hiddenKeys = new Set(query('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key));
+
+    // Expand: if a section_separator is hidden, also hide every field in that section
+    // (i.e. all fields from that separator up to—but not including—the next separator)
+    const expandedHidden = new Set(hiddenFieldIds);
+    let inHiddenSection = false;
+    for (const f of allFields) {
+      if (f.field_type === 'section_separator') {
+        inHiddenSection = hiddenFieldIds.has(f.id);
+      } else if (inHiddenSection) {
+        expandedHidden.add(f.id);
+      }
+    }
+
+    const hiddenKeys = new Set(allFields.filter(f => expandedHidden.has(f.id)).map(f => f.api_key));
     const cleanData = { ...record.data };
     for (const key of hiddenKeys) delete cleanData[key];
     return { ...record, data: cleanData };
@@ -273,11 +290,19 @@ function getHiddenFieldKeys(user, objectId) {
   try {
     const store = require('../db/init').getStore();
     if (!store.field_visibility || store.field_visibility.length === 0) return new Set();
-    const fieldIds = query('fields', f => f.object_id === objectId).map(f => f.id);
+    const allFields = query('fields', f => f.object_id === objectId)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     const hiddenFieldIds = new Set(
-      store.field_visibility.filter(r => r.role_id === user.role_id && r.hidden && fieldIds.includes(r.field_id)).map(r => r.field_id));
+      store.field_visibility.filter(r => r.role_id === user.role_id && r.hidden && allFields.some(f => f.id === r.field_id)).map(r => r.field_id));
     if (hiddenFieldIds.size === 0) return new Set();
-    return new Set(query('fields', f => hiddenFieldIds.has(f.id)).map(f => f.api_key));
+    // Expand section separators
+    const expandedHidden = new Set(hiddenFieldIds);
+    let inHiddenSection = false;
+    for (const f of allFields) {
+      if (f.field_type === 'section_separator') { inHiddenSection = hiddenFieldIds.has(f.id); }
+      else if (inHiddenSection) { expandedHidden.add(f.id); }
+    }
+    return new Set(allFields.filter(f => expandedHidden.has(f.id)).map(f => f.api_key));
   } catch { return new Set(); }
 }
 

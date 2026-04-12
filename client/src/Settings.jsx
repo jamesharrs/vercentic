@@ -781,7 +781,8 @@ const FieldVisibilityPanel = ({ role, environment }) => {
   useEffect(() => {
     if (!selObj || !role) return;
     Promise.all([
-      api.get(`/fields?object_id=${selObj.id}&environment_id=${selEnv?.id}`),
+      api.get(`/fields?object_id=${selObj.id}&environment_id=${environment?.id}`),
+      api.get(`/field-visibility?role_id=${role.id}&object_id=${selObj.id}`),
     ]).then(([f, v]) => {
       setFields(Array.isArray(f) ? f : []);
       const r = {};
@@ -791,6 +792,45 @@ const FieldVisibilityPanel = ({ role, environment }) => {
   }, [selObj?.id, role?.id]);
 
   const toggle = (fieldId) => setRules(r => ({ ...r, [fieldId]: !r[fieldId] }));
+
+  // Toggle an entire section (separator + all fields until next separator)
+  const toggleSection = (separatorId) => {
+    const sorted = [...fields].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const sepIdx = sorted.findIndex(f => f.id === separatorId);
+    const sectionFields = [sorted[sepIdx]];
+    for (let i = sepIdx + 1; i < sorted.length; i++) {
+      if (sorted[i].field_type === 'section_separator') break;
+      sectionFields.push(sorted[i]);
+    }
+    const allHidden = sectionFields.every(f => rules[f.id]);
+    setRules(r => {
+      const next = { ...r };
+      sectionFields.forEach(f => { next[f.id] = !allHidden; });
+      return next;
+    });
+  };
+
+  // Build grouped view: sections with their child fields
+  const grouped = (() => {
+    const sorted = [...fields].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const groups = [];
+    let current = null;
+    for (const f of sorted) {
+      if (f.field_type === 'section_separator') {
+        current = { separator: f, fields: [] };
+        groups.push(current);
+      } else if (current) {
+        current.fields.push(f);
+      } else {
+        // fields before first separator
+        if (!groups.length || groups[0].separator) {
+          groups.unshift({ separator: null, fields: [] });
+        }
+        groups[0].fields.push(f);
+      }
+    }
+    return groups;
+  })();
 
   const handleSave = async () => {
     setSaving(true);
@@ -830,27 +870,68 @@ const FieldVisibilityPanel = ({ role, environment }) => {
           </button>
         ))}
       </div>
-      {/* Field list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {fields.map(f => (
-          <div key={f.id} onClick={() => toggle(f.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-              borderRadius: 8, border: `1px solid ${rules[f.id] ? '#fecaca' : C.border}`,
-              background: rules[f.id] ? '#fff5f5' : 'white', cursor: 'pointer', transition: 'all .1s' }}>
-            <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${rules[f.id] ? '#ef4444' : C.border}`,
-              background: rules[f.id] ? '#ef4444' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {rules[f.id] && <svg width={10} height={10} viewBox='0 0 24 24' fill='none' stroke='white' strokeWidth={3}><path d='M18 6L6 18M6 6l12 12'/></svg>}
+      {/* Grouped field list with section toggles */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {grouped.map((group, gi) => {
+          const sep = group.separator;
+          const allHidden = sep && group.fields.length > 0 && [sep, ...group.fields].every(f => rules[f.id]);
+          const someHidden = sep && group.fields.some(f => rules[f.id]);
+          return (
+            <div key={sep?.id || `g${gi}`}>
+              {/* Section header row */}
+              {sep && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  borderRadius: 8, background: '#f3f0ff', border: '1px solid #e9d5ff',
+                  marginBottom: 3, cursor: 'pointer' }}
+                  onClick={() => toggleSection(sep.id)}>
+                  {/* Section toggle checkbox */}
+                  <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                    border: `2px solid ${allHidden ? '#ef4444' : someHidden ? '#f59e0b' : '#7c3aed'}`,
+                    background: allHidden ? '#ef4444' : someHidden ? '#fef3c7' : '#ede9fe',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {allHidden
+                      ? <svg width={10} height={10} viewBox='0 0 24 24' fill='none' stroke='white' strokeWidth={3}><path d='M18 6L6 18M6 6l12 12'/></svg>
+                      : someHidden
+                      ? <div style={{ width: 8, height: 2, background: '#d97706', borderRadius: 1 }}/>
+                      : null}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#4c1d95', flex: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {sep.name}
+                  </span>
+                  <span style={{ fontSize: 10, color: allHidden ? '#ef4444' : someHidden ? '#d97706' : '#7c3aed', fontWeight: 600 }}>
+                    {allHidden ? `Section hidden from ${role?.name}` : someHidden ? `${group.fields.filter(f=>rules[f.id]).length} field(s) hidden` : `Visible to ${role?.name}`}
+                  </span>
+                </div>
+              )}
+              {/* Fields in this section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: sep ? 12 : 0 }}>
+                {group.fields.map(f => (
+                  <div key={f.id} onClick={() => toggle(f.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px',
+                      borderRadius: 8, border: `1px solid ${rules[f.id] ? '#fecaca' : C.border}`,
+                      background: rules[f.id] ? '#fff5f5' : 'white', cursor: 'pointer', transition: 'all .1s' }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                      border: `2px solid ${rules[f.id] ? '#ef4444' : C.border}`,
+                      background: rules[f.id] ? '#ef4444' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {rules[f.id] && <svg width={9} height={9} viewBox='0 0 24 24' fill='none' stroke='white' strokeWidth={3}><path d='M18 6L6 18M6 6l12 12'/></svg>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: rules[f.id] ? '#ef4444' : C.text1 }}>{f.name}</span>
+                      <span style={{ fontSize: 11, color: C.text3, marginLeft: 8 }}>{f.api_key}</span>
+                      {f.condition_value && <span style={{ fontSize: 10, color: '#7c3aed', marginLeft: 6, background: '#ede9fe', padding: '1px 5px', borderRadius: 4 }}>if {f.condition_value}</span>}
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
+                      color: rules[f.id] ? '#ef4444' : C.text3,
+                      background: rules[f.id] ? '#fee2e2' : C.bg }}>
+                      {rules[f.id] ? 'HIDDEN' : 'visible'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: rules[f.id] ? '#ef4444' : C.text1 }}>{f.name}</span>
-              <span style={{ fontSize: 11, color: C.text3, marginLeft: 8 }}>{f.api_key}</span>
-            </div>
-            <span style={{ fontSize: 10, fontWeight: 600, color: rules[f.id] ? '#ef4444' : C.text3,
-              padding: '2px 7px', borderRadius: 10, background: rules[f.id] ? '#fee2e2' : C.bg }}>
-              {rules[f.id] ? 'HIDDEN' : 'visible'}
-            </span>
-          </div>
-        ))}
+          );
+        })}
         {fields.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: C.text3, fontSize: 13 }}>Select an object above to configure field visibility.</div>}
       </div>
     </div>
