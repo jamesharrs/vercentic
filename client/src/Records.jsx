@@ -4551,10 +4551,9 @@ const PdfViewer = ({ data }) => {
     (async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        // Use versioned CDN worker — try .js fallback if .mjs fails
-        const ver = pdfjsLib.version;
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${ver}/pdf.worker.min.js`;
+        // Use the bundled worker — CDN version won't match pdfjs-dist v5
+        const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl.toString();
         const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
         const pdf = await loadingTask.promise;
         if (cancelled) return;
