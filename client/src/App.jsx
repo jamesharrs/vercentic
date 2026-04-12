@@ -1508,37 +1508,9 @@ function App() {
   const { t, isRTL } = useI18n();
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
-  const _path = window.location.pathname;
-  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
-
-  // Candidate Hub — magic-link auth, completely separate from admin app
-  if (_path.startsWith('/hub')) return <CandidateHub />;
-
-  // Client support portal — must be before the portal slug fallback
-  if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
-
-  // /portal/{slug} is the canonical public portal URL.
-  // vercel.json gives /portal/* an explicit SPA rewrite and public cache headers.
-  // All portal API calls go through /api/portal-public/* which is fully auth-exempt.
-  const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
-  if (portalSlug) return <PortalApp slug={portalSlug}/>;
-
-  // Legacy fallback: bare slug URLs (e.g. /careers) also resolve as portals.
-  // Limited to single-segment paths only so mis-typed app routes don't silently
-  // render as an empty portal page.
-  if (_path !== '/' && !_appRoutes.test(_path)) {
-    const segments = _path.replace(/^\//, '').split('/');
-    const cleanSlug = segments[0];
-    if (cleanSlug && !cleanSlug.includes('.') && segments.length <= 2) {
-      return <PortalApp slug={cleanSlug}/>;
-    }
-  }
-    if (_path === '/superadmin') return <SuperAdminConsole />;
-  if (_path.startsWith('/availability/')) {
-    return <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}><AvailabilityPickerPage/></Suspense>;
-  }
-  const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
-  if (botToken) return <BotInterview token={botToken} />;
+  // ── App function — all hooks must be called unconditionally ─────────────────
+  // Special-route routing (hub, portal, superadmin, bot, etc.) has been moved
+  // to AppRoot so early returns never happen before hooks in this component.
 
   // If the subdomain doesn't match the stored session's tenant_slug,
   // clear the stale session so the user is prompted to log in fresh.
@@ -2650,14 +2622,40 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
 
 // ─── Root export wrapped in ThemeProvider ─────────────────────────────────────
 export default function AppRoot() {
-  // Handle public reschedule page (no auth needed)
-  if (window.location.pathname.startsWith('/reschedule/')) {
-    return <ReschedulePage />;
+  const _path = window.location.pathname;
+
+  // ── Public / standalone routes (no auth, no hooks) ───────────────────────
+  if (_path.startsWith('/reschedule/'))   return <ReschedulePage />;
+  if (_path.startsWith('/interview/'))    return <InterviewSession />;
+  if (_path.startsWith('/hub'))           return <CandidateHub />;
+  if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
+  if (_path === '/superadmin')            return <SuperAdminConsole />;
+
+  const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
+  if (botToken) return <BotInterview token={botToken} />;
+
+  if (_path.startsWith('/availability/')) {
+    return (
+      <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}>
+        <AvailabilityPickerPage/>
+      </Suspense>
+    );
   }
-  // Public interview page — no auth needed
-  if (window.location.pathname.startsWith('/interview/')) {
-    return <InterviewSession />;
+
+  // Portal slug routes — /portal/{slug} canonical + legacy bare-slug fallback
+  const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
+  if (portalSlug) return <PortalApp slug={portalSlug}/>;
+
+  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening)(\/|$)/;
+  if (_path !== '/' && !_appRoutes.test(_path)) {
+    const segments = _path.replace(/^\//, '').split('/');
+    const cleanSlug = segments[0];
+    if (cleanSlug && !cleanSlug.includes('.') && segments.length <= 2) {
+      return <PortalApp slug={cleanSlug}/>;
+    }
   }
+
+  // ── Main authenticated app ────────────────────────────────────────────────
   return (
     <ReportingErrorBoundary>
       <ThemeProvider>
