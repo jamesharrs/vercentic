@@ -136,6 +136,7 @@ const AUTH_EXEMPT = [
   '/superadmin', '/bot', '/analytics',
   '/attachments/file',
   '/attachments/upload',
+  '/attachments/preview',
   '/cv-parse',
   '/comms/webhook',
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal

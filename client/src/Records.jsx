@@ -4430,8 +4430,14 @@ const FilePreviewModal = ({ att, onClose }) => {
   const ext = (att.ext || att.name?.split('.').pop() || '').toLowerCase();
   const isImage = ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
   const isPdf   = ext === 'pdf';
+  const isDocx  = ['docx','doc'].includes(ext);
   const isText  = ['txt','csv','md','log'].includes(ext);
   const rawUrl  = att.url || '#';
+
+  // For DOCX use server-side mammoth preview endpoint directly (no auth needed)
+  const previewUrl = isDocx && rawUrl !== '#'
+    ? rawUrl.replace('/api/attachments/file/', '/api/attachments/preview/')
+    : null;
 
   // Fetch blob with auth so iframe/img has no CORS/auth issues
   const [blobUrl,  setBlobUrl]  = useState(null);
@@ -4440,6 +4446,8 @@ const FilePreviewModal = ({ att, onClose }) => {
 
   useEffect(() => {
     let url = null;
+    // DOCX uses server-side preview — no blob fetch needed
+    if (isDocx) return;
     if (!rawUrl || rawUrl === '#') { setLoadErr(true); return; }
     fetch(rawUrl, { headers: authHeaders(), credentials: 'include' })
       .then(r => {
@@ -4497,7 +4505,7 @@ const FilePreviewModal = ({ att, onClose }) => {
         {/* Content */}
         <div style={{ flex:1, overflow:'auto', background:'#f0f2f5', display:'flex', flexDirection:'column', alignItems:'center', minHeight:0 }}>
           {/* Loading */}
-          {!blobUrl && !loadErr && (
+          {!blobUrl && !loadErr && !isDocx && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, padding:48 }}>
               <svg width="24" height="24" viewBox="0 0 24 24" style={{animation:'spin 1s linear infinite'}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="#3b5bdb" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg>
               <span style={{ fontSize:13, color:'#6b7280' }}>Loading file…</span>
@@ -4512,6 +4520,17 @@ const FilePreviewModal = ({ att, onClose }) => {
           )}
           {/* PDF — rendered by PDF.js */}
           {blobData && isPdf && <PdfViewer data={blobData}/>}
+          {/* DOCX — server-side mammoth → HTML in iframe */}
+          {isDocx && previewUrl && (
+            <iframe src={previewUrl} title={att.name}
+              style={{ width:'100%', border:'none', minHeight:'78vh', background:'white', flex:1 }}/>
+          )}
+          {isDocx && !previewUrl && (
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, padding:48, textAlign:'center' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Preview not available</div>
+            </div>
+          )}
           {/* Image */}
           {blobUrl && isImage && (
             <div style={{ padding:24, display:'flex', alignItems:'center', justifyContent:'center', flex:1 }}>
