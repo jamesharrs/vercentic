@@ -54,21 +54,20 @@ Respond with valid JSON only (no markdown):
 Be concise and specific. If answers are very short or low-quality, note that. Do not be lenient.`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 400,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      const data = await api.post("/ai/chat", {
+        max_tokens: 400,
+        system: "You are an experienced recruiter. Respond only with valid JSON, no markdown.",
+        messages: [{ role: "user", content: prompt }],
       });
-      const data = await res.json();
       const raw = data.content?.[0]?.text || "{}";
       const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, "").trim());
       setAnalysis(parsed);
       setExpanded(true);
-    } catch { setAnalysis({ overall: "Could not generate analysis.", strengths: [], concerns: [], ai_signals: null }); setExpanded(true); }
+    } catch (e) {
+      console.error("AI analysis error:", e);
+      setAnalysis({ overall: "Could not generate analysis.", strengths: [], concerns: [], ai_signals: null });
+      setExpanded(true);
+    }
     setLoading(false);
   };
 
