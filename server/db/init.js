@@ -521,6 +521,44 @@ function removeTestFields() {
 }
 removeTestFields();
 
+// ── Add education table field to People objects ───────────────────────────────
+function migrateEducationField() {
+  const { v4: uid } = require('uuid');
+  let added = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    const peopleObjs = (store.objects || []).filter(o => o.slug === 'people' && !o.deleted_at);
+    for (const obj of peopleObjs) {
+      const existing = (store.fields || []).find(f => f.object_id === obj.id && f.api_key === 'education' && !f.deleted_at);
+      if (!existing) {
+        const maxOrder = (store.fields || []).filter(f => f.object_id === obj.id && !f.deleted_at)
+          .reduce((m, f) => Math.max(m, f.sort_order || 0), 0);
+        if (!store.fields) store.fields = [];
+        store.fields.push({
+          id: uid(), object_id: obj.id, environment_id: obj.environment_id,
+          name: 'Education', api_key: 'education', field_type: 'table',
+          is_required: false, is_unique: false, show_in_list: false, show_in_form: true,
+          is_system: true, sort_order: maxOrder + 1,
+          table_template: 'education',
+          table_columns: [
+            { id: 'edu_inst',    name: 'Institution',      type: 'text',    width: 200 },
+            { id: 'edu_deg',     name: 'Degree',           type: 'text',    width: 160 },
+            { id: 'edu_subj',    name: 'Subject',          type: 'text',    width: 160 },
+            { id: 'edu_from',    name: 'From',             type: 'date',    width: 110 },
+            { id: 'edu_to',      name: 'To',               type: 'date',    width: 110 },
+            { id: 'edu_current', name: 'Current',          type: 'boolean', width: 80  },
+            { id: 'edu_grade',   name: 'Grade / Result',   type: 'text',    width: 130 },
+          ],
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+        added++;
+      }
+    }
+    if (added > 0) saveStoreNow(key);
+  }
+  if (added > 0) console.log(`✅ Added education field to ${added} People object(s)`);
+}
+migrateEducationField();
+
 // ── Prune orphaned people_links on startup ───────────────────────────────────
 // Removes any people_link where the person_record or target_record no longer exists.
 function pruneOrphanedPeopleLinks() {
