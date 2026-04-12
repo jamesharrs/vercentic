@@ -253,8 +253,20 @@ router.delete('/jobs/:job_id/direct/:question_id', (req, res) => {
 // AI-generate questions for a job
 router.post('/jobs/:job_id/generate', async (req, res) => {
   const { job_id } = req.params;
-  const { job_title, department, description, skills, count=8 } = req.body;
+  let { job_title, department, description, skills, count=8 } = req.body;
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({error:'AI not configured'});
+
+  // Auto-fetch job context from the record if not supplied by client
+  if (!job_title) {
+    const { findOne } = require('../db/init');
+    const rec = findOne('records', r => r.id === job_id);
+    if (rec?.data) {
+      job_title   = rec.data.job_title   || rec.data.title       || rec.data.name   || '';
+      department  = rec.data.department  || rec.data.dept        || department       || '';
+      description = rec.data.description || rec.data.job_description || description || '';
+      skills      = rec.data.skills      || rec.data.required_skills || skills      || '';
+    }
+  }
 
   // Fetch existing questions so Claude avoids duplicates
   const { query } = require('../db/init');
@@ -275,18 +287,21 @@ router.post('/jobs/:job_id/generate', async (req, res) => {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
     const data = await response.json();
+    if (data.error) { console.error('Anthropic error:', data.error); return res.status(500).json({error: data.error.message||'AI error'}); }
     const raw = data.content?.[0]?.text||'[]';
     const cleaned = raw.replace(/```json\n?|\n?```/g,'').trim();
     const generated = JSON.parse(cleaned);
 
-    // Similarity dedup — filter out any question too similar to existing ones
+    // Dedup only against questions already assigned to THIS job (don't filter against full library)
     const normalize = s => s.toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
-    const existingNorm = existing.map(q => normalize(q.text));
+    const assignedNorm = [
+      ...existing.filter(q => assignedIds.has(q.id)).map(q => normalize(q.text)),
+      ...jobOnlyTexts.map(normalize),
+    ];
     const deduped = generated.filter(q => {
       const n = normalize(q.text);
-      // Reject if >50% word overlap with any existing question
       const words = new Set(n.split(' ').filter(w => w.length > 4));
-      return !existingNorm.some(en => {
+      return !assignedNorm.some(en => {
         const enWords = en.split(' ').filter(w => w.length > 4);
         if (!enWords.length || !words.size) return false;
         const overlap = enWords.filter(w => words.has(w)).length;
