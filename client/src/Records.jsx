@@ -5985,9 +5985,27 @@ const DocExtractModal = ({ result, mappings, record, onApply, onClose }) => {
 
 // ─── CV Parse Modal ───────────────────────────────────────────────────────────
 const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
-  const [selected, setSelected] = useState({});
+  const [selected, setSelected]     = useState({});
+  const [tableMode, setTableMode]   = useState({}); // field_key → 'replace' | 'merge'
 
-  // All potentially mappable fields — shown if Claude extracted a value
+  // Helper — compare two values for meaningful difference
+  const isDifferent = (parsed, current) => {
+    if (parsed === null || parsed === undefined) return false;
+    if (Array.isArray(parsed)) {
+      if (!parsed.length) return false; // nothing extracted
+      if (!Array.isArray(current) || !current.length) return true;
+      // For skill arrays compare sorted joined string
+      const ps = [...parsed].sort().join('|').toLowerCase();
+      const cs = [...current].map(s => typeof s === 'object' ? (s.name||JSON.stringify(s)) : String(s)).sort().join('|').toLowerCase();
+      return ps !== cs;
+    }
+    if (typeof parsed === 'number') return parsed !== current;
+    const pStr = String(parsed).trim();
+    if (!pStr) return false;
+    if (!current) return true;
+    return pStr.toLowerCase() !== String(current).trim().toLowerCase();
+  };
+
   const FIELD_DEFS = [
     { key:'first_name',       label:'First Name'        },
     { key:'last_name',        label:'Last Name'         },
@@ -6005,19 +6023,27 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
     { key:'education',        label:'Education',        type:'table' },
   ];
 
-  // Show fields where Claude returned a non-empty value
+  // Only show fields where parsed value actually differs from current record
   const MAPPABLE = FIELD_DEFS.filter(m => {
     const val = result[m.key];
     if (val === null || val === undefined) return false;
     if (typeof val === 'string' && val.trim() === '') return false;
-    if (typeof val === 'number' && isNaN(val)) return false;
-    return true;
+    if (Array.isArray(val) && val.length === 0) return false;
+    return isDifferent(val, record.data?.[m.key]);
   });
 
   useEffect(() => {
     const init = {};
-    MAPPABLE.forEach(m => { init[m.key] = true; });
+    const modes = {};
+    MAPPABLE.forEach(m => {
+      init[m.key] = true;
+      // Default table mode: merge if field already has rows, replace if empty
+      if (m.type === 'table') {
+        modes[m.key] = Array.isArray(record.data?.[m.key]) && record.data[m.key].length > 0 ? 'merge' : 'replace';
+      }
+    });
     setSelected(init);
+    setTableMode(modes);
   }, []);
 
   const toggle = k => setSelected(s => ({ ...s, [k]: !s[k] }));
@@ -6027,13 +6053,11 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
     MAPPABLE.forEach(m => {
       if (!selected[m.key]) return;
       if (m.type === 'table') {
-        // Convert parsed array to table column-ID format using the field's column definitions
         const fieldDef = fields.find(f => f.api_key === m.key);
         const cols = fieldDef?.table_columns || [];
         const uid = () => Math.random().toString(36).slice(2, 10);
-
+        let newRows = [];
         if (m.key === 'work_history') {
-          // Map: company→Company, title→Job Title, start→From, end→To, description→Description
           const colMap = {
             company:     cols.find(c => c.name === 'Company')?.id,
             title:       cols.find(c => c.name === 'Job Title')?.id,
@@ -6041,7 +6065,7 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
             end:         cols.find(c => c.name === 'To')?.id,
             description: cols.find(c => c.name === 'Description')?.id,
           };
-          toApply[m.key] = (result[m.key] || []).map(row => {
+          newRows = (result[m.key] || []).map(row => {
             const r = { _id: uid() };
             if (colMap.company)     r[colMap.company]     = row.company     || '';
             if (colMap.title)       r[colMap.title]       = row.title       || '';
@@ -6051,7 +6075,6 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
             return r;
           });
         } else if (m.key === 'education') {
-          // Map: institution→Institution, degree→Degree, field→Subject, year→From
           const colMap = {
             institution: cols.find(c => c.name === 'Institution')?.id,
             degree:      cols.find(c => c.name === 'Degree')?.id,
@@ -6059,7 +6082,7 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
             from:        cols.find(c => c.name === 'From')?.id,
             to:          cols.find(c => c.name === 'To')?.id,
           };
-          toApply[m.key] = (result[m.key] || []).map(row => {
+          newRows = (result[m.key] || []).map(row => {
             const r = { _id: uid() };
             if (colMap.institution) r[colMap.institution] = row.institution || '';
             if (colMap.degree)      r[colMap.degree]      = row.degree      || '';
@@ -6069,6 +6092,8 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
             return r;
           });
         }
+        const existing = Array.isArray(record.data?.[m.key]) ? record.data[m.key] : [];
+        toApply[m.key] = tableMode[m.key] === 'merge' ? [...existing, ...newRows] : newRows;
       } else {
         toApply[m.key] = result[m.key];
       }
@@ -6085,8 +6110,12 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
         {/* Header */}
         <div style={{ padding:'18px 22px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>CV Parsed Successfully</div>
-            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>Select fields to apply to this record</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text1 }}>CV Parsed — Changes Found</div>
+            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>
+              {MAPPABLE.length === 0
+                ? 'No new information found — CV matches existing record data'
+                : `${MAPPABLE.length} field${MAPPABLE.length!==1?'s':''} differ from current record`}
+            </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:20 }}>×</button>
         </div>
@@ -6115,20 +6144,36 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>{m.label}</div>
 
-                {/* Table fields — compact row preview */}
+                {/* Table fields — compact row preview + merge/replace toggle */}
                 {m.type === 'table' && Array.isArray(result[m.key]) ? (
-                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                    {result[m.key].slice(0, 4).map((row, i) => (
-                      <div key={i} style={{ fontSize:12, color:C.text1, background:'white', borderRadius:6,
-                        padding:'5px 8px', border:`1px solid ${C.border}` }}>
-                        {m.key === 'work_history'
-                          ? <><span style={{ fontWeight:600 }}>{row.title}</span>{row.company ? ` · ${row.company}` : ''}{(row.start||row.end) ? <span style={{ color:C.text3, marginLeft:6 }}>{row.start||''}{row.end ? ` → ${row.end}` : ''}</span> : null}</>
-                          : <><span style={{ fontWeight:600 }}>{row.degree}</span>{row.field ? ` · ${row.field}` : ''}{row.institution ? <span style={{ color:C.text3, marginLeft:6 }}>{row.institution}</span> : null}{row.year ? <span style={{ color:C.text3, marginLeft:6 }}>{row.year}</span> : null}</>
-                        }
+                  <div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:4, marginBottom:6 }}>
+                      {result[m.key].slice(0, 3).map((row, i) => (
+                        <div key={i} style={{ fontSize:12, color:C.text1, background:'white', borderRadius:6,
+                          padding:'5px 8px', border:`1px solid ${C.border}` }}>
+                          {m.key === 'work_history'
+                            ? <><span style={{ fontWeight:600 }}>{row.title}</span>{row.company ? ` · ${row.company}` : ''}{(row.start||row.end) ? <span style={{ color:C.text3, marginLeft:6 }}>{row.start||''}{row.end ? ` → ${row.end}` : ''}</span> : null}</>
+                            : <><span style={{ fontWeight:600 }}>{row.degree}</span>{row.field ? ` · ${row.field}` : ''}{row.institution ? <span style={{ color:C.text3, marginLeft:6 }}>{row.institution}</span> : null}{row.year ? <span style={{ color:C.text3, marginLeft:6 }}>{row.year}</span> : null}</>
+                          }
+                        </div>
+                      ))}
+                      {result[m.key].length > 3 && (
+                        <div style={{ fontSize:11, color:C.text3 }}>+{result[m.key].length - 3} more rows</div>
+                      )}
+                    </div>
+                    {/* Merge / Replace toggle — only shown if field already has rows */}
+                    {Array.isArray(record.data?.[m.key]) && record.data[m.key].length > 0 && (
+                      <div style={{ display:'flex', gap:6, marginTop:4 }} onClick={e=>e.stopPropagation()}>
+                        {['merge','replace'].map(mode => (
+                          <button key={mode} onClick={()=>setTableMode(t=>({...t,[m.key]:mode}))}
+                            style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:6, cursor:'pointer', fontFamily:F,
+                              border:`1.5px solid ${tableMode[m.key]===mode ? C.accent : C.border}`,
+                              background: tableMode[m.key]===mode ? C.accentLight : 'white',
+                              color: tableMode[m.key]===mode ? C.accent : C.text3 }}>
+                            {mode === 'merge' ? `+ Add to existing ${record.data[m.key].length} row${record.data[m.key].length!==1?'s':''}` : '↻ Replace all'}
+                          </button>
+                        ))}
                       </div>
-                    ))}
-                    {result[m.key].length > 4 && (
-                      <div style={{ fontSize:11, color:C.text3 }}>+{result[m.key].length - 4} more</div>
                     )}
                   </div>
 
@@ -6147,15 +6192,9 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
 
               {/* Existing value — shown for non-table fields */}
               {!m.type && record.data?.[m.key] && (
-                <div style={{ fontSize:11, color:C.text3, textAlign:'right', flexShrink:0 }}>
-                  <div style={{ color:C.red, textDecoration:'line-through', maxWidth:100, overflow:'hidden', textOverflow:'ellipsis' }}>{String(record.data[m.key])}</div>
-                  <div style={{ fontSize:9 }}>will be replaced</div>
-                </div>
-              )}
-              {/* Table — show existing row count */}
-              {m.type === 'table' && Array.isArray(record.data?.[m.key]) && record.data[m.key].length > 0 && (
-                <div style={{ fontSize:10, color:C.text3, flexShrink:0, textAlign:'right' }}>
-                  <div style={{ color:C.red }}>replaces {record.data[m.key].length} existing row{record.data[m.key].length!==1?'s':''}</div>
+                <div style={{ fontSize:11, color:C.text3, textAlign:'right', flexShrink:0, maxWidth:120 }}>
+                  <div style={{ color:C.red, textDecoration:'line-through', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(record.data[m.key])}</div>
+                  <div style={{ fontSize:9, color:C.text3 }}>→ will be replaced</div>
                 </div>
               )}
             </div>
@@ -7579,14 +7618,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
 
   const handleApplyCvFields = async (selectedFields) => {
-    const updates = {};
-    Object.entries(selectedFields).forEach(([key, val]) => {
-      if (val !== null && val !== undefined && val !== '') updates[key] = val;
-    });
-    if (Object.keys(updates).length === 0) return;
-    await api.patch(`/records/${record.id}`, { data: { ...record.data, ...updates }, updated_by: 'Admin' });
+    const updates = Object.entries(selectedFields).filter(([, val]) => val !== null && val !== undefined && val !== '');
+    if (!updates.length) return;
+    // Apply each field individually through handleSaveFieldValue so activity is logged per-field
+    for (const [key, newValue] of updates) {
+      const oldValue = record.data?.[key];
+      await handleSaveFieldValue(key, oldValue, newValue);
+    }
     setCvParseResult(null); setCvParseAtt(null);
-    load();
+    // load() is called inside handleSaveFieldValue already
   };
 
   const handleDocExtract = async (att) => {
