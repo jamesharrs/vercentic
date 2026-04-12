@@ -393,10 +393,10 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
         ›
       </button>
 
-      <div style={{ width:'100%', maxWidth:1100, maxHeight:'92vh', background:'#f8f5ff', borderRadius:20, display:'flex', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.35)' }}>
+      <div style={{ width:'100%', maxWidth:1100, height:'92vh', background:'#f8f5ff', borderRadius:20, display:'flex', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.35)' }}>
 
         {/* ── Left identity panel ───────────────────────── */}
-        <div style={{ width:280, flexShrink:0, background:`linear-gradient(160deg, #4c1d95, #7c3aed)`, display:'flex', flexDirection:'column', padding:24, color:'white', overflowY:'auto' }}>
+        <div style={{ width:280, flexShrink:0, background:`linear-gradient(160deg, #4c1d95, #7c3aed)`, display:'flex', flexDirection:'column', padding:24, color:'white', overflowY:'auto', height:'100%', boxSizing:'border-box' }}>
           {/* Close */}
           <button onClick={onClose} style={{ alignSelf:'flex-end', background:'rgba(255,255,255,.15)', border:'none', borderRadius:8, padding:'5px 8px', cursor:'pointer', color:'white', display:'flex', alignItems:'center', gap:4, fontSize:12, fontWeight:600, fontFamily:F, marginBottom:16 }}>
             <Ic n="x" s={13} c="white"/> Close
@@ -480,7 +480,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
         </div>
 
         {/* ── Right content panel ───────────────────────── */}
-        <div style={{ flex:1, overflowY:'auto', padding:'24px 28px', display:'flex', flexDirection:'column', gap:0, minHeight:0 }}>
+        <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', padding:'24px 28px', display:'flex', flexDirection:'column', gap:0, height:'100%', boxSizing:'border-box' }}>
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#7c3aed', fontSize:13 }}>
               Loading profile…
