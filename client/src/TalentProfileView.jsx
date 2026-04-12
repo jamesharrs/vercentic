@@ -480,7 +480,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
         </div>
 
         {/* ── Right content panel ───────────────────────── */}
-        <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', padding:'24px 28px', display:'flex', flexDirection:'column', gap:0, height:'100%', boxSizing:'border-box' }}>
+        <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', padding:'24px 28px', height:'100%', boxSizing:'border-box' }}>
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#7c3aed', fontSize:13 }}>
               Loading profile…
