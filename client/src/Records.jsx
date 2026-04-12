@@ -5741,7 +5741,6 @@ export const getDefaultPanelOrder = (objectName) => {
   if (objectName === "Person") base.splice(1, 0, "linked", "coordination", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("assessments");
-  if (objectName === "Person") base.push("scorecard");
   if (objectName === "Person") base.push("engagement");
   if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); }
   if (objectName === "Job" || objectName === "Jobs") base.unshift("insights");
@@ -7163,7 +7162,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const leftStorageKey   = `talentos_panels_left_${objectName}`;
   const topStorageKey    = `talentos_panels_top_${objectName}`;
   const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
-  const PANEL_VERSION    = "v14"; // bumped — merged Screening Rules into Questions panel
+  const PANEL_VERSION    = "v15"; // scorecard panel merged into assessments panel
   const versionKey       = `talentos_panels_version_${objectName}`;
 
   // ── Single atomic layout load — deduplicates all 4 zones together ───────
