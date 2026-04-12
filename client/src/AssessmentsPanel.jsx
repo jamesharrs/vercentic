@@ -16,6 +16,146 @@ const C = {
   green:"#059669", red:"#ef4444", amber:"#d97706", orange:"#ea580c",
 };
 
+const SPARKLE_PATH = "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0L9.937 15.5z";
+
+// ── AI Response Analysis ──────────────────────────────────────────────────────
+function AiResponseAnalysis({ questions }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  // Only free-text questions that have an answer
+  const freeTextQs = questions.filter(q => {
+    const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+    const hasAnswer  = q.answer !== null && q.answer !== undefined && String(q.answer).trim();
+    return !hasOptions && hasAnswer;
+  });
+
+  if (freeTextQs.length === 0) return null;
+
+  const generate = async () => {
+    setLoading(true);
+    const qa = freeTextQs.map((q, i) =>
+      `Q${i+1}: ${q.question}\nAnswer: ${String(q.answer).trim()}`
+    ).join("\n\n");
+
+    const prompt = `You are an experienced recruiter reviewing free-text screening answers. Analyse the following responses and provide a brief, structured assessment.
+
+${qa}
+
+Respond with valid JSON only (no markdown):
+{
+  "overall": "1-2 sentence overall impression of the responses",
+  "strengths": ["up to 2 specific strengths from the answers, or empty array"],
+  "concerns": ["up to 2 concerns or gaps, or empty array"],
+  "ai_signals": "null if no AI usage suspected, otherwise a brief note on what suggests AI-generated content (e.g. unusually formal tone, generic phrasing, no personal anecdotes)"
+}
+
+Be concise and specific. If answers are very short or low-quality, note that. Do not be lenient.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 400,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, "").trim());
+      setAnalysis(parsed);
+      setExpanded(true);
+    } catch { setAnalysis({ overall: "Could not generate analysis.", strengths: [], concerns: [], ai_signals: null }); setExpanded(true); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ margin:"12px 0 4px", borderRadius:10, border:"1px solid #7048E830",
+      background:"#F5F3FF", overflow:"hidden" }}>
+      {/* Header row */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px",
+        borderBottom: expanded && analysis ? "1px solid #7048E820" : "none" }}>
+        <svg width={13} height={13} viewBox="0 0 24 24" fill="none"
+          stroke="#7048E8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d={SPARKLE_PATH}/>
+        </svg>
+        <span style={{ fontSize:12, fontWeight:700, color:"#5b21b6", flex:1 }}>
+          AI Response Analysis
+          <span style={{ fontSize:10, fontWeight:500, color:"#7c3aed", marginLeft:6 }}>
+            ({freeTextQs.length} free-text {freeTextQs.length === 1 ? "response" : "responses"})
+          </span>
+        </span>
+        {!analysis && !loading && (
+          <button onClick={generate}
+            style={{ fontSize:11, fontWeight:700, color:"white", background:"#7048E8",
+              border:"none", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:F }}>
+            Analyse
+          </button>
+        )}
+        {loading && (
+          <span style={{ fontSize:11, color:"#7c3aed" }}>Analysing…</span>
+        )}
+        {analysis && (
+          <button onClick={() => setExpanded(x => !x)}
+            style={{ fontSize:11, color:"#7c3aed", background:"none", border:"none",
+              cursor:"pointer", fontFamily:F, fontWeight:600 }}>
+            {expanded ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
+
+      {/* Analysis content */}
+      {expanded && analysis && (
+        <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+          {/* Overall */}
+          <p style={{ margin:0, fontSize:12, color:"#3b1f8c", lineHeight:1.55 }}>
+            {analysis.overall}
+          </p>
+          {/* Strengths */}
+          {analysis.strengths?.length > 0 && (
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:C.green, textTransform:"uppercase",
+                letterSpacing:"0.07em", marginBottom:3 }}>Strengths</div>
+              {analysis.strengths.map((s, i) => (
+                <div key={i} style={{ display:"flex", gap:6, fontSize:12, color:C.text2, marginBottom:2 }}>
+                  <span style={{ color:C.green, flexShrink:0 }}>✓</span>{s}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Concerns */}
+          {analysis.concerns?.length > 0 && (
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:C.amber, textTransform:"uppercase",
+                letterSpacing:"0.07em", marginBottom:3 }}>Concerns</div>
+              {analysis.concerns.map((c, i) => (
+                <div key={i} style={{ display:"flex", gap:6, fontSize:12, color:C.text2, marginBottom:2 }}>
+                  <span style={{ color:C.amber, flexShrink:0 }}>⚠</span>{c}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* AI signal */}
+          {analysis.ai_signals && (
+            <div style={{ display:"flex", gap:6, padding:"6px 8px", borderRadius:6,
+              background:"#fef3c7", border:"1px solid #fde68a" }}>
+              <span style={{ fontSize:12, flexShrink:0 }}>🤖</span>
+              <div>
+                <span style={{ fontSize:10, fontWeight:700, color:"#92400e",
+                  textTransform:"uppercase", letterSpacing:"0.06em" }}>Possible AI usage — </span>
+                <span style={{ fontSize:11, color:"#78350f" }}>{analysis.ai_signals}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Job Picker ────────────────────────────────────────────────────────────────
 function JobPicker({ links, selectedId, onSelect }) {
   if (!links.length) return (
@@ -101,6 +241,9 @@ function ScreeningTab({ recordId, jobId }) {
             padding:"4px 10px", borderRadius:99, border:"1px solid #fecaca" }}>⛔ Knockout triggered</div>
         )}
       </div>
+
+      {/* AI analysis of free-text responses */}
+      {hasAnswers && <AiResponseAnalysis questions={data.questions}/>}
 
       {/* Questions list */}
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
