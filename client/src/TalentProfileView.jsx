@@ -83,7 +83,7 @@ const SectionShell = ({ icon, label, children, accent='#7c3aed', defaultOpen=tru
           <path d={open ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'}/>
         </svg>
       </button>
-      {open && <div style={{ padding:'12px 16px' }}>{children}</div>}
+      {open && <div style={{ padding:'16px 20px' }}>{children}</div>}
     </div>
   );
 };
@@ -97,7 +97,7 @@ const ApplicationSection = ({ link, stageHistory }) => {
   const hasData = link?.created_at || link?.stage_name || current?.target_name || current?.workflow_name;
   return (
     <SectionShell icon="briefcase" label="Application Details" defaultOpen={!!hasData}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'10px 16px', fontSize:13 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'14px 20px', fontSize:13 }}>
         {link?.created_at && <div><span style={{ color:'#9ca3af', fontSize:11 }}>Applied</span><br/><b>{new Date(link.created_at).toLocaleDateString()}</b></div>}
         {link?.stage_name && <div><span style={{ color:'#9ca3af', fontSize:11 }}>Current stage</span><br/><b style={{ color:PURPLE }}>{link.stage_name}</b></div>}
         {current?.target_name && <div><span style={{ color:'#9ca3af', fontSize:11 }}>Role</span><br/><b>{current.target_name}</b></div>}
@@ -259,7 +259,7 @@ const FormsSection = ({ formResponses }) => (
           {formResponses.map((resp, i) => (
             <div key={i} style={{ borderRadius:8, border:'1px solid #e9d5ff', overflow:'hidden' }}>
               <div style={{ padding:'6px 12px', background:PURPLE+'10', fontSize:12, fontWeight:700, color:PURPLE }}>{resp.form_name}</div>
-              <div style={{ padding:'10px 12px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:'8px 16px' }}>
+              <div style={{ padding:'12px 16px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:'12px 20px' }}>
                 {(resp.responses||[]).map((r, j) => (
                   <div key={i}>
                     <div style={{ fontSize:10, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{r.label||r.field_id}</div>
@@ -279,7 +279,7 @@ const CustomFieldsSection = ({ fields, data, fieldIds }) => {
   return (
     <SectionShell icon="list" label="Profile Fields">
       {visible.length > 0
-        ? <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'10px 16px' }}>
+        ? <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'14px 20px' }}>
             {visible.map(f => {
               const val = data[f.api_key];
               if (val === null || val === undefined || val === '') return null;
@@ -393,7 +393,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
         ›
       </button>
 
-      <div style={{ width:'100%', maxWidth:1100, height:'90vh', background:'#f8f5ff', borderRadius:20, display:'flex', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.35)' }}>
+      <div style={{ width:'100%', maxWidth:1100, maxHeight:'92vh', background:'#f8f5ff', borderRadius:20, display:'flex', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.35)' }}>
 
         {/* ── Left identity panel ───────────────────────── */}
         <div style={{ width:280, flexShrink:0, background:`linear-gradient(160deg, #4c1d95, #7c3aed)`, display:'flex', flexDirection:'column', padding:24, color:'white', overflowY:'auto' }}>
@@ -480,7 +480,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
         </div>
 
         {/* ── Right content panel ───────────────────────── */}
-        <div style={{ flex:1, overflowY:'auto', padding:24, display:'flex', flexDirection:'column', gap:0 }}>
+        <div style={{ flex:1, overflowY:'auto', padding:'24px 28px', display:'flex', flexDirection:'column', gap:0, minHeight:0 }}>
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#7c3aed', fontSize:13 }}>
               Loading profile…
