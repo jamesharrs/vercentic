@@ -6001,6 +6001,8 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
     { key:'nationality',      label:'Nationality'       },
     { key:'years_experience', label:'Years Experience'  },
     { key:'skills',           label:'Skills'            },
+    { key:'work_history',     label:'Work History',     type:'table' },
+    { key:'education',        label:'Education',        type:'table' },
   ];
 
   // Show fields where Claude returned a non-empty value
@@ -6022,7 +6024,55 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
 
   const handleApply = () => {
     const toApply = {};
-    MAPPABLE.forEach(m => { if (selected[m.key]) toApply[m.key] = result[m.key]; });
+    MAPPABLE.forEach(m => {
+      if (!selected[m.key]) return;
+      if (m.type === 'table') {
+        // Convert parsed array to table column-ID format using the field's column definitions
+        const fieldDef = fields.find(f => f.api_key === m.key);
+        const cols = fieldDef?.table_columns || [];
+        const uid = () => Math.random().toString(36).slice(2, 10);
+
+        if (m.key === 'work_history') {
+          // Map: company→Company, title→Job Title, start→From, end→To, description→Description
+          const colMap = {
+            company:     cols.find(c => c.name === 'Company')?.id,
+            title:       cols.find(c => c.name === 'Job Title')?.id,
+            start:       cols.find(c => c.name === 'From')?.id,
+            end:         cols.find(c => c.name === 'To')?.id,
+            description: cols.find(c => c.name === 'Description')?.id,
+          };
+          toApply[m.key] = (result[m.key] || []).map(row => {
+            const r = { _id: uid() };
+            if (colMap.company)     r[colMap.company]     = row.company     || '';
+            if (colMap.title)       r[colMap.title]       = row.title       || '';
+            if (colMap.start)       r[colMap.start]       = row.start       || '';
+            if (colMap.end)         r[colMap.end]         = row.end         || '';
+            if (colMap.description) r[colMap.description] = row.description || '';
+            return r;
+          });
+        } else if (m.key === 'education') {
+          // Map: institution→Institution, degree→Degree, field→Subject, year→From
+          const colMap = {
+            institution: cols.find(c => c.name === 'Institution')?.id,
+            degree:      cols.find(c => c.name === 'Degree')?.id,
+            field:       cols.find(c => c.name === 'Subject')?.id,
+            from:        cols.find(c => c.name === 'From')?.id,
+            to:          cols.find(c => c.name === 'To')?.id,
+          };
+          toApply[m.key] = (result[m.key] || []).map(row => {
+            const r = { _id: uid() };
+            if (colMap.institution) r[colMap.institution] = row.institution || '';
+            if (colMap.degree)      r[colMap.degree]      = row.degree      || '';
+            if (colMap.field)       r[colMap.field]       = row.field       || '';
+            if (colMap.from)        r[colMap.from]        = row.year        || row.start || '';
+            if (colMap.to)          r[colMap.to]          = row.end         || '';
+            return r;
+          });
+        }
+      } else {
+        toApply[m.key] = result[m.key];
+      }
+    });
     onApply(toApply);
   };
 
@@ -6057,42 +6107,60 @@ const CvParseModal = ({ result, fields, record, onApply, onClose }) => {
           )}
           {MAPPABLE.map(m => (
             <div key={m.key} onClick={()=>toggle(m.key)}
-              style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:10, marginBottom:6, cursor:'pointer',
+              style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 14px', borderRadius:10, marginBottom:6, cursor:'pointer',
                 background: selected[m.key] ? `${C.accent}08` : '#f8f9fc',
                 border:`1px solid ${selected[m.key] ? C.accent : C.border}`, transition:'all .12s' }}>
               <input type="checkbox" checked={!!selected[m.key]} onChange={()=>toggle(m.key)}
-                style={{ width:15, height:15, accentColor:C.accent, flexShrink:0, cursor:'pointer' }}/>
+                style={{ width:15, height:15, accentColor:C.accent, flexShrink:0, cursor:'pointer', marginTop:2 }}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em' }}>{m.label}</div>
-                {m.key === 'skills' && Array.isArray(result[m.key]) ? (
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>{m.label}</div>
+
+                {/* Table fields — compact row preview */}
+                {m.type === 'table' && Array.isArray(result[m.key]) ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                    {result[m.key].slice(0, 4).map((row, i) => (
+                      <div key={i} style={{ fontSize:12, color:C.text1, background:'white', borderRadius:6,
+                        padding:'5px 8px', border:`1px solid ${C.border}` }}>
+                        {m.key === 'work_history'
+                          ? <><span style={{ fontWeight:600 }}>{row.title}</span>{row.company ? ` · ${row.company}` : ''}{(row.start||row.end) ? <span style={{ color:C.text3, marginLeft:6 }}>{row.start||''}{row.end ? ` → ${row.end}` : ''}</span> : null}</>
+                          : <><span style={{ fontWeight:600 }}>{row.degree}</span>{row.field ? ` · ${row.field}` : ''}{row.institution ? <span style={{ color:C.text3, marginLeft:6 }}>{row.institution}</span> : null}{row.year ? <span style={{ color:C.text3, marginLeft:6 }}>{row.year}</span> : null}</>
+                        }
+                      </div>
+                    ))}
+                    {result[m.key].length > 4 && (
+                      <div style={{ fontSize:11, color:C.text3 }}>+{result[m.key].length - 4} more</div>
+                    )}
+                  </div>
+
+                ) : m.key === 'skills' && Array.isArray(result[m.key]) ? (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {result[m.key].slice(0, 12).map(s => (
                       <span key={s} style={{ padding:'2px 8px', borderRadius:99, background:'#F59F0018', border:'1px solid #F59F0028', fontSize:11, fontWeight:600, color:'#F59F00' }}>⚡ {s}</span>
                     ))}
                     {result[m.key].length > 12 && <span style={{ fontSize:11, color:C.text3 }}>+{result[m.key].length - 12} more</span>}
                   </div>
+
                 ) : (
-                  <div style={{ fontSize:13, color:C.text1, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(result[m.key])}</div>
+                  <div style={{ fontSize:13, color:C.text1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(result[m.key])}</div>
                 )}
               </div>
-              {record.data?.[m.key] && (
+
+              {/* Existing value — shown for non-table fields */}
+              {!m.type && record.data?.[m.key] && (
                 <div style={{ fontSize:11, color:C.text3, textAlign:'right', flexShrink:0 }}>
                   <div style={{ color:C.red, textDecoration:'line-through', maxWidth:100, overflow:'hidden', textOverflow:'ellipsis' }}>{String(record.data[m.key])}</div>
                   <div style={{ fontSize:9 }}>will be replaced</div>
                 </div>
               )}
+              {/* Table — show existing row count */}
+              {m.type === 'table' && Array.isArray(record.data?.[m.key]) && record.data[m.key].length > 0 && (
+                <div style={{ fontSize:10, color:C.text3, flexShrink:0, textAlign:'right' }}>
+                  <div style={{ color:C.red }}>replaces {record.data[m.key].length} existing row{record.data[m.key].length!==1?'s':''}</div>
+                </div>
+              )}
             </div>
           ))}
 
-          {/* Extra parsed info (read-only) */}
-          {(result.work_history?.length || result.education?.length) && (
-            <div style={{ marginTop:12, padding:'12px 14px', borderRadius:10, background:'#f8f9fc', border:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:8 }}>ALSO EXTRACTED (not applied to fields)</div>
-              {result.years_experience && <div style={{ fontSize:12, color:C.text2, marginBottom:4 }}><b>Experience:</b> {result.years_experience} years</div>}
-              {result.education?.length > 0 && <div style={{ fontSize:12, color:C.text2, marginBottom:4 }}><b>Education:</b> {result.education[0]?.degree} — {result.education[0]?.institution}</div>}
-              {result.work_history?.length > 0 && <div style={{ fontSize:12, color:C.text2 }}><b>Last role:</b> {result.work_history[0]?.title} @ {result.work_history[0]?.company}</div>}
-            </div>
-          )}
         </div>
 
         {/* Footer */}
