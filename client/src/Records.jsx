@@ -7104,6 +7104,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [availableForms, setAvailableForms]  = useState([]);
   const [activeJobContext, setActiveJobContext] = useState(null); // null=General, string=job record id
   const [linkedJobRecords, setLinkedJobRecords] = useState([]);
+  const [attachmentJobFilter, setAttachmentJobFilter] = useState("all");
+  const [formJobFilter, setFormJobFilter] = useState("all");
   useEffect(() => {
     if (objectName !== "Person") return;
     if (!record?.id || !environment?.id) return;
@@ -7112,6 +7114,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       .then(d => setLinkedJobRecords(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, [record?.id, environment?.id, objectName]);
+
+  // Sync file + form filters when job context changes from Linked Records panel
+  useEffect(() => {
+    setAttachmentJobFilter(activeJobContext || "all");
+    setFormJobFilter(activeJobContext || "all");
+  }, [activeJobContext]);
   const [tab, setTab]           = useState("fields");
   const [editing, setEditing]   = useState({});
   const [globalEdit, setGlobalEdit] = useState(false);
@@ -8036,6 +8044,29 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
     if (id==="attachments") return (
       <div>
+        {/* Job filter tabs — mirrors Notes panel pattern */}
+        {linkedJobRecords.length > 0 && (() => {
+          const [fileJobFilter, setFileJobFilter] = [attachmentJobFilter, setAttachmentJobFilter];
+          const jobTitle = (jid) => { const j=linkedJobRecords.find(j=>j.id===jid); return j?(j.title||j.data?.job_title||"Job"):"Job"; };
+          const counts = {
+            all: attachments.length,
+            general: attachments.filter(a=>!a.linked_job_id).length,
+          };
+          linkedJobRecords.forEach(j => { counts[j.id] = attachments.filter(a=>a.linked_job_id===j.id).length; });
+          return (
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:10 }}>
+              {[{id:"all",label:`All (${counts.all})`},{id:"general",label:"General"},...linkedJobRecords.map(j=>({id:j.id,label:jobTitle(j.id)}))].map(tab=>(
+                <button key={tab.id} onClick={()=>setFileJobFilter(tab.id)}
+                  style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:fileJobFilter===tab.id?700:500,
+                    border:`1.5px solid ${fileJobFilter===tab.id?C.accent:C.border}`,
+                    background:fileJobFilter===tab.id?C.accentLight:"transparent",
+                    color:fileJobFilter===tab.id?C.accent:C.text3, cursor:"pointer", fontFamily:F }}>
+                  {tab.label}{tab.id!=="all"&&counts[tab.id]>0?` (${counts[tab.id]})` : ""}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         {/* File type selector + drop zone */}
         {<div style={{ marginBottom:8 }}>
           <select value={selectedFileType} onChange={e=>setSelectedFileType(e.target.value)}
@@ -8059,9 +8090,13 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>}
 
         {/* File list */}
-        {attachments.length===0
+        {(() => {
+          const filteredAtts = attachmentJobFilter === "all" ? attachments
+            : attachmentJobFilter === "general" ? attachments.filter(a => !a.linked_job_id)
+            : attachments.filter(a => a.linked_job_id === attachmentJobFilter);
+          return filteredAtts.length === 0
           ? <div style={{ textAlign:'center', padding:'16px 0', color:C.text3, fontSize:13 }}>No files yet</div>
-          : attachments.map(att=>{
+          : filteredAtts.map(att=>{
             const isCV = att.file_type_name?.toLowerCase().includes('cv') || att.file_type_name?.toLowerCase().includes('resume');
             const ext  = att.ext || att.name?.split('.').pop()?.toLowerCase() || '';
             const iconName = ['jpg','jpeg','png','gif','webp'].includes(ext)?'image':['pdf'].includes(ext)?'file-text':'file';
@@ -8110,7 +8145,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               </div>
             );
           })
-        }
+        })()} 
 
         {/* File Preview Modal */}
         {previewAtt && ReactDOM.createPortal(
@@ -8151,6 +8186,23 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     // Pipeline panel removed
     if (id==="tasks")     return <TasksEventsPanel record={record} environment={environment}/>;
     if (id==="forms")     return <div>
+          {/* Job filter tabs — same pattern as Notes */}
+          {linkedJobRecords.length > 0 && (() => {
+            const jobTitle = (jid) => { const j=linkedJobRecords.find(j=>j.id===jid); return j?(j.title||j.data?.job_title||"Job"):"Job"; };
+            return (
+              <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:10 }}>
+                {[{id:"all",label:"All"},{id:"general",label:"General"},...linkedJobRecords.map(j=>({id:j.id,label:jobTitle(j.id)}))].map(tab=>(
+                  <button key={tab.id} onClick={()=>setFormJobFilter(tab.id)}
+                    style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:formJobFilter===tab.id?700:500,
+                      border:`1.5px solid ${formJobFilter===tab.id?C.accent:C.border}`,
+                      background:formJobFilter===tab.id?C.accentLight:"transparent",
+                      color:formJobFilter===tab.id?C.accent:C.text3, cursor:"pointer", fontFamily:F }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           <div style={{
             display:"flex", alignItems:"center", justifyContent:"space-between",
             marginBottom:10,
@@ -8176,7 +8228,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               Add Form
             </button>
           </div>
-          <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={activeJobContext}/>
+          <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={formJobFilter==="all"?null:formJobFilter==="general"?null:formJobFilter}/>
         </div>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
