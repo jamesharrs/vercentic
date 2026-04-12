@@ -2978,21 +2978,20 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                                 style={{ width:22, height:22, borderRadius:6, border:`1px solid ${prevStep?'#c4b5fd':'#f3f4f6'}`, background:prevStep?'#ede9fe':'#f9f9f9', color:prevStep?'#7c3aed':'#d1d5db', cursor:prevStep?'pointer':'default', display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                                 <Ic n="chevL" s={11} c={prevStep?"#7c3aed":"#d1d5db"}/>
                               </button>
-                              <select value={link.stage_id||""} onChange={e=>{const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);}}
+                              <select value={link.stage_id||""} onChange={e=>{
+                                  if(e.target.value==='__remove__'){removeLink(link.id);return;}
+                                  const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);
+                                }}
                                 style={{ flex:1, padding:"3px 4px", borderRadius:99, fontSize:10, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none", textAlign:"center", minWidth:0 }}>
                                 {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
+                                <option disabled style={{color:"#e5e7eb"}}>──────────</option>
+                                <option value="__remove__" style={{color:"#dc2626",fontWeight:700}}>✕ Remove</option>
                               </select>
                               <button onClick={()=>nextStep&&moveStage(link.id,nextStep)} disabled={!nextStep}
                                 style={{ width:22, height:22, borderRadius:6, border:`1px solid ${nextStep?'#c4b5fd':'#f3f4f6'}`, background:nextStep?'#ede9fe':'#f9f9f9', color:nextStep?'#7c3aed':'#d1d5db', cursor:nextStep?'pointer':'default', display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                                 <Ic n="chevD" s={11} c={nextStep?"#7c3aed":"#d1d5db"} style={{transform:"rotate(-90deg)"}}/>
                               </button>
                             </div>
-                            <button onClick={()=>removeLink(link.id)}
-                              style={{ width:"100%", marginTop:6, padding:"3px 0", borderRadius:6, border:"1px solid #fecaca", background:"transparent", color:"#f87171", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:F }}
-                              onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"}
-                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                              Remove
-                            </button>
                           </div>
                         </div>
                       );
@@ -3337,6 +3336,19 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                     </button>
                   );
                 })}
+                {/* Divider + Remove */}
+                <div style={{ height:1, background:"#f3f4f6", margin:"2px 0" }}/>
+                <button
+                  onClick={() => { setShowStageMenu(false); onRemove && onRemove(link.id); }}
+                  style={{ width:"100%", display:"flex", alignItems:"center", gap:8,
+                    padding:"8px 12px", border:"none", background:"white",
+                    cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .1s",
+                    color:"#dc2626" }}
+                  onMouseEnter={e => e.currentTarget.style.background="#fef2f2"}
+                  onMouseLeave={e => e.currentTarget.style.background="white"}>
+                  <Ic n="x" s={11} c="#dc2626"/>
+                  <span style={{ fontSize:12, fontWeight:600 }}>Remove from pipeline</span>
+                </button>
               </div>
             )}
           </div>
