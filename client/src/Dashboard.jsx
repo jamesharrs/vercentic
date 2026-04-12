@@ -508,16 +508,14 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
 
   useEffect(() => {
     if (!environment?.id) return;
-    fetch(`/api/saved-views/pinned?environment_id=${environment.id}`)
-      .then(r => r.json())
+    api.get(`/saved-views/pinned?environment_id=${environment.id}`)
       .then(pins => {
         if (!Array.isArray(pins)) return;
         setPinnedReports(pins);
         pins.forEach(async pin => {
           if (!pin.object_id) return;
           try {
-            const res = await fetch(`/api/records?object_id=${pin.object_id}&environment_id=${environment.id}&limit=500`);
-            const d   = await res.json();
+            const d   = await api.get(`/records?object_id=${pin.object_id}&environment_id=${environment.id}&limit=500`);
             const raw = Array.isArray(d?.records) ? d.records : [];
             setPinnedData(prev => ({ ...prev, [pin.id]: raw.map(r => ({...r.data, _id:r.id})) }));
           } catch {}
