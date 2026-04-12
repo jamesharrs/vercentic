@@ -8182,8 +8182,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
-    if (id==="scorecard")    return <ScorecardPanel record={record} environment={environment} session={session}/>;
-    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment} session={session}/>;
+    if (id==="scorecard")    return <ScorecardPanel record={record} environment={environment}/>;
+    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
