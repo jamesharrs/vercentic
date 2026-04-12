@@ -197,23 +197,75 @@ const SkillsSection = ({ data }) => {
   );
 };
 
-const DocumentsSection = ({ attachments }) => (
-  <SectionShell icon="paperclip" label="Documents & CV" defaultOpen={attachments?.length > 0}>
-    {attachments?.length > 0
-      ? <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-          {attachments.map((a,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', borderRadius:8, background:'#f9f7ff', border:'1px solid #ede9fe' }}>
-              <Ic n="paperclip" s={14} c={PURPLE}/>
-              <span style={{ flex:1, fontSize:13, color:'#374151', fontWeight:500 }}>{a.name||a.file_name||'File'}</span>
-              {a.file_type && <span style={{ fontSize:10, color:'#9ca3af', background:'#f3f4f6', padding:'2px 6px', borderRadius:4 }}>{a.file_type}</span>}
-              <span style={{ fontSize:11, color:'#9ca3af' }}>{relTime(a.created_at)}</span>
-              {a.url && <a href={a.url} target="_blank" rel="noreferrer" style={{ color:PURPLE }}><Ic n="download" s={13} c={PURPLE}/></a>}
-            </div>
-          ))}
-        </div>
-      : <EmptyMsg msg="No documents uploaded."/>}
-  </SectionShell>
-);
+const DocumentsSection = ({ attachments }) => {
+  const [expanded, setExpanded] = useState(null); // attachment index expanded for preview
+
+  const getPreviewType = (a) => {
+    const ext = (a.ext || a.name?.split('.').pop() || '').toLowerCase();
+    if (['jpg','jpeg','png','gif','webp','svg'].includes(ext)) return 'image';
+    if (ext === 'pdf') return 'pdf';
+    if (['docx','doc'].includes(ext)) return 'docx';
+    return null;
+  };
+
+  return (
+    <SectionShell icon="paperclip" label="Documents & CV" defaultOpen={attachments?.length > 0}>
+      {attachments?.length > 0
+        ? <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {attachments.map((a,i) => {
+              const previewType = getPreviewType(a);
+              const isExpanded = expanded === i;
+              const rawUrl = a.url || '#';
+              const previewUrl = previewType === 'docx'
+                ? rawUrl.replace('/api/attachments/file/', '/api/attachments/preview/')
+                : rawUrl;
+
+              return (
+                <div key={i} style={{ borderRadius:10, border:`1.5px solid ${isExpanded?PURPLE+'60':'#ede9fe'}`, overflow:'hidden', transition:'border-color .15s' }}>
+                  {/* File row */}
+                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px',
+                    background: isExpanded ? PURPLE+'08' : '#f9f7ff', cursor: previewType ? 'pointer' : 'default' }}
+                    onClick={() => previewType && setExpanded(isExpanded ? null : i)}>
+                    <Ic n="paperclip" s={14} c={PURPLE}/>
+                    <span style={{ flex:1, fontSize:13, color:'#374151', fontWeight:500 }}>{a.name||a.file_name||'File'}</span>
+                    {a.file_type_name && <span style={{ fontSize:10, color:PURPLE, background:PURPLE+'12', padding:'2px 6px', borderRadius:4, fontWeight:600 }}>{a.file_type_name}</span>}
+                    <span style={{ fontSize:11, color:'#9ca3af' }}>{relTime(a.created_at)}</span>
+                    {previewType && (
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={PURPLE} strokeWidth={2.5} strokeLinecap="round">
+                        <path d={isExpanded ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'}/>
+                      </svg>
+                    )}
+                    {rawUrl !== '#' && (
+                      <a href={rawUrl} download={a.name} onClick={e=>e.stopPropagation()}
+                        style={{ color:PURPLE, display:'flex', alignItems:'center' }}>
+                        <Ic n="download" s={13} c={PURPLE}/>
+                      </a>
+                    )}
+                  </div>
+                  {/* Inline preview */}
+                  {isExpanded && previewType === 'image' && (
+                    <div style={{ padding:12, background:'#f3f4f6', display:'flex', justifyContent:'center' }}>
+                      <img src={previewUrl} alt={a.name} style={{ maxWidth:'100%', maxHeight:400, objectFit:'contain', borderRadius:6, boxShadow:'0 2px 12px rgba(0,0,0,.1)' }}/>
+                    </div>
+                  )}
+                  {isExpanded && previewType === 'docx' && (
+                    <iframe src={previewUrl} title={a.name}
+                      style={{ width:'100%', height:440, border:'none', background:'white', display:'block' }}/>
+                  )}
+                  {isExpanded && previewType === 'pdf' && (
+                    <div style={{ padding:8, background:'#f3f4f6' }}>
+                      <iframe src={previewUrl} title={a.name}
+                        style={{ width:'100%', height:440, border:'none', borderRadius:6, display:'block', background:'white' }}/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        : <EmptyMsg msg="No documents uploaded."/>}
+    </SectionShell>
+  );
+};
 
 const NotesSection = ({ notes }) => (
   <SectionShell icon="edit" label="Notes" defaultOpen={notes?.length > 0}>
