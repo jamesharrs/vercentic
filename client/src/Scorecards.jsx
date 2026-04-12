@@ -166,7 +166,7 @@ export function ScorecardForm({interviewId,candidateRecordId,jobRecordId,intervi
   );
 }
 
-export function ScorecardPanel({record,environment,session}){
+export function ScorecardPanel({record,environment,session,jobRecordId}){
   const[summary,setSummary]=useState(null);
   const[templates,setTemplates]=useState([]);
   const[loading,setLoading]=useState(true);
@@ -175,8 +175,9 @@ export function ScorecardPanel({record,environment,session}){
 
   const load=useCallback(async()=>{
     if(!record?.id||!environment?.id)return; setLoading(true);
+    const jobParam = jobRecordId ? `&job_record_id=${jobRecordId}` : "";
     const[sum,tmpl]=await Promise.all([
-      api.get(`/scorecards/summary?candidate_record_id=${record.id}`).catch(()=>null),
+      api.get(`/scorecards/summary?candidate_record_id=${record.id}${jobParam}`).catch(()=>null),
       api.get(`/scorecards/templates?environment_id=${environment.id}`).catch(()=>[]),
     ]);
     setSummary(sum); setTemplates(Array.isArray(tmpl)?tmpl:[]); setLoading(false);

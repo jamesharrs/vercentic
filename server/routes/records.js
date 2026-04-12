@@ -511,6 +511,29 @@ router.get('/by-number', (req, res) => {
   res.json({ ...record, object_id: obj.id });
 });
 
+// People-links for a specific person record — used by AssessmentsPanel job picker
+router.get('/:id/people-links', (req, res) => {
+  const store = require('../db/init').getStore();
+  const personId = req.params.id;
+  const links = (store.people_links || []).filter(l =>
+    (l.person_record_id === personId || l.person_id === personId) && !l.deleted_at
+  );
+  // Enrich with target record name (job title / name)
+  const enriched = links.map(l => {
+    const targetId = l.target_record_id || l.record_id;
+    const target   = (store.records || []).find(r => r.id === targetId && !r.deleted_at);
+    const wf       = l.workflow_id ? (store.workflows || []).find(w => w.id === l.workflow_id) : null;
+    const steps    = wf ? (wf.steps || []) : [];
+    const stage    = steps.find(s => s.id === l.stage_id);
+    return {
+      ...l,
+      target_name: target?.data?.job_title || target?.data?.name || target?.data?.pool_name || targetId?.slice(0,8) || "Job",
+      stage_name:  stage?.name || l.stage_name || null,
+    };
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(enriched);
+});
+
 router.get('/:id', (req, res) => {
   const r = findOne('records', r=>r.id===req.params.id&&!r.deleted_at);
   if (!r) return res.status(404).json({error:'Not found'});

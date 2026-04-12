@@ -438,6 +438,61 @@ function getOptions(rule) {
   return ['Yes', 'No'];
 }
 
+// ── Merged questions + answers for a specific person × job ───────────────────
+// Returns the job's screening questions alongside this candidate's submitted
+// answers and the auto-evaluated pass/fail result stored on the people_link.
+router.get('/responses/record/:record_id/job/:job_id', (req, res) => {
+  try {
+    const store = getStore();
+    const { record_id, job_id } = req.params;
+
+    // Candidate's submitted answers (from portal wizard)
+    const response = (store.screening_responses || [])
+      .filter(r => r.record_id === record_id && r.job_id === job_id)
+      .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0] || null;
+
+    // Auto-evaluated results stored on the people_link
+    const link = (store.people_links || []).find(l =>
+      (l.person_record_id === record_id || l.person_id === record_id) &&
+      (l.target_record_id === job_id || l.record_id === job_id) && !l.deleted_at
+    );
+
+    // The job's screening questions
+    const jobRules = (store.screening_job_rules || []).filter(r => r.record_id === job_id);
+
+    // Merge: each question + its submitted answer + evaluated result
+    const merged = jobRules.map(rule => {
+      const ruleId = rule.id || rule.question_id;
+      const answer = response?.answers?.[ruleId] ?? null;
+      const evalResult = link?.screening_results?.[ruleId] || null;
+      return {
+        rule_id: ruleId,
+        question: rule.question_text || rule.label || rule.question || '',
+        question_type: rule.question_type || rule.rule_type || 'text',
+        rule_type: rule.rule_type,         // knockout | preferred | required
+        pass_value: rule.pass_value,
+        options: rule.question_options || rule.options || [],
+        answer,
+        passed: evalResult?.passed ?? (answer !== null ? true : null),
+        weight: rule.weight || 5,
+      };
+    });
+
+    res.json({
+      job_id,
+      record_id,
+      submitted_at: response?.submitted_at || null,
+      score: link?.screening_score ?? response?.score ?? null,
+      knocked_out: link?.screening_results
+        ? Object.values(link.screening_results).some(r => r.rule_type === 'knockout' && r.passed === false)
+        : (response?.knocked_out || false),
+      questions: merged,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Screening responses (submitted by candidates via portal) ──────────────────
 router.get('/responses/record/:record_id', (req, res) => {
   const store = getStore();

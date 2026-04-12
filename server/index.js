@@ -138,6 +138,7 @@ const AUTH_EXEMPT = [
   '/attachments/upload',
   '/attachments/preview',
   '/records/by-number',  // used for URL routing before session is established
+  '/records/activity/feed', // dashboard activity feed
   '/cv-parse',
   '/comms/webhook',
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal

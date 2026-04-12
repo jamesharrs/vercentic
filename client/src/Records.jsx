@@ -16,6 +16,7 @@ import { COUNTRIES, COUNTRY_MAP, PHONE_CODES, formatPhone,
          getPhoneRule, stripPhoneDigits } from "./utils/countries.js";
 import { TasksEventsPanel } from "./TasksEventsPanel.jsx";
 import { ScorecardPanel } from "./Scorecards.jsx";
+import AssessmentsPanel from "./AssessmentsPanel.jsx";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 import InsightsPanel from "./InsightsPanel.jsx";
 
@@ -5728,6 +5729,7 @@ export const PANEL_META = {
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true  },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:true  },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
+  assessments:  { icon:"clipboard",     label:"Assessments",          defaultOpen:true  },
   questions:    { icon:"listChecks",     label:"Screening & Interview Questions", defaultOpen:false },
   interview_plan: { icon:"calendar",      label:"Interview Plan",      defaultOpen:true  },
   insights: { icon:"barChart", label:"Insights", defaultOpen:true },
@@ -5738,6 +5740,7 @@ export const getDefaultPanelOrder = (objectName) => {
   const base = ["tasks","comms","notes","attachments","forms","activity"];
   if (objectName === "Person") base.splice(1, 0, "linked", "coordination", "reporting");
   if (["Person","Job"].includes(objectName)) base.push("match");
+  if (objectName === "Person") base.push("assessments");
   if (objectName === "Person") base.push("scorecard");
   if (objectName === "Person") base.push("engagement");
   if (objectName === "Job") { base.unshift("interview_plan"); base.push("questions"); }
@@ -8179,7 +8182,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
-    if (id==="scorecard") return <ScorecardPanel record={record} environment={environment}/>;
+    if (id==="scorecard")    return <ScorecardPanel record={record} environment={environment} session={session}/>;
+    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment} session={session}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
