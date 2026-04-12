@@ -8176,18 +8176,21 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         )}
 
         {/* CV Parse Modal */}
-        {cvParseResult && (
+        {cvParseResult && ReactDOM.createPortal(
           <CvParseModal
             result={cvParseResult}
             fields={fields}
             record={record}
             onApply={handleApplyCvFields}
             onClose={()=>{ setCvParseResult(null); setCvParseAtt(null); }}
-          />
+          />,
+          document.body
         )}
-        {docExtractResult && (
+        {docExtractResult && ReactDOM.createPortal(
           <DocExtractModal result={docExtractResult} mappings={docExtractMappings} record={record}
-            onApply={handleApplyDocFields} onClose={()=>{ setDocExtractResult(null); setDocExtractAtt(null); }}/>
+            onApply={handleApplyDocFields} onClose={()=>{ setDocExtractResult(null); setDocExtractAtt(null); }}/>,
+          document.body
+        )}
         )}
         {tableModalField && ReactDOM.createPortal(
           <TableModal
