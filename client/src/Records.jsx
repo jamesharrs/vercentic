@@ -8275,7 +8275,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               </div>
             );
           })
-        })()} 
+        })()}
 
         {/* File Preview Modal */}
         {previewAtt && ReactDOM.createPortal(

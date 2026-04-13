@@ -39,33 +39,42 @@ function AiResponseAnalysis({ questions }) {
       `Q${i+1}: ${q.question}\nAnswer: ${String(q.answer).trim()}`
     ).join("\n\n");
 
-    const prompt = `You are an experienced recruiter reviewing free-text screening answers. Analyse the following responses and provide a brief, structured assessment.
+    const prompt = `You are an experienced recruiter reviewing free-text screening answers. Analyse the following Q&A and respond with ONLY a JSON object — no markdown, no explanation, just raw JSON.
 
 ${qa}
 
-Respond with valid JSON only (no markdown):
+Return this exact JSON structure:
 {
-  "overall": "1-2 sentence overall impression of the responses",
-  "strengths": ["up to 2 specific strengths from the answers, or empty array"],
-  "concerns": ["up to 2 concerns or gaps, or empty array"],
-  "ai_signals": "null if no AI usage suspected, otherwise a brief note on what suggests AI-generated content (e.g. unusually formal tone, generic phrasing, no personal anecdotes)"
+  "overall": "<1-2 sentence impression of the quality and relevance of these answers>",
+  "strengths": ["<specific strength from the answers>", "<another strength if applicable>"],
+  "concerns": ["<specific concern or gap>", "<another concern if applicable>"],
+  "ai_signals": "<brief note if answers seem AI-generated e.g. generic phrasing, no personal detail, unusually polished — or null if no concern>"
 }
 
-Be concise and specific. If answers are very short or low-quality, note that. Do not be lenient.`;
+Rules:
+- strengths and concerns arrays may be empty [] if not applicable
+- ai_signals must be null (not the string "null") if no AI usage suspected
+- Be honest and concise — do not be lenient with poor or very short answers
+- Do not repeat the questions back`;
 
     try {
       const data = await api.post("/ai/chat", {
-        max_tokens: 400,
-        system: "You are an experienced recruiter. Respond only with valid JSON, no markdown.",
+        max_tokens: 500,
+        system: "You are a recruiter assistant. Respond only with valid JSON, no markdown fences, no preamble.",
         messages: [{ role: "user", content: prompt }],
       });
-      const raw = data.content?.[0]?.text || "{}";
-      const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, "").trim());
+      const raw = data.content?.[0]?.text || "";
+      console.log("[AI analysis] raw:", raw.slice(0, 300));
+      if (!raw.trim()) throw new Error("Empty response from AI");
+      const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      // Normalise ai_signals — treat string "null" as actual null
+      if (parsed.ai_signals === "null" || parsed.ai_signals === "") parsed.ai_signals = null;
       setAnalysis(parsed);
       setExpanded(true);
     } catch (e) {
       console.error("AI analysis error:", e);
-      setAnalysis({ overall: "Could not generate analysis.", strengths: [], concerns: [], ai_signals: null });
+      setAnalysis({ overall: `Analysis failed: ${e.message}`, strengths: [], concerns: [], ai_signals: null });
       setExpanded(true);
     }
     setLoading(false);
