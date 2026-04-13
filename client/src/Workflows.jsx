@@ -2207,6 +2207,169 @@ export function RecordPipelinePanel({ record, objectId, environment, objectName,
   );
 }
 
+// ─── CardStageDropdown — stage picker on pipeline person cards ───────────────
+function CardStageDropdown({ steps, currentId, onMove, onRemove }) {
+  const [open, setOpen]     = useState(false);
+  const [pos,  setPos]      = useState({ top:0, left:0, flipX:false, flipY:false });
+  const [hov,  setHov]      = useState(null);
+  const btnRef = useRef(null);
+  const current = steps.find(s => s.id === currentId) || steps[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const handleOpen = e => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const dropH = steps.length * 44 + 80;
+      const fitsDown = (r.bottom + dropH) < window.innerHeight;
+      const fitsRight = (r.left + 90) < window.innerWidth - 172;
+      setPos({
+        top:  fitsDown ? r.bottom + window.scrollY + 4 : r.top + window.scrollY - dropH - 4,
+        left: r.left + r.width / 2 + window.scrollX,
+        flipX: !fitsRight,
+      });
+    }
+    setOpen(v => !v);
+  };
+
+  const dropdown = open && createPortal(
+    <div style={{ position:'absolute', top:pos.top, left:pos.left,
+      transform: pos.flipX ? 'translateX(-90%)' : 'translateX(-50%)',
+      background:'white', border:`1px solid ${C.border}`, borderRadius:14,
+      boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
+      zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F }}>
+      <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
+        fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+        Move to stage
+      </div>
+      {steps.map(s => {
+        const isCurrent = s.id === currentId;
+        const hasAuto = (s.actions||[]).some(a=>a.type);
+        return (
+          <button key={s.id}
+            onClick={e => { e.stopPropagation(); onMove(s); setOpen(false); }}
+            onMouseEnter={() => setHov(s.id)} onMouseLeave={() => setHov(null)}
+            style={{ width:'100%', display:'flex', alignItems:'center', gap:9, padding:'9px 13px',
+              border:'none', background: isCurrent ? `${C.accent}0e` : hov===s.id ? '#f8f7ff' : 'transparent',
+              cursor:'pointer', fontFamily:F, textAlign:'left', transition:'background .1s' }}>
+            <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0,
+              background: isCurrent ? C.accent : C.border, border:`2px solid ${isCurrent ? C.accent : C.border}`,
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {isCurrent && <div style={{ width:6, height:6, borderRadius:'50%', background:'white' }}/>}
+            </div>
+            <span style={{ fontSize:13, fontWeight: isCurrent?600:400, color: isCurrent?C.accent:C.text1, flex:1 }}>{s.name}</span>
+            {hasAuto && <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e', padding:'2px 6px', borderRadius:99, fontWeight:700, border:'1px solid #fde68a' }}>⚡</span>}
+          </button>
+        );
+      })}
+      <div style={{ height:1, background:C.border, margin:'4px 0' }}/>
+      <button onClick={e=>{ e.stopPropagation(); onRemove(); setOpen(false); }}
+        style={{ width:'100%', display:'flex', alignItems:'center', gap:9, padding:'9px 13px 11px',
+          border:'none', background:'transparent', cursor:'pointer', fontFamily:F, textAlign:'left', transition:'background .1s' }}
+        onMouseEnter={e=>e.currentTarget.style.background='#fef2f2'}
+        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+        <Ic n="x" s={13} c="#dc2626"/>
+        <span style={{ fontSize:13, fontWeight:500, color:'#dc2626' }}>Remove</span>
+      </button>
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
+          padding:'3px 8px', borderRadius:99, fontSize:10, fontWeight:700,
+          border:`1.5px solid ${open?C.accent:'#c4b5fd'}`,
+          background: open?'#ede9fe':'#f5f3ff', color:'#6d28d9',
+          cursor:'pointer', fontFamily:F, minWidth:0, transition:'all .12s' }}>
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{current?.name||'Stage'}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.6 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
+// ─── BulkStageDropdown — "Move to…" for bulk-selected people ─────────────────
+function BulkStageDropdown({ steps, onMove }) {
+  const [open, setOpen] = useState(false);
+  const [pos,  setPos]  = useState({ top:0, left:0 });
+  const [hov,  setHov]  = useState(null);
+  const btnRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const handleOpen = e => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const dropH = steps.length * 44 + 50;
+      const fitsDown = (r.bottom + dropH) < window.innerHeight;
+      setPos({ top: fitsDown ? r.bottom + window.scrollY + 4 : r.top + window.scrollY - dropH - 4,
+               left: r.left + r.width / 2 + window.scrollX });
+    }
+    setOpen(v => !v);
+  };
+
+  const dropdown = open && createPortal(
+    <div style={{ position:'absolute', top:pos.top, left:pos.left, transform:'translateX(-50%)',
+      background:'white', border:`1px solid ${C.border}`, borderRadius:14,
+      boxShadow:'0 12px 32px rgba(0,0,0,.13)', zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F }}>
+      <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
+        fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+        Move selected to
+      </div>
+      {steps.map(s => {
+        const hasAuto = (s.actions||[]).some(a=>a.type);
+        return (
+          <button key={s.id}
+            onClick={e => { e.stopPropagation(); onMove(s); setOpen(false); }}
+            onMouseEnter={() => setHov(s.id)} onMouseLeave={() => setHov(null)}
+            style={{ width:'100%', display:'flex', alignItems:'center', gap:9, padding:'9px 13px',
+              border:'none', background: hov===s.id ? '#f8f7ff' : 'transparent',
+              cursor:'pointer', fontFamily:F, textAlign:'left', transition:'background .1s' }}>
+            <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0,
+              background:C.border, border:`2px solid ${C.border}` }}/>
+            <span style={{ fontSize:13, color:C.text1, flex:1 }}>{s.name}</span>
+            {hasAuto && <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e', padding:'2px 6px', borderRadius:99, fontWeight:700, border:'1px solid #fde68a' }}>⚡</span>}
+          </button>
+        );
+      })}
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ padding:'3px 10px', borderRadius:8, fontSize:11, fontWeight:700,
+          border:`1.5px solid #c4b5fd`, background: open?'#ede9fe':'#f5f3ff',
+          color:'#6d28d9', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', gap:5,
+          transition:'all .12s' }}>
+        Move to…
+        <svg width="9" height="9" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.6 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
 // ─── PeoplePipelineWidget ─────────────────────────────────────────────────────
 // Shown at the TOP of any non-Person object record (e.g. Job).
 // Displays the Linked Person workflow stage track with counts; clicking a stage
@@ -2833,11 +2996,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                 {selectedLinks.length > 0 && (
                   <>
                     {/* Move to stage */}
-                    <select onChange={e => { if(!e.target.value) return; const s=plSteps.find(st=>st.id===e.target.value); if(s) { selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); } e.target.value=""; }}
-                      style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
-                      <option value="">Move to…</option>
-                      {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
-                    </select>
+                    <BulkStageDropdown
+                      steps={plSteps}
+                      onMove={s=>{ selectedLinks.forEach(id=>moveStage(id,s)); setSelectedLinks([]); }}
+                    />
                     {plSteps.some(s=>(s.actions||[]).some(a=>a.type)) && (
                       <select onChange={e => { if(!e.target.value) return; bulkRunStepActions(e.target.value); e.target.value=""; }}
                         style={{ padding:"3px 8px", borderRadius:8, fontSize:11, fontWeight:700, border:`1.5px solid #fde68a`, background:"#fffbeb", color:"#92400e", cursor:"pointer", fontFamily:F, outline:"none" }}>
@@ -2978,15 +3140,12 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                                 style={{ width:22, height:22, borderRadius:6, border:`1px solid ${prevStep?'#c4b5fd':'#f3f4f6'}`, background:prevStep?'#ede9fe':'#f9f9f9', color:prevStep?'#7c3aed':'#d1d5db', cursor:prevStep?'pointer':'default', display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                                 <Ic n="chevL" s={11} c={prevStep?"#7c3aed":"#d1d5db"}/>
                               </button>
-                              <select value={link.stage_id||""} onChange={e=>{
-                                  if(e.target.value==='__remove__'){removeLink(link.id);return;}
-                                  const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);
-                                }}
-                                style={{ flex:1, padding:"3px 4px", borderRadius:99, fontSize:10, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none", textAlign:"center", minWidth:0 }}>
-                                {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{ha?"⚡ "+s.name:s.name}</option>; })}
-                                <option disabled style={{color:"#e5e7eb"}}>──────────</option>
-                                <option value="__remove__" style={{color:"#dc2626",fontWeight:700}}>✕ Remove</option>
-                              </select>
+                              <CardStageDropdown
+                                steps={plSteps}
+                                currentId={link.stage_id}
+                                onMove={s=>moveStage(link.id,s)}
+                                onRemove={()=>removeLink(link.id)}
+                              />
                               <button onClick={()=>nextStep&&moveStage(link.id,nextStep)} disabled={!nextStep}
                                 style={{ width:22, height:22, borderRadius:6, border:`1px solid ${nextStep?'#c4b5fd':'#f3f4f6'}`, background:nextStep?'#ede9fe':'#f9f9f9', color:nextStep?'#7c3aed':'#d1d5db', cursor:nextStep?'pointer':'default', display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                                 <Ic n="chevD" s={11} c={nextStep?"#7c3aed":"#d1d5db"} style={{transform:"rotate(-90deg)"}}/>
