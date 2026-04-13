@@ -3707,7 +3707,19 @@ function StagePill({ linkInfo, onStageChange }) {
     if (!hasSteps) return;
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + window.scrollY + 4, left: r.left + r.width / 2 + window.scrollX });
+      const dropW = 180;
+      const dropH = 300; // estimate
+      // Flip left if would overflow right edge
+      const left = r.left + r.width / 2 + window.scrollX;
+      const fitsRight = (r.left + r.width / 2 + dropW / 2) < window.innerWidth;
+      const fitsLeft  = (r.left + r.width / 2 - dropW / 2) > 0;
+      // Flip up if would overflow bottom
+      const fitsDown = (r.bottom + dropH) < window.innerHeight;
+      setPos({
+        top:  fitsDown ? r.bottom + window.scrollY + 4 : r.top + window.scrollY - dropH - 4,
+        left: left,
+        flipX: !fitsRight && fitsLeft ? 'right' : 'center',
+      });
     }
     setOpen(v => !v);
   };
@@ -3730,7 +3742,7 @@ function StagePill({ linkInfo, onStageChange }) {
   const dropdown = open && ReactDOM.createPortal(
     <div style={{
       position:'absolute', top: pos.top, left: pos.left,
-      transform:'translateX(-50%)',
+      transform: pos.flipX === 'right' ? 'translateX(-90%)' : 'translateX(-50%)',
       background:'white', border:`1px solid ${C.border}`, borderRadius:14,
       boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
       zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F,

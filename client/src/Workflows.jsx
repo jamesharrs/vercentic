@@ -3189,6 +3189,7 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
     ? steps.filter(s => allowedNextIds.includes(s.id))
     : steps;
   const [showStageMenu, setShowStageMenu] = useState(false);
+  const [stageMenuPos, setStageMenuPos] = useState({ top:0, left:0, flipX:false });
   const stageRef = useRef(null);
 
   const score = matchScore?.score ?? null;
@@ -3290,7 +3291,21 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
           </button>
           {/* Custom stage pill dropdown */}
           <div ref={stageRef} style={{ position:"relative" }}>
-            <button onClick={() => setShowStageMenu(v => !v)}
+            <button onClick={e => {
+              e.stopPropagation();
+              if (!showStageMenu && stageRef.current) {
+                const r = stageRef.current.getBoundingClientRect();
+                const dropH = Math.min(steps.length * 46 + 60, 340);
+                const fitsDown = (r.bottom + dropH) < window.innerHeight;
+                const fitsRight = (r.left + 86 + 172) < window.innerWidth;
+                setStageMenuPos({
+                  top:  fitsDown ? r.bottom + window.scrollY + 4 : r.top + window.scrollY - dropH - 4,
+                  left: r.left + r.width / 2 + window.scrollX,
+                  flipX: !fitsRight,
+                });
+              }
+              setShowStageMenu(v => !v);
+            }}
               style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 10px 4px 11px",
                 borderRadius:20, fontSize:11, fontWeight:700,
                 border:`1.5px solid ${showStageMenu ? "#7c3aed" : "#c4b5fd"}`,
@@ -3308,11 +3323,12 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                 <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
               </svg>
             </button>
-            {showStageMenu && (
-              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:"50%", transform:"translateX(-50%)",
+            {showStageMenu && createPortal(
+              <div style={{ position:"absolute", top:stageMenuPos.top, left:stageMenuPos.left,
+                transform: stageMenuPos.flipX ? "translateX(-90%)" : "translateX(-50%)",
                 background:"white", border:`1px solid ${C.border}`, borderRadius:14,
                 boxShadow:"0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)",
-                zIndex:200, minWidth:172, overflow:"hidden",
+                zIndex:9999, minWidth:172, overflow:"hidden",
                 fontFamily:F }}>
                 {/* Header label */}
                 <div style={{ padding:"8px 12px 6px", borderBottom:`1px solid ${C.border}`,
@@ -3362,7 +3378,8 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                   <Ic n="x" s={13} c="#dc2626"/>
                   <span style={{ fontSize:13, fontWeight:500, color:"#dc2626" }}>Remove</span>
                 </button>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
           {/* Forward */}
@@ -3413,7 +3430,14 @@ function LinkedStageDropdown({ link, steps, onMove }) {
     e.stopPropagation();
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + window.scrollY + 4, left: r.right + window.scrollX });
+      const dropH = Math.min(steps.length * 46 + 60, 340);
+      const fitsDown = (r.bottom + dropH) < window.innerHeight;
+      const fitsRight = (r.left + 90 + 172) < window.innerWidth;
+      setPos({
+        top:  fitsDown ? r.bottom + window.scrollY + 4 : r.top + window.scrollY - dropH - 4,
+        left: fitsRight ? r.left + r.width / 2 + window.scrollX : r.right + window.scrollX,
+        flipX: !fitsRight,
+      });
     }
     setOpen(v => !v);
   };
@@ -3423,7 +3447,7 @@ function LinkedStageDropdown({ link, steps, onMove }) {
   const dropdown = open && createPortal(
     <div style={{
       position:'absolute', top: pos.top, left: pos.left,
-      transform:'translateX(-100%)',
+      transform: pos.flipX ? 'translateX(-100%)' : 'translateX(-50%)',
       background:'white', border:`1px solid ${C.border}`, borderRadius:14,
       boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
       zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F,
@@ -3452,6 +3476,10 @@ function LinkedStageDropdown({ link, steps, onMove }) {
             </div>
             <span style={{ fontSize:13, fontWeight: isCurrent ? 600 : 400,
               color: isCurrent ? C.accent : C.text1, flex:1 }}>{step.name}</span>
+            {(step.actions||[]).some(a=>a.type) && (
+              <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e',
+                padding:'2px 6px', borderRadius:99, fontWeight:700, border:'1px solid #fde68a' }}>⚡</span>
+            )}
           </button>
         );
       })}
