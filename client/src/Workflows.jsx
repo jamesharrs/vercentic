@@ -2229,21 +2229,29 @@ function CardStageDropdown({ steps, currentId, onMove, onRemove }) {
       const dropW = 200;
       // Always try below first; only flip left if near right edge
       const flipX = (r.left + r.width / 2 + dropW / 2) > window.innerWidth - 12;
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const spaceAbove = r.top - 8;
+      const showAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
       setPos({
-        top:  r.bottom + 4,
+        top:  showAbove ? r.top : r.bottom + 4,
         left: r.left + r.width / 2,
         flipX,
+        showAbove,
+        maxH: Math.min(showAbove ? spaceAbove : spaceBelow, 400),
       });
     }
     setOpen(v => !v);
   };
 
   const dropdown = open && createPortal(
-    <div style={{ position:'fixed', top:pos.top, left:pos.left,
+    <div style={{ position:'fixed',
+      top: pos.showAbove ? undefined : pos.top,
+      bottom: pos.showAbove ? window.innerHeight - pos.top : undefined,
+      left:pos.left,
       transform: pos.flipX ? 'translateX(-90%)' : 'translateX(-50%)',
       background:'white', border:`1px solid ${C.border}`, borderRadius:14,
       boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
-      zIndex:9999, minWidth:180, maxHeight:'60vh', overflow:'auto', fontFamily:F }}>
+      zIndex:9999, minWidth:180, maxHeight: pos.maxH || 320, overflowY:'auto', fontFamily:F }}>
       <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
         fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
         Move to stage
@@ -2317,15 +2325,27 @@ function BulkStageDropdown({ steps, onMove }) {
     e.stopPropagation();
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, left: r.left + r.width / 2 });
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const spaceAbove = r.top - 8;
+      const showAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
+      setPos({ 
+        top: showAbove ? r.top : r.bottom + 4, 
+        left: r.left + r.width / 2,
+        showAbove,
+        maxH: Math.min(showAbove ? spaceAbove : spaceBelow, 400),
+      });
     }
     setOpen(v => !v);
   };
 
   const dropdown = open && createPortal(
-    <div style={{ position:'fixed', top:pos.top, left:pos.left, transform:'translateX(-50%)',
+    <div style={{ position:'fixed',
+      top: pos.showAbove ? undefined : pos.top,
+      bottom: pos.showAbove ? window.innerHeight - pos.top : undefined,
+      left:pos.left, transform:'translateX(-50%)',
       background:'white', border:`1px solid ${C.border}`, borderRadius:14,
-      boxShadow:'0 12px 32px rgba(0,0,0,.13)', zIndex:9999, minWidth:180, maxHeight:'60vh', overflow:'auto', fontFamily:F }}>
+      boxShadow:'0 12px 32px rgba(0,0,0,.13)', zIndex:9999, minWidth:180,
+      maxHeight: pos.maxH || 320, overflowY:'auto', fontFamily:F }}>
       <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
         fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
         Move selected to
@@ -3485,7 +3505,7 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
                 transform: stageMenuPos.flipX ? "translateX(-90%)" : "translateX(-50%)",
                 background:"white", border:`1px solid ${C.border}`, borderRadius:14,
                 boxShadow:"0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)",
-                zIndex:9999, minWidth:180, maxHeight:"60vh", overflowY:"auto",
+                zIndex:9999, minWidth:180, maxHeight: window.innerHeight - stageMenuPos.top - 8, overflowY:"auto",
                 fontFamily:F }}>
                 {/* Header label */}
                 <div style={{ padding:"8px 12px 6px", borderBottom:`1px solid ${C.border}`,
@@ -3589,10 +3609,15 @@ function LinkedStageDropdown({ link, steps, onMove }) {
       const r = btnRef.current.getBoundingClientRect();
       const dropW = 200;
       const flipX = (r.left + r.width / 2 + dropW / 2) > window.innerWidth - 12;
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const spaceAbove = r.top - 8;
+      const showAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
       setPos({
-        top:  r.bottom + 4,
+        top:  showAbove ? r.top : r.bottom + 4,
         left: r.left + r.width / 2,
         flipX,
+        showAbove,
+        maxH: Math.min(showAbove ? spaceAbove : spaceBelow, 400),
       });
     }
     setOpen(v => !v);
@@ -3602,11 +3627,14 @@ function LinkedStageDropdown({ link, steps, onMove }) {
 
   const dropdown = open && createPortal(
     <div style={{
-      position:'fixed', top: pos.top, left: pos.left,
+      position:'fixed',
+      top: pos.showAbove ? undefined : pos.top,
+      bottom: pos.showAbove ? window.innerHeight - pos.top : undefined,
+      left: pos.left,
       transform: pos.flipX ? 'translateX(-90%)' : 'translateX(-50%)',
       background:'white', border:`1px solid ${C.border}`, borderRadius:14,
       boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
-      zIndex:9999, minWidth:180, maxHeight:'60vh', overflow:'auto', fontFamily:F,
+      zIndex:9999, minWidth:180, maxHeight: pos.maxH || 320, overflowY:'auto', fontFamily:F,
     }}>
       <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
         fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
