@@ -8220,13 +8220,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>}
 
         {/* File list */}
-        {(() => {
-          const filteredAtts = attachmentJobFilter === "all" ? attachments
-            : attachmentJobFilter === "general" ? attachments.filter(a => !a.linked_job_id)
-            : attachments.filter(a => a.linked_job_id === attachmentJobFilter);
-          return filteredAtts.length === 0
+        {(attachmentJobFilter === "all" ? attachments
+          : attachmentJobFilter === "general" ? attachments.filter(a => !a.linked_job_id)
+          : attachments.filter(a => a.linked_job_id === attachmentJobFilter)
+        ).length === 0
           ? <div style={{ textAlign:'center', padding:'16px 0', color:C.text3, fontSize:13 }}>No files yet</div>
-          : filteredAtts.map(att=>{
+          : (attachmentJobFilter === "all" ? attachments
+              : attachmentJobFilter === "general" ? attachments.filter(a => !a.linked_job_id)
+              : attachments.filter(a => a.linked_job_id === attachmentJobFilter)
+            ).map(att => {
             const isCV = att.file_type_name?.toLowerCase().includes('cv') || att.file_type_name?.toLowerCase().includes('resume');
             const ext  = att.ext || att.name?.split('.').pop()?.toLowerCase() || '';
             const iconName = ['jpg','jpeg','png','gif','webp'].includes(ext)?'image':['pdf'].includes(ext)?'file-text':'file';
@@ -8274,8 +8276,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                 </div>
               </div>
             );
-          })
-        })()}
+          })}
 
         {/* File Preview Modal */}
         {previewAtt && ReactDOM.createPortal(
