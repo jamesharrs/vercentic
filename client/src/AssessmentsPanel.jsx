@@ -63,7 +63,10 @@ Rules:
         system: "You are a recruiter assistant. Respond only with valid JSON, no markdown fences, no preamble.",
         messages: [{ role: "user", content: prompt }],
       });
-      const raw = data.content?.[0]?.text || "";
+      // Proxy returns { content: "string" } not the raw Anthropic shape
+      const raw = typeof data.content === "string"
+        ? data.content
+        : (data.content?.[0]?.text || data.response || data.message || "");
       console.log("[AI analysis] raw:", raw.slice(0, 300));
       if (!raw.trim()) throw new Error("Empty response from AI");
       const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
