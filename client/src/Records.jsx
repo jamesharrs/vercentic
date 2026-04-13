@@ -3731,9 +3731,14 @@ function StagePill({ linkInfo, onStageChange }) {
     <div style={{
       position:'absolute', top: pos.top, left: pos.left,
       transform:'translateX(-50%)',
-      background:'white', border:'1px solid #e5e7eb', borderRadius:10,
-      boxShadow:'0 8px 24px rgba(0,0,0,.15)', zIndex:9999, minWidth:150, overflow:'hidden',
+      background:'white', border:`1px solid ${C.border}`, borderRadius:14,
+      boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
+      zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F,
     }}>
+      <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
+        fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+        Move to stage
+      </div>
       {linkInfo.steps.map(step => {
         const isCurrent = step.id === linkInfo.stage_id;
         const isHov     = hovered === step.id;
@@ -3744,17 +3749,22 @@ function StagePill({ linkInfo, onStageChange }) {
             onMouseEnter={() => setHovered(step.id)}
             onMouseLeave={() => setHovered(null)}
             style={{
-              width:'100%', display:'flex', alignItems:'center', gap:8,
-              padding:'9px 12px', border:'none',
-              background: isCurrent ? '#f5f3ff' : isHov ? '#faf5ff' : 'white',
-              cursor:'pointer', fontFamily:'inherit', textAlign:'left',
-              transition:'background .1s',
+              width:'100%', display:'flex', alignItems:'center', gap:9,
+              padding:'9px 13px', border:'none',
+              background: isCurrent ? `${accent}0e` : isHov ? '#f8f7ff' : 'transparent',
+              cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'background .1s',
             }}>
-            {isCurrent
-              ? <svg width="12" height="12" viewBox="0 0 12 12" style={{flexShrink:0}}><path d="M2 6l3 3 5-5" stroke={accent} strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
-              : <span style={{ width:12, flexShrink:0 }}/>}
-            <span style={{ fontSize:12, fontWeight: isCurrent?700:400, color: isCurrent?accent:'#374151', flex:1 }}>{step.name}</span>
-            {hasAuto && <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:99, fontWeight:700 }}>⚡</span>}
+            <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0,
+              background: isCurrent ? accent : C.border,
+              border: `2px solid ${isCurrent ? accent : C.border}`,
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {isCurrent && <div style={{ width:6, height:6, borderRadius:'50%', background:'white' }}/>}
+            </div>
+            <span style={{ fontSize:13, fontWeight: isCurrent ? 600 : 400,
+              color: isCurrent ? accent : C.text1, flex:1 }}>{step.name}</span>
+            {hasAuto && <span style={{ fontSize:9, background:'#fef3c7', color:'#92400e',
+              padding:'2px 6px', borderRadius:99, fontWeight:700,
+              border:'1px solid #fde68a' }}>⚡</span>}
           </button>
         );
       })}

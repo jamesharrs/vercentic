@@ -3309,45 +3309,58 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
               </svg>
             </button>
             {showStageMenu && (
-              <div style={{ position:"absolute", top:"calc(100% + 4px)", left:"50%", transform:"translateX(-50%)",
-                background:"white", border:`1px solid #e5e7eb`, borderRadius:10,
-                boxShadow:"0 6px 20px rgba(0,0,0,.12)", zIndex:200, minWidth:140, overflow:"hidden" }}>
-                {steps.map((step, si) => {
+              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:"50%", transform:"translateX(-50%)",
+                background:"white", border:`1px solid ${C.border}`, borderRadius:14,
+                boxShadow:"0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)",
+                zIndex:200, minWidth:172, overflow:"hidden",
+                fontFamily:F }}>
+                {/* Header label */}
+                <div style={{ padding:"8px 12px 6px", borderBottom:`1px solid ${C.border}`,
+                  fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                  Move to stage
+                </div>
+                {steps.map((step) => {
                   const isCurrent = step.id === link.stage_id;
                   const hasAuto = (step.actions||[]).some(a=>a.type);
                   return (
                     <button key={step.id}
                       onClick={() => { onMove(link.id, step); setShowStageMenu(false); }}
-                      style={{ width:"100%", display:"flex", alignItems:"center", gap:8,
-                        padding:"8px 12px", border:"none", background: isCurrent ? "#f5f3ff" : "white",
+                      style={{ width:"100%", display:"flex", alignItems:"center", gap:9,
+                        padding:"9px 13px", border:"none",
+                        background: isCurrent ? `${C.accent}0e` : "transparent",
                         cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .1s" }}
-                      onMouseEnter={e => !isCurrent && (e.currentTarget.style.background="#faf5ff")}
-                      onMouseLeave={e => !isCurrent && (e.currentTarget.style.background="white")}>
-                      {isCurrent
-                        ? <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#7c3aed" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
-                        : <span style={{ width:12, flexShrink:0 }}/>}
-                      <span style={{ fontSize:12, fontWeight: isCurrent?700:400, color: isCurrent?"#6d28d9":"#374151", flex:1 }}>{step.name}</span>
+                      onMouseEnter={e => !isCurrent && (e.currentTarget.style.background="#f8f7ff")}
+                      onMouseLeave={e => !isCurrent && (e.currentTarget.style.background="transparent")}>
+                      {/* Left indicator */}
+                      <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
+                        background: isCurrent ? C.accent : `${C.border}`,
+                        border: isCurrent ? `2px solid ${C.accent}` : `2px solid ${C.border}`,
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        {isCurrent && <div style={{ width:6, height:6, borderRadius:"50%", background:"white" }}/>}
+                      </div>
+                      <span style={{ fontSize:13, fontWeight: isCurrent ? 600 : 400,
+                        color: isCurrent ? C.accent : C.text1, flex:1 }}>{step.name}</span>
                       {hasAuto && (
                         <AutoTooltip step={step}>
-                          <span style={{ fontSize:9, background:"#fef3c7", color:"#92400e", padding:"1px 5px",
-                            borderRadius:99, fontWeight:700, whiteSpace:"nowrap", cursor:"help" }}>⚡ auto</span>
+                          <span style={{ fontSize:9, background:"#fef3c7", color:"#92400e",
+                            padding:"2px 6px", borderRadius:99, fontWeight:700,
+                            whiteSpace:"nowrap", cursor:"help", border:"1px solid #fde68a" }}>⚡</span>
                         </AutoTooltip>
                       )}
                     </button>
                   );
                 })}
                 {/* Divider + Remove */}
-                <div style={{ height:1, background:"#f3f4f6", margin:"2px 0" }}/>
+                <div style={{ height:1, background:C.border, margin:"4px 0" }}/>
                 <button
                   onClick={() => { setShowStageMenu(false); onRemove && onRemove(link.id); }}
-                  style={{ width:"100%", display:"flex", alignItems:"center", gap:8,
-                    padding:"8px 12px", border:"none", background:"white",
-                    cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .1s",
-                    color:"#dc2626" }}
+                  style={{ width:"100%", display:"flex", alignItems:"center", gap:9,
+                    padding:"9px 13px 11px", border:"none", background:"transparent",
+                    cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .1s" }}
                   onMouseEnter={e => e.currentTarget.style.background="#fef2f2"}
-                  onMouseLeave={e => e.currentTarget.style.background="white"}>
-                  <Ic n="x" s={11} c="#dc2626"/>
-                  <span style={{ fontSize:12, fontWeight:600 }}>Remove from pipeline</span>
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                  <Ic n="x" s={13} c="#dc2626"/>
+                  <span style={{ fontSize:13, fontWeight:500, color:"#dc2626" }}>Remove</span>
                 </button>
               </div>
             )}
