@@ -3395,6 +3395,91 @@ function PipelinePersonRow({ link, steps, label, subtitle, initial, matchScore, 
   );
 }
 
+// ─── LinkedStageDropdown — custom styled stage picker for LinkedRecordsPanel ─
+function LinkedStageDropdown({ link, steps, onMove }) {
+  const [open, setOpen]       = useState(false);
+  const [pos,  setPos]        = useState({ top:0, left:0 });
+  const [hovered, setHovered] = useState(null);
+  const btnRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const handleOpen = (e) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + window.scrollY + 4, left: r.right + window.scrollX });
+    }
+    setOpen(v => !v);
+  };
+
+  const currentStep = steps.find(s => s.id === link.stage_id) || steps[0];
+
+  const dropdown = open && createPortal(
+    <div style={{
+      position:'absolute', top: pos.top, left: pos.left,
+      transform:'translateX(-100%)',
+      background:'white', border:`1px solid ${C.border}`, borderRadius:14,
+      boxShadow:'0 12px 32px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.06)',
+      zIndex:9999, minWidth:172, overflow:'hidden', fontFamily:F,
+    }}>
+      <div style={{ padding:'8px 12px 6px', borderBottom:`1px solid ${C.border}`,
+        fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+        Move to stage
+      </div>
+      {steps.map(step => {
+        const isCurrent = step.id === link.stage_id;
+        const isHov     = hovered === step.id;
+        return (
+          <button key={step.id}
+            onClick={e => { e.stopPropagation(); onMove(link.id, step); setOpen(false); }}
+            onMouseEnter={() => setHovered(step.id)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ width:'100%', display:'flex', alignItems:'center', gap:9,
+              padding:'9px 13px', border:'none',
+              background: isCurrent ? `${C.accent}0e` : isHov ? '#f8f7ff' : 'transparent',
+              cursor:'pointer', fontFamily:F, textAlign:'left', transition:'background .1s' }}>
+            <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0,
+              background: isCurrent ? C.accent : C.border,
+              border:`2px solid ${isCurrent ? C.accent : C.border}`,
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {isCurrent && <div style={{ width:6, height:6, borderRadius:'50%', background:'white' }}/>}
+            </div>
+            <span style={{ fontSize:13, fontWeight: isCurrent ? 600 : 400,
+              color: isCurrent ? C.accent : C.text1, flex:1 }}>{step.name}</span>
+          </button>
+        );
+      })}
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ display:'inline-flex', alignItems:'center', gap:5,
+          padding:'4px 10px 4px 11px', borderRadius:20, fontSize:11, fontWeight:700,
+          border:`1.5px solid ${open ? C.accent : '#c4b5fd'}`,
+          background: open ? '#ede9fe' : '#f5f3ff',
+          color:'#6d28d9', cursor:'pointer', fontFamily:F, whiteSpace:'nowrap',
+          transition:'all .12s' }}>
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', maxWidth:110 }}>
+          {currentStep?.name || 'Stage'}
+        </span>
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.6 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
 // ─── LinkedRecordsPanel ───────────────────────────────────────────────────────
 // Shown on a Person record. Shows all objects this person is linked to across
 // all pipelines, with stage dropdown and ability to link to new records.
@@ -3622,17 +3707,9 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
                   <div style={{ fontSize:11, color:C.text3 }}>{link.target_object_name}</div>
                 </div>
               </div>
-              {/* Stage dropdown */}
+              {/* Stage dropdown — custom styled */}
               {steps.length > 0 ? (
-                <select value={link.stage_id || steps[0]?.id || ""}
-                  onChange={e => { const s = steps.find(st => st.id === e.target.value); if(s) moveStage(link.id, s); }}
-                  style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-                    border:`1.5px solid #e9d5ff`, background:"#f5f3ff", color:"#7c3aed",
-                    cursor:"pointer", fontFamily:F, outline:"none" }}>
-                  {steps.map(step => (
-                    <option key={step.id} value={step.id}>{step.name || "Stage"}</option>
-                  ))}
-                </select>
+                <LinkedStageDropdown link={link} steps={steps} onMove={moveStage}/>
               ) : (
                 <span style={{ fontSize:11, color:C.text3, padding:"4px 10px",
                   border:`1px solid ${C.border}`, borderRadius:20, whiteSpace:"nowrap" }}>
