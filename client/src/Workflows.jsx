@@ -125,9 +125,20 @@ function AutoTooltip({ step, children }) {
   const updatePos = () => {
     if (!triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
+    const tipW = 240; // approx tooltip width
+    // Horizontal: center on trigger but clamp to viewport
+    let left = r.left + r.width / 2;
+    const halfW = tipW / 2;
+    if (left + halfW > window.innerWidth - 12) left = window.innerWidth - 12 - halfW;
+    if (left - halfW < 12) left = 12 + halfW;
+    // Vertical: show above by default, flip below if not enough space
+    const spaceAbove = r.top - 8;
+    const showBelow = spaceAbove < 80;
     setPos({
-      top:  r.top + window.scrollY - 8,   // above the trigger
-      left: r.left + r.width / 2 + window.scrollX,
+      top:  showBelow ? r.bottom + 6 : r.top - 8,
+      left,
+      showBelow,
+      arrowLeft: Math.max(8, Math.min(tipW - 18, r.left + r.width / 2 - (left - halfW))),
     });
   };
 
@@ -135,14 +146,18 @@ function AutoTooltip({ step, children }) {
 
   const tooltip = show && createPortal(
     <div style={{
-      position:"absolute", top: pos.top, left: pos.left,
-      transform:"translate(-50%, -100%)",
+      position:"fixed", top: pos.top, left: pos.left,
+      transform: pos.showBelow ? "translateX(-50%)" : "translate(-50%, -100%)",
       background:"#1a1a2e", borderRadius:10, padding:"10px 12px",
       zIndex:9999, minWidth:210, maxWidth:290,
       boxShadow:"0 8px 28px rgba(0,0,0,.3)", pointerEvents:"none",
     }}>
-      {/* Arrow */}
-      <div style={{ position:"absolute", bottom:-5, left:"50%", transform:"translateX(-50%) rotate(45deg)",
+      {/* Arrow — positioned relative to actual trigger, not tooltip center */}
+      <div style={{ position:"absolute",
+        top: pos.showBelow ? -5 : "auto",
+        bottom: pos.showBelow ? "auto" : -5,
+        left: pos.arrowLeft || "50%",
+        transform:"translateX(-50%) rotate(45deg)",
         width:10, height:10, background:"#1a1a2e" }}/>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
         letterSpacing:"0.07em", marginBottom:7 }}>⚡ When moved to this stage</div>
