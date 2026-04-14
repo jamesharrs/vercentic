@@ -3740,10 +3740,6 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
     const cands = result.logo_candidates || (result.logo ? [result.logo] : []);
     return cands.length ? cands[logoIndex % cands.length] : result.logo || null;
   };
-  const cycleLogoForward = () => {
-    const total = (result?.logo_candidates || []).length;
-    if (total > 1) setLogoIndex(i => (i + 1) % total);
-  };
   const activeLogo   = getActiveLogo();
   const totalLogos   = (result?.logo_candidates || []).length;
 
@@ -3805,24 +3801,77 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
             </div>}
             {result&&!loading&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
               {/* Logo with candidate cycling */}
-              <div style={{padding:"12px 16px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  {activeLogo
-                    ?<div style={{width:100,height:48,borderRadius:8,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",padding:8,flexShrink:0}}>
-                        <img src={activeLogo} alt="logo" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
-                      </div>
-                    :<div style={{width:48,height:48,borderRadius:8,background:result.theme?.primaryColor||C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:"white",flexShrink:0}}>{(result.title||"?")[0]}</div>}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:2}}>{result.title||result.source_url}</div>
-                    <div style={{fontSize:11,color:C.text3,marginBottom:4}}>{result.source_url}</div>
-                    {totalLogos>1&&<button onClick={cycleLogoForward} style={{fontSize:11,color:C.accent,background:"none",border:"none",cursor:"pointer",fontFamily:F,padding:0,fontWeight:600}}>
-                      Not right? Try next ({logoIndex+1}/{totalLogos}) →
-                    </button>}
-                    {totalLogos<=1&&activeLogo&&<div style={{fontSize:11,color:C.text3}}>AI-validated logo</div>}
-                  </div>
+              {/* ── Logo section ── */}
+              <div style={{borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+                {/* Header row */}
+                <div style={{padding:"10px 14px",background:C.surface2,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em"}}>Logo</div>
+                  {totalLogos>1&&<div style={{fontSize:11,color:C.text3}}>{totalLogos} options found — click to select</div>}
+                  {totalLogos<=1&&activeLogo&&<div style={{fontSize:11,color:"#0ca678",fontWeight:600}}>✓ AI-validated</div>}
                 </div>
-                <input placeholder="Or paste a logo URL to override…" style={{...inp,fontSize:11,padding:"6px 10px",marginTop:10}}
-                  onBlur={e=>{if(e.target.value.trim()){setResult(r=>({...r,logo:e.target.value.trim(),logo_candidates:[e.target.value.trim(),...(r.logo_candidates||[])]}));setLogoIndex(0);}}}/>
+                {/* Large preview of selected logo */}
+                <div style={{padding:"20px 0",display:"flex",justifyContent:"center",alignItems:"center",background:"white",minHeight:80,borderBottom:totalLogos>1?`1px solid ${C.border}`:"none"}}>
+                  {activeLogo
+                    ?<img src={activeLogo} alt="Selected logo"
+                        style={{maxHeight:60,maxWidth:260,objectFit:"contain"}}
+                        onError={e=>{e.target.style.display="none";}}/>
+                    :<div style={{fontSize:12,color:C.text3,textAlign:"center"}}>No logo found</div>}
+                </div>
+                {/* Candidate grid — only shown when multiple options */}
+                {totalLogos>1&&<div style={{padding:"12px 14px",background:C.bg}}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                    {(result.logo_candidates||[]).map((logoUrl,i)=>{
+                      const isSelected = i===logoIndex;
+                      return (
+                        <div key={i} onClick={()=>setLogoIndex(i)}
+                          title={logoUrl.split('/').pop().split('?')[0]}
+                          style={{
+                            width:80,height:48,borderRadius:8,cursor:"pointer",flexShrink:0,
+                            background:"white",padding:6,
+                            border:`2px solid ${isSelected?C.accent:C.border}`,
+                            boxShadow:isSelected?`0 0 0 3px ${C.accent}22`:"none",
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                            position:"relative",transition:"border-color .15s,box-shadow .15s"
+                          }}>
+                          <img src={logoUrl} alt={`Logo option ${i+1}`}
+                            style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}
+                            onError={e=>{e.target.parentNode.style.opacity="0.3";}}/>
+                          {isSelected&&<div style={{
+                            position:"absolute",top:-6,right:-6,width:16,height:16,
+                            borderRadius:"50%",background:C.accent,
+                            display:"flex",alignItems:"center",justifyContent:"center"
+                          }}>
+                            <svg width="8" height="8" viewBox="0 0 8 8"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+                          </div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>}
+                {/* Manual URL override */}
+                <div style={{padding:"10px 14px",borderTop:`1px solid ${C.border}`,background:C.surface2}}>
+                  <input placeholder="Or paste a logo URL to use instead…"
+                    style={{...inp,fontSize:11,padding:"6px 10px"}}
+                    onBlur={e=>{
+                      const v=e.target.value.trim();
+                      if(v){
+                        setResult(r=>({...r,logo_candidates:[v,...(r.logo_candidates||[])]}));
+                        setLogoIndex(0);
+                        e.target.value="";
+                      }
+                    }}
+                    onKeyDown={e=>{
+                      if(e.key==="Enter"){
+                        const v=e.target.value.trim();
+                        if(v){
+                          setResult(r=>({...r,logo_candidates:[v,...(r.logo_candidates||[])]}));
+                          setLogoIndex(0);
+                          e.target.value="";
+                        }
+                      }
+                    }}
+                  />
+                </div>
               </div>
               {result.colors?.length>0&&<div>
                 <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Extracted colours</div>
