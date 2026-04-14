@@ -2525,6 +2525,146 @@ const TYPE_OPS = {
 };
 const NO_VAL_OPS = ["is empty","is not empty","is true","is false"];
 
+// ── FieldSearchPicker — searchable, sorted field dropdown ────────────────────
+// Replaces native <select> for both bulk-edit and filter field pickers.
+// Props:
+//   value        – current selected value (string)
+//   onChange     – (value, fieldObj?) => void
+//   groups       – [{ label, fields: [{id, name, ...}] }]   for grouped mode
+//   flat         – [{id, name, ...}]                         for flat mode
+//   placeholder  – string shown when nothing selected
+function FieldSearchPicker({ value, onChange, groups, flat, placeholder = "Choose field…" }) {
+  const [search, setSearch]   = useState("");
+  const [open,   setOpen]     = useState(false);
+  const [hov,    setHov]      = useState(null);
+  const btnRef  = useRef(null);
+  const dropRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Build flat list for display
+  const allFields = flat
+    ? flat.map(f => ({ ...f, _group: null, _value: f.id }))
+    : (groups || []).flatMap(g =>
+        g.fields.map(f => ({ ...f, _group: g.label, _value: f._value || f.id }))
+      );
+
+  const sorted = [...allFields].sort((a, b) => a.name.localeCompare(b.name));
+  const q = search.trim().toLowerCase();
+  const filtered = q ? sorted.filter(f => f.name.toLowerCase().includes(q)) : sorted;
+
+  // Group the filtered list again for display
+  const displayGroups = [];
+  if (groups && !q) {
+    groups.forEach(g => {
+      const gf = g.fields.filter(f => filtered.some(x => x._value === (f._value || f.id)));
+      if (gf.length) displayGroups.push({ label: g.label, fields: [...gf].sort((a,b)=>a.name.localeCompare(b.name)) });
+    });
+  }
+
+  const selectedLabel = allFields.find(f => f._value === value)?.name || placeholder;
+
+  const handleOpen = () => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 30); };
+  const handleSelect = (f) => { onChange(f._value, f); setOpen(false); setSearch(""); };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const h = e => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false); setSearch("");
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const rowStyle = (f) => ({
+    width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 12px",
+    border:"none", background: hov === f._value ? C.accentLight : "transparent",
+    cursor:"pointer", fontFamily:F, textAlign:"left", transition:"background .08s",
+    fontSize:13, color: value === f._value ? C.accent : C.text1,
+    fontWeight: value === f._value ? 600 : 400,
+  });
+
+  const dropdown = open && ReactDOM.createPortal(
+    <>
+      <div style={{ position:"fixed", inset:0, zIndex:9880 }} onMouseDown={() => { setOpen(false); setSearch(""); }}/>
+      <div ref={dropRef} style={{
+        position:"fixed",
+        top: (() => { const r = btnRef.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0; })(),
+        left: (() => { const r = btnRef.current?.getBoundingClientRect(); return r ? r.left : 0; })(),
+        minWidth: Math.max(220, btnRef.current?.getBoundingClientRect()?.width || 220),
+        maxWidth: 300, maxHeight:"60vh",
+        background:"white", border:`1px solid ${C.border}`, borderRadius:12,
+        boxShadow:"0 8px 28px rgba(0,0,0,.14)", zIndex:9881,
+        display:"flex", flexDirection:"column", overflow:"hidden", fontFamily:F,
+      }}>
+        {/* Search */}
+        <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:7, background:C.bg, borderRadius:7, padding:"5px 9px", border:`1px solid ${C.border}` }}>
+            <Ic n="search" s={12} c={C.text3}/>
+            <input ref={inputRef} value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search fields…"
+              style={{ border:"none", background:"transparent", outline:"none", fontSize:12, fontFamily:F, flex:1, color:C.text1 }}/>
+            {search && <button onClick={()=>setSearch("")} style={{ background:"none", border:"none", cursor:"pointer", padding:0, color:C.text3, lineHeight:1 }}>×</button>}
+          </div>
+        </div>
+        {/* List */}
+        <div style={{ overflowY:"auto", flex:1 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding:"16px 12px", textAlign:"center", fontSize:12, color:C.text3 }}>No fields match</div>
+          )}
+          {/* Grouped display */}
+          {displayGroups.length > 0 ? displayGroups.map(g => (
+            <div key={g.label}>
+              <div style={{ padding:"6px 12px 2px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", background:"#f8f7ff" }}>{g.label}</div>
+              {g.fields.map(f => {
+                const v = f._value || f.id;
+                return (
+                  <button key={v} onMouseDown={()=>handleSelect({...f,_value:v})}
+                    onMouseEnter={()=>setHov(v)} onMouseLeave={()=>setHov(null)}
+                    style={rowStyle({...f,_value:v})}>
+                    {value === v && <Ic n="check" s={11} c={C.accent}/>}
+                    {f.name}
+                  </button>
+                );
+              })}
+            </div>
+          )) : (
+            // Flat / search results
+            filtered.map(f => (
+              <button key={f._value} onMouseDown={()=>handleSelect(f)}
+                onMouseEnter={()=>setHov(f._value)} onMouseLeave={()=>setHov(null)}
+                style={rowStyle(f)}>
+                {value === f._value && <Ic n="check" s={11} c={C.accent}/>}
+                <span style={{ flex:1 }}>{f.name}</span>
+                {q && f._group && <span style={{ fontSize:10, color:C.text3 }}>{f._group}</span>}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:6,
+          padding:"7px 10px", borderRadius:8, border:`1.5px solid ${open ? C.accent : C.border}`,
+          background: open ? C.accentLight : C.surface, color: value ? C.text1 : C.text3,
+          fontSize:13, fontFamily:F, cursor:"pointer", textAlign:"left", transition:"all .12s" }}>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{selectedLabel}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.5 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
 // ── FilterRow — module-level so it is never recreated on parent re-render ─────
 // (defining inside AdvancedFilterPanel caused focus loss on every keystroke)
 const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) => {
@@ -2595,24 +2735,24 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
         }
       </div>
 
-      {/* Field picker — grouped */}
-      <select value={fieldValue} onChange={handleFieldChange}
-        style={{ ...sel, flex:"0 0 180px" }}
-        onFocus={e=>e.target.style.borderColor=C.accent}
-        onBlur={e=>e.target.style.borderColor=C.border}>
-        <optgroup label="This record">
-          {(ownGroup?.fields || []).map(f => (
-            <option key={f.id} value={`own||${f.id}`}>{f.name}</option>
-          ))}
-        </optgroup>
-        {linkedGroups.map(grp => (
-          <optgroup key={grp.objectId} label={`Linked ${grp.label}`}>
-            {grp.fields.map(f => (
-              <option key={f.id} value={`linked|${grp.objectId}|${f.id}`}>{f.name}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      {/* Field picker — searchable grouped */}
+      <div style={{ flex:"0 0 200px" }}>
+        <FieldSearchPicker
+          value={fieldValue}
+          onChange={(val) => {
+            // Synthesise a fake event so handleFieldChange works
+            handleFieldChange({ target: { value: val } });
+          }}
+          groups={[
+            { label: "This record", fields: (ownGroup?.fields||[]).map(f=>({ ...f, _value:`own||${f.id}` })) },
+            ...(linkedGroups||[]).map(grp => ({
+              label: `Linked ${grp.label}`,
+              fields: (grp.fields||[]).map(f=>({ ...f, _value:`linked|${grp.objectId}|${f.id}` })),
+            })),
+          ]}
+          placeholder="Choose field…"
+        />
+      </div>
 
       {/* Operator */}
       <select value={filt.op} onChange={e => onUpdate(filt.id, { op: e.target.value, value: "" })}
@@ -3096,10 +3236,12 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           <div style={{ position:"fixed", inset:0, zIndex:9699 }} onMouseDown={() => { setShowEditPicker(false); setEditFieldId(""); setEditValue(""); }}/>
           <div style={{ position:"fixed", bottom:editPos.bottom, left:editPos.left, zIndex:9700, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>Set field on {count} records</div>
-            <select value={editFieldId} onChange={e => { setEditFieldId(e.target.value); setEditValue(""); }} style={selSt}>
-              <option value="">Choose field…</option>
-              {editableFields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <FieldSearchPicker
+              value={editFieldId}
+              onChange={(id) => { setEditFieldId(id); setEditValue(""); }}
+              flat={[...editableFields].sort((a,b)=>a.name.localeCompare(b.name))}
+              placeholder="Choose field…"
+            />
             {chosenField && (
               chosenField.field_type === "select" ? (
                 <select value={editValue} onChange={e => setEditValue(e.target.value)} style={selSt}>
