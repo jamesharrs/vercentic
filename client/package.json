@@ -15,7 +15,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "vite-plugin-compression": "^0.5.1"
   },
   "scripts": {
     "dev": "vite --port 3000",

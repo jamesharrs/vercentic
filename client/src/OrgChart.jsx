@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import api from './apiClient.js';import React from "react";
 import ReactDOM from "react-dom";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+// html2canvas + jsPDF are only needed for PDF export — lazy-loaded on demand
+// import html2canvas from "html2canvas";
+// import jsPDF from "jspdf";
 
 const API = "/api";
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
@@ -1418,6 +1419,14 @@ export default function OrgChart({ environment }) {
   const handleExportPdf = useCallback(async () => {
     const container = zp.canvasRef.current;
     if (!container) return;
+
+    // Lazy-load heavy PDF libraries only when export is actually used
+    const [html2canvasModule, jsPDFModule] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    const html2canvas = html2canvasModule.default;
+    const jsPDF = jsPDFModule.default;
 
     // Fit before capturing
     handleFit();

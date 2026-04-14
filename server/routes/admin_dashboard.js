@@ -135,7 +135,10 @@ router.get('/dashboard', (req, res) => {
     const allAttachments = store.attachments || [];
     const allComms = store.communications || [];
     const commsThisMonth = allComms.filter(c => c.created_at >= startOfMonth);
-    const storeSize = JSON.stringify(store).length;
+    // Estimate store size cheaply by summing per-table array lengths × avg bytes
+    // Avoids serialising the entire store just to get a byte count
+    const storeSize = Object.values(store).reduce((sum, v) =>
+      sum + (Array.isArray(v) ? v.length * 800 : 200), 0);
 
     res.json({
       generated_at: now.toISOString(),

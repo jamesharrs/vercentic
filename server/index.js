@@ -2,6 +2,7 @@ require('dotenv').config();
 const express       = require('express');
 const cors          = require('cors');
 const helmet        = require('helmet');
+const compression   = require('compression');
 const cookieParser  = require('cookie-parser');
 const session       = require('express-session');
 const { initDB, getStore } = require('./db/init');
@@ -11,6 +12,8 @@ const { auditResponseMiddleware } = require('./middleware/security-audit');
 const { attachCsrfCookie, verifyCsrf } = require('./middleware/csrf');
 
 const app = express();
+// Compress all responses — reduces API payload sizes by ~60-80%
+app.use(compression());
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [

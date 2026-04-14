@@ -259,21 +259,29 @@ router.get('/', (req, res) => {
 });
 
 // Global activity feed for dashboard — enriched with record/object/actor context
+// Cache lookup maps for 10 seconds — avoids rebuilding on every dashboard poll
+let _feedCache = { key: null, maps: null, ts: 0 };
+
 router.get('/activity/feed', (req, res) => {
   const { environment_id, limit = 25, types } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   const store = getStore();
   const n = Number(limit);
 
-  // Build lookup maps — include deleted records so we can still show their names
-  const recordMap = {};
-  (store.records || []).filter(r => r.environment_id === environment_id)
-    .forEach(r => { recordMap[r.id] = r; });
-  const objectMap = {};
-  (store.objects || store.object_definitions || []).filter(o => o.environment_id === environment_id)
-    .forEach(o => { objectMap[o.id] = o; });
-  const userMap = {};
-  (store.users || []).forEach(u => { userMap[u.id] = u; });
+  // Build lookup maps — cached for 10s so rapid dashboard reloads don't re-scan
+  const now10 = Date.now();
+  if (!_feedCache.maps || _feedCache.key !== environment_id || now10 - _feedCache.ts > 10000) {
+    const recordMap = {};
+    (store.records || []).filter(r => r.environment_id === environment_id)
+      .forEach(r => { recordMap[r.id] = r; });
+    const objectMap = {};
+    (store.objects || store.object_definitions || []).filter(o => o.environment_id === environment_id)
+      .forEach(o => { objectMap[o.id] = o; });
+    const userMap = {};
+    (store.users || []).forEach(u => { userMap[u.id] = u; });
+    _feedCache = { key: environment_id, maps: { recordMap, objectMap, userMap }, ts: now10 };
+  }
+  const { recordMap, objectMap, userMap } = _feedCache.maps;
 
   const stripEmoji = s => (s || "").replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F300}-\u{1F9FF}]/gu, "").trim();
 
