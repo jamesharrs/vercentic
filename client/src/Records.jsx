@@ -2987,10 +2987,15 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   const isPeople = objectSlug === "people";
 
   // Position helpers — compute fixed coords above a button
-  const posAboveBtn = (btnRef) => {
+  const posAboveBtn = (btnRef, panelWidth = 290) => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return null;
-    return { bottom: window.innerHeight - r.top + 6, left: r.left };
+    const margin = 10;
+    // Right-align to button right edge, but clamp so panel stays on screen
+    let left = r.right - panelWidth;
+    if (left < margin) left = margin;
+    if (left + panelWidth > window.innerWidth - margin) left = window.innerWidth - margin - panelWidth;
+    return { bottom: window.innerHeight - r.top + 6, left };
   };
 
   // Close dropdowns on outside click
