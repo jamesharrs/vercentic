@@ -6,6 +6,7 @@
  * - Click → full modal breakdown with visual bars
  */
 import { useState, useRef, useEffect } from "react";
+import ReactDOM from "react-dom";
 
 const F = "var(--t-font,'Plus Jakarta Sans',sans-serif)";
 const C = {
@@ -35,25 +36,52 @@ function CheckIcon({ ok }) {
 }
 
 // ── Tooltip (hover) ───────────────────────────────────────────────────────────
-function ScoreTooltip({ score, reasons = [], gaps = [], style = {} }) {
+function ScoreTooltip({ score, reasons = [], gaps = [], triggerRect = null }) {
   const col = scoreColor(score);
   const topReasons = reasons.slice(0, 3);
   const topGaps    = gaps.slice(0, 2);
-  return (
+
+  // Position using fixed coords derived from the trigger element's bounding rect
+  // so the tooltip escapes any overflow:hidden ancestor (e.g. the Copilot panel)
+  const posStyle = triggerRect
+    ? {
+        position: "fixed",
+        // Place above the trigger; if too close to top, flip below
+        bottom: triggerRect.top > 220
+          ? `${window.innerHeight - triggerRect.top + 8}px`
+          : "auto",
+        top: triggerRect.top <= 220
+          ? `${triggerRect.bottom + 8}px`
+          : "auto",
+        // Centre on the trigger ring, clamped so it doesn't overflow the right edge
+        left: Math.min(
+          triggerRect.left + triggerRect.width / 2 - 120,
+          window.innerWidth - 252,
+        ) + "px",
+      }
+    : {
+        position: "absolute",
+        bottom: "calc(100% + 8px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+      };
+
+  const tooltip = (
     <div style={{
-      position: "absolute", zIndex: 9999, bottom: "calc(100% + 8px)", left: "50%",
-      transform: "translateX(-50%)", width: 240,
-      background: C.text1, color: "white", borderRadius: 12,
-      padding: "12px 14px", boxShadow: "0 8px 30px rgba(0,0,0,.25)",
+      ...posStyle,
+      zIndex: 99999, width: 240,
+      background: "#0f0f1a", color: "white", borderRadius: 12,
+      padding: "12px 14px", boxShadow: "0 8px 30px rgba(0,0,0,.35)",
       fontFamily: F, pointerEvents: "none",
-      ...style,
     }}>
-      {/* Arrow */}
-      <div style={{position:"absolute",bottom:-6,left:"50%",transform:"translateX(-50%)",
-        width:12,height:6,overflow:"hidden"}}>
-        <div style={{width:12,height:12,background:C.text1,transform:"rotate(45deg)",
-          transformOrigin:"center",marginTop:-6}}/>
-      </div>
+      {/* Arrow — only shown in absolute mode (inside same stacking context) */}
+      {!triggerRect && (
+        <div style={{position:"absolute",bottom:-6,left:"50%",transform:"translateX(-50%)",
+          width:12,height:6,overflow:"hidden"}}>
+          <div style={{width:12,height:12,background:"#0f0f1a",transform:"rotate(45deg)",
+            transformOrigin:"center",marginTop:-6}}/>
+        </div>
+      )}
       {/* Score line */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,.7)"}}>AI Match Score</span>
@@ -81,6 +109,11 @@ function ScoreTooltip({ score, reasons = [], gaps = [], style = {} }) {
       <div style={{marginTop:8,fontSize:10,color:"rgba(255,255,255,.4)",textAlign:"center"}}>Click for full breakdown</div>
     </div>
   );
+
+  // When we have viewport coordinates, portal into document.body to escape overflow:hidden ancestors
+  return triggerRect
+    ? ReactDOM.createPortal(tooltip, document.body)
+    : tooltip;
 }
 
 // ── Modal (click) ─────────────────────────────────────────────────────────────
@@ -318,7 +351,6 @@ export default function ScoreExplainer({
         onMouseEnter={() => hasDetail && setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={e => { if (!hasDetail) return; e.stopPropagation(); setOpen(true); setHovered(false); }}
-        title={hasDetail ? "Click for full score breakdown" : undefined}
       >
         {/* Score ring */}
         <div style={{
@@ -333,9 +365,12 @@ export default function ScoreExplainer({
           <span style={{ fontSize: 8, color: col, opacity: 0.7 }}>%</span>
         </div>
 
-        {/* Hover tooltip */}
+        {/* Hover tooltip — portalled so it escapes overflow:hidden ancestors */}
         {hovered && hasDetail && (
-          <ScoreTooltip score={score} reasons={reasons} gaps={gaps} />
+          <ScoreTooltip
+            score={score} reasons={reasons} gaps={gaps}
+            triggerRect={ref.current?.getBoundingClientRect?.() ?? null}
+          />
         )}
       </div>
 
