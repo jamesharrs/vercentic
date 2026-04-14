@@ -2822,8 +2822,8 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
 
   const getOps = f => TYPE_OPS[f?.field_type] || TYPE_OPS.text;
 
-  // Build field options grouped by object
-  const ownGroup = { label: null, fields, objectId: null, objectSlug: null };
+  // Build field options grouped by object — only fields marked show_in_list
+  const ownGroup = { label: null, fields: fields.filter(f => f.show_in_list), objectId: null, objectSlug: null };
   const linkedGroups = Object.entries(linkedObjectFields)
     .filter(([key]) => !key.startsWith('__'))
     .map(([objId, flds]) => {
@@ -2839,7 +2839,7 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
   };
 
   const addRow = () => {
-    const first = fields[0];
+    const first = ownGroup.fields[0] || fields[0];
     onFiltersChange([...filters, {
       id: Date.now() + "",
       source: "own",
@@ -10065,7 +10065,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             </button>
             {showColPicker && (
               <ColumnPickerDropdown
-                fields={fields}
+                fields={fields.filter(f => f.show_in_list)}
                 visibleIds={visibleFieldIds || []}
                 onChange={handleColChange}
                 onClose={() => setShowColPicker(false)}
