@@ -6,7 +6,7 @@
 //   3. Subdomain of the request host
 //   4. null → master store
 
-const { tenantStorage, getStore, loadTenantStore, listTenants } = require('../db/init');
+const { tenantStorage, getStore, loadTenantStore, listTenants, storeCache } = require('../db/init');
 
 // Subdomains that are infrastructure — never treated as tenant slugs
 const RESERVED = new Set(['www', 'app', 'api', 'admin', 'portal', 'localhost', 'mail', 'smtp', 'ftp', 'static', 'cdn', 'assets']);
@@ -64,12 +64,26 @@ function tenantMiddleware(req, res, next) {
     tenantStorage.run(slug, () => {
       const tenantStore = getStore();
       const userInTenant = (tenantStore.users || []).find(u => u.id === userId && u.status !== 'deactivated');
-      if (!userInTenant) {
-        // User not in tenant store — fall back to master
-        tenantStorage.run('master', next);
+      if (userInTenant) {
+        next();
         return;
       }
-      next();
+
+      // User not in tenant store — check if they are a super admin in master
+      // Super admins can access any tenant store (for support, demo viewing etc.)
+      const masterStore = storeCache['master'] || loadTenantStore(null);
+      const masterUser  = (masterStore.users || []).find(u => u.id === userId && u.status !== 'deactivated');
+      const masterRole  = masterUser
+        ? ((masterStore.roles || []).find(r => r.id === masterUser.role_id)?.slug || masterUser.role_name || '')
+        : '';
+      if (masterUser && (masterRole === 'super_admin' || masterUser.is_super_admin)) {
+        // Super admin from master — allow through to the requested tenant store
+        next();
+        return;
+      }
+
+      // Not in tenant, not super admin — fall back to master
+      tenantStorage.run('master', next);
     });
     return;
   }
