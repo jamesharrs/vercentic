@@ -71,4 +71,41 @@ router.delete('/tenant/:slug/records', async (req, res) => {
   }
 });
 
+// POST /api/tenant-reset/trim-logs
+// Trims oversized log tables on master store to prevent file bloat.
+// Safe to call any time — just rotates logs, never deletes real data.
+router.post('/trim-logs', (req, res) => {
+  const { password } = req.body;
+  if (password !== SUPER_ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+
+  const LIMITS = {
+    error_logs:    500,
+    ai_usage_log:  100,
+    portal_events: 100,
+    security_audit: 50,
+    audit_log:     100,
+    activity:      150,
+  };
+
+  const store = getStore();
+  const report = {};
+  let totalRemoved = 0;
+
+  for (const [table, limit] of Object.entries(LIMITS)) {
+    if (!Array.isArray(store[table])) continue;
+    const before = store[table].length;
+    if (before > limit) {
+      store[table] = store[table].slice(-limit);
+      const removed = before - limit;
+      totalRemoved += removed;
+      report[table] = { before, after: limit, removed };
+    } else {
+      report[table] = { before, after: before, removed: 0 };
+    }
+  }
+
+  saveStore();
+  res.json({ ok: true, totalRemoved, tables: report });
+});
+
 module.exports = router;
