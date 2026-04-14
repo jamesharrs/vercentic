@@ -9264,19 +9264,48 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => {
     const handler = (e) => {
       const { search: q, filters, clearFilters, field, op, value } = e.detail || {};
+
+      // Helper: resolve api_key → fieldId UUID using current fields state
+      // The AI sends api_key strings; the filter system needs field UUIDs
+      const resolveField = (apiKey) => {
+        if (!apiKey) return null;
+        const f = fields.find(f => f.api_key === apiKey || f.name?.toLowerCase() === apiKey?.toLowerCase());
+        return f ? { fieldId: f.id, fieldType: f.field_type, options: f.options } : { fieldId: apiKey }; // fallback keeps api_key as-is
+      };
+
+      const makeFilter = (apiKey, operator, val) => {
+        const resolved = resolveField(apiKey);
+        return {
+          id: `copilot_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          source: "own",
+          fieldId: resolved?.fieldId || apiKey,
+          op: operator || "contains",
+          value: val ?? "",
+          rowLogic: "AND",
+        };
+      };
+
       // Simple single-field shorthand: { field, op, value }
       if (field !== undefined && !filters) {
         if (field === null || field === "") {
           setActiveFilters([]);
           setFilterChip(null);
         } else {
-          setActiveFilters([{ field, op: op || "contains", value: value ?? "" }]);
+          setActiveFilters([makeFilter(field, op, value)]);
           setFilterLogic("AND");
         }
       }
-      // Full filters array
+      // Full filters array — resolve each field api_key to UUID
       if (filters !== undefined) {
-        setActiveFilters(Array.isArray(filters) ? filters : []);
+        const resolved = (Array.isArray(filters) ? filters : []).map((filt, i) => ({
+          id: `copilot_${Date.now()}_${i}`,
+          source: "own",
+          fieldId: resolveField(filt.field || filt.fieldId)?.fieldId || filt.field || filt.fieldId,
+          op: filt.op || "contains",
+          value: filt.value ?? "",
+          rowLogic: i === 0 ? "AND" : (filt.logic || "AND"),
+        }));
+        setActiveFilters(resolved);
         setFilterLogic("AND");
       }
       if (clearFilters) {
@@ -9286,10 +9315,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       // Search string
       if (q !== undefined) setSearch(q);
       setPage(1);
+      // Auto-open the filter panel so user can see what was applied
+      if ((filters?.length || field) && !clearFilters) setShowFilterPanel(true);
     };
     window.addEventListener("talentos:apply-filter", handler);
     return () => window.removeEventListener("talentos:apply-filter", handler);
-  }, []);
+  }, [fields]); // re-bind when fields load so resolveField has current data
   const [total, setTotal]       = useState(0);
 
   const colStorageKey = `talentos_cols_${object.id}`;
