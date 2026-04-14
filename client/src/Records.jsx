@@ -2995,14 +2995,13 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
 
   // Close dropdowns on outside click
   useEffect(() => {
-    if (!showComms && !showEditPicker) return;
+    if (!showComms) return;
     const h = e => {
       if (showComms && commsBtnRef.current && !commsBtnRef.current.contains(e.target)) setShowComms(false);
-      if (showEditPicker && editBtnRef.current && !editBtnRef.current.contains(e.target)) setShowEditPicker(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, [showComms, showEditPicker]);
+  }, [showComms]);
 
   // Load all linkable records (only those with a Linked Person workflow) when modal opens
   useEffect(() => {
@@ -3088,6 +3087,8 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           <Ic n="edit" s={12} c="white"/> Edit fields
         </button>
         {showEditPicker && editPos && ReactDOM.createPortal(
+          <>
+          <div style={{ position:"fixed", inset:0, zIndex:9699 }} onMouseDown={() => { setShowEditPicker(false); setEditFieldId(""); setEditValue(""); }}/>
           <div style={{ position:"fixed", bottom:editPos.bottom, left:editPos.left, zIndex:9700, background:"white", borderRadius:12, border:`1px solid ${C.border}`, boxShadow:"0 8px 28px rgba(0,0,0,.15)", padding:14, minWidth:280, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>Set field on {count} records</div>
             <select value={editFieldId} onChange={e => { setEditFieldId(e.target.value); setEditValue(""); }} style={selSt}>
@@ -3118,7 +3119,8 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
               <button onClick={handleBulkEdit} disabled={!editFieldId}
                 style={{ flex:2, padding:"6px", borderRadius:7, border:"none", background:C.accent, color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:F, opacity:!editFieldId?0.5:1 }}>Apply</button>
             </div>
-          </div>,
+          </div>
+          </>,
           document.body
         )}
       </div>
