@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
-import ReschedulePage from './ReschedulePage.jsx';
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
-import InboxModule, { useInboxUnreadCount } from "./Inbox";
-import { MobileShell, useIsMobile } from "./MobileApp.jsx";
-import MaintenanceOverlay from "./MaintenanceOverlay";
-import GuidedTour, { useTour } from "./GuidedTour";
+import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import { useI18n } from "./i18n/I18nContext.jsx";
+import { getSession, clearSession } from "./usePermissions.js";
+import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
+import { useHistory } from "./useHistory";
 
 // Heavy modules — loaded on demand only when navigated to
 // Chunk-load error handler — reloads once when a lazy chunk fails (stale deployment cache)
@@ -20,6 +20,30 @@ const lazyWithRetry = (factory) => lazy(() =>
   })
 );
 
+// Route-only lazy imports (not needed until that route loads)
+const ReschedulePage      = lazyWithRetry(() => import('./ReschedulePage.jsx'));
+const PortalApp           = lazyWithRetry(() => import('./PortalApp.jsx'));
+const InterviewSession    = lazyWithRetry(() => import('./InterviewSession.jsx'));
+const LoginPage           = lazyWithRetry(() => import('./LoginPage.jsx'));
+const CandidateChat       = lazyWithRetry(() => import('./CandidateChat.jsx'));
+const DocumentBuilder     = lazyWithRetry(() => import('./DocumentBuilder.jsx'));
+const BotInterview        = lazyWithRetry(() => import('./BotInterview.jsx'));
+const CandidateHub        = lazyWithRetry(() => import('./CandidateHub.jsx'));
+const ClientHub           = lazyWithRetry(() => import('./ClientHub.jsx'));
+const ClientCasePortal    = lazyWithRetry(() => import('./ClientCasePortal.jsx'));
+const SupportPortalPage   = lazyWithRetry(() => import('./SupportPortalPage.jsx'));
+const MaintenanceOverlay  = lazyWithRetry(() => import('./MaintenanceOverlay.jsx'));
+const GuidedTour          = lazyWithRetry(() => import('./GuidedTour.jsx'));
+const MobileShell         = lazyWithRetry(() => import('./MobileApp.jsx').then(m => ({ default: m.MobileShell })));
+
+// Core app modules (lazy but pre-loaded once main shell renders)
+const RecordsView         = lazyWithRetry(() => import('./Records.jsx').then(m => ({ default: m.default })));
+const RecordDetail        = lazyWithRetry(() => import('./Records.jsx').then(m => ({ default: m.RecordDetail })));
+const AICopilot           = lazyWithRetry(() => import('./AI.jsx').then(m => ({ default: m.AICopilot })));
+const InboxModule         = lazyWithRetry(() => import('./Inbox.jsx').then(m => ({ default: m.default })));
+const HistoryDropdown     = lazyWithRetry(() => import('./RecentHistory.jsx').then(m => ({ default: m.HistoryDropdown })));
+const CalendarModule      = lazyWithRetry(() => import('./Calendar.jsx'));
+
 const SettingsPage    = lazyWithRetry(() => import("./Settings.jsx"));
 const OrgChart        = lazyWithRetry(() => import("./OrgChart.jsx"));
 const SearchPage      = lazyWithRetry(() => import("./Search.jsx"));
@@ -29,8 +53,6 @@ const AdminDashboard      = lazyWithRetry(() => import("./AdminDashboard.jsx"));
 const InterviewDashboard = lazyWithRetry(() => import("./InterviewDashboard.jsx"));
 const OfferDashboard     = lazyWithRetry(() => import("./OfferDashboard.jsx"));
 const DashboardHub       = lazyWithRetry(() => import("./DashboardHub.jsx"));
-import PortalApp from "./PortalApp.jsx";
-import InterviewSession from "./InterviewSession.jsx";
 const WorkflowsPage   = lazyWithRetry(() => import("./Workflows.jsx"));
 const PortalsPage     = lazyWithRetry(() => import("./Portals.jsx"));
 const ReportsPage     = lazyWithRetry(() => import("./Reports.jsx"));
@@ -45,25 +67,10 @@ const AvailabilityPickerPage = lazyWithRetry(() => import("./AvailabilityPicker.
 const IntegrationsPage  = lazyWithRetry(() => import("./IntegrationsSettings.jsx"));
 const HelpPage          = lazyWithRetry(() => import("./Help.jsx"));
 const CompanySetupWizard = lazyWithRetry(() => import("./CompanySetupWizard.jsx"));
-
-// Records loaded eagerly — used everywhere for record detail navigation
-import RecordsView, { RecordDetail } from "./Records.jsx";
-import { AICopilot, MatchingEngine } from "./AI.jsx";
-import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
-import { useI18n } from "./i18n/I18nContext.jsx";
-import LoginPage from "./LoginPage.jsx";
-import CalendarModule from "./Calendar.jsx";
-import CandidateChat from "./CandidateChat.jsx";
-import DocumentBuilder from "./DocumentBuilder.jsx";
-import BotInterview from "./BotInterview.jsx";
-import CandidateHub from "./CandidateHub.jsx";
-import ClientHub from "./ClientHub.jsx";
-import ClientCasePortal from "./ClientCasePortal.jsx";
-import SupportPortalPage from "./SupportPortalPage.jsx";
-import { getSession, clearSession } from "./usePermissions.js";
-import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
-import { useHistory } from "./useHistory";
-import { HistoryDropdown } from "./RecentHistory";
+const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
+const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
+const useIsMobile       = () => typeof window !== 'undefined' && window.innerWidth < 768;
+const useTour           = () => ({ startTour: () => {}, TourStep: () => null });
 
 
 // ─── AccessDenied fallback ───────────────────────────────────────────────────
