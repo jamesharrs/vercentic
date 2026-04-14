@@ -6,7 +6,7 @@
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
+const { getStore, saveStore, storeCache, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
 
 const JOB_TEMPLATES = [
   { title:'Senior Software Engineer',        dept:'Engineering', salary_min:120000, salary_max:160000, location:'San Francisco, USA',  work_type:'Hybrid',  employment_type:'Full-time' },
@@ -121,17 +121,19 @@ const fmt     = (str, vars) => str.replace(/\{(\w+)\}/g, (_, k) => vars[k] || ''
 // Find which tenant store contains a given environment_id
 // Returns null for the master store, or the tenant slug string
 function findTenantForEnv(environmentId) {
-  // Check master store environments first
-  const master = getStore();
+  // IMPORTANT: Do NOT use getStore() here — if the HTTP request already has
+  // X-Tenant-Slug set (e.g. from DemoDataManager sending tenantHeaders()),
+  // getStore() returns the tenant's store, not master. We must read storeCache
+  // directly to bypass the AsyncLocalStorage context.
+  const master = storeCache['master'] || loadTenantStore(null);
+
   if ((master.environments || []).find(e => e.id === environmentId)) return null;
 
   // Check master store's client_environments (provisioned tenant environments)
   const clientEnv = (master.client_environments || []).find(e => e.id === environmentId && !e.deleted_at);
   if (clientEnv) {
-    // Find which client owns this environment and return their slug
     const client = (master.clients || []).find(c => c.id === clientEnv.client_id && !c.deleted_at);
     if (client?.tenant_slug) {
-      // Also ensure the tenant store has the environment seeded so future lookups work
       const ts = loadTenantStore(client.tenant_slug);
       if (!(ts.environments || []).find(e => e.id === environmentId)) {
         if (!ts.environments) ts.environments = [];
