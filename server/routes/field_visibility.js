@@ -39,41 +39,46 @@ router.get('/', (req, res) => {
 // Bulk:  body: { role_id, object_id, rules: [{ field_id, hidden }] }
 // Single: body: { role_id, object_id, rules: [{ field_id, hidden }] }  ← same shape, single-item rules
 router.put('/', (req, res) => {
-  if (checkGlobal(req, res, 'manage_settings') === false) return;
-  const { role_id, object_id, rules } = req.body;
-  if (!role_id || !object_id || !Array.isArray(rules))
-    return res.status(400).json({ error: 'role_id, object_id and rules[] required' });
+  try {
+    if (checkGlobal(req, res, 'manage_settings') === false) return;
+    const { role_id, object_id, rules } = req.body;
+    if (!role_id || !object_id || !Array.isArray(rules))
+      return res.status(400).json({ error: 'role_id, object_id and rules[] required' });
 
-  const store = getStore();
-  if (!store.field_visibility) store.field_visibility = [];
+    const store = getStore();
+    if (!store.field_visibility) store.field_visibility = [];
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  // If single-field save (rules has exactly 1 item), only touch that field's rule for this role
-  if (rules.length === 1 && rules[0].field_id) {
-    const { field_id, hidden } = rules[0];
-    store.field_visibility = store.field_visibility.filter(r =>
-      !(r.role_id === role_id && r.field_id === field_id)
-    );
-    if (hidden) {
-      store.field_visibility.push({ id: require('uuid').v4(), role_id, field_id, hidden: true, created_at: now });
-    }
-  } else {
-    // Bulk: replace all rules for this role+object
-    const fieldIds = query('fields', f => f.object_id === object_id).map(f => f.id);
-    store.field_visibility = store.field_visibility.filter(r =>
-      !(r.role_id === role_id && fieldIds.includes(r.field_id))
-    );
-    for (const rule of rules) {
-      if (rule.hidden) {
-        store.field_visibility.push({ id: require('uuid').v4(), role_id, field_id: rule.field_id, hidden: true, created_at: now });
+    // If single-field save (rules has exactly 1 item), only touch that field's rule for this role
+    if (rules.length === 1 && rules[0].field_id) {
+      const { field_id, hidden } = rules[0];
+      store.field_visibility = store.field_visibility.filter(r =>
+        !(r.role_id === role_id && r.field_id === field_id)
+      );
+      if (hidden) {
+        store.field_visibility.push({ id: uuidv4(), role_id, field_id, hidden: true, created_at: now });
+      }
+    } else {
+      // Bulk: replace all rules for this role+object
+      const fieldIds = query('fields', f => f.object_id === object_id).map(f => f.id);
+      store.field_visibility = store.field_visibility.filter(r =>
+        !(r.role_id === role_id && fieldIds.includes(r.field_id))
+      );
+      for (const rule of rules) {
+        if (rule.hidden) {
+          store.field_visibility.push({ id: uuidv4(), role_id, field_id: rule.field_id, hidden: true, created_at: now });
+        }
       }
     }
-  }
 
-  require('../db/init').saveStore();
-  logFieldVisibilityChange(req, role_id, object_id, rules);
-  res.json({ saved: rules.length });
+    require('../db/init').saveStore();
+    logFieldVisibilityChange(req, role_id, object_id, rules);
+    res.json({ saved: rules.length });
+  } catch (e) {
+    console.error('[field-visibility PUT] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // DELETE /api/field-visibility/:id

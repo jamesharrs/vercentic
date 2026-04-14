@@ -57,7 +57,16 @@ router.post('/', validate(createFieldSchema), (req, res) => {
 });
 
 router.patch('/:id', validate(patchFieldSchema), (req, res) => {
-  if (checkGlobal(req, res, 'manage_settings') === false) return; const f = update('fields', x=>x.id===req.params.id, req.body); f ? res.json(f) : res.status(404).json({error:'Not found'}); });
+  try {
+    if (checkGlobal(req, res, 'manage_settings') === false) return;
+    const f = update('fields', x => x.id === req.params.id, req.body);
+    if (!f) return res.status(404).json({ error: 'Not found' });
+    res.json(f);
+  } catch (e) {
+    console.error('[fields PATCH] Unexpected error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.delete('/:id', (req, res) => {
   if (checkGlobal(req, res, 'manage_settings') === false) return;
