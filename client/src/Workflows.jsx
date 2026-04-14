@@ -3161,7 +3161,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                           </div>
                           {/* Name */}
                           <div style={{ textAlign:"center" }}>
-                            <div onClick={()=>onNavigate&&onNavigate(link.person_record_id)}
+                            <div onClick={e=>{e.stopPropagation();onNavigate&&onNavigate(link.person_record_id);}}
                               style={{ fontSize:13, fontWeight:700, color:"#7c3aed", cursor:"pointer", lineHeight:1.3, marginBottom:2 }}
                               onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
                               onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
@@ -3243,7 +3243,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                               <div style={{ width:24,height:24,borderRadius:"50%",background:"#7c3aed",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"white",flexShrink:0 }}>
                                 {(name||"?").charAt(0).toUpperCase()}
                               </div>
-                              <span onClick={()=>onNavigate&&onNavigate(link.person_record_id)}
+                              <span onClick={e=>{e.stopPropagation();onNavigate&&onNavigate(link.person_record_id);}}
                                 style={{ fontWeight:600, color:"#7c3aed", cursor:"pointer", textDecoration:"underline" }}>{name}</span>
                             </div>
                           </td>
