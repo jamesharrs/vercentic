@@ -1646,6 +1646,7 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
             onDragOver={e => handleDragOver(e, idx)}
             onDrop={e => handleDrop(e, idx)}
             onDragEnd={handleDragEnd}
+            onClick={() => onEdit(f)}
             style={{
               display:"flex", alignItems:"center", gap:8,
               padding: isSep ? "8px 12px" : "9px 12px",
@@ -1658,15 +1659,22 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
               background: isDragging ? "#f0f4ff" : isSep ? "#f0f4ff" : "#fff",
               opacity: isDragging ? 0.5 : 1,
               transition: "border .1s, background .1s",
-              cursor: "grab",
+              cursor: "pointer",
             }}
+            onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = C.accent; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = isOver ? C.accent : isSep ? "#93c5fd" : C.border; }}
           >
-            {/* Drag handle */}
-            <div title="Drag to reorder" style={{
-              display:"flex", flexDirection:"column", gap:2,
-              padding:"2px 4px", cursor:"grab", flexShrink:0, color:C.text3,
-              opacity: 0.5,
-            }}>
+            {/* Drag handle — stops click so dragging doesn't open edit */}
+            <div
+              title="Drag to reorder"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              style={{
+                display:"flex", flexDirection:"column", gap:2,
+                padding:"2px 4px", cursor:"grab", flexShrink:0, color:C.text3,
+                opacity: 0.5,
+              }}
+            >
               {[0,1,2].map(i => (
                 <div key={i} style={{width:12,height:2,borderRadius:1,background:"currentColor"}}/>
               ))}
@@ -1680,6 +1688,7 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
               onChange={e => setOrderInputs(p => ({...p, [f.id]: e.target.value}))}
               onBlur={e => commitOrder(f, e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } if (e.key === "Escape") { setOrderInputs(p => { const n={...p}; delete n[f.id]; return n; }); } }}
+              onClick={e => e.stopPropagation()}
               style={{
                 width:34, textAlign:"center", padding:"3px 4px",
                 border:`1px solid ${C.border}`, borderRadius:6,
@@ -1712,7 +1721,7 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
             )}
 
             {/* Actions */}
-            <div style={{display:"flex",gap:4,flexShrink:0}}>
+            <div style={{display:"flex",gap:4,flexShrink:0}} onClick={e => e.stopPropagation()}>
               <Btn v="ghost" sz="sm" icon="edit" onClick={()=>onEdit(f)}/>
               {!f.is_system && <Btn v="ghost" sz="sm" icon="trash" onClick={()=>onDelete(f)} style={{color:"#ef4444"}}/>}
             </div>
