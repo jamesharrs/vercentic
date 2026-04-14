@@ -8846,8 +8846,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <EngagementBadge
             recordId={record?.id}
             onClick={() => {
-              const el = document.querySelector('[data-panel-id="engagement"]');
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              openPanelAndScroll("engagement");
+              setTimeout(() => {
+                const el = document.querySelector('[data-panel-id="engagement"]');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 80);
             }}
           />
         )}

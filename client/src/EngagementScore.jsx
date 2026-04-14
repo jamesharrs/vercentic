@@ -91,9 +91,15 @@ export function EngagementBadge({ recordId, onClick }) {
         style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px 4px 6px', borderRadius:99,
           background: hovered ? data.color+'20' : data.color+'12',
           border:`1.5px solid ${hovered ? data.color+'50' : data.color+'28'}`,
-          cursor:onClick?'pointer':'default', transition:'all .15s', userSelect:'none' }}>
+          cursor:onClick?'pointer':'default', transition:'all .15s', userSelect:'none',
+          title: onClick ? 'Click to open Engagement panel' : undefined }}>
         <div style={{ width:8, height:8, borderRadius:'50%', background:data.color, flexShrink:0 }}/>
         <span style={{ fontSize:12, fontWeight:700, color:data.color, lineHeight:1 }}>{data.score}</span>
+        {onClick && hovered && (
+          <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={data.color} strokeWidth={3} strokeLinecap="round">
+            <path d="M12 5v14M5 12l7 7 7-7"/>
+          </svg>
+        )}
       </div>
       {hovered && ReactDOM.createPortal(
         <div style={{ position:'fixed', top: pos.top, left: pos.left,
