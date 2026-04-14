@@ -825,13 +825,20 @@ RULES:
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
 
-IMPORTANT MATCHING RULE — CRITICAL:
-When the user is viewing a PERSON RECORD and asks about job matches, best roles, suitable positions, or similar:
-- The context already contains "REAL JOB MATCH SCORES" — pre-calculated scores from the AI matching engine
-- USE THOSE SCORES DIRECTLY — do NOT use <SEARCH_QUERY> for this
+IMPORTANT MATCHING RULES — CRITICAL:
+
+When the user asks which jobs a person IS ALREADY BEING CONSIDERED FOR, IS LINKED TO, IS APPLYING FOR, or IS IN A PIPELINE FOR:
+- Use "PERSON LINKED TO X JOB(S)" from the context — these are the actual active job links
+- Answer directly: "She is being considered for: 1. Risk Manager, 2. Senior Recruiter"
+- Include the current stage if available
+- Do NOT use REAL JOB MATCH SCORES for this — those are potential fits, not current applications
+- If "PERSON LINKED TO 0 JOBS" or no linked section exists, say they are not currently linked to any roles
+
+When the user asks about job MATCHES, BEST FIT, SUITABLE ROLES, RECOMMENDATIONS for a person:
+- Use "REAL JOB MATCH SCORES" from the context — pre-calculated scores from the AI matching engine
 - Rank jobs by score (highest first), explain WHY each is a good or poor fit
 - Reference specific scores, reasons, and gaps from the injected data
-- If no scores are injected, say there are no jobs in the system yet
+- Do NOT use <SEARCH_QUERY> for job matching
 
 When a user asks to SEARCH or FIND records (not matching), output a search block:
 <SEARCH_QUERY>{"q":"search term","slug":"people"}</SEARCH_QUERY>
@@ -1679,12 +1686,15 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     // debug: console.log('[CP] linked jobs for context:', _lj.length);
     if(_lj.length>0 && currentObject?.slug==='people'){
       parts.push('');
-      parts.push(`PERSON LINKED TO ${_lj.length} JOB(S) — MANDATORY: When scheduling an interview or any job-related action, you MUST immediately show this numbered list and ask the user to pick one. Do NOT ask "which role?" as a blank question — always show the options.`);
+      parts.push(`JOBS THIS PERSON IS BEING CONSIDERED FOR (${_lj.length} active pipeline link${_lj.length!==1?'s':''}) — These are the roles they are CURRENTLY linked to / being considered for / in the pipeline for. Use this list to answer "what jobs is she being considered for?", "what roles is she linked to?", "what applications does she have?". Also MANDATORY when scheduling an interview: show this list and ask user to pick one. Do NOT ask "which role?" as a blank question — always show the options.`);
       _lj.forEach((j,i)=>{
         parts.push(`  ${i+1}. ${j.title}${j.object_name?' ('+j.object_name+')':''}${j.stage?' — Stage: '+j.stage:''}${j.status?' ['+j.status+']':''} [record_id:${j.id}]`);
       });
       parts.push('  0. No specific role');
       parts.push('Wait for user to reply with a number, then use the matching record_id as job_id and the title as job_name in the action block.');
+    } else if(currentObject?.slug==='people'){
+      parts.push('');
+      parts.push('JOBS THIS PERSON IS BEING CONSIDERED FOR: None — this person is not currently linked to any job pipelines. If asked "what jobs is she being considered for?", answer that they have no active job links.');
     }
     if(pageContext){parts.push('');parts.push('ADDITIONAL PAGE CONTEXT:');parts.push(pageContext);}
 
