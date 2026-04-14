@@ -3797,7 +3797,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
             </div>}
             {error && error!=="__blocked__" && <div style={{padding:"10px 14px",borderRadius:8,background:C.redLight,border:`1px solid ${C.red}40`,fontSize:13,color:C.red,marginBottom:12}}>{error}</div>}
             {error==="__blocked__"&&result&&<div style={{padding:"10px 14px",borderRadius:8,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E",marginBottom:12}}>
-              <strong style={{display:"inline-flex",alignItems:"center",gap:4}}><Ic n="alertTri" s={12} c={C.amber}/>Site blocked automated scraping</strong> — Vercentic generated a theme from the brand name instead. Apply it or tweak colours below.
+              <strong style={{display:"inline-flex",alignItems:"center",gap:4}}><Ic n="alertTri" s={12} c={C.amber}/>Notice</strong> — {result.blocked_message || "Vercentic generated a theme from the brand name instead. Apply it or tweak colours below."}
             </div>}
             {result&&!loading&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
               {/* Logo with candidate cycling */}

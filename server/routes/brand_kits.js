@@ -13,7 +13,7 @@ function ensure() {
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { timeout: 8000,
+    const req = mod.get(url, { timeout: 12000,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Vercentic/1.0; +https://vercentic.com)' }
     }, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -307,10 +307,31 @@ router.post('/analyse', async (req, res) => {
       blocked: false
     });
   } catch (e) {
-    const msg = e.code === 'ENOTFOUND'
-      ? `Could not reach "${new URL(target).hostname}" — check the URL is correct (e.g. vodafone.com, not just "vodafone")`
-      : e.message || 'Failed to analyse URL';
-    res.status(500).json({ error: msg });
+    // ENOTFOUND = bad domain
+    if (e.code === 'ENOTFOUND') {
+      const host = (() => { try { return new URL(target).hostname; } catch { return target; } })();
+      return res.status(400).json({ error: `Could not reach "${host}" — check the URL is correct (e.g. vodafone.com, not just "vodafone")` });
+    }
+    // Timeout or connection refused → fall back to AI-only theme from brand name
+    if (e.message === 'Timeout' || e.code === 'ECONNREFUSED' || e.code === 'ECONNRESET') {
+      const host = (() => { try { return new URL(target).hostname.replace(/^www\./, ''); } catch { return target; } })();
+      console.log(`[brand] Timeout for ${target}, falling back to AI-only theme`);
+      try {
+        const domainTheme = await synthesiseTheme({ url: target, colors: [], fonts: [], logo: null, title: host });
+        return res.json({
+          source_url: target,
+          title: host,
+          logo: null, logo_candidates: [],
+          colors: [], fonts: [],
+          theme: domainTheme || buildFallbackTheme([], []),
+          blocked: true,
+          blocked_message: `"${host}" took too long to respond — Vercentic generated a theme from the brand name instead. You can also paste colours manually.`
+        });
+      } catch (aiErr) {
+        return res.status(500).json({ error: `"${host}" timed out and AI fallback failed. Try again or paste colours manually.` });
+      }
+    }
+    res.status(500).json({ error: e.message || 'Failed to analyse URL' });
   }
 });
 
