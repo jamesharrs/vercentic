@@ -38,6 +38,13 @@ router.post('/', (req, res) => {
       created_at: new Date().toISOString(),
     };
     store.error_logs.push(log);
+
+    // Rotate — keep only the latest 500 entries to prevent file bloat
+    const MAX_ERROR_LOGS = 500;
+    if (store.error_logs.length > MAX_ERROR_LOGS) {
+      store.error_logs = store.error_logs.slice(-MAX_ERROR_LOGS);
+    }
+
     const { saveStore } = require('../db/init');
     saveStore();
     res.json({ ok: true, code: log.code });

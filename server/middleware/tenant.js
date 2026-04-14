@@ -11,6 +11,20 @@ const { tenantStorage, getStore, loadTenantStore, listTenants } = require('../db
 // Subdomains that are infrastructure — never treated as tenant slugs
 const RESERVED = new Set(['www', 'app', 'api', 'admin', 'portal', 'localhost', 'mail', 'smtp', 'ftp', 'static', 'cdn', 'assets']);
 
+// Cache listTenants() result — recompute at most every 30s to avoid per-request overhead
+let _tenantCache = null;
+let _tenantCacheAt = 0;
+function cachedTenants() {
+  const now = Date.now();
+  if (!_tenantCache || now - _tenantCacheAt > 30000) {
+    _tenantCache = new Set(listTenants ? listTenants() : []);
+    _tenantCacheAt = now;
+  }
+  return _tenantCache;
+}
+// Expose for invalidation after provisioning a new tenant
+function invalidateTenantCache() { _tenantCache = null; }
+
 function slugFromHost(host) {
   if (!host) return null;
   const h = host.split(':')[0].toLowerCase();
@@ -37,7 +51,7 @@ function tenantMiddleware(req, res, next) {
   }
 
   // Validate the slug actually exists as a tenant file
-  const knownTenants = new Set(listTenants ? listTenants() : []);
+  const knownTenants = cachedTenants();
   if (!knownTenants.has(slug)) {
     // Unknown slug — fall back to master
     tenantStorage.run('master', next);
@@ -66,3 +80,4 @@ function tenantMiddleware(req, res, next) {
 
 module.exports = tenantMiddleware;
 module.exports.slugFromHost = slugFromHost;
+module.exports.invalidateTenantCache = invalidateTenantCache;
