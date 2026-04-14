@@ -2416,6 +2416,95 @@ function BulkStageDropdown({ steps, onMove }) {
   );
 }
 
+// ─── AddPersonModal ───────────────────────────────────────────────────────────
+function AddPersonModal({ steps, personRecords, peopleLinks, environment, onAdd, onClose }) {
+  const [search, setSearch]   = useState("");
+  const [stageId, setStageId] = useState(steps[0]?.id || "");
+  const [hov, setHov]         = useState(null);
+
+  const linkedIds = new Set(peopleLinks.map(l => l.person_record_id));
+  const filtered  = personRecords.filter(p => {
+    if (linkedIds.has(p.id)) return false;
+    const name = [p.data?.first_name, p.data?.last_name].filter(Boolean).join(" ").toLowerCase();
+    const q = search.trim().toLowerCase();
+    return !q || name.includes(q) || (p.data?.email||"").toLowerCase().includes(q);
+  });
+
+  return ReactDOM.createPortal(
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(10,14,30,.45)", zIndex:9800 }} onMouseDown={onClose}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
+        background:"white", borderRadius:16, boxShadow:"0 20px 60px rgba(0,0,0,.2)",
+        zIndex:9801, width:420, maxHeight:"70vh", display:"flex", flexDirection:"column",
+        overflow:"hidden", fontFamily:F }}>
+        {/* Header */}
+        <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Add Person to Pipeline</div>
+            <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>Select a person and starting stage</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:4, display:"flex" }}>
+            <Ic n="x" s={16} c={C.text3}/>
+          </button>
+        </div>
+        {/* Stage picker */}
+        {steps.length > 1 && (
+          <div style={{ padding:"10px 18px 0", display:"flex", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:11, fontWeight:600, color:C.text3, alignSelf:"center", marginRight:4 }}>Start at:</span>
+            {steps.map(s => (
+              <button key={s.id} onClick={() => setStageId(s.id)}
+                style={{ padding:"3px 10px", borderRadius:99, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F, border:`1.5px solid ${stageId===s.id?C.accent:"#c4b5fd"}`,
+                  background: stageId===s.id?C.accent:"#f5f3ff", color: stageId===s.id?"white":"#6d28d9" }}>
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Search */}
+        <div style={{ padding:"10px 18px 8px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, background:"#f5f3ff", borderRadius:8, padding:"7px 10px", border:`1px solid ${C.border}` }}>
+            <Ic n="search" s={13} c={C.text3}/>
+            <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="Search by name or email…"
+              style={{ border:"none", background:"transparent", outline:"none", fontSize:13, fontFamily:F, flex:1, color:C.text1 }}/>
+          </div>
+        </div>
+        {/* List */}
+        <div style={{ flex:1, overflowY:"auto", padding:"0 10px 10px" }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px 0", color:C.text3, fontSize:13 }}>
+              {personRecords.length === 0 ? "No people records found" : "No matches"}
+            </div>
+          ) : filtered.map(p => {
+            const name = [p.data?.first_name, p.data?.last_name].filter(Boolean).join(" ") || p.data?.email || "Unnamed";
+            const initials = name.split(" ").map(w=>w[0]||"").slice(0,2).join("").toUpperCase();
+            const title = p.data?.current_title || p.data?.job_title || "";
+            return (
+              <button key={p.id}
+                onClick={() => onAdd(p.id, stageId)}
+                onMouseEnter={() => setHov(p.id)} onMouseLeave={() => setHov(null)}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 10px",
+                  borderRadius:9, border:"none", background: hov===p.id?"#f5f3ff":"transparent",
+                  cursor:"pointer", textAlign:"left", fontFamily:F, transition:"background .1s" }}>
+                <div style={{ width:34, height:34, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#a78bfa)",
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"white", flexShrink:0 }}>
+                  {initials||"?"}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.accent, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                  {title && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{title}</div>}
+                </div>
+                <Ic n="plus" s={14} c={C.accent}/>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+
 // ─── PeoplePipelineWidget ─────────────────────────────────────────────────────
 // Shown at the TOP of any non-Person object record (e.g. Job).
 // Displays the Linked Person workflow stage track with counts; clicking a stage
@@ -2713,9 +2802,19 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
             steps={plSteps} personRecords={personRecords} peopleLinks={peopleLinks}
             environment={environment}
             onAdd={async (personId, stageId) => {
-              await api.post("/people-links", { record_id: record.id, person_id: personId, stage_id: stageId, environment_id: environment?.id });
+              if (peopleLinks.find(l => l.person_record_id === personId)) { setAddingPerson(false); return; }
+              const step = plSteps.find(s => s.id === stageId) || plSteps[0];
+              await api.post("/workflows/people-links", {
+                person_record_id: personId,
+                target_record_id: record.id,
+                target_object_id: objectId,
+                stage_id:   step?.id   || null,
+                stage_name: step?.name || "New",
+                environment_id: environment?.id,
+              });
               setAddingPerson(false);
-              load();
+              await load();
+              setSelectedStage(step?.id || null);
             }}
             onClose={() => setAddingPerson(false)}
           />
