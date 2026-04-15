@@ -334,14 +334,22 @@ export default function ScoreExplainer({
   jobName,
   size = 44,
   fontSize = 12,
+  darkBg = false,
 }) {
   const [hovered, setHovered] = useState(false);
   const [open, setOpen]       = useState(false);
   const ref = useRef(null);
   const col = scoreColor(score);
+  // On dark backgrounds use a lighter ring track + white number
+  const trackCol   = darkBg ? 'rgba(255,255,255,0.25)' : '#e5e7eb';
+  const numberCol  = darkBg ? 'white' : col;
+  const pctCol     = darkBg ? 'rgba(255,255,255,0.6)' : col;
   const hasDetail = reasons.length > 0 || gaps.length > 0;
 
   if (score == null) return null;
+
+  const r    = (size / 2) - 4;
+  const circ = 2 * Math.PI * r;
 
   return (
     <>
@@ -355,17 +363,21 @@ export default function ScoreExplainer({
         {/* Score ring */}
         <div style={{
           width: size, height: size, borderRadius: "50%",
-          border: `3px solid ${col}`,
           display: "flex", alignItems: "center", justifyContent: "center",
-          flexDirection: "column", background: `${col}10`,
+          flexDirection: "column", position: "relative",
           transition: "transform .15s, box-shadow .15s",
-          ...(hovered ? { transform: "scale(1.1)", boxShadow: `0 0 0 3px ${col}25` } : {}),
+          ...(hovered ? { transform: "scale(1.1)", boxShadow: `0 0 0 3px ${col}50` } : {}),
         }}>
-          <span style={{ fontSize, fontWeight: 800, color: col, lineHeight: 1 }}>{score}</span>
-          <span style={{ fontSize: 8, color: col, opacity: 0.7 }}>%</span>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position:"absolute", inset:0, transform:"rotate(-90deg)" }}>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackCol} strokeWidth={darkBg?3:3}/>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={3}
+              strokeDasharray={`${circ * score / 100} ${circ}`} strokeLinecap="round"/>
+          </svg>
+          <span style={{ fontSize, fontWeight: 800, color: numberCol, lineHeight: 1, position:"relative" }}>{score}</span>
+          <span style={{ fontSize: fontSize * 0.55, color: pctCol, opacity: darkBg ? 0.85 : 0.7, position:"relative" }}>%</span>
         </div>
 
-        {/* Hover tooltip — portalled so it escapes overflow:hidden ancestors */}
+        {/* Hover tooltip */}
         {hovered && hasDetail && (
           <ScoreTooltip
             score={score} reasons={reasons} gaps={gaps}

@@ -520,6 +520,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
                     skillsDetail={matchScore?.skillsDetail}
                     size={58}
                     fontSize={15}
+                    darkBg
                   />
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
