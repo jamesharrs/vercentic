@@ -977,7 +977,7 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
               </div>
             </div>
             <div>
-              {/* ── Employee / AI Agent toggle ───────────────────────────── */}
+              {/* ── Employee / AI Agent toggle ─────────────────────────────── */}
               <label style={labelSt}>Interviewers</label>
               <div style={{display:"flex",gap:0,borderRadius:9,border:`1.5px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
                 {[["employee","👤 Employee"],["ai_agent","✦ AI Agent"]].map(([val,lbl])=>(
@@ -991,14 +991,13 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
                 ))}
               </div>
 
-              {/* ── AI Agent content ─────────────────────────────────────── */}
               {form.interviewer_mode==="ai_agent" ? (
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   <div>
                     <label style={labelSt}>Select AI Agent</label>
                     {availableAgents.length === 0
                       ? <div style={{padding:"10px 12px",borderRadius:9,border:`1px dashed ${C.border}`,fontSize:12,color:C.text3}}>
-                          No AI interview agents configured. Create one in Settings → Agents with capability "ai_interview".
+                          No AI interview agents configured. Create one in Settings → Agents.
                         </div>
                       : <select value={form.ai_agent_id} onChange={e=>set("ai_agent_id",e.target.value)} style={inpSt}>
                           <option value="">Choose an agent…</option>
@@ -1027,37 +1026,37 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
                     </div>
                   )}
                   <div style={{padding:"8px 12px",borderRadius:8,background:"#f5f3ff",border:"1px solid #ddd6fe",fontSize:12,color:"#6d28d9"}}>
-                    ✦ The AI agent will conduct this interview autonomously with the candidate.
-                    {form.ai_trigger==="now" ? " It will be triggered immediately after saving." : " It will be triggered at the scheduled time."}
+                    ✦ The AI agent will conduct this interview autonomously.
+                    {form.ai_trigger==="now" ? " Triggered immediately on save." : " Triggered at the scheduled time."}
                   </div>
                 </div>
               ) : (
-                /* ── Human employee interviewers ───────────────────────── */
                 <div>
-                <div style={{marginBottom:10,padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"#f8f9fc"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>From Job</div>
-                  {jobInterviewers.map(iv => {
-                    const isChecked = (form.interviewers||[]).some(x=>(typeof x==="object"?x.id:x)===iv.id);
-                    const toggle = () => setForm(f => ({
-                      ...f,
-                      interviewers: isChecked
-                        ? (f.interviewers||[]).filter(x=>(typeof x==="object"?x.id:x)!==iv.id)
-                        : [...(f.interviewers||[]), iv]
-                    }));
-                    const init = (iv.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
-                    return (
-                      <div key={iv.id} onClick={toggle} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",cursor:"pointer",borderBottom:`1px solid ${C.border}`,lastChild:{borderBottom:"none"}}}>
-                        <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isChecked?C.accent:C.border}`,background:isChecked?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
-                          {isChecked && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
-                        </div>
-                        <div style={{width:26,height:26,borderRadius:"50%",background:`${C.accent}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:C.accent,flexShrink:0}}>{init}</div>
-                        <span style={{fontSize:13,color:C.text1,fontWeight:500}}>{iv.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add more interviewers…"/>
+                  {jobInterviewers.length > 0 && (
+                    <div style={{marginBottom:10,padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"#f8f9fc"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>From Job</div>
+                      {jobInterviewers.map(iv => {
+                        const isChecked = (form.interviewers||[]).some(x=>(typeof x==="object"?x.id:x)===iv.id);
+                        const toggle = () => setForm(f => ({
+                          ...f,
+                          interviewers: isChecked
+                            ? (f.interviewers||[]).filter(x=>(typeof x==="object"?x.id:x)!==iv.id)
+                            : [...(f.interviewers||[]), iv]
+                        }));
+                        const init = (iv.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+                        return (
+                          <div key={iv.id} onClick={toggle} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",cursor:"pointer",borderBottom:`1px solid ${C.border}`}}>
+                            <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isChecked?C.accent:C.border}`,background:isChecked?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
+                              {isChecked && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                            </div>
+                            <div style={{width:26,height:26,borderRadius:"50%",background:`${C.accent}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:C.accent,flexShrink:0}}>{init}</div>
+                            <span style={{fontSize:13,color:C.text1,fontWeight:500}}>{iv.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add more interviewers…"/>
                 </div>
               )}
             </div>
