@@ -692,3 +692,21 @@ function pruneOrphanedPeopleLinks() {
   if (pruned > 0) console.log(`🧹 Pruned ${pruned} orphaned people_link(s)`);
 }
 pruneOrphanedPeopleLinks();
+
+// ── Backfill missing IDs on calendar tasks/events ────────────────────────────
+function migrateCalendarIds() {
+  const { v4: uuid } = require('uuid');
+  let fixed = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    let dirty = false;
+    for (const table of ['calendar_tasks', 'calendar_events']) {
+      if (!Array.isArray(store[table])) continue;
+      for (const row of store[table]) {
+        if (!row.id) { row.id = uuid(); dirty = true; fixed++; }
+      }
+    }
+    if (dirty) saveStore(key);
+  }
+  if (fixed > 0) console.log(`🔑 Backfilled IDs on ${fixed} calendar row(s)`);
+}
+migrateCalendarIds();

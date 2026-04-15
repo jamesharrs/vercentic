@@ -34,6 +34,7 @@ router.post('/tasks', (req, res) => {
       record_id, object_id, record_name, checklist, tags, estimated_minutes } = req.body;
     if (!title) return res.status(400).json({ error: 'title required' });
     const task = insert('calendar_tasks', {
+      id: uuidv4(),
       environment_id, title, description: description || '',
       due_date: due_date || null, due_time: due_time || null,
       priority: priority || 'medium',
@@ -107,6 +108,7 @@ router.post('/events', (req, res) => {
       type, location, attendees, record_id, object_id, record_name, all_day, color } = req.body;
     if (!title || !start_date) return res.status(400).json({ error: 'title and start_date required' });
     const event = insert('calendar_events', {
+      id: uuidv4(),
       environment_id, title, description: description || '',
       start_date, start_time: start_time || null,
       end_date: end_date || start_date, end_time: end_time || null,
