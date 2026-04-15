@@ -280,9 +280,9 @@ export default function SignupPage() {
 
   // ── Step 3: Done ──────────────────────────────────────────────────────────
   const StepDone = () => {
-    const url = result?.login_url || result?.credentials?.url;
     const tenantSlug = result?.tenant_slug || result?.credentials?.tenant_slug;
-    const loginUrl = tenantSlug ? `https://${tenantSlug}.vercentic.com` : url;
+    // Use ?tenant= param so www.vercentic.com routes to the correct tenant store on login
+    const loginUrl = tenantSlug ? `/?tenant=${tenantSlug}` : '/';
     return (
       <div style={{ textAlign: "center" }}>
         <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#DCFCE7",

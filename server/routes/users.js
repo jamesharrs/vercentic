@@ -3,6 +3,8 @@ const { validate } = require('../middleware/validate');
 const { createUserSchema, patchUserSchema, resetPasswordSchema, loginSchema } = require('../validation/schemas');
 const { hasGlobalAction } = require('../middleware/rbac');
 const crypto = require('crypto');
+const { query, findOne, insert, update, remove, getStore, getCurrentTenant,
+        listTenants, loadTenantStore, tenantStorage } = require('../db/init');
 
 // Set the CSRF double-submit cookie on a successful login response
 function setCsrfCookie(res) {
@@ -26,7 +28,6 @@ function checkGlobal(req, res, action) {
 }
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { query, findOne, insert, update, remove } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
 
@@ -138,29 +139,50 @@ router.delete('/:id', (req, res) => {
   res.json({ deactivated: true });
 });
 
-// POST login
+// POST login — supports cross-store lookup when no tenant context (e.g. www.vercentic.com login)
 router.post('/auth/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
-  const user = findOne('users', u => u.email === email);
+
+  // 1. Try the current tenant store (set by middleware via X-Tenant-Slug or ?tenant= or subdomain)
+  let user = findOne('users', u => u.email === email.toLowerCase());
+  let resolvedSlug = getCurrentTenant();
+
+  // 2. If not found (e.g. login from www with no tenant context), search all tenant stores
+  if (!user || user.status === 'deactivated') {
+    const tenants = listTenants ? listTenants() : [];
+    for (const slug of tenants) {
+      if (slug === 'master' || slug === resolvedSlug) continue;
+      const ts = loadTenantStore(slug);
+      const found = (ts.users || []).find(u => u.email === email.toLowerCase() && u.status !== 'deactivated');
+      if (found) {
+        user = found;
+        resolvedSlug = slug;
+        // Switch execution context to this tenant store for the rest of the request
+        return tenantStorage.run(slug, () => completeLogin(req, res, user, resolvedSlug, password));
+      }
+    }
+  }
+
   if (!user || user.status === 'deactivated') return res.status(401).json({ error: 'Invalid credentials' });
+  completeLogin(req, res, user, resolvedSlug, password);
+});
+
+function completeLogin(req, res, user, tenantSlug, password) {
   if (!verifyPassword(password, user.password_hash)) {
-    insert('audit_log', { id:uuidv4(), action:'auth.login_failed', actor:email, target_id:user.id, target_type:'user', details:{ reason:'bad_password' }, created_at:new Date().toISOString() });
+    insert('audit_log', { id:uuidv4(), action:'auth.login_failed', actor:user.email, target_id:user.id, target_type:'user', details:{ reason:'bad_password' }, created_at:new Date().toISOString() });
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const token = uuidv4() + '-' + uuidv4();
-  const tenantSlug = require('../db/init').getCurrentTenant();
   insert('sessions', { id:uuidv4(), user_id:user.id, token, tenant_slug: tenantSlug, created_at:new Date().toISOString(), expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(), ip: req.ip });
   update('users', u => u.id === user.id, { last_login: new Date().toISOString(), login_count: (user.login_count||0)+1 });
-  insert('audit_log', { id:uuidv4(), action:'auth.login', actor:email, target_id:user.id, target_type:'user', details:{ tenant: tenantSlug }, created_at:new Date().toISOString() });
+  insert('audit_log', { id:uuidv4(), action:'auth.login', actor:user.email, target_id:user.id, target_type:'user', details:{ tenant: tenantSlug }, created_at:new Date().toISOString() });
   const role = findOne('roles', r => r.id === user.role_id);
-  // Set httpOnly session cookie (primary auth mechanism)
   req.session.userId     = user.id;
   req.session.tenantSlug = tenantSlug;
-  setCsrfCookie(res);  // also set the JS-readable CSRF double-submit token
-  // Also return token/user in body for backward compat (mobile app, Chrome extension, existing clients)
+  setCsrfCookie(res);
   res.json({ token, user: { ...user, password_hash: undefined, role }, tenant_slug: tenantSlug, must_change_password: user.must_change_password });
-});
+}
 
 // POST /api/users/exchange-impersonation — exchange a superadmin impersonation token for a real session
 router.post('/exchange-impersonation', (req, res) => {
@@ -168,7 +190,6 @@ router.post('/exchange-impersonation', (req, res) => {
   if (!token) return res.status(400).json({ error: 'Token required' });
 
   // Load master store to find the token
-  const { loadTenantStore, getStore, saveStore, findOne: masterFindOne } = require('../db/init');
   const s = getStore();
   if (!s.impersonation_tokens) return res.status(401).json({ error: 'Invalid or expired token' });
 
@@ -210,7 +231,6 @@ router.post('/login', validate(loginSchema), (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
   const hashed = hashPassword(password);
-  const { getCurrentTenant, listTenants, loadTenantStore, tenantStorage } = require('../db/init');
 
   // Try current store first (set by tenant middleware based on subdomain/header)
   let u = findOne('users', u => u.email === email);
