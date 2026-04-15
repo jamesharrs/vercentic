@@ -3,7 +3,7 @@ const { validate } = require('../middleware/validate');
 const { createUserSchema, patchUserSchema, resetPasswordSchema, loginSchema } = require('../validation/schemas');
 const { hasGlobalAction } = require('../middleware/rbac');
 const crypto = require('crypto');
-const { query, findOne, insert, update, remove, getStore, getCurrentTenant,
+const { query, findOne, insert, update, remove, getStore, saveStore, getCurrentTenant,
         listTenants, loadTenantStore, tenantStorage } = require('../db/init');
 
 // Set the CSRF double-submit cookie on a successful login response
