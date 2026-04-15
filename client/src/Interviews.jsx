@@ -838,11 +838,18 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
     time: initialValues?.time || "",
     notes: initialValues?.notes || "",
     interviewers: initialValues?.interviewers || interviewType?.interviewers || [],
+    // AI agent fields
+    interviewer_mode: initialValues?.interviewer_mode || "employee",
+    ai_agent_id:      initialValues?.ai_agent_id || "",
+    ai_agent_name:    initialValues?.ai_agent_name || "",
+    ai_trigger:       initialValues?.ai_trigger || "now",
+    ai_trigger_at:    initialValues?.ai_trigger_at || "",
   });
   const [bulkIdx, setBulkIdx] = useState(0); // which bulk candidate we're scheduling
   const [candidates, setCandidates] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [jobInterviewers, setJobInterviewers] = useState([]);
+  const [availableAgents, setAvailableAgents] = useState([]);
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -864,6 +871,11 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
         setJobs(jr.map(r=>({id:r.id,name:r.data?.job_title||r.data?.name||r.id, interviewers:r.data?.interviewers||[]})));
       });
     });
+    // Load AI-interview-capable agents
+    api.get(`/agents?environment_id=${envId}`).then(d => {
+      const list = Array.isArray(d) ? d : (d.agents || []);
+      setAvailableAgents(list.filter(a => a.capabilities?.includes?.("ai_interview") || a.type === "ai_interview" || a.use_case === "interview"));
+    }).catch(() => {});
   }, [envId]);
 
   // When job changes, load its interviewers and pre-check them
@@ -885,7 +897,20 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
 
   const handle = async () => {
     setSaving(true);
-    await onSave({ ...form, interview_type_id: interviewType?.id, interview_type_name: interviewType?.name, duration: interviewType?.duration, format: interviewType?.format });
+    const isAi = form.interviewer_mode === "ai_agent";
+    await onSave({
+      ...form,
+      interview_type_id:   interviewType?.id,
+      interview_type_name: interviewType?.name,
+      duration:            interviewType?.duration,
+      format:              interviewType?.format,
+      // only send AI fields when in AI mode
+      interviewer_mode: isAi ? "ai_agent" : "employee",
+      ai_agent_id:      isAi ? form.ai_agent_id : null,
+      ai_agent_name:    isAi ? (availableAgents.find(a=>a.id===form.ai_agent_id)?.name || "") : null,
+      ai_trigger:       isAi ? form.ai_trigger : null,
+      ai_trigger_at:    isAi && form.ai_trigger === "scheduled" ? form.ai_trigger_at : null,
+    });
     setSaving(false);
   };
 
@@ -943,17 +968,72 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div>
-                <label style={labelSt}>Date *</label>
-                <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={inpSt} min={new Date().toISOString().slice(0,10)}/>
+                <label style={labelSt}>Date {form.interviewer_mode!=="ai_agent"&&"*"}</label>
+                <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} min={new Date().toISOString().slice(0,10)} disabled={form.interviewer_mode==="ai_agent"}/>
               </div>
               <div>
-                <label style={labelSt}>Time *</label>
-                <input type="time" value={form.time} onChange={e=>set("time",e.target.value)} style={inpSt}/>
+                <label style={labelSt}>Time {form.interviewer_mode!=="ai_agent"&&"*"}</label>
+                <input type="time" value={form.time} onChange={e=>set("time",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} disabled={form.interviewer_mode==="ai_agent"}/>
               </div>
             </div>
             <div>
+              {/* ── Employee / AI Agent toggle ───────────────────────────── */}
               <label style={labelSt}>Interviewers</label>
-              {jobInterviewers.length > 0 && (
+              <div style={{display:"flex",gap:0,borderRadius:9,border:`1.5px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
+                {[["employee","👤 Employee"],["ai_agent","✦ AI Agent"]].map(([val,lbl])=>(
+                  <button key={val} onClick={()=>set("interviewer_mode",val)} style={{
+                    flex:1, padding:"8px 0", fontSize:12, fontWeight:600, cursor:"pointer",
+                    border:"none", fontFamily:F,
+                    background: form.interviewer_mode===val ? (val==="ai_agent"?"#6d28d9":"#4361EE") : "#f8fafc",
+                    color: form.interviewer_mode===val ? "white" : C.text2,
+                    transition:"all .15s",
+                  }}>{lbl}</button>
+                ))}
+              </div>
+
+              {/* ── AI Agent content ─────────────────────────────────────── */}
+              {form.interviewer_mode==="ai_agent" ? (
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <div>
+                    <label style={labelSt}>Select AI Agent</label>
+                    {availableAgents.length === 0
+                      ? <div style={{padding:"10px 12px",borderRadius:9,border:`1px dashed ${C.border}`,fontSize:12,color:C.text3}}>
+                          No AI interview agents configured. Create one in Settings → Agents with capability "ai_interview".
+                        </div>
+                      : <select value={form.ai_agent_id} onChange={e=>set("ai_agent_id",e.target.value)} style={inpSt}>
+                          <option value="">Choose an agent…</option>
+                          {availableAgents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    }
+                  </div>
+                  <div>
+                    <label style={labelSt}>Send trigger</label>
+                    <div style={{display:"flex",gap:0,borderRadius:9,border:`1.5px solid ${C.border}`,overflow:"hidden"}}>
+                      {[["now","Send Now"],["scheduled","Schedule"]].map(([val,lbl])=>(
+                        <button key={val} onClick={()=>set("ai_trigger",val)} style={{
+                          flex:1, padding:"7px 0", fontSize:12, fontWeight:600, cursor:"pointer",
+                          border:"none", fontFamily:F,
+                          background: form.ai_trigger===val ? "#6d28d9" : "#f8fafc",
+                          color: form.ai_trigger===val ? "white" : C.text2,
+                          transition:"all .15s",
+                        }}>{lbl}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {form.ai_trigger==="scheduled" && (
+                    <div>
+                      <label style={labelSt}>Send at</label>
+                      <input type="datetime-local" value={form.ai_trigger_at} onChange={e=>set("ai_trigger_at",e.target.value)} style={inpSt}/>
+                    </div>
+                  )}
+                  <div style={{padding:"8px 12px",borderRadius:8,background:"#f5f3ff",border:"1px solid #ddd6fe",fontSize:12,color:"#6d28d9"}}>
+                    ✦ The AI agent will conduct this interview autonomously with the candidate.
+                    {form.ai_trigger==="now" ? " It will be triggered immediately after saving." : " It will be triggered at the scheduled time."}
+                  </div>
+                </div>
+              ) : (
+                /* ── Human employee interviewers ───────────────────────── */
+                <div>
                 <div style={{marginBottom:10,padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"#f8f9fc"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>From Job</div>
                   {jobInterviewers.map(iv => {
@@ -978,6 +1058,8 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
                 </div>
               )}
               <SimplePeoplePicker value={form.interviewers} onChange={v=>set("interviewers",v)} envId={envId} placeholder="Add more interviewers…"/>
+                </div>
+              )}
             </div>
             <div>
               <label style={labelSt}>Notes</label>
