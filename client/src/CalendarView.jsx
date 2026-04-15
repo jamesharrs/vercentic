@@ -743,6 +743,12 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
   const [scheduleSearch1, setScheduleSearch1]   = useState('');
   const [scheduleSearch2, setScheduleSearch2]   = useState('');
   const [schedSaving, setSchedSaving]           = useState(false);
+  // AI agent interview state
+  const [schedInterviewerMode, setSchedInterviewerMode] = useState('employee'); // 'employee' | 'ai_agent'
+  const [schedAiAgentId, setSchedAiAgentId]             = useState('');
+  const [schedAiTrigger, setSchedAiTrigger]             = useState('now');     // 'now' | 'scheduled'
+  const [schedAiTriggerAt, setSchedAiTriggerAt]         = useState('');
+  const [schedAvailableAgents, setSchedAvailableAgents] = useState([]);
   // Self-loading when used standalone (environment prop provided)
   const [ownInterviews, setOwnInterviews] = useState([]);
   const [ownTypes, setOwnTypes] = useState([]);
@@ -778,6 +784,16 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
         })));
       }).catch(() => {});
     }).catch(() => {});
+    // Load AI-interview-capable agents
+    api.get(`/agents?environment_id=${environment.id}`).then(d => {
+      const list = Array.isArray(d) ? d : (d.agents || []);
+      setSchedAvailableAgents(list.filter(a => a.capabilities?.includes?.('ai_interview') || a.type === 'ai_interview' || a.use_case === 'interview'));
+    }).catch(() => {});
+    // Reset AI state when modal opens
+    setSchedInterviewerMode('employee');
+    setSchedAiAgentId('');
+    setSchedAiTrigger('now');
+    setSchedAiTriggerAt('');
   }, [showScheduleModal, environment?.id]);
 
   // When interviewees change, load their common linked jobs
@@ -1099,38 +1115,96 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                       </div>
                     </div>
 
-                    {/* Interviewers — employees only */}
+                    {/* Interviewers — Employee / AI Agent toggle */}
                     <div style={{ marginBottom:14 }}>
-                      <label style={labelSt}>Interviewers <span style={{ fontWeight:400, color:'#9ca3af', fontSize:10 }}>(employees only)</span></label>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:4 }}>
-                        {scheduleInterviewers.map(p => (
-                          <span key={p.id} style={{...tagSt, background:'#ECFDF5', color:'#059669'}}>
-                            {p.name}{p.job_title ? ` · ${p.job_title}` : ''}
-                            <button onClick={()=>setScheduleInterviewers(a=>a.filter(x=>x.id!==p.id))}
-                              style={{background:'none',border:'none',cursor:'pointer',color:'#059669',padding:0,fontSize:13,lineHeight:1}}>×</button>
-                          </span>
+                      <label style={labelSt}>Interviewers</label>
+                      {/* Toggle */}
+                      <div style={{ display:'flex', gap:0, borderRadius:9, border:'1.5px solid #e5e7eb', overflow:'hidden', marginBottom:10 }}>
+                        {[['employee','👤 Employee'],['ai_agent','✦ AI Agent']].map(([val,lbl]) => (
+                          <button key={val} onClick={()=>setSchedInterviewerMode(val)} style={{
+                            flex:1, padding:'8px 0', fontSize:12, fontWeight:600, cursor:'pointer',
+                            border:'none', fontFamily:FONT,
+                            background: schedInterviewerMode===val ? (val==='ai_agent'?'#6d28d9':'#4361EE') : '#f8fafc',
+                            color: schedInterviewerMode===val ? 'white' : '#6b7280',
+                            transition:'all .15s',
+                          }}>{lbl}</button>
                         ))}
                       </div>
-                      <div style={{ position:'relative' }}>
-                        <input value={scheduleSearch2} onChange={e=>setScheduleSearch2(e.target.value)}
-                          placeholder="Search employees…" style={inpSt}/>
-                        {scheduleSearch2 && employees.length>0 && (
-                          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:10, maxHeight:180, overflowY:'auto', marginTop:2 }}>
-                            {employees.slice(0,8).map(p => (
-                              <div key={p.id} onClick={()=>{ setScheduleInterviewers(a=>[...a,p]); setScheduleSearch2(''); }}
-                                style={{ padding:'9px 14px', cursor:'pointer', fontSize:13, borderBottom:'1px solid #f0f0f0' }}
-                                onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'}
-                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <div style={{ fontWeight:600, color:'#111827' }}>{p.name}</div>
-                                {p.job_title && <div style={{ fontSize:11, color:'#9ca3af' }}>{p.job_title}</div>}
-                              </div>
+
+                      {schedInterviewerMode === 'ai_agent' ? (
+                        /* ── AI Agent content ── */
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                          <div>
+                            <label style={labelSt}>Select AI Agent</label>
+                            {schedAvailableAgents.length === 0
+                              ? <div style={{ padding:'10px 12px', borderRadius:9, border:'1px dashed #e5e7eb', fontSize:12, color:'#9ca3af' }}>
+                                  No AI interview agents configured. Create one in Settings → Agents.
+                                </div>
+                              : <select value={schedAiAgentId} onChange={e=>setSchedAiAgentId(e.target.value)} style={{...inpSt, background:'white'}}>
+                                  <option value="">Choose an agent…</option>
+                                  {schedAvailableAgents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                            }
+                          </div>
+                          <div>
+                            <label style={labelSt}>Send trigger</label>
+                            <div style={{ display:'flex', gap:0, borderRadius:9, border:'1.5px solid #e5e7eb', overflow:'hidden' }}>
+                              {[['now','Send Now'],['scheduled','Schedule']].map(([val,lbl]) => (
+                                <button key={val} onClick={()=>setSchedAiTrigger(val)} style={{
+                                  flex:1, padding:'7px 0', fontSize:12, fontWeight:600, cursor:'pointer',
+                                  border:'none', fontFamily:FONT,
+                                  background: schedAiTrigger===val ? '#6d28d9' : '#f8fafc',
+                                  color: schedAiTrigger===val ? 'white' : '#6b7280',
+                                  transition:'all .15s',
+                                }}>{lbl}</button>
+                              ))}
+                            </div>
+                          </div>
+                          {schedAiTrigger === 'scheduled' && (
+                            <div>
+                              <label style={labelSt}>Send at</label>
+                              <input type="datetime-local" value={schedAiTriggerAt} onChange={e=>setSchedAiTriggerAt(e.target.value)} style={inpSt}/>
+                            </div>
+                          )}
+                          <div style={{ padding:'8px 12px', borderRadius:8, background:'#f5f3ff', border:'1px solid #ddd6fe', fontSize:12, color:'#6d28d9' }}>
+                            ✦ The AI agent will conduct this interview autonomously.
+                            {schedAiTrigger==='now' ? ' Triggered immediately on save.' : ' Triggered at the scheduled time.'}
+                          </div>
+                        </div>
+                      ) : (
+                        /* ── Human employee interviewers ── */
+                        <div>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:4 }}>
+                            {scheduleInterviewers.map(p => (
+                              <span key={p.id} style={{...tagSt, background:'#ECFDF5', color:'#059669'}}>
+                                {p.name}{p.job_title ? ` · ${p.job_title}` : ''}
+                                <button onClick={()=>setScheduleInterviewers(a=>a.filter(x=>x.id!==p.id))}
+                                  style={{background:'none',border:'none',cursor:'pointer',color:'#059669',padding:0,fontSize:13,lineHeight:1}}>×</button>
+                              </span>
                             ))}
-                            {employees.length===0 && scheduleSearch2 && (
-                              <div style={{ padding:'12px 14px', color:'#9ca3af', fontSize:12 }}>No employees found</div>
+                          </div>
+                          <div style={{ position:'relative' }}>
+                            <input value={scheduleSearch2} onChange={e=>setScheduleSearch2(e.target.value)}
+                              placeholder="Search employees…" style={inpSt}/>
+                            {scheduleSearch2 && employees.length>0 && (
+                              <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:10, maxHeight:180, overflowY:'auto', marginTop:2 }}>
+                                {employees.slice(0,8).map(p => (
+                                  <div key={p.id} onClick={()=>{ setScheduleInterviewers(a=>[...a,p]); setScheduleSearch2(''); }}
+                                    style={{ padding:'9px 14px', cursor:'pointer', fontSize:13, borderBottom:'1px solid #f0f0f0' }}
+                                    onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'}
+                                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                    <div style={{ fontWeight:600, color:'#111827' }}>{p.name}</div>
+                                    {p.job_title && <div style={{ fontSize:11, color:'#9ca3af' }}>{p.job_title}</div>}
+                                  </div>
+                                ))}
+                                {employees.length===0 && scheduleSearch2 && (
+                                  <div style={{ padding:'12px 14px', color:'#9ca3af', fontSize:12 }}>No employees found</div>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Linked job + General toggle */}
@@ -1161,12 +1235,12 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                     {/* Date, Time, Duration, Format */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
                       <div>
-                        <label style={labelSt}>Date *</label>
-                        <input type="date" value={scheduleForm.date} onChange={e=>setScheduleForm(f=>({...f,date:e.target.value}))} style={inpSt}/>
+                        <label style={labelSt}>Date {schedInterviewerMode!=='ai_agent'&&'*'}</label>
+                        <input type="date" value={scheduleForm.date} onChange={e=>setScheduleForm(f=>({...f,date:e.target.value}))} style={{...inpSt, opacity:schedInterviewerMode==='ai_agent'?0.4:1}} disabled={schedInterviewerMode==='ai_agent'}/>
                       </div>
                       <div>
                         <label style={labelSt}>Time</label>
-                        <input type="time" value={scheduleForm.time} onChange={e=>setScheduleForm(f=>({...f,time:e.target.value}))} style={inpSt}/>
+                        <input type="time" value={scheduleForm.time} onChange={e=>setScheduleForm(f=>({...f,time:e.target.value}))} style={{...inpSt, opacity:schedInterviewerMode==='ai_agent'?0.4:1}} disabled={schedInterviewerMode==='ai_agent'}/>
                       </div>
                       <div>
                         <label style={labelSt}>Duration (min)</label>
@@ -1193,11 +1267,12 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                         style={{ flex:1, padding:'11px', borderRadius:10, border:'1.5px solid #e5e7eb', background:'transparent', color:'#374151', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT }}>
                         Cancel
                       </button>
-                      <button disabled={!scheduleForm.date || scheduleInterviewees.length===0 || schedSaving}
+                      <button disabled={(!scheduleForm.date && schedInterviewerMode!=='ai_agent') || scheduleInterviewees.length===0 || schedSaving}
                         onClick={async () => {
                           if (schedSaving) return;
                           setSchedSaving(true);
                           try {
+                            const isAi = schedInterviewerMode === 'ai_agent';
                             const candidateName = scheduleInterviewees.map(p=>p.name).join(', ');
                             await api.post('/interviews', {
                               environment_id: environment?.id,
@@ -1205,14 +1280,20 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                               candidate_name: candidateName,
                               job_id: scheduleJob?.id || null,
                               job_name: scheduleJob?.name || '',
-                              interview_type_name: 'Interview',
-                              date: scheduleForm.date,
-                              time: scheduleForm.time,
+                              interview_type_name: isAi ? 'AI Interview' : 'Interview',
+                              date: isAi ? null : scheduleForm.date,
+                              time: isAi ? null : scheduleForm.time,
                               duration: scheduleForm.duration,
-                              format: scheduleForm.format,
-                              interviewers: scheduleInterviewers.map(p=>({ name:p.name, id:p.id, email:p.email, title:p.job_title })),
+                              format: isAi ? 'AI Interview' : scheduleForm.format,
+                              interviewers: isAi ? [] : scheduleInterviewers.map(p=>({ name:p.name, id:p.id, email:p.email, title:p.job_title })),
                               notes: scheduleForm.notes,
-                              status: 'pending',
+                              status: isAi ? 'ai_pending' : 'pending',
+                              // AI agent fields
+                              interviewer_mode: schedInterviewerMode,
+                              ai_agent_id: isAi ? schedAiAgentId : null,
+                              ai_agent_name: isAi ? (schedAvailableAgents.find(a=>a.id===schedAiAgentId)?.name || '') : null,
+                              ai_trigger: isAi ? schedAiTrigger : null,
+                              ai_trigger_at: isAi && schedAiTrigger==='scheduled' ? schedAiTriggerAt : null,
                             });
                             setShowScheduleModal(false);
                             setScheduleForm({ date:'', time:'09:00', duration:45, format:'Video Call', notes:'', general:false });
@@ -1227,11 +1308,11 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                           setSchedSaving(false);
                         }}
                         style={{ flex:2, padding:'11px', borderRadius:10, border:'none',
-                          background: schedSaving||!scheduleForm.date||scheduleInterviewees.length===0 ? '#9ca3af' : '#7C5CFC',
+                          background: schedSaving||(scheduleInterviewees.length===0)||(!scheduleForm.date&&schedInterviewerMode!=='ai_agent') ? '#9ca3af' : '#7C5CFC',
                           color:'#fff', fontSize:13, fontWeight:700,
-                          cursor: schedSaving||!scheduleForm.date||scheduleInterviewees.length===0 ? 'not-allowed' : 'pointer',
+                          cursor: schedSaving||(scheduleInterviewees.length===0)||(!scheduleForm.date&&schedInterviewerMode!=='ai_agent') ? 'not-allowed' : 'pointer',
                           fontFamily:FONT }}>
-                        {schedSaving ? 'Scheduling…' : '✓ Schedule Interview'}
+                        {schedSaving ? 'Scheduling…' : schedInterviewerMode==='ai_agent' ? '✦ Send AI Interview' : '✓ Schedule Interview'}
                       </button>
                     </div>
                   </>
