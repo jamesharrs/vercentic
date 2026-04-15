@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
 const { applyStarterConfig } = require('../data/starter_config');
 const { getStore, saveStore, saveStoreNow, provisionTenant, tenantStorage, loadTenantStore } = require('../db/init');
+const { invalidateTenantCache } = require('../middleware/tenant');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
 
@@ -249,6 +250,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.clients.push(client);
+  saveStoreNow('master'); // persist immediately so listTenants() finds the slug after restart
 
   const environment = {
     id: uuidv4(), client_id: client.id,
@@ -258,8 +260,8 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.client_environments.push(environment);
-  // NOTE: Do NOT push into s.environments — client environments live in their
-  // own tenant store only. Adding them here would expose client data to master users.
+  saveStoreNow('master'); // flush again — environment is now in master store
+  invalidateTenantCache(); // new slug must be visible immediately without 30s cache lag
 
   // Build objects/fields/roles in memory only — do NOT push to master store (s).
   // Everything goes exclusively into the isolated tenant store below.
