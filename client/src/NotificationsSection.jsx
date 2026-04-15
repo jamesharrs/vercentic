@@ -49,7 +49,7 @@ export default function NotificationsSection() {
   const [saved, setSaved] = useState(false);
   const [categories, setCategories] = useState([]);
   const [types, setTypes] = useState([]);
-  const [digestConfig, setDigestConfig] = useState({ daily_time: '08:00', weekly_day: 'friday', timezone: 'Asia/Dubai' });
+  const [digestConfig, setDigestConfig] = useState({ daily_time: '08:00', weekly_day: 'friday', timezone: 'Asia/Dubai', frequency: 'weekdays' });
   const [matchThreshold, setMatchThreshold] = useState(75);
   const [quietHours, setQuietHours] = useState({ enabled: false, start: '22:00', end: '07:00' });
   const [expandedCat, setExpandedCat] = useState(null);
@@ -59,7 +59,7 @@ export default function NotificationsSection() {
       const data = await api.get('/notification-preferences');
       setCategories(data.categories || []);
       setTypes(data.types || []);
-      setDigestConfig(data.digest_config || { daily_time: '08:00', weekly_day: 'friday', timezone: 'Asia/Dubai' });
+      setDigestConfig(data.digest_config || { daily_time: '08:00', weekly_day: 'friday', timezone: 'Asia/Dubai', frequency: 'weekdays' });
       setMatchThreshold(data.match_threshold || 75);
       setQuietHours(data.quiet_hours || { enabled: false, start: '22:00', end: '07:00' });
       if (data.categories?.length) setExpandedCat(data.categories[0].key);
@@ -246,9 +246,19 @@ export default function NotificationsSection() {
                     <div style={{ fontSize:12, fontWeight:700, color:C.text1, marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
                       <Ic n="clock" s={13} c={C.red} /> Delivery schedule
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:12 }}>
                       <div>
-                        <label style={{ fontSize:11, fontWeight:600, color:C.text3, display:'block', marginBottom:4 }}>Daily digest time</label>
+                        <label style={{ fontSize:11, fontWeight:600, color:C.text3, display:'block', marginBottom:4 }}>Frequency</label>
+                        <select value={digestConfig.frequency||'weekdays'} onChange={e => setDigestConfig(d => ({ ...d, frequency: e.target.value }))}
+                          style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:'white' }}>
+                          <option value="daily">Every day</option>
+                          <option value="weekdays">Weekdays only</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="off">Off</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:600, color:C.text3, display:'block', marginBottom:4 }}>Time</label>
                         <input type="time" value={digestConfig.daily_time}
                           onChange={e => setDigestConfig(d => ({ ...d, daily_time: e.target.value }))}
                           style={{ width:'100%', boxSizing:'border-box', padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1 }} />
@@ -269,7 +279,9 @@ export default function NotificationsSection() {
                       </div>
                     </div>
                     <div style={{ marginTop:10, fontSize:11, color:C.text3, lineHeight:1.5 }}>
-                      Daily digest sends at {digestConfig.daily_time} ({digestConfig.timezone.replace('_',' ')}). Weekly summary every {digestConfig.weekly_day.charAt(0).toUpperCase()+digestConfig.weekly_day.slice(1)} afternoon. Monthly report on the 1st.
+                      Daily digest sends at {digestConfig.daily_time} ({digestConfig.timezone.replace('_',' ')}) — {
+                        {'daily':'every day','weekdays':'weekdays only','weekly':`every ${digestConfig.weekly_day}`, 'off':'currently off'}[digestConfig.frequency||'weekdays']
+                      }. Weekly summary every {digestConfig.weekly_day.charAt(0).toUpperCase()+digestConfig.weekly_day.slice(1)} afternoon. Monthly report on the 1st.
                     </div>
                   </div>
                 )}

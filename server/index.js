@@ -498,6 +498,8 @@ initDB().then(() => {
     const { startScheduler } = require('./agent-engine');
     startScheduler();
     initScheduler();
+    const { startDigestScheduler } = require('./services/digestScheduler');
+    startDigestScheduler();
   } catch (e) { console.warn('[Scheduler] Init:', e.message); }
 
 }).catch(err => { console.error('[Boot] DB init failed:', err.message); });

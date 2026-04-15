@@ -15,8 +15,8 @@ const formatTime = t => {
   return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
 };
 
-function buildDigestData(environmentId) {
-  const store = getStore();
+function buildDigestData(environmentId, storeOverride) {
+  const store = storeOverride || getStore();
   const today = new Date().toISOString().slice(0, 10);
   const threeDays = new Date(); threeDays.setDate(threeDays.getDate() + 3);
   const threeStr  = threeDays.toISOString().slice(0, 10);
@@ -202,3 +202,6 @@ router.post('/send', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildDigestData = buildDigestData;
+module.exports.buildHtml = buildHtml;
+module.exports.sendEmail = sendEmail;
