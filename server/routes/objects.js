@@ -10,11 +10,6 @@ router.get('/', (req, res) => {
   const { environment_id } = req.query;
   if (!environment_id) return res.status(400).json({error:'environment_id required'});
 
-  // Security: user ID sent but not found in current store = wrong tenant context
-  const requestingUserId = req.headers['x-user-id'];
-  if (requestingUserId && !req.currentUser) {
-    return res.status(403).json({ error: 'Access denied — invalid session context' });
-  }
   // Non-admin users can only query their own environment
   if (req.currentUser) {
     const role = req.currentUser.role || require('../db/init').findOne('roles', r => r.id === req.currentUser.role_id);
