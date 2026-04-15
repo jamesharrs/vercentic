@@ -30,6 +30,21 @@ const { query, findOne, insert, update, remove } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
 
+// Verify password against either hash format:
+//   new format: "randomSalt:hash"  (created by signup.js)
+//   old format: plain hex sha256   (created by hashPassword above)
+function verifyPassword(plaintext, storedHash) {
+  if (!storedHash) return false;
+  if (storedHash.includes(':')) {
+    // new format — split salt from hash
+    const [salt, hash] = storedHash.split(':');
+    const candidate = crypto.createHash('sha256').update(plaintext + salt).digest('hex');
+    return candidate === hash;
+  }
+  // old fixed-salt format
+  return storedHash === hashPassword(plaintext);
+}
+
 // GET all users
 router.get('/', (req, res) => {
   if (checkGlobal(req, res, 'manage_users') === false) return;
@@ -129,7 +144,7 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   const user = findOne('users', u => u.email === email);
   if (!user || user.status === 'deactivated') return res.status(401).json({ error: 'Invalid credentials' });
-  if (user.password_hash !== hashPassword(password)) {
+  if (!verifyPassword(password, user.password_hash)) {
     insert('audit_log', { id:uuidv4(), action:'auth.login_failed', actor:email, target_id:user.id, target_type:'user', details:{ reason:'bad_password' }, created_at:new Date().toISOString() });
     return res.status(401).json({ error: 'Invalid credentials' });
   }

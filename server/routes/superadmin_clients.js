@@ -350,6 +350,27 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     if (!ts.users) ts.users = [];
     ts.users.push(user);
 
+    // Create a Person record so the admin appears in the People object
+    const peopleObj = createdObjects.find(o => o.slug === 'people');
+    if (peopleObj) {
+      if (!ts.records) ts.records = [];
+      ts.records.push({
+        id: uuidv4(), object_id: peopleObj.id, environment_id: environment.id,
+        record_number: 1,
+        data: {
+          first_name: adminUser.first_name || 'Admin',
+          last_name:  adminUser.last_name  || 'User',
+          email:      adminUser.email,
+          status:     'Active',
+          person_type: 'Employee',
+          current_title: 'Administrator',
+        },
+        user_id:    user.id,
+        created_by: user.id,
+        created_at: now, updated_at: now, deleted_at: null,
+      });
+    }
+
     // Seed security defaults
     ts.security_settings = { password_min_length:8, password_require_uppercase:1, password_require_number:1, password_require_symbol:1, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, sso_enabled:0, updated_at: now };
 

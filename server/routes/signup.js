@@ -155,8 +155,51 @@ router.post('/', async (req, res) => {
         created_at:now, updated_at:now, deleted_at:null,
       }];
 
+      // Create a Person record for the admin user so they appear in People
+      const peopleObj = ts.objects.find(o => o.slug === 'people');
+      if (peopleObj) {
+        if (!ts.records) ts.records = [];
+        ts.records.push({
+          id: uuidv4(),
+          object_id: peopleObj.id,
+          environment_id: envId,
+          record_number: 1,
+          data: {
+            first_name: firstName || '',
+            last_name:  lastName  || '',
+            email:      email.toLowerCase(),
+            status:     'Active',
+            person_type:'Employee',
+            current_title: 'Administrator',
+          },
+          user_id:    userId,   // link back to the platform user
+          created_by: userId,
+          created_at: now, updated_at: now, deleted_at: null,
+        });
+      }
+
       ts.security_settings = { password_min_length:8, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, updated_at:now };
       saveStore(tenantSlug);
+    });
+
+    // Register user in master store so super admin client detail shows them
+    await tenantStorage.run('master', () => {
+      const ms = getStore();
+      if (!ms.client_users) ms.client_users = [];
+      ms.client_users.push({
+        id:     userId,
+        client_id:  clientId,
+        tenant_slug: tenantSlug,
+        environment_id: envId,
+        first_name: firstName || '',
+        last_name:  lastName  || '',
+        email:      email.toLowerCase(),
+        role_name:  'Super Admin',
+        status:     'active',
+        source:     'self_serve',
+        created_at: now,
+      });
+      saveStore('master');
     });
 
     // Apply starter configuration — seeds workflows, email templates, career site, scorecard
