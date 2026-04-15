@@ -133,6 +133,8 @@ const AUTH_EXEMPT = [
   '/health', '/environments',
   '/events/stream', '/events/status',
   '/notification-preferences/digest',
+  '/digest/preview',
+  '/digest/send',
   '/portals/public', '/portals/by-slug', '/portals/slug',
   '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
@@ -273,6 +275,7 @@ app.use('/api/sourcing',          require('./routes/sourcing'));
 app.use('/api/calendar',          require('./routes/calendar'));
 const { router: sseRouter, broadcast } = require('./routes/sse');
 app.use('/api/events',            sseRouter);
+app.use('/api/digest',            require('./routes/digest'));
 // Expose broadcast globally so any route can push updates without circular deps
 global.sseBroadcast = broadcast;
 app.use('/api/task-triggers',     require('./routes/task_triggers').router);
