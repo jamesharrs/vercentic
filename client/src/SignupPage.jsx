@@ -281,8 +281,12 @@ export default function SignupPage() {
   // ── Step 3: Done ──────────────────────────────────────────────────────────
   const StepDone = () => {
     const tenantSlug = result?.tenant_slug || result?.credentials?.tenant_slug;
-    // Use ?tenant= param so www.vercentic.com routes to the correct tenant store on login
-    const loginUrl = tenantSlug ? `/?tenant=${tenantSlug}` : '/';
+    // Redirect to app.vercentic.com (the app) not www.vercentic.com (the marketing site)
+    // Use ?tenant= so the login page routes the request to the right tenant store
+    const appBase = window.location.hostname.includes('vercentic.com')
+      ? 'https://app.vercentic.com'
+      : ''; // local dev — same origin
+    const loginUrl = tenantSlug ? `${appBase}/?tenant=${tenantSlug}` : `${appBase}/`;
     return (
       <div style={{ textAlign: "center" }}>
         <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#DCFCE7",
@@ -355,7 +359,7 @@ export default function SignupPage() {
 
       {step < 3 && (
         <div style={{ marginTop: 24, fontSize: 13, color: C.text3, textAlign: "center" }}>
-          Already have an account? <a href="/" style={{ color: C.accent, fontWeight: 600 }}>Sign in</a>
+          Already have an account? <a href={window.location.hostname.includes('vercentic.com') ? 'https://app.vercentic.com/' : '/'} style={{ color: C.accent, fontWeight: 600 }}>Sign in</a>
         </div>
       )}
     </div>

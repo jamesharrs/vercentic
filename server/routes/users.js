@@ -230,8 +230,6 @@ router.post('/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
-  const hashed = hashPassword(password);
-
   // Try current store first (set by tenant middleware based on subdomain/header)
   let u = findOne('users', u => u.email === email);
   let resolvedTenantSlug = (() => { const t = getCurrentTenant(); return (t && t !== 'master') ? t : null; })();
@@ -248,7 +246,8 @@ router.post('/login', validate(loginSchema), (req, res) => {
 
   if (!u) return res.status(401).json({ error: 'Invalid credentials' });
   if (u.status === 'deactivated') return res.status(403).json({ error: 'Account deactivated' });
-  if (u.password_hash !== hashed) return res.status(401).json({ error: 'Invalid credentials' });
+  // Use verifyPassword to support both hash formats (new: salt:hash, old: fixed-salt sha256)
+  if (!verifyPassword(password, u.password_hash)) return res.status(401).json({ error: 'Invalid credentials' });
 
   // Fetch role + permissions from the correct store
   const doInStore = (slug, fn) => {
