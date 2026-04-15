@@ -27,3 +27,12 @@ e2e/report/
 playwright-report/
 *.bak
 data/*.bak
+
+# Test-generated tenant stores (created by Playwright E2E runs)
+data/tenant-e2etestco*.json
+data/tenant-curltesttest*.json
+data/tenant-directtest*.json
+
+# Playwright output
+test-results/
+e2e/report/
