@@ -1154,4 +1154,41 @@ router.get('/:id/environments-with-roles', (req, res) => {
 });
 
 
+// POST /purge-test-clients — wipe all test clients + tenant files, keep master data intact
+router.post('/purge-test-clients', (req, res) => {
+  const { keep_slugs = [] } = req.body; // e.g. ["slugtest"]
+  const s = getStore();
+  const dataDir = path.join(__dirname, '../../data');
+
+  const clients = s.clients || [];
+  const removed = [];
+  const kept    = [];
+
+  for (const client of clients) {
+    const slug = client.tenant_slug;
+    if (keep_slugs.includes(slug)) { kept.push(client); continue; }
+
+    // Delete tenant JSON file
+    if (slug) {
+      const tenantFile = path.join(dataDir, `tenant-${slug}.json`);
+      try { if (fs.existsSync(tenantFile)) fs.unlinkSync(tenantFile); } catch(e) { /* ignore */ }
+    }
+    removed.push(client.name);
+  }
+
+  // Wipe clients + their environments from master store
+  const keptSlugs = new Set(kept.map(c => c.tenant_slug));
+  s.clients = kept;
+  s.client_environments = (s.client_environments || []).filter(e => {
+    const ownerClient = kept.find(c => c.id === e.client_id);
+    return !!ownerClient;
+  });
+  s.provision_log = (s.provision_log || []).filter(l => keptSlugs.has(l.tenant_slug) || !l.tenant_slug);
+
+  invalidateTenantCache();
+  saveStoreNow('master');
+
+  res.json({ removed_count: removed.length, removed, kept: kept.map(c=>c.name) });
+});
+
 module.exports = router;
