@@ -877,7 +877,13 @@ const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues })
     // Load AI-interview-capable agents
     api.get(`/agents?environment_id=${envId}`).then(d => {
       const list = Array.isArray(d) ? d : (d.agents || []);
-      setAvailableAgents(list.filter(a => a.capabilities?.includes?.("ai_interview") || a.type === "ai_interview" || a.use_case === "interview"));
+      const filtered = list.filter(a => !a.deleted_at && (
+        a.type === 'interview' || a.type === 'ai_interview' ||
+        a.use_case === 'interview' ||
+        a.capabilities?.includes?.('ai_interview') ||
+        (a.steps||[]).some(s => s.type === 'ai_interview')
+      ));
+      setAvailableAgents(filtered.length ? filtered : list.filter(a => !a.deleted_at));
     }).catch(() => {});
   }, [envId]);
 
