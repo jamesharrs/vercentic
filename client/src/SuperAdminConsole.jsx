@@ -298,7 +298,159 @@ const NAV_ITEMS = [
   { id:'cases', label:'Support Cases', icon:'cases', desc:'Customer service case management' },
   { id:'ai_usage', label:'AI Usage', icon:'cpu', desc:'Token usage, costs & quota management' },
   { id:'activity', label:'Activity Report', icon:'activity', desc:'Environment activity & usage analytics' },
+  { id:'platform_events', label:'Platform Events', icon:'zap', desc:'Digest sends, scheduler runs, SSE connections & system events' },
 ];
+
+// ── Platform Events Monitor ───────────────────────────────────────────────────
+const CATEGORY_META = {
+  digest:    { label:'Digest',    color:'#60A5FA' },
+  scheduler: { label:'Scheduler', color:'#A78BFA' },
+  sse:       { label:'SSE',       color:'#34D399' },
+  auth:      { label:'Auth',      color:'#FBBF24' },
+  provision: { label:'Provision', color:'#F87171' },
+  email:     { label:'Email',     color:'#60A5FA' },
+  sms:       { label:'SMS',       color:'#34D399' },
+  system:    { label:'System',    color:'#9CA3AF' },
+  error:     { label:'Error',     color:'#F87171' },
+};
+const LEVEL_COLOR = { info:'#34D399', warn:'#FBBF24', error:'#F87171' };
+
+function PlatformEvents() {
+  const [logs,     setLogs]     = useState([]);
+  const [total,    setTotal]    = useState(0);
+  const [loading,  setLoading]  = useState(true);
+  const [catFilter,setCatFilter]= useState('all');
+  const [lvlFilter,setLvlFilter]= useState('all');
+  const [search,   setSearch]   = useState('');
+  const [expanded, setExpanded] = useState(null);
+  const [clearing, setClearing] = useState(false);
+
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: 300 });
+      if (catFilter !== 'all') params.set('category', catFilter);
+      if (lvlFilter !== 'all') params.set('level',    lvlFilter);
+      if (search)               params.set('search',   search);
+      const d = await api.get(`/clients/platform-logs?${params}`);
+      setLogs(d.logs || []); setTotal(d.total || 0);
+    } catch { setLogs([]); }
+    setLoading(false);
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [catFilter, lvlFilter]);  // eslint-disable-line
+
+  const handleSearch = (e) => { if (e.key === 'Enter') load(); };
+
+  const clearLogs = async () => {
+    if (!window.confirm('Clear all platform event logs?')) return;
+    setClearing(true);
+    await fetch('/api/superadmin/clients/platform-logs', { method:'DELETE' });
+    setClearing(false); load();
+  };
+
+  const cats = ['all','digest','scheduler','sse','auth','provision','email','system','error'];
+  const fmtTs = iso => iso ? new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+
+  return (
+    <div style={{padding:'28px 32px',fontFamily:F,minHeight:'100vh',background:C.bg,color:C.text1}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:800,color:C.text1}}>Platform Events</div>
+          <div style={{fontSize:12,color:C.text3,marginTop:2}}>{total} events captured · live monitoring</div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={load} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F}}>↻ Refresh</button>
+          <button onClick={clearLogs} disabled={clearing} style={{padding:'7px 14px',borderRadius:8,border:`1px solid #F87171`,background:'transparent',color:'#F87171',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F}}>Clear logs</button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        {/* Category pills */}
+        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+          {cats.map(c => (
+            <button key={c} onClick={()=>setCatFilter(c)}
+              style={{padding:'4px 10px',borderRadius:99,border:`1px solid ${catFilter===c?(CATEGORY_META[c]?.color||C.purple):C.border}`,
+                background:catFilter===c?`${CATEGORY_META[c]?.color||C.purple}18`:'transparent',
+                color:catFilter===c?(CATEGORY_META[c]?.color||C.purple):C.text3,
+                fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:F,textTransform:'capitalize'}}>
+              {c === 'all' ? 'All' : (CATEGORY_META[c]?.label || c)}
+            </button>
+          ))}
+        </div>
+        {/* Level */}
+        <select value={lvlFilter} onChange={e=>setLvlFilter(e.target.value)}
+          style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:12,fontFamily:F}}>
+          {['all','info','warn','error'].map(l=><option key={l} value={l}>{l==='all'?'All levels':l}</option>)}
+        </select>
+        {/* Search */}
+        <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={handleSearch}
+          placeholder="Search events… (Enter)" style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text1,fontSize:12,fontFamily:F,outline:'none',minWidth:200}}/>
+      </div>
+
+      {/* Log table */}
+      {loading ? (
+        <div style={{textAlign:'center',color:C.text3,padding:48,fontSize:13}}>Loading…</div>
+      ) : logs.length === 0 ? (
+        <div style={{textAlign:'center',padding:60}}>
+          <div style={{fontSize:32,marginBottom:12}}>📭</div>
+          <div style={{color:C.text3,fontSize:13}}>No events yet — they'll appear here as the platform runs.</div>
+          <div style={{color:C.text3,fontSize:12,marginTop:6}}>Digest sends, scheduler checks, SSE connections and more are captured automatically.</div>
+        </div>
+      ) : (
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          {logs.map((log, i) => {
+            const catM = CATEGORY_META[log.category] || { label: log.category, color: C.text3 };
+            const isExp = expanded === log.id;
+            const hasMeta = log.meta && Object.keys(log.meta).length > 0;
+            return (
+              <div key={log.id}
+                style={{borderBottom: i < logs.length-1 ? `1px solid ${C.border}` : 'none',
+                  background: i%2===0 ? C.surface : C.surface2}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',cursor:hasMeta?'pointer':'default'}}
+                  onClick={()=>hasMeta&&setExpanded(isExp?null:log.id)}>
+                  {/* Level dot */}
+                  <div style={{width:7,height:7,borderRadius:'50%',background:LEVEL_COLOR[log.level]||C.text3,flexShrink:0}}/>
+                  {/* Timestamp */}
+                  <span style={{fontSize:11,color:C.text3,width:150,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtTs(log.ts)}</span>
+                  {/* Category pill */}
+                  <span style={{padding:'2px 8px',borderRadius:99,fontSize:10,fontWeight:700,
+                    background:`${catM.color}18`,color:catM.color,flexShrink:0,minWidth:70,textAlign:'center'}}>
+                    {catM.label}
+                  </span>
+                  {/* Event name */}
+                  <span style={{fontSize:11,color:C.purple,fontWeight:600,width:160,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.event}</span>
+                  {/* Message */}
+                  <span style={{fontSize:12,color:C.text2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.message}</span>
+                  {/* Expand */}
+                  {hasMeta && <span style={{fontSize:10,color:C.text3,flexShrink:0}}>{isExp?'▲':'▼'}</span>}
+                </div>
+                {/* Meta panel */}
+                {isExp && hasMeta && (
+                  <div style={{background:`${C.purple}08`,borderTop:`1px solid ${C.border}`,padding:'10px 14px 10px 44px'}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'8px 24px'}}>
+                      {Object.entries(log.meta).map(([k,v])=>(
+                        <div key={k} style={{fontSize:11}}>
+                          <span style={{color:C.text3,fontWeight:600}}>{k}: </span>
+                          <span style={{color:C.text1,fontFamily:'monospace'}}>{String(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SuperAdminConsole() {
   const [authed,  setAuthed]  = useState(() => !!sessionStorage.getItem('sa_token'));
@@ -374,6 +526,7 @@ export default function SuperAdminConsole() {
         {section === 'perf' && <Performance/>}
         {section === 'ai_usage' && <AIUsageReport/>}
         {section === 'activity' && <ActivityReport clientId={clientView==='detail'?selectedClientId:null}/>}
+        {section === 'platform_events' && <PlatformEvents/>}
         {section === 'demo' && <DemoDataManager/>}
         {section === 'errors' && <ErrorLogViewer/>}
         {section === 'release_notes' && <ReleaseNotesAdmin />}

@@ -690,6 +690,41 @@ router.get('/reports/activity-summary', (req, res) => {
   });
 });
 
+// ── GET /platform-logs — must be BEFORE /:id wildcard ────────────────────────
+router.get('/platform-logs', (req, res) => {
+  try {
+    const { storeCache: sc } = require('../db/init');
+    const master = sc['master'];
+    if (!master) return res.json({ logs: [], total: 0 });
+
+    let logs = [...(master.platform_logs || [])].reverse();
+    const { limit = 200, category, level, search, since } = req.query;
+    if (category && category !== 'all') logs = logs.filter(l => l.category === category);
+    if (level    && level    !== 'all') logs = logs.filter(l => l.level    === level);
+    if (since)  logs = logs.filter(l => l.ts >= since);
+    if (search) {
+      const q = search.toLowerCase();
+      logs = logs.filter(l =>
+        l.message?.toLowerCase().includes(q) ||
+        l.event?.toLowerCase().includes(q)   ||
+        JSON.stringify(l.meta || {}).toLowerCase().includes(q)
+      );
+    }
+    const total = logs.length;
+    logs = logs.slice(0, Number(limit));
+    res.json({ logs, total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/platform-logs', (req, res) => {
+  try {
+    const { storeCache: sc, saveStore } = require('../db/init');
+    const master = sc['master'];
+    if (master) { master.platform_logs = []; saveStore('master'); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', (req, res) => {
   ensureCollections();
   const s = getStore();
@@ -1094,5 +1129,6 @@ router.get('/:id/environments-with-roles', (req, res) => {
     res.json({ environments: [], roles: [] });
   }
 });
+
 
 module.exports = router;

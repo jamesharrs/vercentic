@@ -3,6 +3,7 @@
 // No WebSocket overhead; browser auto-reconnects.
 
 const router = require('express').Router();
+const { platformLog } = require('../services/platformLogger');
 
 // tenantClients: Map<tenantSlug, Set<res>>
 const tenantClients = new Map();
@@ -32,6 +33,7 @@ router.get('/stream', (req, res) => {
   // Register this client
   if (!tenantClients.has(slug)) tenantClients.set(slug, new Set());
   tenantClients.get(slug).add(res);
+  platformLog('sse', 'client_connected', `SSE client connected`, { tenant: slug, total: tenantClients.get(slug).size });
 
   // Send a heartbeat every 25s to keep the connection alive through proxies
   const hb = setInterval(() => {

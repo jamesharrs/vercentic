@@ -5,6 +5,7 @@
 
 const https = require('https');
 const { storeCache, loadTenantStore, listTenants, getCurrentTenant } = require('../db/init');
+const { platformLog } = require('./platformLogger');
 
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
 
@@ -149,12 +150,18 @@ async function runDigestCheck() {
         markSent(store, user.id, today);
         try { _ss(slug); } catch {}
         sent++;
+        platformLog('digest', 'digest_sent', `Daily digest sent to ${user.email}`,
+          { tenant: slug, user_id: user.id, email: user.email, tasks_today: digest.tasks_today.length,
+            tasks_overdue: digest.tasks_overdue.length, interviews: digest.interviews_today.length });
       } catch(e) {
         console.error(`[DigestScheduler] Failed for ${user.email}:`, e.message);
+        platformLog('digest', 'digest_failed', `Failed to send digest to ${user.email}: ${e.message}`,
+          { tenant: slug, user_id: user.id, email: user.email }, 'error');
       }
     }
   }
   if (sent > 0) console.log(`[DigestScheduler] Sent ${sent} digest(s)`);
+  platformLog('scheduler', 'digest_check', `Digest check complete — ${sent} sent`, { sent });
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
