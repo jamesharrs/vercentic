@@ -57,8 +57,16 @@ function mutationHeaders() {
   return h;
 }
 
+// Paths that are expected to 404 (e.g. lookup-by-email) — suppress browser console errors
+const SILENT_404_PATTERNS = ['/users/by-email/'];
+
+function handleResponse(r, path = '') {
+  if (r.status === 404 && SILENT_404_PATTERNS.some(p => path.includes(p))) return null;
+  return r.json();
+}
+
 const api = {
-  get:    (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', headers: authHeaders() }).then(r => r.json()),
+  get:    (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', headers: authHeaders() }).then(r => handleResponse(r, path)),
   post:   (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'POST',   headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
   patch:  (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PATCH',  headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
   put:    (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PUT',    headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
