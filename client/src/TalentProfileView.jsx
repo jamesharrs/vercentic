@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from './apiClient.js';
+import ScoreExplainer from './ScoreExplainer.jsx';
 
 const F = "'DM Sans', -apple-system, sans-serif";
 const PURPLE = '#7c3aed';
@@ -505,11 +506,44 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
           )}
           {/* Match score */}
           {score !== null && (
-            <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,.12)', borderRadius:10, padding:'8px 12px', marginBottom:16 }}>
-              <ScoreRing score={score}/>
-              <div>
-                <div style={{ fontSize:12, fontWeight:800 }}>{score}% match</div>
-                <div style={{ fontSize:10, opacity:.7 }}>{matchScore?.reasons?.[0]||'AI score'}</div>
+            <div style={{ marginBottom:16, background:'rgba(255,255,255,.15)', borderRadius:12, padding:'12px 14px',
+              border:'1px solid rgba(255,255,255,.2)', backdropFilter:'blur(4px)' }}>
+              <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.6)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>AI Match Score</div>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                {/* Larger ring — white stroke on purple bg */}
+                <div style={{ flexShrink:0 }}>
+                  <ScoreExplainer
+                    score={score}
+                    reasons={matchScore?.reasons || []}
+                    gaps={matchScore?.gaps || []}
+                    criteriaScores={matchScore?.criteriaScores}
+                    skillsDetail={matchScore?.skillsDetail}
+                    size={58}
+                    fontSize={15}
+                  />
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:15, fontWeight:800, color:'white', lineHeight:1.2 }}>
+                    {score >= 75 ? 'Strong match' : score >= 50 ? 'Good match' : 'Partial match'}
+                  </div>
+                  {matchScore?.reasons?.length > 0 && (
+                    <div style={{ marginTop:4, display:'flex', flexDirection:'column', gap:2 }}>
+                      {matchScore.reasons.slice(0,2).map((r,i) => (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'rgba(255,255,255,.8)' }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                          {r}
+                        </div>
+                      ))}
+                      {matchScore?.gaps?.slice(0,1).map((g,i) => (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'rgba(255,255,255,.65)' }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.5"><path d="M12 9v4M12 17h.01"/></svg>
+                          {g}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ marginTop:5, fontSize:9, color:'rgba(255,255,255,.45)' }}>Hover ring for full breakdown</div>
+                </div>
               </div>
             </div>
           )}
