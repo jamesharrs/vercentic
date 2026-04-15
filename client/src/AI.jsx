@@ -974,6 +974,19 @@ SCHEDULING RULES:
   • In Person: "✅ I'll send both Lewie Harrison and James Harrison a calendar invite with the location details and an option to reschedule."
   Keep it to one sentence, warm and direct.
 
+TASK CREATION INSTRUCTIONS:
+When the user asks to create a task, reminder, or to-do:
+Step 1: Confirm what the task is for — title, type, priority, due date.
+Step 2: When you have the key details, output EXACTLY this format:
+<CREATE_TASK>
+{"title":"Follow up with Ahmed","task_type":"follow_up","priority":"medium","due_date":"2026-04-18","due_time":"09:00","reminder":"1d","description":"Check on application status","record_id":null,"record_name":null}
+</CREATE_TASK>
+task_type: call, email, follow_up, review, interview, meeting, send_docs, chase, other
+priority: urgent, high, medium, low
+reminder: 15m, 30m, 1h, 3h, 1d, 2d (before due) — or omit if no reminder needed
+If the user is viewing a record in CURRENT PAGE CONTEXT, offer to link the task to it.
+Always confirm the key details before outputting the block.
+
 FORM CREATION INSTRUCTIONS:
 When a user wants to create a form, questionnaire, scorecard, survey, or data capture template:
 
@@ -1594,6 +1607,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   linkedJobsRef.current = linkedJobs;  // always-fresh — read in sendMessage to avoid stale closure
   const [pendingInterview, setPendingInterview] = useState(null);
   const [pendingForm,      setPendingForm]      = useState(null);
+  const [pendingTask,      setPendingTask]      = useState(null);
   const [pendingReport,    setPendingReport]    = useState(null);
   const [pendingPortal,    setPendingPortal]    = useState(null);
   const [pendingDashboard, setPendingDashboard] = useState(null);
@@ -2132,6 +2146,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  const parseCreateTask = (text) => {
+    const match = text.match(/<CREATE_TASK>([\s\S]*?)<\/CREATE_TASK>/);
+    if (!match) return null;
+    try { return JSON.parse(match[1].trim()); } catch { return null; }
+  };
+
   const parseSearchQuery = (text) => {
     const match = text.match(/<SEARCH_QUERY>([\s\S]*?)<\/SEARCH_QUERY>/);
     if (!match) return null;
@@ -2157,6 +2177,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
+    .replace(/<CREATE_TASK>[\s\S]*?<\/CREATE_TASK>/g,"")
     .replace(/<RECOMMEND_CANDIDATES\s*\/?>/g,"")
     .trim();
 
@@ -2315,6 +2336,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setPendingRole(null);
     setPendingInterview(null);
     setPendingForm(null);
+    setPendingTask(null);
     setPendingPortal(null);
     setPendingPortal(null);
     setPendingReport(null);
@@ -2473,6 +2495,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const roleData      = parseCreateRole(reply);
       const interviewData = parseScheduleInterview(reply);
       const formData2     = parseCreateForm(reply);
+      const taskData      = parseCreateTask(reply);
       const portalData    = parseCreatePortal(reply);
       const dashboardData = parseCreateDashboard(reply);
       const modifyReport  = parseModifyReport(reply);
@@ -2501,14 +2524,15 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         : "";
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
-      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
-        interviewData, formData2, reportData, portalData, dashboardData}]);
+      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
+        interviewData, formData2, taskData, reportData, portalData, dashboardData}]);
       if(createData)    setPendingRecord(createData);
       if(workflowData)  setPendingWorkflow(workflowData);
       if(userData)      setPendingUser(userData);
       if(roleData)      setPendingRole(roleData);
       if(interviewData && canRecord('record_schedule_interview')) setPendingInterview(interviewData);
       if(formData2)     setPendingForm(formData2);
+      if(taskData)      setPendingTask(taskData);
       if(portalData)    setPendingPortal(portalData);
       if(dashboardData)  setPendingDashboard(dashboardData);
       if(modifyReport)  window.dispatchEvent(new CustomEvent("talentos:modify-report", { detail: modifyReport }));
@@ -2686,6 +2710,35 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       setParsedJob(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
+    }
+    setCreating(false);
+  };
+
+  const handleConfirmTask = async () => {
+    if (!pendingTask || !environment?.id) return;
+    setCreating(true);
+    try {
+      const offsets = { '15m':15,'30m':30,'1h':60,'3h':180,'1d':1440,'2d':2880 };
+      let reminderAt = null;
+      if (pendingTask.reminder && pendingTask.due_date) {
+        const mins = offsets[pendingTask.reminder];
+        if (mins) {
+          const base = new Date(`${pendingTask.due_date}T${pendingTask.due_time||'09:00'}:00`);
+          reminderAt = new Date(base.getTime() - mins*60000).toISOString();
+        }
+      }
+      const payload = { ...pendingTask, environment_id:environment.id, created_by:'copilot',
+        reminder_at:reminderAt, tags:JSON.stringify(['copilot']) };
+      delete payload.reminder;
+      const r = await tFetch('/api/calendar/tasks', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      });
+      const created = await r.json();
+      setPendingTask(null);
+      setMessages(m=>[...m,{role:'assistant',content:`✅ Task created: **${created.title||pendingTask.title}**${pendingTask.due_date?` · Due ${pendingTask.due_date}`:''}`,ts:new Date()}]);
+      window.dispatchEvent(new CustomEvent('talentos:tasks-updated'));
+    } catch(e) {
+      setMessages(m=>[...m,{role:'assistant',content:`Failed to create task: ${e.message}`,ts:new Date(),error:true}]);
     }
     setCreating(false);
   };
@@ -3809,6 +3862,30 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     </div>
                   </div>
                 )}
+
+{/* ── Task Creation Card ── */}
+                {msg.role==="assistant"&&msg.hasTask&&(msg.taskData||pendingTask)&&i===messages.length-1&&(()=>{const td=msg.taskData||pendingTask;const TICO={'call':'📞','email':'✉️','follow_up':'🔄','review':'👁','interview':'🗓','meeting':'👥','send_docs':'📄','chase':'⚡','other':'○'};return(
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #c7d2fe",background:"#EEF2FF"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:"#4361EE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{TICO[td.task_type]||'✓'}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0D0D0F",marginBottom:3}}>{td.title}</div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:11,color:"#6b7280"}}>
+                          {td.priority&&<span style={{fontWeight:700,color:{urgent:"#ef4444",high:"#f97316",medium:"#eab308",low:"#22c55e"}[td.priority]||"#6b7280"}}>{td.priority}</span>}
+                          {td.due_date&&<span>Due {td.due_date}{td.due_time?` at ${td.due_time}`:""}</span>}
+                          {td.reminder&&<span>🔔 {td.reminder} before</span>}
+                        </div>
+                        {td.description&&<div style={{fontSize:12,color:"#374151",marginTop:5,lineHeight:1.4}}>{td.description}</div>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingTask(null)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #e5e7eb",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
+                      <button onClick={handleConfirmTask} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#4361EE",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        {creating?<><Ic n="loader" s={12}/> Creating…</>:<><Ic n="check" s={12}/> Create Task</>}
+                      </button>
+                    </div>
+                  </div>
+                );})()}
 
                 {/* ── Report card ── */}
                 {msg.role==="assistant"&&msg.hasReport&&msg.reportData&&i===messages.length-1&&(()=>{

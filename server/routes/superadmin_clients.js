@@ -4,6 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
+const { applyStarterConfig } = require('../data/starter_config');
 const { getStore, saveStore, saveStoreNow, provisionTenant, tenantStorage, loadTenantStore } = require('../db/init');
 
 const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
@@ -371,6 +372,13 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 
     saveStoreNow(tenantSlug); // synchronous — must complete before response
   });
+
+  // Apply starter configuration (workflows, email templates, career site, scorecard)
+  try {
+    await applyStarterConfig(tenantSlug, environment, createdObjects, clientData);
+  } catch(e) {
+    console.error('[provision] Starter config failed (non-fatal):', e.message);
+  }
 
   return {
     client, environment, tenant_slug: tenantSlug,
