@@ -1,0 +1,925 @@
+{
+  "environments": [
+    {
+      "id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Production",
+      "slug": "production",
+      "is_default": 1,
+      "color": "#6941C6",
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z",
+      "starter_config_applied": true,
+      "starter_config_applied_at": "2026-04-15T09:58:14.744Z"
+    }
+  ],
+  "objects": [
+    {
+      "id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Person",
+      "plural_name": "People",
+      "slug": "people",
+      "icon": "users",
+      "color": "#3b5bdb",
+      "is_system": 1,
+      "sort_order": 1,
+      "relationships_enabled": 0,
+      "person_type_options": [
+        "Employee",
+        "Contractor",
+        "Consultant",
+        "Candidate",
+        "Contact"
+      ],
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Job",
+      "plural_name": "Jobs",
+      "slug": "jobs",
+      "icon": "briefcase",
+      "color": "#f59f00",
+      "is_system": 1,
+      "sort_order": 2,
+      "relationships_enabled": 0,
+      "person_type_options": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "6c85bc15-1637-4ea7-83f0-309ecff4eeb4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Talent Pool",
+      "plural_name": "Talent Pools",
+      "slug": "talent-pools",
+      "icon": "layers",
+      "color": "#0ca678",
+      "is_system": 1,
+      "sort_order": 3,
+      "relationships_enabled": 0,
+      "person_type_options": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    }
+  ],
+  "fields": [
+    {
+      "id": "0a1fd745-2f15-4e02-b8c0-2a788023db9e",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "First Name",
+      "api_key": "first_name",
+      "field_type": "text",
+      "is_required": 1,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 1,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "b87afeff-fe4f-41ae-ae46-f353b927efd5",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Last Name",
+      "api_key": "last_name",
+      "field_type": "text",
+      "is_required": 1,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 2,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "2bdd878a-1f7c-4efe-b93b-511ff887f0c8",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Email",
+      "api_key": "email",
+      "field_type": "email",
+      "is_required": 1,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 3,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "0b33ebed-472e-4104-81ed-6167e389dfae",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Phone",
+      "api_key": "phone",
+      "field_type": "phone",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 0,
+      "show_in_form": 1,
+      "sort_order": 4,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "9136c17a-0845-4064-af2e-f3cf0f410d64",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Location",
+      "api_key": "location",
+      "field_type": "text",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 5,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "224bfdd7-db29-4756-aca8-a58e0cea9c67",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Status",
+      "api_key": "status",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 6,
+      "options": [
+        "Active",
+        "Passive",
+        "Not Looking",
+        "Placed",
+        "Archived"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "84a7b156-5f22-47e0-a343-09debae1f496",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Source",
+      "api_key": "source",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 7,
+      "options": [
+        "LinkedIn",
+        "Referral",
+        "Job Board",
+        "Direct Apply",
+        "Agency",
+        "Other"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "cf106fbc-140e-42b3-96f8-f0ae8229a7fd",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Current Title",
+      "api_key": "current_title",
+      "field_type": "text",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 8,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "dd037b8b-3c77-44f4-b8c8-5bce3b66e491",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Skills",
+      "api_key": "skills",
+      "field_type": "skills",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 0,
+      "show_in_form": 1,
+      "sort_order": 9,
+      "options": [],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "83cb6c59-7de1-40e4-b0df-7ba7e8b49d10",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Rating",
+      "api_key": "rating",
+      "field_type": "rating",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 10,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "8907fb69-9c2c-43a5-ae30-b465d23db2ac",
+      "object_id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Job Title",
+      "api_key": "job_title",
+      "field_type": "text",
+      "is_required": 1,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 1,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "71fa5661-dff3-460d-9f9e-7f5d7f8b8014",
+      "object_id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Department",
+      "api_key": "department",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 2,
+      "options": [
+        "Engineering",
+        "Product",
+        "Sales",
+        "Marketing",
+        "HR",
+        "Finance",
+        "Operations",
+        "Other"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "38b4a165-bc8f-46d1-bd0d-d7ef815d5d4f",
+      "object_id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Location",
+      "api_key": "location",
+      "field_type": "text",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 3,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "3df03f18-07d3-4a6e-a82c-87bf5bd5bc39",
+      "object_id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Status",
+      "api_key": "status",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 4,
+      "options": [
+        "Draft",
+        "Open",
+        "On Hold",
+        "Filled",
+        "Cancelled"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "76351e35-7c2f-4e67-9106-b9d75791b640",
+      "object_id": "6c85bc15-1637-4ea7-83f0-309ecff4eeb4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Pool Name",
+      "api_key": "pool_name",
+      "field_type": "text",
+      "is_required": 1,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 1,
+      "options": null,
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "570b639c-bd90-4c3c-a318-1951e50ff14f",
+      "object_id": "6c85bc15-1637-4ea7-83f0-309ecff4eeb4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Category",
+      "api_key": "category",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 2,
+      "options": [
+        "Technical",
+        "Leadership",
+        "Sales",
+        "Operations",
+        "Graduates",
+        "Other"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "3993a484-ca70-4abf-bed1-0acecee61d1a",
+      "object_id": "6c85bc15-1637-4ea7-83f0-309ecff4eeb4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Status",
+      "api_key": "status",
+      "field_type": "select",
+      "is_required": 0,
+      "is_unique": 0,
+      "is_system": 1,
+      "show_in_list": 1,
+      "show_in_form": 1,
+      "sort_order": 3,
+      "options": [
+        "Active",
+        "Inactive",
+        "Archived"
+      ],
+      "lookup_object_id": null,
+      "default_value": null,
+      "placeholder": null,
+      "help_text": null,
+      "condition_field": null,
+      "condition_value": null,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    }
+  ],
+  "records": [
+    {
+      "id": "42da1e41-ff1e-4fa4-8379-6dbe8dd5ec7a",
+      "object_id": "274e4f4a-8733-449e-9022-3d60f6185139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "record_number": 1,
+      "data": {
+        "first_name": "",
+        "last_name": "",
+        "email": "e2e.0ac18a13@example.com",
+        "status": "Active",
+        "person_type": "Employee",
+        "current_title": "Administrator"
+      },
+      "user_id": "376127f9-b93a-4a19-8944-040af5c22bd4",
+      "created_by": "376127f9-b93a-4a19-8944-040af5c22bd4",
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z",
+      "deleted_at": null
+    },
+    {
+      "id": "8a52102d-dc0a-49d0-acc0-983fa566560a",
+      "object_id": "6c85bc15-1637-4ea7-83f0-309ecff4eeb4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "data": {
+        "pool_name": "Active Candidates",
+        "description": "Candidates in active hiring processes.",
+        "category": "Hiring",
+        "status": "Active"
+      },
+      "created_by": "system",
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z",
+      "deleted_at": null
+    }
+  ],
+  "relationships": [],
+  "activity": [],
+  "users": [
+    {
+      "id": "376127f9-b93a-4a19-8944-040af5c22bd4",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "client_id": "7fac7cf9-c502-4824-9b4b-af2a5cfcdd0d",
+      "first_name": "",
+      "last_name": "",
+      "email": "e2e.0ac18a13@example.com",
+      "password_hash": "2bc4710b143eec3b0abf361085283f19:3e904c7f19ef8deb60e0d97d836dd9d2d039b29f5488972301c8925afd7c8fd9",
+      "role_id": "28ee37e3-7cab-4df5-ae06-7f14292186e6",
+      "role_name": "Super Admin",
+      "status": "active",
+      "is_super_admin": true,
+      "must_change_password": 0,
+      "mfa_enabled": 0,
+      "plan": "growth",
+      "plan_label": "Growth",
+      "trial_ends_at": "2026-04-29T09:58:14.739Z",
+      "last_login": null,
+      "login_count": 0,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z",
+      "deleted_at": null
+    }
+  ],
+  "roles": [
+    {
+      "id": "28ee37e3-7cab-4df5-ae06-7f14292186e6",
+      "name": "Super Admin",
+      "slug": "super_admin",
+      "color": "#6941C6",
+      "is_system": 1,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "0c0b57c7-310e-431e-b2ee-5ef8f47f1db5",
+      "name": "Recruiter",
+      "slug": "recruiter",
+      "color": "#3B82F6",
+      "is_system": 1,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "a6989d6e-63d1-4e1b-9127-faa38301bb8f",
+      "name": "Hiring Manager",
+      "slug": "hiring_manager",
+      "color": "#059669",
+      "is_system": 1,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    },
+    {
+      "id": "cb984792-476c-4dc5-9891-289efea0f3b9",
+      "name": "Read Only",
+      "slug": "read_only",
+      "color": "#9CA3AF",
+      "is_system": 1,
+      "created_at": "2026-04-15T09:58:14.739Z",
+      "updated_at": "2026-04-15T09:58:14.739Z"
+    }
+  ],
+  "permissions": [],
+  "sessions": [],
+  "audit_log": [],
+  "org_units": [],
+  "question_bank": [],
+  "bot_sessions": [],
+  "scorecards": [],
+  "security_settings": {
+    "password_min_length": 8,
+    "session_timeout_minutes": 60,
+    "max_login_attempts": 5,
+    "lockout_duration_minutes": 30,
+    "mfa_enabled": 0,
+    "updated_at": "2026-04-15T09:58:14.739Z"
+  },
+  "email_templates": [
+    {
+      "id": "e6588955-41e1-4344-be3b-53e6d2787f34",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Application Acknowledgement",
+      "category": "candidate",
+      "subject": "We received your application – {{job_title}}",
+      "body": "Hi {{first_name}},\n\nThank you for applying for the {{job_title}} position at {{company_name}}.\n\nWe've received your application and our team will review it carefully. We aim to get back to all candidates within 5–7 business days.\n\nWarm regards,\n{{recruiter_name}}",
+      "tags": [
+        "acknowledgement"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "0266fe3a-3672-4b40-885b-7ae7e4896eba",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Interview Invitation",
+      "category": "candidate",
+      "subject": "Interview invitation – {{job_title}} at {{company_name}}",
+      "body": "Hi {{first_name}},\n\nWe'd love to invite you for an interview for the {{job_title}} role.\n\nDate: {{interview_date}}\nTime: {{interview_time}}\nFormat: {{interview_format}}\n\nPlease confirm your availability by replying to this email.\n\nBest regards,\n{{recruiter_name}}",
+      "tags": [
+        "interview"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "af9f39a2-01e9-4448-91cc-a98fca4bc0ab",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Offer Letter",
+      "category": "candidate",
+      "subject": "Congratulations! Offer of employment – {{job_title}}",
+      "body": "Hi {{first_name}},\n\nWe're delighted to extend an offer for the position of {{job_title}} at {{company_name}}.\n\nRole: {{job_title}}\nStart date: {{start_date}}\nSalary: {{salary}}\n\nPlease sign and return by {{offer_expiry_date}}.\n\nWarm regards,\n{{recruiter_name}}",
+      "tags": [
+        "offer"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "00b512f2-04e2-4754-8e80-49fb22d1c1ac",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Application Unsuccessful",
+      "category": "candidate",
+      "subject": "Your application for {{job_title}} at {{company_name}}",
+      "body": "Hi {{first_name}},\n\nThank you for applying for the {{job_title}} position. After careful consideration, we won't be moving forward with your application at this time.\n\nWe'll keep your details on file and will be in touch if a suitable opportunity arises.\n\nKind regards,\n{{recruiter_name}}",
+      "tags": [
+        "rejection"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "0d2791d0-46f2-48cf-b908-3dfd80a8fe10",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Screening Call Confirmation",
+      "category": "candidate",
+      "subject": "Screening call confirmed – {{job_title}}",
+      "body": "Hi {{first_name}},\n\nGreat news — we'd like to schedule a brief screening call for the {{job_title}} opportunity.\n\nDate: {{interview_date}}\nTime: {{interview_time}}\nFormat: Phone/Video call\n\nSpeak soon,\n{{recruiter_name}}",
+      "tags": [
+        "screening"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "067a294f-17a9-40f1-a24e-58390994707e",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Hiring Manager Shortlist Brief",
+      "category": "internal",
+      "subject": "Candidate shortlist – {{job_title}}",
+      "body": "Hi {{hiring_manager_name}},\n\nPlease find below a summary of shortlisted candidates for the {{job_title}} role.\n\n{{candidate_summary}}\n\nPlease let me know your thoughts and preferred interview slots.\n\nBest,\n{{recruiter_name}}",
+      "tags": [
+        "internal",
+        "shortlist"
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    }
+  ],
+  "workflows": [
+    {
+      "id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Candidate Hiring Process",
+      "description": "Standard end-to-end hiring workflow.",
+      "object_id": "10dae022-3aef-42a7-9bc5-d46735a28902",
+      "workflow_type": "people_link",
+      "type": "people_link",
+      "status": "active",
+      "is_active": 1,
+      "trigger_type": "manual",
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    }
+  ],
+  "workflow_steps": [
+    {
+      "id": "2b3b27b3-4e19-44bc-97d5-22690a16deda",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Applied",
+      "color": "#6b7280",
+      "order": 0,
+      "automation_type": "send_email",
+      "automation_config": "{\"template\":\"Application Acknowledgement\",\"recipient_mode\":\"record_field\",\"recipient_field\":\"email\"}",
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "7e8e4190-6418-4ecf-8384-64919f68618b",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Screening",
+      "color": "#3b82f6",
+      "order": 1,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "2d76dbe9-1ff3-4541-8741-4d3e37f02d35",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Phone Interview",
+      "color": "#8b5cf6",
+      "order": 2,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "19870c8a-7bb6-4b3b-ac7a-843f21dccfee",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Technical Interview",
+      "color": "#f59e0b",
+      "order": 3,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "a45a79d1-b21d-4d51-8d72-9195c10789cc",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Final Interview",
+      "color": "#ec4899",
+      "order": 4,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "ce358964-0291-4f77-acb8-5eab18c8271c",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Offer Sent",
+      "color": "#06b6d4",
+      "order": 5,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "6ddbd4c5-3c57-4c3d-b5da-a6475dca9ff5",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Hired",
+      "color": "#10b981",
+      "order": 6,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    },
+    {
+      "id": "beb1ef6c-cb3e-46c8-a189-6e9dde3d649b",
+      "workflow_id": "3727dbc2-dc9e-47d1-a80e-f443607a4a3b",
+      "name": "Rejected",
+      "color": "#ef4444",
+      "order": 7,
+      "automation_type": null,
+      "automation_config": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    }
+  ],
+  "portals": [
+    {
+      "id": "4deda374-7d71-4b42-b4da-6fedde13582e",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "E2ETestCo0ac18a13-dupe Career Site",
+      "slug": "/careers",
+      "description": "Public-facing job board and application portal.",
+      "type": "career_site",
+      "status": "published",
+      "theme": {
+        "company_name": "E2ETestCo0ac18a13-dupe",
+        "tagline": "Find your next opportunity",
+        "primary": "#4361EE",
+        "secondary": "#0D0D0F",
+        "background": "#ffffff",
+        "font": "DM Sans, sans-serif"
+      },
+      "pages": [
+        {
+          "id": "home",
+          "name": "Jobs",
+          "type": "job_board",
+          "config": {
+            "show_search": true,
+            "show_department_filter": true
+          }
+        }
+      ],
+      "nav": {
+        "links": [
+          {
+            "label": "Jobs",
+            "href": "#jobs"
+          }
+        ]
+      },
+      "footer": {
+        "text": "© 2026 E2ETestCo0ac18a13-dupe. All rights reserved."
+      },
+      "gdpr": {
+        "enabled": false
+      },
+      "deleted_at": null,
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    }
+  ],
+  "forms": [
+    {
+      "id": "cbe9e375-3e59-4a62-b7f0-457c46946139",
+      "environment_id": "a3cb276b-3c56-4c4b-acbc-28d0b63368d1",
+      "name": "Interview Scorecard",
+      "description": "Structured interview feedback form.",
+      "category": "interview",
+      "applies_to": [
+        "people"
+      ],
+      "is_confidential": true,
+      "status": "active",
+      "fields": [
+        {
+          "id": "39396f97-7d06-4d69-9ed0-1814c0b68efe",
+          "label": "Overall recommendation",
+          "field_type": "select",
+          "required": true,
+          "options": [
+            "Strong Yes",
+            "Yes",
+            "No",
+            "Strong No"
+          ],
+          "order": 0
+        },
+        {
+          "id": "087aacc6-6921-4586-8e29-73aa5688c5f5",
+          "label": "Communication skills",
+          "field_type": "rating",
+          "required": true,
+          "order": 1
+        },
+        {
+          "id": "cb7e1cff-06ec-4cf7-bdc1-28eeb7bb4382",
+          "label": "Technical competency",
+          "field_type": "rating",
+          "required": true,
+          "order": 2
+        },
+        {
+          "id": "bc494212-badc-457a-9663-697ee5f7129f",
+          "label": "Cultural fit",
+          "field_type": "rating",
+          "required": true,
+          "order": 3
+        },
+        {
+          "id": "6ef61f95-eb8e-4047-b66b-6729c772c20e",
+          "label": "Key strengths",
+          "field_type": "textarea",
+          "required": true,
+          "order": 4,
+          "placeholder": "What stood out positively?"
+        },
+        {
+          "id": "5c6c1b72-5d3f-4edb-b008-d0785a76a3f7",
+          "label": "Areas of concern",
+          "field_type": "textarea",
+          "required": false,
+          "order": 5,
+          "placeholder": "Any gaps or concerns?"
+        },
+        {
+          "id": "990b09dc-94d3-4715-8d02-b2d0f0d273c6",
+          "label": "Additional notes",
+          "field_type": "textarea",
+          "required": false,
+          "order": 6
+        }
+      ],
+      "created_at": "2026-04-15T09:58:14.744Z",
+      "updated_at": "2026-04-15T09:58:14.744Z"
+    }
+  ]
+}

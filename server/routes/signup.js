@@ -7,7 +7,7 @@ const express  = require('express');
 const router   = express.Router();
 const crypto   = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore, tenantStorage, storeCache, loadTenantStore, provisionTenant } = require('../db/init');
+const { getStore, saveStore, saveStoreNow, tenantStorage, storeCache, loadTenantStore, provisionTenant } = require('../db/init');
 const { applyStarterConfig } = require('../data/starter_config');
 
 const PLAN_LIMITS = {
@@ -179,7 +179,7 @@ router.post('/', async (req, res) => {
       }
 
       ts.security_settings = { password_min_length:8, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, updated_at:now };
-      saveStore(tenantSlug);
+      saveStoreNow(tenantSlug); // synchronous — ensures data is written before response
     });
 
     // Register user in master store so super admin client detail shows them

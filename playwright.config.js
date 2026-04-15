@@ -3,6 +3,15 @@
 // Headed:   npx playwright test --headed
 // One file: npx playwright test e2e/core/auth.spec.js
 // UI mode:  npx playwright test --ui
+//
+// To run provisioning suite with API + app:
+//   API_URL=http://localhost:3001 APP_URL=http://localhost:3000 \
+//   PLAYWRIGHT_TEST=1 npx playwright test e2e/core/provisioning.spec.js
+//
+// Against production:
+//   API_URL=https://talentos-production-4045.up.railway.app \
+//   APP_URL=https://app.vercentic.com \
+//   npx playwright test e2e/core/provisioning.spec.js
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({

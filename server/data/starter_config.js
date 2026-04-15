@@ -111,7 +111,7 @@ function buildScorecardForm(envId) {
 }
 
 async function applyStarterConfig(tenantSlug, environment, objects, clientData={}) {
-  const { getStore, saveStore, tenantStorage } = require('../db/init');
+  const { getStore, saveStoreNow, tenantStorage } = require('../db/init');
   const envId = environment.id;
   const companyName = clientData.name || environment.name?.replace(/(Production|Staging|Dev|UAT)$/i,'').trim() || 'Company';
   const peopleObj = objects.find(o=>o.slug==='people');
@@ -147,7 +147,7 @@ async function applyStarterConfig(tenantSlug, environment, objects, clientData={
       store.environments[envIdx].starter_config_applied=true;
       store.environments[envIdx].starter_config_applied_at=new Date().toISOString();
     }
-    saveStore(tenantSlug);
+    saveStoreNow(tenantSlug);
     console.log(`[starter] Applied to tenant "${tenantSlug}": ${templates.length} templates, ${steps.length} pipeline stages, career site, scorecard`);
   });
 }
