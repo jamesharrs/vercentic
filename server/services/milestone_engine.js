@@ -75,7 +75,12 @@ async function sendStepEmail(enrolment, step, template, client) {
 
   try {
     const { sendEmail } = require('../services/messaging');
-    await sendEmail(client.admin_email, subject, htmlFinal, text, template.from_email, template.from_name);
+    await sendEmail({
+      to:      client.admin_email,
+      subject,
+      html:    htmlFinal,
+      text,
+    });
     const log = getCol('email_send_log');
     log.push({ id:uuidv4(), enrolment_id:enrolment.id, client_id:enrolment.client_id, sequence_id:enrolment.sequence_id, step_id:step.id, template_id:template.id, to_email:client.admin_email, subject, sent_at:now(), opened:false, clicked:false });
     saveCol('email_send_log', log);

@@ -67,7 +67,12 @@ router.post('/templates/:id/test-send', async (req,res) => {
   const sample={ client_name:'Acme Corp', admin_first_name:'James', admin_email:to_email, environment_name:'Acme Production', login_url:process.env.APP_URL||'https://app.vercentic.com', days_since_signup:'3' };
   try {
     const { sendEmail } = require('../services/messaging');
-    await sendEmail(to_email, applyMerge(t.subject,sample), applyMerge(t.body_html,sample), applyMerge(t.body_text,sample), t.from_email, t.from_name);
+    await sendEmail({
+      to:      to_email,
+      subject: applyMerge(t.subject, sample),
+      html:    applyMerge(t.body_html, sample),
+      text:    applyMerge(t.body_text, sample),
+    });
     res.json({ ok:true, message:`Test sent to ${to_email}` });
   } catch(e) { res.status(500).json({error:e.message}); }
 });
