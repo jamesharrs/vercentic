@@ -132,6 +132,7 @@ const AUTH_EXEMPT = [
   '/users/login', '/users/auth/login', '/users/logout',
   '/health', '/environments',
   '/events/stream', '/events/status',
+  '/notification-preferences/digest',
   '/portals/public', '/portals/by-slug', '/portals/slug',
   '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',

@@ -34,6 +34,7 @@ const DEFAULT_NOTIFICATION_TYPES = [
 
   // Digests
   { key: 'daily_task_digest',     category: 'digests',     label: 'Daily task digest',         description: 'Morning email: interviews, pending approvals, expiring offers, overdue tasks', in_app: false, email: true },
+  { key: 'daily_tasks_today',     category: 'digests',     label: 'My tasks today (in-app)',    description: 'In-app banner at login showing tasks due today and overdue tasks',             in_app: true,  email: false },
   { key: 'weekly_pipeline_summary', category: 'digests',   label: 'Weekly pipeline summary',   description: 'Friday overview: stage movement, new vs closed jobs, hiring velocity',         in_app: false, email: true },
   { key: 'monthly_hiring_report', category: 'digests',     label: 'Monthly hiring report',     description: 'Month-end: placements, time-to-fill, source breakdown, team performance',     in_app: false, email: true },
 ];
@@ -125,6 +126,56 @@ router.put('/', (req, res) => {
 // GET /api/notification-preferences/defaults — returns just the type definitions (for admin reference)
 router.get('/defaults', (req, res) => {
   res.json({ categories: CATEGORIES, types: DEFAULT_NOTIFICATION_TYPES });
+});
+
+// GET /api/notification-preferences/digest/today — tasks + interviews for today
+// Used by the copilot daily digest and the in-app banner
+router.get('/digest/today', (req, res) => {
+  try {
+    const { environment_id } = req.query;
+    const store = getStore();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Tasks due today + overdue
+    const tasks = (store.calendar_tasks || []).filter(t => {
+      if (t.deleted_at || t.status === 'done') return false;
+      if (environment_id && t.environment_id !== environment_id) return false;
+      return t.due_date && t.due_date <= today;
+    }).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+
+    // Interviews today
+    const interviews = (store.interviews || []).filter(i => {
+      if (i.deleted_at) return false;
+      if (environment_id && i.environment_id !== environment_id) return false;
+      return i.date === today;
+    });
+
+    // Expiring offers (within 3 days)
+    const threeDays = new Date(); threeDays.setDate(threeDays.getDate() + 3);
+    const threeStr  = threeDays.toISOString().slice(0, 10);
+    const offers = (store.offers || []).filter(o => {
+      if (o.deleted_at) return false;
+      if (environment_id && o.environment_id !== environment_id) return false;
+      return o.status === 'sent' && o.expiry_date && o.expiry_date >= today && o.expiry_date <= threeStr;
+    });
+
+    const overdue = tasks.filter(t => t.due_date < today);
+    const dueToday = tasks.filter(t => t.due_date === today);
+
+    res.json({
+      date: today,
+      summary: {
+        tasks_overdue: overdue.length,
+        tasks_today: dueToday.length,
+        interviews_today: interviews.length,
+        offers_expiring: offers.length,
+      },
+      tasks_overdue: overdue,
+      tasks_today: dueToday,
+      interviews_today: interviews,
+      offers_expiring: offers,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

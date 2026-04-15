@@ -516,13 +516,49 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
   prev.onNavigate === next.onNavigate
 );
 
-/* ─── Search Result Cards ────────────────────────────────────────────────── */
-const SearchResultCards = ({ results, onNavigate }) => {
-  if (!results?.length) return (
-    <div style={{ background:"#f8f9fc", borderRadius:10, border:`1px solid ${C.border}`, padding:"12px 14px", marginTop:4, fontSize:12, color:C.text3 }}>
-      No records found.
+/* ─── Task Result Cards ──────────────────────────────────────────────────── */
+const TASK_PRIORITY_COLOR = { urgent:'#ef4444', high:'#f97316', medium:'#eab308', low:'#22c55e' };
+const TaskResultCards = ({ tasks, onNavigate }) => {
+  if (!tasks?.length) return (
+    <div style={{ background:"#f8f9fc", borderRadius:10, border:`1px solid ${C.border}`, padding:"12px 14px", marginTop:4, fontSize:12, color:C.text3 }}>No tasks found.</div>
+  );
+  const today = new Date().toISOString().slice(0,10);
+  const groups = [
+    { label:'Overdue', items: tasks.filter(t => t.due_date && t.due_date < today && t.status!=='done'), color:'#ef4444' },
+    { label:'Due today', items: tasks.filter(t => t.due_date === today && t.status!=='done'), color:'#f97316' },
+    { label:'Upcoming', items: tasks.filter(t => (!t.due_date || t.due_date > today) && t.status!=='done'), color:'#3B5BDB' },
+    { label:'Done', items: tasks.filter(t => t.status==='done'), color:'#10b981' },
+  ].filter(g => g.items.length > 0);
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:6 }}>
+      {groups.map(g => (
+        <div key={g.label}>
+          <div style={{ fontSize:10, fontWeight:700, color:g.color, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:3 }}>{g.label} ({g.items.length})</div>
+          {g.items.map(t => (
+            <div key={t.id||t.title}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, background:'#fff',
+                border:`1px solid ${C.border}`, marginBottom:3,
+                cursor: t.record_id ? 'pointer' : 'default', transition:'all .12s' }}
+              onMouseEnter={e => t.record_id && (e.currentTarget.style.borderColor=C.accent+'44')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor=C.border)}
+              onClick={() => t.record_id && onNavigate && onNavigate(t.record_id, t.object_id)}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background: TASK_PRIORITY_COLOR[t.priority]||'#9ca3af', flexShrink:0 }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:C.text1, textDecoration:t.status==='done'?'line-through':'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
+                {t.record_name && <div style={{ fontSize:11, color:C.text3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📌 {t.record_name}</div>}
+              </div>
+              {t.due_date && <div style={{ fontSize:11, color: t.due_date < today && t.status!=='done' ? '#ef4444' : C.text3, flexShrink:0 }}>{t.due_date}</div>}
+              {t.record_id && <Ic n="arrowR" s={11} c={C.text3}/>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
+};
+
+/* ─── Search Result Cards ────────────────────────────────────────────────── */
+const SearchResultCards = ({ results, onNavigate }) => {
   const OBJ_COLORS = { people:"#3b5bdb", jobs:"#0ca678", "talent-pools":"#7c3aed" };
   return (
     <div style={{ marginTop:4, display:"flex", flexDirection:"column", gap:6 }}>
@@ -987,7 +1023,20 @@ reminder: 15m, 30m, 1h, 3h, 1d, 2d (before due) — or omit if no reminder neede
 If the user is viewing a record in CURRENT PAGE CONTEXT, offer to link the task to it.
 Always confirm the key details before outputting the block.
 
-FORM CREATION INSTRUCTIONS:
+TASK SEARCH INSTRUCTIONS:
+When the user asks to see, find, or list tasks — e.g. "show me my tasks", "what tasks do I have today", "show tasks for this record", "what's overdue" — output EXACTLY this block:
+<SEARCH_TASKS>
+{"scope":"global","status":"todo","due":"today"}
+</SEARCH_TASKS>
+scope: "record" (only tasks linked to the current record), "global" (all tasks for this user/environment)
+status: "todo", "done", "all" — omit to return all open tasks
+due: "today", "overdue", "this_week", "all" — omit for all dates
+IMPORTANT: After outputting <SEARCH_TASKS>, the system will inject the real task list into the context automatically. You do NOT need to invent tasks — wait for the injected data, then summarise it naturally.
+If the user is viewing a record and asks about "my tasks" or "tasks here", default scope to "record" first and offer to expand to global.
+For "show me all my tasks" or "what do I need to do today", always use scope "global".
+Each task result includes: title, due_date, priority, status, record_name (the linked record), record_id, task_id.
+When presenting tasks, group by: overdue → due today → upcoming. Include a clickable summary with the linked record name.
+
 When a user wants to create a form, questionnaire, scorecard, survey, or data capture template:
 
 Step 1: Ask what the form is for (e.g. interview scorecard, screening questionnaire, survey, onboarding checklist).
@@ -1587,6 +1636,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [allPools,     setAllPools]     = useState([]);
   const [allPeople,    setAllPeople]    = useState([]);
   const [searchResults,setSearchResults]= useState({}); // keyed by message index
+  const [taskSearchResults,setTaskSearchResults]= useState({}); // keyed by message index
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
   const [interviewTypes, setInterviewTypes] = useState([]);
@@ -2161,6 +2211,34 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     } catch { return { q: match[1].trim(), slug: null }; }
   };
 
+  const parseSearchTasks = (text) => {
+    const match = text.match(/<SEARCH_TASKS>([\s\S]*?)<\/SEARCH_TASKS>/);
+    if (!match) return null;
+    try { return JSON.parse(match[1].trim()); } catch { return { scope: 'global' }; }
+  };
+
+  const runTaskSearch = async ({ scope, status, due }) => {
+    try {
+      const params = new URLSearchParams();
+      if (environment?.id) params.set('environment_id', environment.id);
+      if (status && status !== 'all') params.set('status', status);
+      // scope: record = filter to current record, global = all
+      if (scope === 'record' && currentRecord?.id) params.set('record_id', currentRecord.id);
+      const r = await tFetch(`/api/calendar/tasks?${params}`);
+      let tasks = await r.json();
+      if (!Array.isArray(tasks)) tasks = [];
+      // Apply due filter client-side
+      const today = new Date().toISOString().slice(0,10);
+      if (due === 'today') tasks = tasks.filter(t => t.due_date === today);
+      else if (due === 'overdue') tasks = tasks.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
+      else if (due === 'this_week') {
+        const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
+        tasks = tasks.filter(t => t.due_date && t.due_date <= weekEnd.toISOString().slice(0,10));
+      }
+      return tasks.filter(t => !t.deleted_at);
+    } catch { return []; }
+  };
+
   const stripBlocks = (text) => text
     .replace(/<CREATE_RECORD>[\s\S]*?<\/CREATE_RECORD>/g,"")
     .replace(/<CREATE_WORKFLOW>[\s\S]*?<\/CREATE_WORKFLOW>/g,"")
@@ -2178,6 +2256,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
     .replace(/<CREATE_TASK>[\s\S]*?<\/CREATE_TASK>/g,"")
+    .replace(/<SEARCH_TASKS>[\s\S]*?<\/SEARCH_TASKS>/g,"")
     .replace(/<RECOMMEND_CANDIDATES\s*\/?>/g,"")
     .trim();
 
@@ -2467,8 +2546,30 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         reply = d2.content || reply;
       }
 
-      // Handle document search — copilot wants to reference company knowledge base
-      const docSearchMatch = reply.match(/<DOC_SEARCH>([\s\S]*?)<\/DOC_SEARCH>/);
+      // Handle task search
+      const taskSearchQ = parseSearchTasks(reply);
+      let taskSearchHits = [];
+      if (taskSearchQ) {
+        setLoadingLabel("Fetching tasks…");
+        taskSearchHits = await runTaskSearch(taskSearchQ);
+        const today = new Date().toISOString().slice(0,10);
+        const taskText = taskSearchHits.length
+          ? taskSearchHits.map(t => {
+              const overdue = t.due_date && t.due_date < today && t.status !== 'done';
+              return `- [${overdue ? 'OVERDUE' : t.status?.toUpperCase() || 'TODO'}] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ''}${t.record_name ? ` — linked to: ${t.record_name}` : ''} [task_id:${t.id}]${t.record_id ? ` [record_id:${t.record_id}]` : ''}`;
+            }).join('\n')
+          : 'No tasks found matching that criteria.';
+        const taskFollowUp = [
+          ...newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),
+          {role:"assistant", content: reply},
+          {role:"user", content:`Here are the tasks from the system:\n\n${taskText}\n\nNow summarise these tasks clearly. Group as: overdue → due today → upcoming. For each task include its linked record name. Do NOT include <SEARCH_TASKS> in your response.`}
+        ];
+        const r2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:taskFollowUp})});
+        const d2 = await r2.json();
+        reply = d2.content || reply;
+      }
+
+      // Handle document search — copilot wants to reference company knowledge base      const docSearchMatch = reply.match(/<DOC_SEARCH>([\s\S]*?)<\/DOC_SEARCH>/);
       if (docSearchMatch && environment?.id) {
         setLoadingLabel("Searching company documents…");
         const docQ = docSearchMatch[1].trim();
@@ -2525,7 +2626,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
       setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
-        interviewData, formData2, taskData, reportData, portalData, dashboardData}]);
+        interviewData, formData2, taskData, reportData, portalData, dashboardData,
+        hasTaskSearch:taskSearchHits.length>0, taskSearchIndex:msgIndex}]);
+      if(taskSearchHits.length>0) setTaskSearchResults(prev=>({...prev,[msgIndex]:taskSearchHits}));
       if(createData)    setPendingRecord(createData);
       if(workflowData)  setPendingWorkflow(workflowData);
       if(userData)      setPendingUser(userData);
@@ -3413,6 +3516,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 {msg.role==="assistant"&&msg.hasSearch&&searchResults[msg.searchIndex]&&(
                   <div style={{marginTop:8,marginLeft:34}}>
                     <SearchResultCards results={searchResults[msg.searchIndex]} onNavigate={onNavigateToRecord}/>
+                  </div>
+                )}
+
+                {msg.role==="assistant"&&msg.hasTaskSearch&&taskSearchResults[msg.taskSearchIndex]&&(
+                  <div style={{marginTop:8,marginLeft:34}}>
+                    <TaskResultCards tasks={taskSearchResults[msg.taskSearchIndex]} onNavigate={(recordId,objectId)=>onNavigateToRecord&&onNavigateToRecord({id:recordId,object_id:objectId})}/>
                   </div>
                 )}
 
