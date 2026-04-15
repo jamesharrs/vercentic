@@ -17,7 +17,7 @@ router.post('/chat', async (req, res) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
         max_tokens: req.body.max_tokens || 4096,
         system: system || 'You are a helpful assistant.',
         messages,
@@ -63,7 +63,7 @@ router.get('/status', (req, res) => {
     configured: key.length > 10,
     key_prefix: key ? key.slice(0, 10) + '...' : 'NOT SET',
     key_length: key.length,
-    model: 'claude-sonnet-4-20250514',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
   });
 });
 

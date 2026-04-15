@@ -2645,7 +2645,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(propAction)    setProposedAction(propAction);
 
     } catch(err){
-      setMessages(m=>[...m,{role:"assistant",content:"I encountered an error. Please check your API key is set on the server.",ts:new Date(),error:true}]);
+      const errMsg = err.message && err.message.length < 300 ? err.message : "AI service error — please try again.";
+      setMessages(m=>[...m,{role:"assistant",content:`I encountered an error: ${errMsg}`,ts:new Date(),error:true}]);
     }
     setLoading(false);
     setLoadingLabel("");
