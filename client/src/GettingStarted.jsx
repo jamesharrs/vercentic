@@ -250,10 +250,11 @@ export default function GettingStarted({ environment, navObjects, onNavigate }) 
 
 // ── Welcome Modal (first-load) ────────────────────────────────────────────────
 export function WelcomeModal({ environment, onAccept, onDecline }) {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible]   = useState(true);
+  const [dontShow, setDontShow] = useState(false);
   if (!visible) return null;
-  const handleAccept  = () => { setVisible(false); if (onAccept)  onAccept(); };
-  const handleDecline = () => { setVisible(false); if (onDecline) onDecline(); };
+  const handleAccept  = () => { setVisible(false); if (onAccept)  onAccept(dontShow); };
+  const handleDecline = () => { setVisible(false); if (onDecline) onDecline(dontShow); };
   const envName = environment?.name || "your workspace";
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9990, background:"rgba(13,13,15,0.55)", backdropFilter:"blur(6px)", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -264,7 +265,7 @@ export function WelcomeModal({ environment, onAccept, onDecline }) {
           </svg>
         </div>
         <h2 style={{ fontSize:22, fontWeight:800, color:"#0D0D0F", margin:"0 0 8px", fontFamily:FW, letterSpacing:"-0.3px" }}>Welcome to Vercentic</h2>
-        <p style={{ fontSize:14, color:"#6B7280", lineHeight:1.65, margin:"0 0 28px", maxWidth:380, marginLeft:"auto", marginRight:"auto" }}>
+        <p style={{ fontSize:14, color:"#6B7280", lineHeight:1.65, margin:"0 0 24px", maxWidth:380, marginLeft:"auto", marginRight:"auto" }}>
           Your <strong style={{ color:"#374151" }}>{envName}</strong> environment is ready.
           Would you like a guided setup to help you get the most from the platform?
         </p>
@@ -274,7 +275,17 @@ export function WelcomeModal({ environment, onAccept, onDecline }) {
         <button onClick={handleDecline} style={{ width:"100%", padding:"10px 24px", borderRadius:12, border:"1.5px solid #E5E7EB", background:"transparent", color:"#6B7280", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:F }}>
           I'll explore on my own
         </button>
-        <p style={{ fontSize:11, color:"#9CA3AF", marginTop:14, lineHeight:1.5 }}>You can always return to Getting Started from the sidebar.</p>
+        {/* Don't show again */}
+        <label style={{ display:"inline-flex", alignItems:"center", gap:8, marginTop:16, cursor:"pointer", userSelect:"none" }}>
+          <input
+            type="checkbox"
+            checked={dontShow}
+            onChange={e => setDontShow(e.target.checked)}
+            style={{ width:15, height:15, accentColor:"#4361EE", cursor:"pointer" }}
+          />
+          <span style={{ fontSize:12, color:"#9CA3AF" }}>Don't show this again</span>
+        </label>
+        <p style={{ fontSize:11, color:"#C4C9D4", marginTop:10, lineHeight:1.5 }}>You can always return to Getting Started from the sidebar.</p>
       </div>
     </div>
   );

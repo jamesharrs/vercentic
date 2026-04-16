@@ -2423,14 +2423,15 @@ function App() {
       {showWelcomeModal && (
         <WelcomeModal
           environment={selectedEnv}
-          onAccept={() => {
+          onAccept={(dontShow) => {
             api.post("/onboarding-progress/welcome-seen", { environment_id: selectedEnv?.id });
+            if (dontShow) api.post("/onboarding-progress/dismiss", { environment_id: selectedEnv?.id });
             setShowWelcomeModal(false);
             switchNav("getting-started");
           }}
-          onDecline={() => {
+          onDecline={(dontShow) => {
             api.post("/onboarding-progress/welcome-seen", { environment_id: selectedEnv?.id });
-            api.post("/onboarding-progress/dismiss",      { environment_id: selectedEnv?.id });
+            if (dontShow) api.post("/onboarding-progress/dismiss", { environment_id: selectedEnv?.id });
             setShowWelcomeModal(false);
           }}
         />
