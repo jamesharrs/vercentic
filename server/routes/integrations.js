@@ -381,6 +381,14 @@ router.get('/monitor', (req, res) => {
   res.json({ summary, providers, events });
 });
 
+// GET /api/integrations/monitor/events — alias that returns just the event log
+router.get('/monitor/events', (req, res) => {
+  const { environment_id, limit = 100 } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+  const events = getEventLog(environment_id, Number(limit));
+  res.json({ events });
+});
+
 // POST /api/integrations/monitor/log — manual event logging (for connector_actions)
 router.post('/monitor/log', (req, res) => {
   const { environment_id, provider, action, ok, detail, duration_ms } = req.body;

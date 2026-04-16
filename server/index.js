@@ -140,6 +140,7 @@ const AUTH_EXEMPT = [
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/campaign-links',
     '/integrations',  
+  '/feature-packs',
   '/superadmin', '/bot', '/analytics',
   '/sequencer/unsubscribe',
   '/attachments/file',
