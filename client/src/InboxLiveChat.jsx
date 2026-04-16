@@ -4,6 +4,22 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const C = { bg:'#F8FAFF', surface:'#FFFFFF', border:'#E8EDF5', accent:'#4361EE', accentLight:'#EEF1FF', text1:'#0D0D0F', text2:'#4B5563', text3:'#9CA3AF', green:'#0CA678', amber:'#F59F00', red:'#E03131' };
 const F = "'DM Sans', -apple-system, sans-serif";
 
+// Get auth headers from session — same pattern as apiClient.js
+function authHeaders(userId) {
+  try {
+    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const uid = userId || sess?.user?.id || null;
+    const h = { 'Content-Type': 'application/json' };
+    if (uid) h['X-User-Id'] = uid;
+    return h;
+  } catch { return { 'Content-Type': 'application/json' }; }
+}
+
+async function apiFetch(path, options = {}, userId) {
+  const res = await fetch(path, { ...options, headers: { ...authHeaders(userId), ...(options.headers || {}) } });
+  return res.json();
+}
+
 const STATUS_META   = { bot:{ label:'Bot', color:'#6B7280', bg:'#F3F4F6' }, escalated:{ label:'Waiting', color:'#F59F00', bg:'#FFFBEB' }, claimed:{ label:'Live', color:'#0CA678', bg:'#ECFDF5' }, resolved:{ label:'Resolved', color:'#9CA3AF', bg:'#F9FAFB' } };
 const IDENTITY_META = { anonymous:{ label:'Anonymous', color:'#9CA3AF' }, partial:{ label:'Partial', color:'#F59F00' }, linked:{ label:'Linked', color:'#0CA678' } };
 
@@ -192,8 +208,7 @@ export default function InboxLiveChat({ environment, session, onNavigate, onBack
       if (filter==='escalated') params.set('status','escalated');
       if (filter==='resolved')  params.set('status','resolved');
       if (search) params.set('search',search);
-      const res  = await fetch(`/api/live-chat/conversations?${params}`, { headers:{'x-user-id':currentUserId||''} });
-      const data = await res.json();
+      const data = await apiFetch(`/api/live-chat/conversations?${params}`, {}, currentUserId);
       setConvs(data.conversations||[]);
     } catch {}
     setLoading(false);
@@ -204,10 +219,9 @@ export default function InboxLiveChat({ environment, session, onNavigate, onBack
 
   const loadConversation = async (id) => {
     try {
-      const res  = await fetch(`/api/live-chat/conversations/${id}`, { headers:{'x-user-id':currentUserId||''} });
-      const data = await res.json();
+      const data = await apiFetch(`/api/live-chat/conversations/${id}`, {}, currentUserId);
       setSelected(data);
-      fetch(`/api/live-chat/conversations/${id}/read`, { method:'PATCH', headers:{'x-user-id':currentUserId||''} });
+      apiFetch(`/api/live-chat/conversations/${id}/read`, { method:'PATCH' }, currentUserId);
       setConvs(c => c.map(cv => cv.id===id ? { ...cv, unread_agent:0 } : cv));
     } catch {}
   };
@@ -233,19 +247,19 @@ export default function InboxLiveChat({ environment, session, onNavigate, onBack
   }, [selected?.id]);
 
   const handleSendMessage = async (convId, content) => {
-    await fetch(`/api/live-chat/conversations/${convId}/messages`, { method:'POST', headers:{'Content-Type':'application/json','x-user-id':currentUserId||''}, body:JSON.stringify({content,role:'agent'}) });
+    await apiFetch(`/api/live-chat/conversations/${convId}/messages`, { method:'POST', body:JSON.stringify({content,role:'agent'}) }, currentUserId);
     await loadConversation(convId); loadList();
   };
   const handleClaim = async (convId) => {
-    await fetch(`/api/live-chat/conversations/${convId}/claim`, { method:'POST', headers:{'x-user-id':currentUserId||''} });
+    await apiFetch(`/api/live-chat/conversations/${convId}/claim`, { method:'POST' }, currentUserId);
     await loadConversation(convId); loadList();
   };
   const handleResolve = async (convId) => {
-    await fetch(`/api/live-chat/conversations/${convId}/resolve`, { method:'POST', headers:{'x-user-id':currentUserId||''} });
+    await apiFetch(`/api/live-chat/conversations/${convId}/resolve`, { method:'POST' }, currentUserId);
     setSelected(null); loadList();
   };
   const handleLink = async (convId, personId) => {
-    await fetch(`/api/live-chat/conversations/${convId}/identity`, { method:'PATCH', headers:{'Content-Type':'application/json','x-user-id':currentUserId||''}, body:JSON.stringify({person_id:personId}) });
+    await apiFetch(`/api/live-chat/conversations/${convId}/identity`, { method:'PATCH', body:JSON.stringify({person_id:personId}) }, currentUserId);
     await loadConversation(convId); loadList();
   };
   const handleCreatePerson = (conv) => {

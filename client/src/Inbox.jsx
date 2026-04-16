@@ -358,7 +358,9 @@ export default function InboxModule({ environment, session, onNavigate }) {
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', fontFamily: F, background: C.bg }}>
       {/* Live Chat tab — full-width takeover */}
       {channel === 'live_chat' ? (
-        <InboxLiveChat environment={environment} session={session} onNavigate={onNavigate} onBack={() => setChannel('all')}/>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
+          <InboxLiveChat environment={environment} session={session} onNavigate={onNavigate} onBack={() => setChannel('all')}/>
+        </div>
       ) : (<>
       {/* Left pane */}
       <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', background: C.card, borderRight: `1px solid ${C.border}` }}>

@@ -70,6 +70,7 @@ const AvailabilityPickerPage = lazyWithRetry(() => import("./AvailabilityPicker.
 const IntegrationsPage  = lazyWithRetry(() => import("./IntegrationsSettings.jsx"));
 const HelpPage          = lazyWithRetry(() => import("./Help.jsx"));
 const CompanySetupWizard = lazyWithRetry(() => import("./CompanySetupWizard.jsx"));
+import GettingStarted, { WelcomeModal } from "./GettingStarted";
 const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
 const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
 const useIsMobile       = () => typeof window !== 'undefined' && window.innerWidth < 768;
@@ -1617,7 +1618,7 @@ function App() {
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
-      'help','matching',
+      'help','matching','getting-started',
     ];
     if (named.includes(seg0)) return seg0;
     return 'dashboard';
@@ -1672,6 +1673,8 @@ function App() {
   const [reportPreset, setReportPreset] = useState(null);
   const [createTarget, setCreateTarget] = useState(null); // obj to auto-open new record modal
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeChecked, setWelcomeChecked] = useState(false);
 
   useEffect(() => {
     fetch("/api/health")
@@ -1723,15 +1726,15 @@ function App() {
     }
   }, [session?.user?.id, selectedEnv?.id]);
 
-  // First-run company setup wizard
+  // First-run welcome modal (Getting Started)
   useEffect(() => {
-    if (!selectedEnv?.id) return;
-    const key = `talentos_setup_complete_${selectedEnv.id}`;
-    if (!localStorage.getItem(key)) {
-      const t = setTimeout(() => setShowSetupWizard(true), 1200);
-      return () => clearTimeout(t);
-    }
-  }, [selectedEnv?.id]);
+    if (!selectedEnv?.id || welcomeChecked) return;
+    setWelcomeChecked(true);
+    api.get(`/onboarding-progress?environment_id=${selectedEnv.id}`)
+      .then(res => { if (!res.welcome_shown && !res.dismissed) setShowWelcomeModal(true); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEnv?.id, welcomeChecked]);
 
   // Manual launch from Settings
   useEffect(() => {
@@ -1748,6 +1751,7 @@ function App() {
     {
       label: t("nav.overview"),
       items: [
+        { id: "getting-started", icon: "zap", label: "Getting Started" },
         { id: "inbox",       icon: "inbox",   label: "Inbox", badge: inboxUnread || null },
       ]
     },
@@ -1802,6 +1806,7 @@ function App() {
     if (!id.startsWith("record_")) { setActiveRecord(null); setActiveRecordObj(null); }
     if (!id.startsWith("obj_") && !id.startsWith("record_")) { setListContext(null); }
     const NAV_META = {
+      "getting-started":    { label: "Getting Started", objectName: "Setup",       objectColor: "#4361EE" },
       dashboard:            { label: "Dashboard",   objectName: "Overview",   objectColor: "#4361EE" },
       dashboard_interviews: { label: "Interviews",  objectName: "Dashboard",  objectColor: "#0891b2" },
       dashboard_offers:     { label: "Offers",      objectName: "Dashboard",  objectColor: "#059669" },
@@ -2245,7 +2250,9 @@ function App() {
           `page-${activeNav}`
         } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow:"auto",
           background: activeNav === "dashboard" || activeNav.startsWith("dashboard_") ? "#F8F7FF" : undefined }}>
-        { activeNav === "inbox" ? (
+        { activeNav === "getting-started" ? (
+          <GettingStarted environment={selectedEnv} navObjects={navObjects} onNavigate={switchNav} />
+        ) : activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
         ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
@@ -2412,20 +2419,21 @@ function App() {
           }} />
       )}
 
-      {/* Company Setup Wizard — first-run only */}
-      {showSetupWizard && (
-        <Suspense fallback={null}>
-          <div style={{position:"fixed",inset:0,background:"rgba(15,23,41,0.65)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}>
-            <div style={{background:"white",borderRadius:24,width:"90%",maxWidth:880,maxHeight:"92vh",overflow:"auto",boxShadow:"0 32px 80px rgba(0,0,0,0.3)"}}>
-              <CompanySetupWizard
-                environmentId={selectedEnv?.id}
-                environmentName={selectedEnv?.name}
-                onComplete={() => { localStorage.setItem(`talentos_setup_complete_${selectedEnv?.id}`,"1"); setShowSetupWizard(false); }}
-                onSkip={() => { localStorage.setItem(`talentos_setup_complete_${selectedEnv?.id}`,"skipped"); setShowSetupWizard(false); }}
-              />
-            </div>
-          </div>
-        </Suspense>
+      {/* Getting Started — welcome modal on first login */}
+      {showWelcomeModal && (
+        <WelcomeModal
+          environment={selectedEnv}
+          onAccept={() => {
+            api.post("/onboarding-progress/welcome-seen", { environment_id: selectedEnv?.id });
+            setShowWelcomeModal(false);
+            switchNav("getting-started");
+          }}
+          onDecline={() => {
+            api.post("/onboarding-progress/welcome-seen", { environment_id: selectedEnv?.id });
+            api.post("/onboarding-progress/dismiss",      { environment_id: selectedEnv?.id });
+            setShowWelcomeModal(false);
+          }}
+        />
       )}
     </div>
       {TourPortal}

@@ -284,6 +284,7 @@ app.use('/api/digest',            require('./routes/digest'));
 global.sseBroadcast = broadcast;
 app.use('/api/task-triggers',     require('./routes/task_triggers').router);
 app.use('/api/onboarding',        require('./routes/onboarding'));
+app.use('/api/onboarding-progress', require('./routes/onboarding_progress'));
 app.use('/api/plan',              require('./middleware/plan_gates').router);
 app.use('/api/scorecards',require('./routes/scorecards'));
 app.use('/api/screening',         require('./routes/screening'));
