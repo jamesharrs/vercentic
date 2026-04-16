@@ -1618,7 +1618,7 @@ function App() {
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
-      'help','matching','getting-started',
+      'help','matching','getting-started','setup_wizard','setup-wizard',
     ];
     if (named.includes(seg0)) return seg0;
     return 'dashboard';

@@ -15,7 +15,7 @@ const TASK_PHASES = [
       {
         id: 'company_branding', title: 'Set your company name and branding',
         desc: 'Add your logo, colours, and company name so the platform feels like yours.',
-        type: 'auto', navTarget: 'settings', navSection: 'appearance', icon: 'palette',
+        type: 'auto', navTarget: 'setup_wizard', navSection: null, icon: 'palette',
         check: (store, envId) => {
           const app = (store.appearance || []).find(a => a.environment_id === envId);
           return !!(app && app.company_name && app.company_name.trim());

@@ -95,9 +95,12 @@ function TaskRow({ task, last, phaseColor, navObjects, onNavigate, onTick, ticki
       const obj = navObjects.find(o => o.slug === task.navTargetSlug || o.name?.toLowerCase() === task.navTargetSlug);
       if (obj) { onNavigate(`obj_${obj.id}`); return; }
     }
+    if (task.navTarget === "setup_wizard") {
+      window.dispatchEvent(new CustomEvent("talentos:launch-setup-wizard"));
+      return;
+    }
     if (task.navTarget) {
       if (task.navSection) {
-        // Use the sessionStorage pattern Settings.jsx already listens to
         sessionStorage.setItem("talentos_settings_section", task.navSection);
         onNavigate("settings");
         return;
