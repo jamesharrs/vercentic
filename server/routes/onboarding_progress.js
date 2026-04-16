@@ -4,7 +4,8 @@
 
 const express = require('express');
 const router  = express.Router();
-const { getStore, saveStore, uuidv4 } = require('../db/init');
+const { getStore, saveStore } = require('../db/init');
+const { v4: uuidv4 } = require('uuid');
 
 // ── Task definitions ──────────────────────────────────────────────────────────
 const TASK_PHASES = [

@@ -1731,7 +1731,7 @@ function App() {
     if (!selectedEnv?.id || welcomeChecked) return;
     setWelcomeChecked(true);
     api.get(`/onboarding-progress?environment_id=${selectedEnv.id}`)
-      .then(res => { if (!res.welcome_shown && !res.dismissed) setShowWelcomeModal(true); })
+      .then(res => { if (res && !res.welcome_shown && !res.dismissed) setShowWelcomeModal(true); })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEnv?.id, welcomeChecked]);

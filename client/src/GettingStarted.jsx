@@ -2,6 +2,12 @@
 // Vercentic — Getting Started / Onboarding Dashboard
 
 import { useState, useEffect, useCallback } from "react";
+import apiClient from "./apiClient";
+
+const api = {
+  get:   (path)       => apiClient.get(path),
+  post:  (path, body) => apiClient.post(path, body),
+};
 
 const C = {
   accent: "var(--t-accent, #4361EE)", accentLight: "var(--t-accent-light, #EEF2FF)",
@@ -44,11 +50,6 @@ const Ic = ({ n, s = 16, c = "currentColor" }) => (
     <path d={PATHS[n] || PATHS.circle} />
   </svg>
 );
-
-const api = {
-  get:   (path)       => fetch(`/api${path}`, { credentials: "include" }).then(r => r.json()),
-  post:  (path, body) => fetch(`/api${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) }).then(r => r.json()),
-};
 
 // ── Phase bar ─────────────────────────────────────────────────────────────────
 function PhaseBar({ phase, navObjects, onNavigate, onTick, tickingId }) {
@@ -155,7 +156,12 @@ export default function GettingStarted({ environment, navObjects, onNavigate }) 
   const load = useCallback(async () => {
     if (!envId) return;
     setLoading(true);
-    try { const res = await api.get(`/onboarding-progress?environment_id=${envId}`); setData(res); }
+    try {
+      const res = await apiClient.get(`/onboarding-progress?environment_id=${envId}`);
+      // Only store if it's a valid response with phases
+      if (res && Array.isArray(res.phases)) setData(res);
+      else setData(null);
+    }
     catch (e) { console.error("onboarding-progress:", e); }
     setLoading(false);
   }, [envId]);
@@ -175,7 +181,7 @@ export default function GettingStarted({ environment, navObjects, onNavigate }) 
   };
 
   if (loading) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:C.text3, fontFamily:F }}>Loading your setup progress…</div>;
-  if (!data) return null;
+  if (!data || !Array.isArray(data.phases)) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:C.text3, fontFamily:F }}>Unable to load progress. Please refresh.</div>;
 
   const { phases, totalDone, totalTasks, percent } = data;
   const remaining = totalTasks - totalDone;
