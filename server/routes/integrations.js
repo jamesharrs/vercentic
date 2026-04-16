@@ -35,6 +35,23 @@ function mask(val) {
 }
 
 // ── Integration Catalog ───────────────────────────────────────────────────────
+// Clearbit logo domains — https://logo.clearbit.com/{domain}
+const LOGO_DOMAINS = {
+  okta:'okta.com', azure_ad:'microsoft.com', google_workspace:'google.com',
+  microsoft_365:'microsoft.com', google_calendar:'google.com', zoom:'zoom.us',
+  slack:'slack.com', microsoft_teams:'microsoft.com',
+  docusign:'docusign.com', adobe_sign:'adobe.com',
+  linkedin_jobs:'linkedin.com', indeed:'indeed.com', bayt:'bayt.com', reed:'reed.co.uk',
+  checkr:'checkr.com', sterling:'sterlingcheck.com',
+  workday:'workday.com', bamboohr:'bamboohr.com', personio:'personio.de',
+  sap_successfactors:'successfactors.com', rippling:'rippling.com',
+  hirevue:'hirevue.com', codility:'codility.com',
+  salesforce:'salesforce.com', hubspot:'hubspot.com',
+  zapier:'zapier.com', make:'make.com', xref:'xref.com',
+  twilio:'twilio.com', sendgrid:'sendgrid.com',
+  power_bi:'microsoft.com', adobe_analytics:'adobe.com',
+};
+
 const CATALOG = [
   // SSO & Identity
   { slug:'okta',            name:'Okta',               category:'sso',            category_label:'SSO & Identity',        color:'#00297A', icon:'Okta',  description:'Single sign-on via Okta.',          tags:['enterprise','saml','oauth'],
@@ -140,7 +157,8 @@ router.get('/catalog', (req, res) => {
   const groups = {};
   for (const item of CATALOG) {
     if (!groups[item.category]) groups[item.category] = { slug: item.category, label: item.category_label, items: [] };
-    const entry = { ...item, fields: item.fields }; // include fields
+    const domain = LOGO_DOMAINS[item.slug];
+    const entry = { ...item, fields: item.fields, logo_url: domain ? `https://logo.clearbit.com/${domain}` : null };
     if (environment_id) {
       const list = getList();
       const conn = list.find(c => c.environment_id === environment_id && c.provider_slug === item.slug);
