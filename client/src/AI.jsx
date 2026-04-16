@@ -914,6 +914,17 @@ The "slug" field MUST be one of: "people", "jobs", "talent-pools".
 Keep "q" short and specific (e.g. "Ahmed", "Software Engineer", "Dubai").
 After a search, summarise what was found concisely based on the injected results.
 
+DB QUERY — use when the user asks a question that requires filtering ALL records (not just visible ones), especially:
+- Date-based conditions: "not updated in 7 days", "created this week", "open for 30+ days"
+- System field conditions: updated_at, created_at
+- Combinations of conditions that go beyond the visible list
+Output: <DB_QUERY>{"slug":"people","filters":[{"field":"updated_at","op":"before_days","value":7},{"field":"status","op":"not_in","value":"Archived,Placed,Hired"}],"sort":"updated_at","sort_dir":"asc","limit":50,"description":"candidates not updated in 7+ days"}</DB_QUERY>
+
+Supported operators: eq, neq, contains, not_contains, gt, lt, gte, lte, before_days (older than N days), after_days (within last N days), is_empty, not_empty, in, not_in
+System fields: updated_at, created_at (use ISO date or before_days/after_days operators)
+Data fields: use exact api_key from FIELDS list (e.g. status, department, rating)
+Use SEARCH_QUERY for name/text searches. Use DB_QUERY for date/comparison/multi-field queries.
+
 RECORD CREATION INSTRUCTIONS:
 When a user wants to create a record:
 
@@ -2318,6 +2329,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<PROPOSE_ACTION>[\s\S]*?<\/PROPOSE_ACTION>/g,"")
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
+    .replace(/<DB_QUERY>[\s\S]*?<\/DB_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
     .replace(/<UPDATE_RECORD>[\s\S]*?<\/UPDATE_RECORD>/g,"")
     .replace(/<BULK_ACTION>[\s\S]*?<\/BULK_ACTION>/g,"")
@@ -2341,6 +2353,31 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const data = await tFetch(`/api/records/search?q=${encodeURIComponent(q)}&environment_id=${environment.id}&limit=8`).then(r=>r.json());
       return Array.isArray(data) ? data : [];
     } catch { return []; }
+  };
+
+  // ── DB Query — full-dataset search with system field & date operator support ──
+  const runDbQuery = async ({ slug, filters = [], sort = 'updated_at', sort_dir = 'desc', limit = 50 }) => {
+    try {
+      const obj = objects.find(o => o.slug === slug);
+      if (!obj && slug) return { results: [], total: 0, error: `Object "${slug}" not found` };
+      const body = {
+        object_id: obj?.id,
+        object_slug: slug,
+        environment_id: environment?.id,
+        filters, sort, sort_dir,
+        limit: Math.min(limit, 100),
+      };
+      const data = await tFetch('/api/records/db-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(r => r.json());
+      // Attach object metadata to each result for display
+      return {
+        results: (data.results || []).map(r => ({ ...r, object_name: obj?.name || slug, object_slug: slug, object_color: obj?.color })),
+        total: data.total || 0,
+      };
+    } catch(e) { return { results: [], total: 0, error: e.message }; }
   };
 
   // ── File drop / attach handler ───────────────────────────────────────────
@@ -2597,7 +2634,6 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           : "No results found.";
 
         // Second AI call with injected results
-        // Include record IDs so Claude can use them in action blocks (e.g. candidate_id in SCHEDULE_INTERVIEW)
         const resultsWithIds = searchHits.length
           ? searchHits.map(r => {
               const d = r.data || {};
@@ -2613,6 +2649,33 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         const r2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:followUp})});
         const d2 = await r2.json();
         reply = d2.content || reply;
+      }
+
+      // Handle DB_QUERY — full-dataset date/comparison search
+      const dbQMatch = reply.match(/<DB_QUERY>([\s\S]*?)<\/DB_QUERY>/);
+      let dbQueryHits = [];
+      if (dbQMatch) {
+        try {
+          const dbQ = JSON.parse(dbQMatch[1].trim());
+          setLoadingLabel("Querying database…");
+          const { results, total, error } = await runDbQuery(dbQ);
+          dbQueryHits = results || [];
+          const summaryLines = dbQueryHits.length
+            ? dbQueryHits.slice(0, 20).map(r => {
+                const upd = r.updated_at ? `last updated ${Math.floor((Date.now()-new Date(r.updated_at).getTime())/(1000*60*60*24))}d ago` : '';
+                const sub = r.display_sub || '';
+                return `- ${r.display_name}${sub?` · ${sub}`:''}${upd?` (${upd})`:''} [record_id:${r.id}]`;
+              }).join('\n')
+            : 'No records matched the query.';
+          const countNote = total > dbQueryHits.length ? `\n(Showing ${dbQueryHits.length} of ${total} total matches)` : '';
+          const dbFollowUp = [...newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),
+            {role:"assistant", content: reply},
+            {role:"user", content:`[DB_QUERY_RESULTS for: ${dbQ.description||'query'}]\nTotal matches: ${total}\n${summaryLines}${countNote}\n\nSummarise these results clearly for the user. Include the count, key details, and any patterns you notice. Do not include record_ids in your response text.`},
+          ];
+          const r3 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:dbFollowUp})});
+          const d3 = await r3.json();
+          reply = d3.content || reply;
+        } catch(e) { console.warn('[db_query] parse error:', e); }
       }
 
       // Handle task search
@@ -2715,7 +2778,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       // Store action data on the message itself so each card is self-contained and immune to state resets
       setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
         interviewData, formData2, taskData, reportData, portalData, dashboardData,
-        hasTaskSearch:taskSearchHits.length>0, taskSearchIndex:msgIndex}]);
+        hasTaskSearch:taskSearchHits.length>0, taskSearchIndex:msgIndex,
+        hasDbQuery:dbQueryHits.length>0, dbQueryHits}]);
       if(taskSearchHits.length>0) setTaskSearchResults(prev=>({...prev,[msgIndex]:taskSearchHits}));
       if(createData)    setPendingRecord(createData);
       if(workflowData)  setPendingWorkflow(workflowData);
@@ -3721,6 +3785,37 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 {msg.role==="assistant"&&msg.hasSearch&&searchResults[msg.searchIndex]&&(
                   <div style={{marginTop:8,marginLeft:34}}>
                     <SearchResultCards results={searchResults[msg.searchIndex]} onNavigate={onNavigateToRecord}/>
+                  </div>
+                )}
+
+                {/* DB Query results — full-dataset date/comparison results */}
+                {msg.role==="assistant"&&msg.hasDbQuery&&msg.dbQueryHits?.length>0&&(
+                  <div style={{marginTop:8,marginLeft:34}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#4361EE",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+                      {msg.dbQueryHits.length} result{msg.dbQueryHits.length!==1?"s":""} from database
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:280,overflowY:"auto"}}>
+                      {msg.dbQueryHits.map((r,i)=>(
+                        <div key={r.id||i} onClick={()=>onNavigateToRecord&&onNavigateToRecord({id:r.id,object_id:r.object_id})}
+                          style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"white",borderRadius:9,
+                            border:"1px solid #e5e7eb",cursor:"pointer",transition:"all .1s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor="#4361EE";e.currentTarget.style.background="#EEF2FF";}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor="#e5e7eb";e.currentTarget.style.background="white";}}>
+                          <div style={{width:30,height:30,borderRadius:"50%",background:r.object_color||"#4361EE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <span style={{color:"white",fontSize:11,fontWeight:700}}>{(r.display_name||"?").charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:600,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.display_name}</div>
+                            {r.display_sub&&<div style={{fontSize:10,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.display_sub}</div>}
+                          </div>
+                          {r.updated_at&&(
+                            <div style={{fontSize:10,color:"#9ca3af",flexShrink:0,textAlign:"right"}}>
+                              {Math.floor((Date.now()-new Date(r.updated_at).getTime())/(1000*60*60*24))}d ago
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

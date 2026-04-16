@@ -719,4 +719,108 @@ router.post('/move-stage', (req, res) => {
   res.json({ success: true, person_id, job_id: link.target_record_id, stage: step?.name || stage_name });
 });
 
+// ── DB Query — full-dataset search with system field support ─────────────────
+// Supports filtering on data.* fields AND system fields (updated_at, created_at, id)
+// Operators: eq, neq, contains, not_contains, gt, lt, gte, lte,
+//            before_days (older than N days), after_days (newer than N days),
+//            is_empty, not_empty, in, not_in
+router.post('/db-query', (req, res) => {
+  const { object_id, object_slug, environment_id, filters = [], sort = 'updated_at', sort_dir = 'desc', limit = 100 } = req.body;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+
+  // Resolve object_id from slug if needed
+  let objId = object_id;
+  if (!objId && object_slug) {
+    const objects = query('object_definitions', o => o.environment_id === environment_id);
+    const obj = objects.find(o => o.slug === object_slug);
+    if (!obj) return res.status(404).json({ error: `Object "${object_slug}" not found` });
+    objId = obj.id;
+  }
+  if (!objId) return res.status(400).json({ error: 'object_id or object_slug required' });
+
+  const now = Date.now();
+  const SYSTEM_FIELDS = new Set(['updated_at', 'created_at', 'id', 'created_by']);
+
+  const applyOp = (fieldVal, op, filterVal) => {
+    const strVal = String(fieldVal || '').toLowerCase();
+    const fv = String(filterVal || '').toLowerCase();
+    switch (op) {
+      case 'eq':            return strVal === fv;
+      case 'neq':           return strVal !== fv;
+      case 'contains':      return strVal.includes(fv);
+      case 'not_contains':  return !strVal.includes(fv);
+      case 'gt':            return Number(fieldVal) > Number(filterVal);
+      case 'lt':            return Number(fieldVal) < Number(filterVal);
+      case 'gte':           return Number(fieldVal) >= Number(filterVal);
+      case 'lte':           return Number(fieldVal) <= Number(filterVal);
+      case 'before_days': { // field date is older than N days ago
+        if (!fieldVal) return false;
+        const ms = now - new Date(fieldVal).getTime();
+        return ms > Number(filterVal) * 24 * 60 * 60 * 1000;
+      }
+      case 'after_days': { // field date is within last N days
+        if (!fieldVal) return false;
+        const ms = now - new Date(fieldVal).getTime();
+        return ms < Number(filterVal) * 24 * 60 * 60 * 1000;
+      }
+      case 'is_empty':      return !fieldVal || strVal === '';
+      case 'not_empty':     return !!fieldVal && strVal !== '';
+      case 'in': {
+        const arr = Array.isArray(filterVal) ? filterVal : String(filterVal).split(',').map(s=>s.trim());
+        if (Array.isArray(fieldVal)) return fieldVal.some(v => arr.map(a=>a.toLowerCase()).includes(String(v).toLowerCase()));
+        return arr.map(a=>a.toLowerCase()).includes(strVal);
+      }
+      case 'not_in': {
+        const arr = Array.isArray(filterVal) ? filterVal : String(filterVal).split(',').map(s=>s.trim());
+        if (Array.isArray(fieldVal)) return !fieldVal.some(v => arr.map(a=>a.toLowerCase()).includes(String(v).toLowerCase()));
+        return !arr.map(a=>a.toLowerCase()).includes(strVal);
+      }
+      default: return strVal === fv;
+    }
+  };
+
+  let records = query('records', r =>
+    r.object_id === objId &&
+    r.environment_id === environment_id &&
+    !r.deleted_at
+  );
+
+  // Apply each filter
+  for (const f of filters) {
+    const { field, op = 'eq', value } = f;
+    records = records.filter(r => {
+      const fieldVal = SYSTEM_FIELDS.has(field) ? r[field] : r.data?.[field];
+      return applyOp(fieldVal, op, value);
+    });
+  }
+
+  // Sort
+  records.sort((a, b) => {
+    const av = SYSTEM_FIELDS.has(sort) ? a[sort] : a.data?.[sort];
+    const bv = SYSTEM_FIELDS.has(sort) ? b[sort] : b.data?.[sort];
+    const dir = sort_dir === 'asc' ? 1 : -1;
+    if (!av && !bv) return 0;
+    if (!av) return dir;
+    if (!bv) return -dir;
+    return dir * (av < bv ? -1 : av > bv ? 1 : 0);
+  });
+
+  const total = records.length;
+  const results = records.slice(0, Math.min(parseInt(limit), 200));
+
+  // Build display-friendly result set
+  const display = results.map(r => ({
+    id: r.id,
+    object_id: r.object_id,
+    data: r.data || {},
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    display_name: [r.data?.first_name, r.data?.last_name].filter(Boolean).join(' ') ||
+                  r.data?.job_title || r.data?.name || r.data?.pool_name || 'Untitled',
+    display_sub:  r.data?.email || r.data?.department || r.data?.location || r.data?.category || '',
+  }));
+
+  res.json({ results: display, total, returned: display.length });
+});
+
 module.exports = router;
