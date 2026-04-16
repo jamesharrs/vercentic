@@ -731,7 +731,7 @@ router.post('/db-query', (req, res) => {
   // Resolve object_id from slug if needed
   let objId = object_id;
   if (!objId && object_slug) {
-    const objects = query('object_definitions', o => o.environment_id === environment_id);
+    const objects = query('objects', o => o.environment_id === environment_id);
     const obj = objects.find(o => o.slug === object_slug);
     if (!obj) return res.status(404).json({ error: `Object "${object_slug}" not found` });
     objId = obj.id;
