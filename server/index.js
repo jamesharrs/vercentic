@@ -356,9 +356,15 @@ require('./routes/skills_intelligence').migrate();
 require('./routes/datasets').migrate();
 
 app.get('/api/health', (req, res) => {
+  const { stats } = require('./utils/cache');
   res.set('Cache-Control', 'no-store');
-  res.set('X-Response-Time', Date.now() + 'ms');
-  res.json({ status: 'ok', version: '1.5.2', build: 'clean', region: process.env.RAILWAY_REGION || 'local' });
+  res.json({
+    status:  'ok',
+    version: '1.5.2',
+    uptime:  Math.floor(process.uptime()),
+    cache:   stats(),
+    region:  process.env.RAILWAY_REGION || 'local',
+  });
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
