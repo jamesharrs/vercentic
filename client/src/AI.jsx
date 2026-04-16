@@ -732,6 +732,10 @@ SUPPORTED action_types and their required payload fields:
 - "assign"        → { record_id, assigned_to }  — assigns a record to a user
 - "bulk_op"       → { record_ids[], data{} }  — updates multiple records
 - "delete"        → { record_id }  — deletes a record (use severity:"danger")
+- "update_record" → { record_id, record_name, object_name, field_updates: { api_key: new_value } }
+- "bulk_action"   → { object_name, record_ids: [...], field_updates: { api_key: new_value }, estimated_count: N, description: "plain English", automation_warning: "describe any workflows/emails that may auto-trigger, or null" }
+- "move_stage"    → { person_id, person_name, job_id?, job_name?, stage_name }
+- "navigate"      → { destination: "people"|"jobs"|"talent-pools"|"interviews"|"calendar"|"reports"|"campaigns"|"offers"|"dashboard"|"settings", record_id? }
 - "create_field"  → { object_id, object_name, name, api_key?, field_type("text"|"textarea"|"number"|"select"|"multi_select"|"date"|"boolean"|"email"|"url"|"phone"|"currency"|"rating"|"rich_text"), description?, is_required?, show_in_list?, options?[] }
 - "create_object" → { environment_id, name, plural_name?, slug?, description?, icon?, color? }
 
@@ -828,7 +832,24 @@ WORKFLOW RULES:
 LIST FILTER & SEARCH ACTIONS:
 When the user asks you to filter, narrow down, show only, or sort the list they are currently viewing, you MUST use the <APPLY_FILTER> block to do it directly — do NOT tell them to click buttons themselves.
 
-You will be given "CURRENT LIST STATE" in your context showing what object is displayed, field names, current filters, and record count. Use the exact field api_key values from that context for the "field" property.
+UPDATE RECORD: When user asks to change a field on a specific record:
+- Show what will change, output: <UPDATE_RECORD>{"record_id":"...","record_name":"...","object_name":"...","field_updates":{"api_key":"value"}}</UPDATE_RECORD>
+
+BULK ACTION — HIGH RISK. You MUST follow this exact sequence:
+Step 1: Before outputting the block, explicitly state in your message:
+  - Exact number of records that will be affected (use breakdown counts from CURRENT LIST STATE)
+  - Exact field(s) and new value(s)
+  - Whether any automations may trigger: if the "status" field is changing, or if workflows exist on this object, explicitly warn the user. Be specific — "Active workflows on People may fire emails/assignments for all N records."
+Step 2: Ask "Shall I proceed? Type yes to confirm." — do NOT output the <BULK_ACTION> block yet.
+Step 3: Only after user confirms, output:
+<BULK_ACTION>{"object_name":"People","record_ids":[],"filter":{"field":"status","op":"eq","value":"Screening"},"field_updates":{"status":"On Hold"},"estimated_count":23,"description":"Change status to On Hold for 23 Screening candidates","automation_warning":"Status change may trigger active workflows — emails or task assignments could fire for all 23 records"}</BULK_ACTION>
+Set automation_warning to a specific warning string whenever: status is changing, workflows exist on the object, or email sequences are linked. Set to null only when no automations could possibly trigger.
+
+MOVE STAGE: Output: <MOVE_STAGE>{"person_id":"...","person_name":"...","job_id":"...","job_name":"...","stage_name":"Interview"}</MOVE_STAGE>
+
+NAVIGATE: Output: <NAVIGATE>{"destination":"people"}</NAVIGATE>
+
+You will be given "CURRENT LIST STATE"
 
 Output format:
 <APPLY_FILTER>
@@ -857,6 +878,8 @@ RULES:
 - FIELDS line lists ALL available fields on this object — use these to answer questions even if a field isn't currently visible in the column picker
 - Numeric fields appear as {api_key}_stats lines with min/max/avg/count/below_20/below_50 — use these to answer range questions like "how many have score less than 20"
 - If a field exists in FIELDS but has no breakdown data, it means all values are empty/null for the loaded records
+- LAST_CREATED_RECORD context (if present) gives you the id/name of the most recently created record so you can act on it immediately
+- TOTAL_RECORDS shows the total count across all pages — use for aggregate questions
 - After applying, briefly confirm what you did ("I've filtered the list to show Active candidates in Engineering.")
 - If the user's intent is ambiguous about a field value, apply it and offer to refine
 - NEVER say "I can't apply filters" — you CAN, use <APPLY_FILTER>
@@ -1643,6 +1666,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [adminRoles,   setAdminRoles]   = useState([]);
   const [adminUsers,   setAdminUsers]   = useState([]);
   const [interviewTypes, setInterviewTypes] = useState([]);
+  const [lastCreatedRecord, setLastCreatedRecord] = useState(null);
+  const [pendingUpdate, setPendingUpdate]   = useState(null);
+  const [pendingBulk,   setPendingBulk]     = useState(null);
+  const [pendingStage,  setPendingStage]    = useState(null);
+  const [bulkConfirmed, setBulkConfirmed]   = useState(false);
   const [companyDocs,    setCompanyDocs]    = useState([]);
   const [companyProfile, setCompanyProfile] = useState(null); // from Settings → Company Profile
   const [linkedJobs,     setLinkedJobs]     = useState([]);   // jobs/records this person is linked to
@@ -2258,6 +2286,10 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
+    .replace(/<UPDATE_RECORD>[\s\S]*?<\/UPDATE_RECORD>/g,"")
+    .replace(/<BULK_ACTION>[\s\S]*?<\/BULK_ACTION>/g,"")
+    .replace(/<MOVE_STAGE>[\s\S]*?<\/MOVE_STAGE>/g,"")
+    .replace(/<NAVIGATE>[\s\S]*?<\/NAVIGATE>/g,"")
     .replace(/<CREATE_TASK>[\s\S]*?<\/CREATE_TASK>/g,"")
     .replace(/<SEARCH_TASKS>[\s\S]*?<\/SEARCH_TASKS>/g,"")
     .replace(/<RECOMMEND_CANDIDATES\s*\/?>/g,"")
@@ -2452,6 +2484,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         interviewTypes.length?`\n\nAVAILABLE INTERVIEW TYPES:\n${interviewTypes.map(t=>`- ${t.name} (id:${t.id}, duration:${t.duration}min, format:${t.format||t.interview_format||'Video Call'})`).join("\n")}`
           :"\n\nINTERVIEW TYPES: None configured yet — you can still schedule a custom interview.",
         // Live list context (current filters, record count, visible fields from RecordsView)
+        lastCreatedRecord ? `\n\nLAST_CREATED_RECORD: ${JSON.stringify(lastCreatedRecord)} — the user may refer to this as "that person/job I just created", "them", "it" etc.` : "",
         listContext ? `\n\nCURRENT LIST STATE (USE THIS to answer questions about the visible records — breakdowns show exact counts per value):\n${typeof listContext === 'string' ? listContext : JSON.stringify(listContext, null, 2)}` : "",
         // Live objects context for dashboard/report creation
         objects.length ? `\n\nLIVE OBJECTS (use these slugs and IDs for dashboard panels):\n${objects.map(o=>`- ${o.plural_name||o.name} | slug: ${o.slug} | id: ${o.id}`).join("\n")}` : "",
@@ -2570,6 +2603,24 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         const r2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:taskFollowUp})});
         const d2 = await r2.json();
         reply = d2.content || reply;
+      }
+
+      const updateMatch = reply.match(/<UPDATE_RECORD>([\s\S]*?)<\/UPDATE_RECORD>/);
+      if (updateMatch) { try { setPendingUpdate(JSON.parse(updateMatch[1].trim())); } catch(e) {} }
+
+      const bulkMatch = reply.match(/<BULK_ACTION>([\s\S]*?)<\/BULK_ACTION>/);
+      if (bulkMatch) { try { setPendingBulk(JSON.parse(bulkMatch[1].trim())); setBulkConfirmed(false); } catch(e) {} }
+
+      const stageMatch = reply.match(/<MOVE_STAGE>([\s\S]*?)<\/MOVE_STAGE>/);
+      if (stageMatch) { try { setPendingStage(JSON.parse(stageMatch[1].trim())); } catch(e) {} }
+
+      const navMatch = reply.match(/<NAVIGATE>([\s\S]*?)<\/NAVIGATE>/);
+      if (navMatch) {
+        try {
+          const nav = JSON.parse(navMatch[1].trim());
+          if (nav.record_id) window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: nav.record_id } }));
+          else if (nav.destination) window.dispatchEvent(new CustomEvent('talentos:navigate', { detail: { slug: nav.destination } }));
+        } catch(e) {}
       }
 
       // Handle document search — copilot wants to reference company knowledge base
@@ -2995,6 +3046,45 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     } catch (err) {
       setMessages(m => [...m, { role: 'assistant', content: `❌ Failed: ${err.message}`, ts: new Date(), error: true }]);
     }
+    setCreating(false);
+  };
+
+  const handleConfirmUpdate = async () => {
+    if (!pendingUpdate) return;
+    setCreating(true);
+    try {
+      const existing = await api.get(`/records/${pendingUpdate.record_id}`);
+      if (!existing || existing.error) throw new Error('Record not found');
+      await api.patch(`/records/${pendingUpdate.record_id}`, { data: { ...(existing.data || {}), ...pendingUpdate.field_updates } });
+      const fl = Object.entries(pendingUpdate.field_updates).map(([k,v]) => `${k} → ${v}`).join(', ');
+      setMessages(m => [...m, { role:'assistant', content:`✓ Updated ${pendingUpdate.record_name||'record'}: ${fl}` }]);
+      setPendingUpdate(null);
+    } catch(e) { setMessages(m => [...m, { role:'assistant', content:`Failed to update: ${e.message}` }]); }
+    setCreating(false);
+  };
+
+  const handleConfirmBulk = async () => {
+    if (!pendingBulk) return;
+    setCreating(true);
+    try {
+      const ids = pendingBulk.record_ids || [];
+      if (!ids.length) throw new Error('No record IDs — search for the records first so I can identify them.');
+      const result = await api.post('/records/bulk-update', { record_ids: ids, field_updates: pendingBulk.field_updates, environment_id: environment?.id });
+      setMessages(m => [...m, { role:'assistant', content:`✓ Done. ${result.updated} record${result.updated===1?'':'s'} updated.${result.failed > 0 ? ` ${result.failed} failed.` : ''}` }]);
+      setPendingBulk(null); setBulkConfirmed(false);
+    } catch(e) { setMessages(m => [...m, { role:'assistant', content:`Bulk update failed: ${e.message}` }]); }
+    setCreating(false);
+  };
+
+  const handleConfirmStage = async () => {
+    if (!pendingStage) return;
+    setCreating(true);
+    try {
+      const result = await api.post('/records/move-stage', { ...pendingStage, environment_id: environment?.id });
+      if (result.error) throw new Error(result.error);
+      setMessages(m => [...m, { role:'assistant', content:`✓ Moved ${pendingStage.person_name||'person'} to ${result.stage}${pendingStage.job_name ? ` on ${pendingStage.job_name}` : ''}.` }]);
+      setPendingStage(null);
+    } catch(e) { setMessages(m => [...m, { role:'assistant', content:`Move stage failed: ${e.message}` }]); }
     setCreating(false);
   };
 
@@ -3783,6 +3873,108 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                       <button onClick={handleConfirmParsedJob} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#d97706,#f59e0b)",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                         {creating?<><Ic n="loader" s={12}/> Creating…</>:<><Ic n="briefcase" s={12} c="white"/> Create Job</>}
                       </button>
+                    </div>
+                  </div>
+                )}
+
+
+                {/* ── UPDATE RECORD Card ── */}
+                {pendingUpdate && (
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #4361EE",background:"#EEF2FF",fontFamily:F}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <Ic n="edit" s={13} c="#4361EE"/>
+                      <span style={{fontSize:12,fontWeight:800,color:"#1e3a8a"}}>Update Record</span>
+                    </div>
+                    <div style={{fontSize:11,color:"#374151",marginBottom:6}}><strong>{pendingUpdate.record_name}</strong> · {pendingUpdate.object_name}</div>
+                    <div style={{background:"#dbeafe",borderRadius:8,padding:"8px 10px",marginBottom:10}}>
+                      {Object.entries(pendingUpdate.field_updates||{}).map(([k,v])=>(
+                        <div key={k} style={{display:"flex",gap:6,alignItems:"center",fontSize:12,marginBottom:2}}>
+                          <code style={{background:"#bfdbfe",padding:"1px 5px",borderRadius:4,fontSize:10}}>{k}</code>
+                          <span style={{color:"#6b7280"}}>→</span>
+                          <strong style={{color:"#1e3a8a"}}>{String(v)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingUpdate(null)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #bfdbfe",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
+                      <button onClick={handleConfirmUpdate} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#4361EE",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>{creating?"Saving…":"Confirm Update"}</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── BULK ACTION Card — two-step, explicit, danger-styled ── */}
+                {pendingBulk && (
+                  <div style={{margin:"8px 0",borderRadius:12,border:"2px solid #dc2626",overflow:"hidden",fontFamily:F}}>
+                    <div style={{background:"#dc2626",padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}>
+                      <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+                      <span style={{fontSize:13,fontWeight:800,color:"white"}}>Bulk Action — Requires Your Approval</span>
+                    </div>
+                    <div style={{background:"#fef2f2",padding:"14px"}}>
+                      <div style={{fontSize:13,color:"#1f2937",lineHeight:1.5,marginBottom:12}}>{pendingBulk.description}</div>
+                      <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 12px",background:"#fee2e2",borderRadius:99,border:"1px solid #fca5a5",marginBottom:12}}>
+                        <Ic n="users" s={12} c="#dc2626"/>
+                        <span style={{fontSize:12,fontWeight:700,color:"#991b1b"}}>{pendingBulk.estimated_count||'Multiple'} records affected</span>
+                      </div>
+                      <div style={{fontSize:10,fontWeight:700,color:"#991b1b",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>Changes to each record</div>
+                      <div style={{background:"white",borderRadius:8,border:"1px solid #fca5a5",marginBottom:12,overflow:"hidden"}}>
+                        {Object.entries(pendingBulk.field_updates||{}).map(([k,v],i,arr)=>(
+                          <div key={k} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:i<arr.length-1?"1px solid #fee2e2":"none",fontSize:12}}>
+                            <code style={{background:"#f3f4f6",padding:"2px 6px",borderRadius:4,fontSize:11}}>{k}</code>
+                            <span style={{color:"#9ca3af"}}>→</span>
+                            <strong style={{color:"#dc2626"}}>{String(v)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      {pendingBulk.automation_warning && (
+                        <div style={{padding:"10px 12px",background:"#fffbeb",borderRadius:8,border:"2px solid #f59f00",marginBottom:14}}>
+                          <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth={2.5} style={{flexShrink:0,marginTop:1}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+                            <div>
+                              <div style={{fontSize:11,fontWeight:800,color:"#92400e",marginBottom:2}}>⚠ Automated actions may trigger</div>
+                              <div style={{fontSize:11,color:"#78350f",lineHeight:1.5}}>{pendingBulk.automation_warning}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {!bulkConfirmed ? (
+                        <>
+                          <div style={{fontSize:11,color:"#6b7280",textAlign:"center",marginBottom:8}}>This cannot be undone. Press "I understand" to unlock the confirm button.</div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>setPendingBulk(null)} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid #e5e7eb",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
+                            <button onClick={()=>setBulkConfirmed(true)} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:"#dc2626",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>I understand the risk</button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{fontSize:11,fontWeight:700,color:"#991b1b",textAlign:"center",padding:"6px",background:"#fee2e2",borderRadius:6,marginBottom:8}}>Final step — {pendingBulk.estimated_count||'these'} records will update immediately</div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>{setPendingBulk(null);setBulkConfirmed(false);}} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid #e5e7eb",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
+                            <button onClick={handleConfirmBulk} disabled={creating} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:creating?"#9ca3af":"#991b1b",color:"white",fontSize:12,fontWeight:700,cursor:creating?"not-allowed":"pointer",fontFamily:F}}>
+                              {creating?"Updating records…":`Confirm — Update ${pendingBulk.estimated_count||''} Records`}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── MOVE STAGE Card ── */}
+                {pendingStage && (
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #7c3aed",background:"#f5f3ff",fontFamily:F}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+                      <span style={{fontSize:12,fontWeight:800,color:"#4c1d95"}}>Move Pipeline Stage</span>
+                    </div>
+                    <div style={{background:"#ede9fe",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:12,color:"#374151"}}>
+                      <strong>{pendingStage.person_name}</strong>
+                      {pendingStage.job_name && <> · <strong>{pendingStage.job_name}</strong></>}
+                      <span style={{color:"#9ca3af",margin:"0 6px"}}>→</span>
+                      <strong style={{color:"#7c3aed"}}>{pendingStage.stage_name}</strong>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingStage(null)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #ddd6fe",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
+                      <button onClick={handleConfirmStage} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#7c3aed",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}>{creating?"Moving…":"Confirm Move"}</button>
                     </div>
                   </div>
                 )}

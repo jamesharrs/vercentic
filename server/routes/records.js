@@ -665,4 +665,58 @@ router.get('/:id/activity', (req, res) => {
   res.json({ items: redacted, total, page: pg, limit: lm, pages: Math.ceil(total/lm) });
 });
 
+// ── Bulk update multiple records ─────────────────────────────────────────────
+router.post('/bulk-update', (req, res) => {
+  const { record_ids, field_updates } = req.body;
+  if (!Array.isArray(record_ids) || !record_ids.length)
+    return res.status(400).json({ error: 'record_ids array required' });
+  if (!field_updates || typeof field_updates !== 'object')
+    return res.status(400).json({ error: 'field_updates object required' });
+  const updated = [], failed = [];
+  for (const id of record_ids) {
+    try {
+      const existing = query('records', r => r.id === id)[0];
+      if (!existing) { failed.push(id); continue; }
+      const rec = update('records', r => r.id === id, {
+        data: { ...existing.data, ...field_updates },
+        updated_at: new Date().toISOString(),
+      });
+      rec ? updated.push(id) : failed.push(id);
+    } catch(e) { failed.push(id); }
+  }
+  res.json({ updated: updated.length, failed: failed.length, updated_ids: updated });
+});
+
+// ── Move a person to a pipeline stage ────────────────────────────────────────
+router.post('/move-stage', (req, res) => {
+  const { person_id, job_id, stage_name } = req.body;
+  if (!person_id || !stage_name)
+    return res.status(400).json({ error: 'person_id and stage_name required' });
+  const store = getStore();
+  const links = store.people_links || [];
+  const link = links.find(l =>
+    l.person_id === person_id &&
+    (!job_id || l.target_record_id === job_id) &&
+    !l.deleted_at
+  );
+  if (!link)
+    return res.status(404).json({ error: `No pipeline link found for this person${job_id ? ' on this job' : ''}` });
+  const workflow = (store.workflows || []).find(w => w.id === link.workflow_id);
+  const steps = workflow?.steps || [];
+  const step = steps.find(s =>
+    s.name?.toLowerCase().includes(stage_name.toLowerCase()) ||
+    stage_name.toLowerCase().includes((s.name || '').toLowerCase())
+  );
+  if (!step && steps.length > 0)
+    return res.status(400).json({ error: `Stage "${stage_name}" not found. Available: ${steps.map(s => s.name).join(', ')}` });
+  const idx = store.people_links.findIndex(l => l.id === link.id);
+  if (idx !== -1) {
+    store.people_links[idx].stage_id   = step?.id || null;
+    store.people_links[idx].stage_name = step?.name || stage_name;
+    store.people_links[idx].updated_at = new Date().toISOString();
+    saveStore(store);
+  }
+  res.json({ success: true, person_id, job_id: link.target_record_id, stage: step?.name || stage_name });
+});
+
 module.exports = router;

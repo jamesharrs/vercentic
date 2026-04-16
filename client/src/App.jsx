@@ -1926,6 +1926,31 @@ function App() {
     return () => window.removeEventListener("talentos:openRecord", handler);
   }, []); // safe — uses ref, not stale closure
 
+  // Copilot navigation — switch to a named section or object
+  useEffect(() => {
+    const handler = (e) => {
+      const { slug } = e.detail || {};
+      if (!slug) return;
+      // Try object nav first (people, jobs, talent-pools, etc.)
+      const objNav = navObjects.find(o =>
+        o.slug === slug ||
+        (o.plural_name||'').toLowerCase().replace(/\s+/g,'-') === slug
+      );
+      if (objNav) {
+        switchNav('obj_' + objNav.id);
+      } else {
+        const staticMap = {
+          dashboard:'dashboard', reports:'reports', interviews:'interviews',
+          calendar:'calendar', campaigns:'campaigns', offers:'offers',
+          settings:'settings', search:'search',
+        };
+        if (staticMap[slug]) switchNav(staticMap[slug]);
+      }
+    };
+    window.addEventListener('talentos:navigate', handler);
+    return () => window.removeEventListener('talentos:navigate', handler);
+  }, [navObjects]); // re-run when objects load
+
   // Cmd+K / Ctrl+K → open command palette
   useEffect(() => {
     const handler = (e) => {
