@@ -2,6 +2,7 @@ import { tFetch } from "./apiClient.js";
 import api from "./apiClient.js";
 // client/src/Inbox.jsx
 import { useState, useEffect, useCallback, useRef } from "react";
+import InboxLiveChat from "./InboxLiveChat";
 
 const C = {
   bg: "var(--t-bg, #EEF2FF)", card: "var(--t-card, #ffffff)",
@@ -345,15 +346,20 @@ export default function InboxModule({ environment, session, onNavigate }) {
   const unreadCount = messages.filter(m => !m.read).length;
 
   const CHANNELS = [
-    { id: 'all',      label: 'All',      icon: 'inbox' },
-    { id: 'email',    label: 'Email',    icon: 'mail' },
-    { id: 'sms',      label: 'SMS',      icon: 'phone' },
-    { id: 'whatsapp', label: 'WhatsApp', icon: 'messageSquare' },
+    { id: 'all',       label: 'All',       icon: 'inbox' },
+    { id: 'email',     label: 'Email',     icon: 'mail' },
+    { id: 'sms',       label: 'SMS',       icon: 'phone' },
+    { id: 'whatsapp',  label: 'WhatsApp',  icon: 'messageSquare' },
+    { id: 'live_chat', label: 'Live Chat', icon: 'messageCircle' },
   ];
   const FILTERS = [{ id: 'mine', label: 'Mine' }, { id: 'all', label: 'All' }, { id: 'unread', label: `Unread${unreadCount ? ` (${unreadCount})` : ''}` }, { id: 'unmatched', label: 'Unmatched' }];
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', fontFamily: F, background: C.bg }}>
+      {/* Live Chat tab — full-width takeover */}
+      {channel === 'live_chat' ? (
+        <InboxLiveChat environment={environment} session={session} onNavigate={onNavigate} onBack={() => setChannel('all')}/>
+      ) : (<>
       {/* Left pane */}
       <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', background: C.card, borderRight: `1px solid ${C.border}` }}>
         <div style={{ padding: '16px 16px 0', borderBottom: `1px solid ${C.border}` }}>
@@ -473,6 +479,7 @@ export default function InboxModule({ environment, session, onNavigate }) {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }

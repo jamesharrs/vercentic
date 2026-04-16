@@ -3,6 +3,7 @@ import { ClientList, ClientDetail, ProvisionWizard, Performance } from './supera
 import ActivityReport from './superadmin/ActivityReport.jsx';
 import AIUsageReport from './superadmin/AIUsageReport.jsx';
 import DemoDataManager from './superadmin/DemoDataManager';
+import FeaturePacksAdmin from './superadmin/FeaturePacks';
 import ErrorLogViewer from './superadmin/ErrorLogViewer.jsx';
 import { ReleaseNotesAdmin } from './ReleaseNotes.jsx';
 import CaseManager from './superadmin/CaseManager.jsx';
@@ -156,6 +157,43 @@ function EnvRow({ variable, onSave }) {
   );
 }
 
+// ── Feature Packs Section ─────────────────────────────────────────────────────
+function FeaturePacksSection() {
+  const [environments, setEnvironments] = useState([]);
+  const [selectedEnvId, setSelectedEnvId] = useState(null);
+  const F = "'DM Sans', sans-serif";
+  const Cs = { surface2:'#1C2035', border:'#2A2F4A', text1:'#F0F4FF', text3:'#6B7599' };
+
+  useEffect(() => {
+    fetch('/api/environments').then(r => r.json()).then(data => {
+      const envs = Array.isArray(data) ? data : [];
+      setEnvironments(envs);
+      if (envs.length > 0) setSelectedEnvId(envs[0].id);
+    }).catch(() => {});
+  }, []);
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <h3 style={{ margin:'0 0 6px', fontSize:15, fontWeight:700, color:Cs.text1 }}>Feature Packs</h3>
+        <p style={{ margin:'0 0 14px', fontSize:12, color:Cs.text3 }}>Enable or disable feature packs per environment. Changes take effect immediately.</p>
+        {environments.length > 1 && (
+          <div style={{ marginBottom:16 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:Cs.text3, textTransform:'uppercase', letterSpacing:'0.06em', display:'block', marginBottom:6 }}>Environment</label>
+            <select value={selectedEnvId||''} onChange={e=>setSelectedEnvId(e.target.value)}
+              style={{ padding:'8px 12px', borderRadius:8, border:`1px solid ${Cs.border}`, background:Cs.surface2, color:Cs.text1, fontSize:13, fontFamily:F, outline:'none', cursor:'pointer' }}>
+              {environments.map(env => <option key={env.id} value={env.id}>{env.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+      {selectedEnvId
+        ? <FeaturePacksAdmin environmentId={selectedEnvId}/>
+        : <div style={{ padding:40, textAlign:'center', color:Cs.text3, fontSize:13 }}>No environments found.</div>
+      }
+    </div>
+  );
+}
 
 // ── Env Config Section ────────────────────────────────────────────────────────
 function EnvSection() {
@@ -288,18 +326,19 @@ const NavIcon = ({ id, size=14, color="currentColor" }) => {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
 };
 const NAV_ITEMS = [
-  { id:'env',      label:'Environment',  icon:'env',     desc:'Manage .env variables' },
-  { id:'health',   label:'System Health', icon:'health', desc:'Server stats & uptime' },
-  { id:'clients',  label:'Clients',      icon:'clients', desc:'Manage client organisations' },
-  { id:'provision',label:'Provision',    icon:'provision',desc:'Provision a new client environment' },
-  { id:'perf',     label:'Performance',  icon:'perf',    desc:'Platform-wide stats & usage' },
-  { id:'demo',     label:'Demo Data',    icon:'provision', desc:'Generate realistic demo data' },
-  { id:'errors',   label:'Error Logs',   icon:'errors',    desc:'App errors across all environments' },
+  { id:'env',      label:'Environment',    icon:'env',      desc:'Manage .env variables' },
+  { id:'health',   label:'System Health',  icon:'health',   desc:'Server stats & uptime' },
+  { id:'clients',  label:'Clients',        icon:'clients',  desc:'Manage client organisations' },
+  { id:'provision',label:'Provision',      icon:'provision',desc:'Provision a new client environment' },
+  { id:'features', label:'Feature Packs',  icon:'features', desc:'Enable/disable feature packs per environment' },
+  { id:'perf',     label:'Performance',    icon:'perf',     desc:'Platform-wide stats & usage' },
+  { id:'demo',     label:'Demo Data',      icon:'provision',desc:'Generate realistic demo data' },
+  { id:'errors',   label:'Error Logs',     icon:'errors',   desc:'App errors across all environments' },
   { id:'release_notes', label:'Release Notes', icon:'bell', desc:'Manage platform release notes' },
-  { id:'cases', label:'Support Cases', icon:'cases', desc:'Customer service case management' },
-  { id:'sequencer', label:'Email Sequencer', icon:'mail', desc:'Client onboarding email automation' },
-  { id:'ai_usage', label:'AI Usage', icon:'cpu', desc:'Token usage, costs & quota management' },
-  { id:'activity', label:'Activity Report', icon:'activity', desc:'Environment activity & usage analytics' },
+  { id:'cases',    label:'Support Cases',  icon:'cases',    desc:'Customer service case management' },
+  { id:'sequencer',label:'Email Sequencer',icon:'mail',     desc:'Client onboarding email automation' },
+  { id:'ai_usage', label:'AI Usage',       icon:'cpu',      desc:'Token usage, costs & quota management' },
+  { id:'activity', label:'Activity Report',icon:'activity', desc:'Environment activity & usage analytics' },
   { id:'platform_events', label:'Platform Events', icon:'zap', desc:'Digest sends, scheduler runs, SSE connections & system events' },
 ];
 
@@ -526,6 +565,7 @@ export default function SuperAdminConsole() {
           <ProvisionWizard onDone={()=>{ setSection('clients'); setClientView('list'); }} onCancel={()=>setSection('clients')}/>
         )}
         {section === 'perf' && <Performance/>}
+        {section === 'features' && <FeaturePacksSection/>}
         {section === 'ai_usage' && <AIUsageReport/>}
         {section === 'activity' && <ActivityReport clientId={clientView==='detail'?selectedClientId:null}/>}
         {section === 'platform_events' && <PlatformEvents/>}

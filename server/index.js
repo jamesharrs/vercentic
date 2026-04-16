@@ -259,6 +259,9 @@ app.use('/api/ai-interview',      require('./routes/ai_interview'));
 app.use('/api/comms',             require('./routes/communications'));
 app.use('/api/engagement',        require('./routes/engagement'));
 app.use('/api/inbox',             require('./routes/inbox'));
+app.use('/api/feature-packs',     require('./routes/feature_packs'));
+app.use('/api/availability',      require('./routes/availability'));
+app.use('/api/live-chat',         require('./routes/live_chat'));
 app.use('/api/email-templates',   require('./routes/email-templates'));
 app.use('/api/email-builder',     require('./routes/email_builder'));
 app.use('/api/notifications',     require('./routes/notifications'));
@@ -362,7 +365,11 @@ const PORT = process.env.PORT || 3001;
 // Don't start the HTTP server when loaded by the test suite (supertest handles transport)
 if (process.env.NODE_ENV !== 'test') {
   // Start listening immediately so Railway health check passes during DB init
-  app.listen(PORT, () => {
+  const http = require('http');
+  const httpServer = http.createServer(app);
+  // Wire WebSocket server for live chat
+  try { const { createWss } = require('./ws'); createWss(httpServer); } catch(e) { console.warn('[ws] WebSocket unavailable:', e.message); }
+  httpServer.listen(PORT, () => {
     console.log(`Vercentic API → http://localhost:${PORT}`);
   });
 }

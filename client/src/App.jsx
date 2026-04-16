@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, startTransition } from "react";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import { FeatureProvider } from "./hooks/useFeature.jsx";
 import { useI18n } from "./i18n/I18nContext.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
@@ -2064,6 +2065,7 @@ function App() {
   }
 
   return (
+    <FeatureProvider environmentId={selectedEnv?.id}>
     <PermissionProvider userId={userId}>
     <div style={{ minHeight: "100vh", background: "var(--t-bg)", fontFamily: "var(--t-font)", display: "flex" }}>
       <MaintenanceOverlay />
@@ -2440,6 +2442,7 @@ function App() {
         </Suspense>
       )}
     </PermissionProvider>
+    </FeatureProvider>
   );
 }
 
