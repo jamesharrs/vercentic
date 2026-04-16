@@ -62,19 +62,6 @@ const SILENT_404_PATTERNS = ['/users/by-email/'];
 
 function handleResponse(r, path = '') {
   if (r.status === 404 && SILENT_404_PATTERNS.some(p => path.includes(p))) return null;
-  // Auto-reload on 401 — clears stale session so login page shows cleanly.
-  // Debounced to avoid reload loops. Skips public portal/bot routes.
-  if (r.status === 401) {
-    const loc = window.location.pathname;
-    const isPublic = ['/bot', '/portal', '/interview', '/reschedule', '/signup', '/availability'].some(p => loc.startsWith(p));
-    if (!isPublic && !sessionStorage.getItem('_vrc_401_reload')) {
-      sessionStorage.setItem('_vrc_401_reload', '1');
-      setTimeout(() => sessionStorage.removeItem('_vrc_401_reload'), 5000);
-      try { localStorage.removeItem('talentos_session'); } catch {}
-      window.location.reload();
-    }
-    return null;
-  }
   return r.json();
 }
 
