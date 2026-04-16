@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove } = require('../db/init');
 const { cacheResponse, invalidatePath } = require('../utils/cache');
 
-router.get('/', cacheResponse(60_000), (req, res) => {
+router.get('/', (req, res) => {
   const { environment_id } = req.query;
   if (!environment_id) return res.status(400).json({error:'environment_id required'});
 

@@ -9662,6 +9662,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const load = useCallback(async () => {
     setLoading(true);
+    setRecords([]); // clear immediately so stale records from previous object never flash
     const [f, r] = await Promise.all([
       api.get(`/fields?object_id=${object.id}&environment_id=${environment.id}`),
       api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
