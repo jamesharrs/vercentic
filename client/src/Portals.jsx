@@ -4027,38 +4027,58 @@ const AiSiteGenerator = ({ portal, onApply, onClose }) => {
   const [brandKits,     setBrandKits]     = useState([]);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [usedBrandKit,  setUsedBrandKit]  = useState(null);
-  const [form, setForm] = useState({
-    company:'', tagline:'', industry:'', logo_url:'', tone:'professional',
-    palette:PALETTES[0], customPalette:null,
-    sections:SECTION_OPTIONS.filter(s=>s.default).map(s=>s.id),
-    messages:'', stats_input:'', benefits:'', team_intro:'',
+  const [form, setForm] = useState(()=>{
+    // Pre-select the closest palette to the portal's current theme
+    const themeColor = portal?.theme?.primaryColor;
+    const nearestPalette = themeColor
+      ? PALETTES.find(p => p.primary.toLowerCase() === themeColor.toLowerCase()) || PALETTES[0]
+      : PALETTES[0];
+    return {
+      company  : portal?.branding?.company_name || '',
+      tagline  : portal?.branding?.tagline      || '',
+      industry : '',
+      logo_url : portal?.branding?.logo_url     || portal?.nav?.logoUrl || '',
+      tone     : 'professional',
+      palette  : nearestPalette, customPalette:null,
+      sections : SECTION_OPTIONS.filter(s=>s.default).map(s=>s.id),
+      messages:'', stats_input:'', benefits:'', team_intro:'',
+    };
   });
   const gset = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  // ── Auto-load profile + brand kits ────────────────────────────────────────
+  // ── Auto-load company profile + brand kits on open ────────────────────────
   useEffect(()=>{
     const envId = portal?.environment_id;
     if(!envId){ setProfileLoaded(true); return; }
     const hdr = { 'X-Tenant-Slug':envId, 'X-User-Id':'portal-builder' };
     Promise.all([
-      fetch(`/api/company-profile?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>null),
+      fetch(`/api/company-research?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>null),
       fetch(`/api/brand-kits?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>[]),
     ]).then(([profile, kits])=>{
-      if(profile && !profile.error){
+      if(profile && !profile.error && profile.name){
         setProfileData(profile);
         setForm(f=>({
           ...f,
           company    : f.company   || profile.name        || '',
-          tagline    : f.tagline   || profile.evp?.headline || profile.description?.slice(0,80) || '',
+          tagline    : f.tagline   || profile.evp?.headline || '',
           industry   : f.industry  || profile.industry    || '',
           logo_url   : f.logo_url  || profile.logo_url    || '',
           tone       : profile.tone || f.tone,
-          messages   : f.messages  || [profile.evp?.statement, profile.evp?.pillars?.length ? 'Key pillars: '+profile.evp.pillars.join(', ') : ''].filter(Boolean).join(' '),
+          messages   : f.messages  || [profile.evp?.statement, profile.evp?.pillars?.length?'Key pillars: '+profile.evp.pillars.join(', '):''].filter(Boolean).join(' '),
           stats_input: f.stats_input || [profile.size&&profile.size+' employees', profile.locations?.length&&profile.locations.length+' offices', profile.founded&&'Founded '+profile.founded].filter(Boolean).join(', '),
-          benefits   : f.benefits  || (profile.benefits||[]).join(', '),
+          benefits   : f.benefits  || (profile.key_benefits||[]).join(', '),
         }));
       }
-      if(Array.isArray(kits)) setBrandKits(kits.filter(k=>!k.deleted_at));
+      if(Array.isArray(kits)){
+        const filtered = kits.filter(k=>!k.deleted_at);
+        setBrandKits(filtered);
+        // Auto-suggest the kit whose primary colour matches the portal's current theme
+        const themeColor = portal?.theme?.primaryColor;
+        if(themeColor && filtered.length > 0 && !usedBrandKit){
+          const match = filtered.find(k => k.theme?.primaryColor?.toLowerCase() === themeColor.toLowerCase());
+          if(match) applyBrandKit(match);
+        }
+      }
       setProfileLoaded(true);
     });
   },[portal?.environment_id]);
