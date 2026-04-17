@@ -4411,119 +4411,157 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",minHeight:"100vh",fontFamily:F,background:C.bg}}>
-      {/* Top bar */}
-      <div style={{height:48,background:C.surface,borderBottom:`1px solid ${C.border}`,zIndex:200,position:"relative",display:"flex",alignItems:"center",gap:0,flexShrink:0,padding:"0 12px"}}>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:6,fontFamily:F,fontSize:13}}
-          onMouseEnter={e=>e.currentTarget.style.color=C.text1} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
-          <Ic n="arrowL" s={14}/> Portals
-        </button>
-        <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
-        <input value={portal.name} onChange={e=>setPortal(p=>({...p,name:e.target.value}))}
-          style={{border:"none",outline:"none",fontSize:14,fontWeight:700,color:C.text1,background:"transparent",fontFamily:F,minWidth:140}}/>
-        {isDirty&&<span style={{width:7,height:7,borderRadius:"50%",background:"#F59E0B",flexShrink:0,marginLeft:-4}} title="Unsaved changes"/>}
-        <div style={{flex:1}}/>
-        {/* Page tabs — draggable to reorder */}
-        <div style={{display:"flex",gap:2,background:C.surface2,borderRadius:8,padding:3,border:`1px solid ${C.border}`,maxWidth:280,overflowX:"auto",flexShrink:0}}>
-          {portal.pages.map((pg,i)=>(
-            <button key={pg.id} onClick={()=>setActivePageIdx(i)}
-              draggable
-              onDragStart={e=>{e.dataTransfer.setData("pageIdx",String(i));}}
-              onDragOver={e=>e.preventDefault()}
-              onDrop={e=>{
-                e.preventDefault();
-                const from=parseInt(e.dataTransfer.getData("pageIdx"));
-                if(isNaN(from)||from===i) return;
-                setPortal(p=>{const pages=[...p.pages];const[moved]=pages.splice(from,1);pages.splice(i,0,moved);return{...p,pages};});
-                setActivePageIdx(i);
-              }}
-              style={{padding:"4px 12px",borderRadius:6,border:"none",fontFamily:F,fontSize:12,fontWeight:600,cursor:"grab",
-                background:activePageIdx===i?C.surface:"transparent",color:activePageIdx===i?C.text1:C.text3,
-                boxShadow:activePageIdx===i?"0 1px 3px rgba(0,0,0,.06)":"none",userSelect:"none"}}>
-              {pg.name}
-            </button>
-          ))}
-          <button onClick={addPage} title="Add page" style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer"}}><Ic n="plus" s={11}/></button>
-          {portal.pages.length>0&&<button onClick={()=>setPageActionsFor(page)} title="Page SEO & settings" style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer"}}><Ic n="settings" s={11}/></button>}
+      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
+      <div style={{height:52,background:C.surface,borderBottom:`1px solid ${C.border}`,zIndex:200,position:"relative",display:"flex",alignItems:"center",flexShrink:0,padding:"0 16px",gap:0}}>
+
+        {/* LEFT — back + name */}
+        <div style={{display:"flex",alignItems:"center",gap:0,flexShrink:0,minWidth:0}}>
+          <button onClick={onClose}
+            style={{background:"none",border:"none",cursor:"pointer",color:C.text3,display:"flex",alignItems:"center",gap:5,padding:"5px 8px",borderRadius:7,fontFamily:F,fontSize:12,fontWeight:600,whiteSpace:"nowrap",marginRight:4}}
+            onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text1;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.text3;}}>
+            <Ic n="arrowL" s={13}/> Portals
+          </button>
+          <div style={{width:1,height:20,background:C.border,marginRight:10}}/>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <input value={portal.name} onChange={e=>setPortal(p=>({...p,name:e.target.value}))}
+              style={{border:"none",outline:"none",fontSize:14,fontWeight:700,color:C.text1,background:"transparent",fontFamily:F,minWidth:80,maxWidth:180}}/>
+            {isDirty&&<span style={{width:6,height:6,borderRadius:"50%",background:"#F59E0B",flexShrink:0}} title="Unsaved changes"/>}
+          </div>
         </div>
-        <div style={{width:1,height:24,background:C.border,margin:"0 12px"}}/>
-        {/* Actions */}
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {/* Viewport toggle (only in preview mode) */}
+
+        {/* CENTRE — page tabs + edit/preview */}
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,minWidth:0}}>
+          {/* Page tabs */}
+          <div style={{display:"flex",gap:1,background:C.surface2,borderRadius:8,padding:3,border:`1px solid ${C.border}`,maxWidth:320,overflowX:"auto",flexShrink:1}}>
+            {portal.pages.map((pg,i)=>(
+              <button key={pg.id} onClick={()=>setActivePageIdx(i)}
+                draggable
+                onDragStart={e=>{e.dataTransfer.setData("pageIdx",String(i));}}
+                onDragOver={e=>e.preventDefault()}
+                onDrop={e=>{
+                  e.preventDefault();
+                  const from=parseInt(e.dataTransfer.getData("pageIdx"));
+                  if(isNaN(from)||from===i) return;
+                  setPortal(p=>{const pages=[...p.pages];const[moved]=pages.splice(from,1);pages.splice(i,0,moved);return{...p,pages};});
+                  setActivePageIdx(i);
+                }}
+                style={{padding:"4px 12px",borderRadius:6,border:"none",fontFamily:F,fontSize:12,fontWeight:600,cursor:"grab",
+                  background:activePageIdx===i?C.surface:"transparent",color:activePageIdx===i?C.text1:C.text3,
+                  boxShadow:activePageIdx===i?"0 1px 3px rgba(0,0,0,.06)":"none",userSelect:"none",whiteSpace:"nowrap"}}>
+                {pg.name}
+              </button>
+            ))}
+            <button onClick={addPage} title="Add page" style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer",flexShrink:0}}><Ic n="plus" s={11}/></button>
+            {portal.pages.length>0&&<button onClick={()=>setPageActionsFor(page)} title="Page settings" style={{padding:"4px 7px",borderRadius:6,border:"none",background:"transparent",color:C.text3,cursor:"pointer",flexShrink:0}}><Ic n="settings" s={11}/></button>}
+          </div>
+
+          {/* Edit / Preview toggle */}
+          <div style={{display:"flex",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:2,flexShrink:0}}>
+            <button onClick={()=>{setIsEditing(true);}}
+              style={{padding:"4px 11px",borderRadius:6,border:"none",fontFamily:F,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .15s",
+                background:isEditing?C.surface:"transparent",color:isEditing?C.text1:C.text3,
+                boxShadow:isEditing?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
+              <span style={{display:"flex",alignItems:"center",gap:4}}><Ic n="edit" s={11} c={isEditing?C.accent:C.text3}/>Edit</span>
+            </button>
+            <button onClick={()=>{setIsEditing(false);setViewportMode("desktop");}}
+              style={{padding:"4px 11px",borderRadius:6,border:"none",fontFamily:F,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .15s",
+                background:!isEditing?C.surface:"transparent",color:!isEditing?C.text1:C.text3,
+                boxShadow:!isEditing?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
+              <span style={{display:"flex",alignItems:"center",gap:4}}><Ic n="eye" s={11} c={!isEditing?C.accent:C.text3}/>Preview</span>
+            </button>
+          </div>
+
+          {/* Viewport toggle — only in preview */}
           {!isEditing&&(
-            <div style={{display:"flex",gap:0,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"flex",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:2,flexShrink:0}}>
               {[{m:"desktop",icon:"monitor"},{m:"mobile",icon:"smartphone"}].map(({m,icon})=>(
                 <button key={m} onClick={()=>setViewportMode(m)}
-                  style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",border:"none",cursor:"pointer",
-                    background:viewportMode===m?C.accentLight:"transparent",
-                    color:viewportMode===m?C.accent:C.text3,fontFamily:F,fontSize:11}}>
+                  style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",transition:"all .15s",
+                    background:viewportMode===m?C.surface:"transparent",
+                    boxShadow:viewportMode===m?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
                   <Ic n={icon} s={12} c={viewportMode===m?C.accent:C.text3}/>
-                  <span style={{fontWeight:600}}>{m==="desktop"?"Desktop":"Mobile"}</span>
                 </button>
               ))}
             </div>
           )}
-          <button onClick={()=>{setIsEditing(e=>!e);if(isEditing)setViewportMode("desktop");}}
-            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
-              border:`1px solid ${C.border}`,background:isEditing?C.accentLight:"transparent",color:isEditing?C.accent:C.text2}}>
-            <Ic n="eye" s={12} c={isEditing?C.accent:C.text2}/>{isEditing?"Editing":"Preview"}
-          </button>
-          {/* More menu — Settings only (Brand Kit moved to Theme, Domain moved to Settings) */}
+        </div>
+
+        {/* RIGHT — tools + primary actions */}
+        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+
+          {/* Tools dropdown (Theme / Brand Kit / Sections / Settings) */}
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowMoreMenu(m=>!m)}
-              style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:showMoreMenu?C.accentLight:"transparent",color:showMoreMenu?C.accent:C.text2}}>
-              <Ic n="more" s={13} c={showMoreMenu?C.accent:C.text2}/>
+              style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:600,
+                border:`1px solid ${C.border}`,background:showMoreMenu?C.surface2:"transparent",color:C.text2,transition:"all .15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;}}
+              onMouseLeave={e=>{if(!showMoreMenu)e.currentTarget.style.background="transparent";}}>
+              Tools <Ic n="chevD" s={11} c={C.text3}/>
             </button>
             {showMoreMenu&&<>
               <div onClick={()=>setShowMoreMenu(false)} style={{position:"fixed",inset:0,zIndex:699}}/>
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.surface,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,.15)",border:`1px solid ${C.border}`,zIndex:700,minWidth:140,padding:4}}>
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.surface,borderRadius:12,
+                boxShadow:"0 8px 32px rgba(0,0,0,.15)",border:`1px solid ${C.border}`,zIndex:700,minWidth:160,padding:4,overflow:"hidden"}}>
                 {[
-                  {icon:"settings",label:"Settings",onClick:()=>{setShowPortalSettings(s=>!s);setShowTheme(false);setShowMoreMenu(false);}},
-                ].map(item=>(
+                  {icon:"palette",  label:"Theme",     onClick:()=>{setShowTheme(s=>!s);setShowMoreMenu(false);}},
+                  {icon:"sparkles", label:"Brand Kit",  onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
+                  {icon:"library",  label:"Sections",   onClick:()=>{setShowLibrary(true);setShowMoreMenu(false);}},
+                  {icon:"settings", label:"Settings",   onClick:()=>{setShowPortalSettings(s=>!s);setShowMoreMenu(false);}},
+                ].map((item,i)=>(<>
+                  {i===2&&<div key="div" style={{height:1,background:C.border,margin:"3px 0"}}/>}
                   <button key={item.label} onClick={item.onClick}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:7,border:"none",background:"transparent",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:500,color:C.text1,textAlign:"left"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 11px",borderRadius:8,border:"none",
+                      background:"transparent",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:500,color:C.text1,textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <Ic n={item.icon} s={13} c={C.text2}/>{item.label}
                   </button>
-                ))}
+                </>))}
               </div>
             </>}
           </div>
-          
-          
-          <button onClick={()=>{setShowTheme(s=>!s);}}
-            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
-              border:`1px solid ${C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2}}>
-            <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
+
+          {/* Generate */}
+          <button onClick={()=>setShowAiGen(true)}
+            style={{display:"flex",alignItems:"center",gap:6,padding:"6px 13px",borderRadius:8,
+              background:`linear-gradient(135deg, ${C.accent}, #7C3AED)`,color:"white",
+              fontSize:12,fontWeight:700,fontFamily:F,border:"none",cursor:"pointer",flexShrink:0,
+              boxShadow:"0 2px 8px rgba(67,97,238,.35)"}}>
+            <Ic n="sparkles" s={12} c="white"/> Generate
           </button>
-          <button onClick={()=>setShowBrandKit(true)}
-            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,
-              border:`1px solid ${C.border}`,background:"transparent",color:C.text2}}>
-            <Ic n="sparkles" s={12} c={C.text2}/>Brand Kit
+
+          <div style={{width:1,height:20,background:C.border}}/>
+
+          {/* Save */}
+          <button onClick={handleSave} disabled={saving}
+            style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${isDirty?"#F59E0B":C.border}`,
+              background:isDirty?"#FFFBEB":"transparent",color:isDirty?"#B45309":C.text2,
+              fontSize:12,fontWeight:700,fontFamily:F,cursor:saving?"default":"pointer",transition:"all .15s",flexShrink:0}}>
+            {saving?"Saving…":isDirty?"Save":"Saved ✓"}
           </button>
-          <Btn v="secondary" s="sm" icon="library" onClick={()=>setShowLibrary(true)}>Sections</Btn>
-          <button onClick={()=>setShowAiGen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 13px",borderRadius:7,background:C.accent,color:"white",fontSize:12,fontWeight:700,fontFamily:F,border:"none",cursor:"pointer",flexShrink:0}}>
-            <Ic n="sparkles" s={13} c="white"/> Generate
-          </button>
-          <Btn v="primary" s="sm" onClick={handleSave} disabled={saving}>{saving?"Saving…":isDirty?"Save":"Saved ✓"}</Btn>
-          <Btn v={portal.status==="published"?"success":"secondary"} s="sm"
-            onClick={async ()=>{
+
+          {/* Publish */}
+          <button onClick={async()=>{
               const newStatus = portal.status==="published"?"draft":"published";
               const updated = {...portal, status: newStatus};
               setPortal(updated);
-              // Auto-save the status change immediately
               if (updated.id && !String(updated.id).startsWith("new_")) {
                 await api.patch(`/portals/${updated.id}`, { status: newStatus });
               }
-            }}>
+            }}
+            style={{padding:"5px 14px",borderRadius:8,border:"none",fontSize:12,fontWeight:700,fontFamily:F,cursor:"pointer",flexShrink:0,transition:"all .15s",
+              background:portal.status==="published"?"#ECFDF5":"#0F1729",
+              color:portal.status==="published"?"#059669":"white"}}>
             {portal.status==="published"?"✓ Published":"Publish"}
-          </Btn>
-          {portal.status==="published" && portal.slug && (
-            <button onClick={()=>{
-              const slug = (portal.slug||'').replace(/^\/+/,'');
-              window.open(`${window.location.origin}/${slug}`,'_blank');
-            }} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:11,fontWeight:600,border:`1px solid ${C.green}`,background:C.greenLight,color:C.green}}>
-              <Ic n="eye" s={11} c={C.green}/>View Live
+          </button>
+
+          {/* View live */}
+          {portal.status==="published"&&portal.slug&&(
+            <button onClick={()=>{const slug=(portal.slug||'').replace(/^\/+/,'');window.open(`${window.location.origin}/${slug}`,'_blank');}}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:600,
+                border:`1px solid ${C.green}30`,background:C.greenLight,color:C.green,flexShrink:0}}>
+              <Ic n="eye" s={11} c={C.green}/>View live
             </button>
           )}
         </div>
