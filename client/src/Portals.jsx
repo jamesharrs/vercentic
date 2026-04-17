@@ -5,7 +5,7 @@ import { FeedbackConfigPanel, FeedbackReports } from './portals/FeedbackConfig.j
 import PortalTemplatePicker from './PortalTemplatePicker.jsx';
 import WizardBuilder from './WizardBuilder.jsx';
 import { PORTAL_TEMPLATES, getTemplatesForType, applyTemplate } from './portalTemplates.js';
-import api from './apiClient.js';
+import api, { jsonHeaders } from './apiClient.js';
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const C = {
   bg:"#F3F4F8", surface:"#FFFFFF", surface2:"#F8F9FC",
@@ -4106,7 +4106,19 @@ const AiSiteGenerator = ({ portal, api, onApply, onClose }) => {
     if(!form.company){setError('Please enter your company name.');return;}
     setGenerating(true); setError('');
     try {
-      const data = await api.post('/portals/generate', {...form, palette:form.palette});
+      // 90-second timeout — generation takes 25-40 s
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 90000);
+      const res   = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/portals/generate`, {
+        method: 'POST',
+        signal: ctrl.signal,
+        credentials: 'include',
+        headers: jsonHeaders(),
+        body: JSON.stringify({...form, palette: form.palette}),
+      });
+      clearTimeout(timer);
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `Server error ${res.status}`); }
+      const data = await res.json();
       if(data.error) throw new Error(data.error);
       setGenerated({...portal,theme:data.portal.theme||portal.theme,nav:data.portal.nav||portal.nav,footer:data.portal.footer||portal.footer,pages:data.portal.pages||portal.pages,branding:{...(portal.branding||{}),company_name:form.company,tagline:form.tagline,logo_url:form.logo_url||portal?.branding?.logo_url||''}});
       setStep(5);
@@ -4208,7 +4220,7 @@ const AiSiteGenerator = ({ portal, api, onApply, onClose }) => {
       {error&&<div style={{marginTop:16,padding:'10px 14px',borderRadius:8,background:'rgba(239,68,68,0.1)',color:'#FCA5A5',fontSize:13}}>{error}</div>}
       <div style={{marginTop:20,padding:'14px 16px',borderRadius:10,background:GC.accentL,border:`1px solid ${GC.accent}40`}}>
         <div style={{fontSize:12,fontWeight:700,color:GC.accent,marginBottom:4}}>✨ Ready to generate</div>
-        <div style={{fontSize:12,color:GC.text2,lineHeight:1.5}}>Building for <strong style={{color:GC.text1}}>{form.company}</strong> · {form.sections.length} sections{usedBrandKit?` · ${usedBrandKit.name} palette`:''} · Takes ~15 seconds</div>
+        <div style={{fontSize:12,color:GC.text2,lineHeight:1.5}}>Building for <strong style={{color:GC.text1}}>{form.company}</strong> · {form.sections.length} sections{usedBrandKit?` · ${usedBrandKit.name} palette`:''} · Takes ~30 seconds</div>
       </div>
     </div>);
 

@@ -12,6 +12,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        timeout: 90000,          // 90 s — AI generation can take 30-40 s
+        proxyTimeout: 90000,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             // Pass the real client origin so the server can build correct reschedule URLs
