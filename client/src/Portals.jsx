@@ -67,6 +67,7 @@ const WIDGET_TYPES = [
   { type:"spacer",       label:"Spacer",         icon:"square",    desc:"Blank vertical space" },
   { type:"files",        label:"Files / Docs",   icon:"paperclip", desc:"Display record attachments by file type" },
   { type:"multistep_form",label:"Multi-step Form",icon:"layers",    desc:"Step-by-step form with validation" },
+  { type:"find_your_fit", label:"Find Your Fit",  icon:"target",    desc:"AI-powered job matching — CV upload or guided questions" },
   { type:"html_embed",   label:"HTML / Code",   icon:"code",      desc:"Custom HTML with AI generation" },
 ];
 
@@ -190,6 +191,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     user:"M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8",
     messageSquare:"M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
     sparkles:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM5 3l.6 1.8L7.4 5.4 5.6 6l-.6 1.8L4.4 6l-1.8-.6L4.4 4.8zM19 15l.6 1.8 1.8.6-1.8.6-.6 1.8-.6-1.8-1.8-.6 1.8-.6z",
+    target:"M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z",
     anchor:"M12 2a3 3 0 100 6 3 3 0 000-6zM12 8v14M5 10a7 7 0 0014 0",
     fileText:"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
     quote:"M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1zM15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z",
@@ -948,6 +950,16 @@ const WidgetPreview = ({ cell, theme }) => {
     display:"inline-block",cursor:"default",
   };
 
+  if (cell.widgetType==="find_your_fit") return (
+    <div style={{ padding:'20px', background:'#F8F9FC', fontFamily:F }}>
+      <div style={{ fontSize:13, fontWeight:700, color:'#0F1729', marginBottom:6, textAlign:'center' }}>{cfg.headline||'Find Your Perfect Role'}</div>
+      <div style={{ fontSize:11, color:'#64748B', marginBottom:14, textAlign:'center' }}>{cfg.subheading||"Tell us about yourself and we'll match you with the best opportunities."}</div>
+      <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
+        {cfg.enableCv!==false&&<div style={{ flex:1, maxWidth:140, padding:'12px 10px', background:'white', borderRadius:8, border:'1.5px solid #E8ECF8', fontSize:10, color:'#64748B', textAlign:'center' }}>📄 {cfg.cvLabel||'Analyse my CV'}</div>}
+        {cfg.enableGuided!==false&&<div style={{ flex:1, maxWidth:140, padding:'12px 10px', background:'white', borderRadius:8, border:'1.5px solid #E8ECF8', fontSize:10, color:'#64748B', textAlign:'center' }}>💡 {cfg.guidedLabel||'Guide me'}</div>}
+      </div>
+    </div>
+  );
   if (cell.widgetType==="hero") return (
     <div style={{
       padding:"32px 24px", textAlign: cfg.align||"center",
@@ -1169,6 +1181,34 @@ const FIELD_TYPES = [
 ];
 const defaultStep  = (n) => ({ id:Math.random().toString(36).slice(2), title:`Step ${n}`, fields:[] });
 const defaultField = ()  => ({ id:Math.random().toString(36).slice(2), type:"text", label:"", placeholder:"", required:false, options:"" });
+
+const FindYourFitConfig = ({ cfg, set, inp, lbl }) => (
+  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+    {lbl("Headline")}
+    {inp({ value:cfg.headline||'', onChange:v=>set('headline',v), placeholder:'Find Your Perfect Role' })}
+    {lbl("Subheading")}
+    {inp({ value:cfg.subheading||'', onChange:v=>set('subheading',v), placeholder:"Tell us about yourself and we'll match you with the best opportunities." })}
+    {lbl("CV Path Label")}
+    {inp({ value:cfg.cvLabel||'', onChange:v=>set('cvLabel',v), placeholder:'Analyse my CV or profile' })}
+    {lbl("Questions Path Label")}
+    {inp({ value:cfg.guidedLabel||'', onChange:v=>set('guidedLabel',v), placeholder:'Guide me to the right role' })}
+    <div style={{ display:'flex', flexDirection:'column', gap:6, paddingTop:4 }}>
+      {[['enableCv','Show CV upload path'],['enableGuided','Show guided questions'],['enableAlerts','Talent alert sign-up']].map(([key,label])=>(
+        <label key={key} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, cursor:'pointer', color:C.text2, fontFamily:F }}>
+          <input type="checkbox" checked={cfg[key]!==false} onChange={e=>set(key,e.target.checked)}/>
+          {label}
+        </label>
+      ))}
+    </div>
+    {lbl("Background")}
+    <select value={cfg.bgStyle||'light'} onChange={e=>set('bgStyle',e.target.value)}
+      style={{ padding:'7px 10px', borderRadius:6, border:`1.5px solid ${C.border}`, fontSize:12, fontFamily:F, color:C.text1, background:C.surface }}>
+      <option value="light">Light grey</option>
+      <option value="accent">Accent tint</option>
+      <option value="dark">Dark</option>
+    </select>
+  </div>
+);
 
 const MultistepFormConfig = ({ cfg, set, inp, lbl }) => {
   const [activeStep, setActiveStep] = useState(0);
@@ -2613,6 +2653,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         </div>
       );
       case "html_embed":     return <HtmlEmbedConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} cell={cell} onUpdate={onUpdate}/>;
+      case "find_your_fit":  return <FindYourFitConfig cfg={cfg} set={set} inp={inp} lbl={lbl}/>;
       default: return <p style={{ fontSize:12, color:C.text3, margin:0 }}>No settings for this widget.</p>;
     }
   };
@@ -3938,6 +3979,291 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
 };
 
 // ─── HM Widget Configurator (for hm_portal type) ─────────────────────────────
+// ─── AI Site Generator ────────────────────────────────────────────────────────
+const AiSiteGenerator = ({ portal, onApply, onClose }) => {
+  const GF = "'DM Sans', -apple-system, sans-serif";
+  const GC = { bg:'#0F1729', surface:'#1A2340', card:'#1E2C4A', border:'rgba(255,255,255,0.1)',
+    accent:'#4361EE', accentL:'rgba(67,97,238,0.18)', text1:'#F1F5F9', text2:'#94A3B8',
+    text3:'#475569', green:'#10B981', amber:'#F59E0B' };
+
+  const PALETTES = [
+    { id:'indigo',   name:'Indigo',   primary:'#4361EE', secondary:'#7C3AED', bg:'#FFFFFF', text:'#0F1729' },
+    { id:'slate',    name:'Slate',    primary:'#334155', secondary:'#64748B', bg:'#F8FAFC', text:'#0F172A' },
+    { id:'teal',     name:'Teal',     primary:'#0D9488', secondary:'#0891B2', bg:'#F0FDFA', text:'#134E4A' },
+    { id:'violet',   name:'Violet',   primary:'#7C3AED', secondary:'#4361EE', bg:'#FAF5FF', text:'#1E1B4B' },
+    { id:'rose',     name:'Rose',     primary:'#E11D48', secondary:'#F43F5E', bg:'#FFFFFF', text:'#1C1917' },
+    { id:'amber',    name:'Amber',    primary:'#D97706', secondary:'#B45309', bg:'#FFFBEB', text:'#1C1917' },
+    { id:'midnight', name:'Midnight', primary:'#6366F1', secondary:'#818CF8', bg:'#0F172A', text:'#F1F5F9' },
+    { id:'forest',   name:'Forest',   primary:'#16A34A', secondary:'#15803D', bg:'#F0FDF4', text:'#14532D' },
+  ];
+  const INDUSTRIES = ['Technology','Finance & Fintech','Healthcare','Retail & E-commerce',
+    'Professional Services','Media & Entertainment','Education','Manufacturing','Real Estate','Other'];
+  const TONES = [
+    { id:'professional', label:'Professional & Authoritative', desc:'Formal, credible, enterprise-grade' },
+    { id:'startup',      label:'Startup & Dynamic',            desc:'Energetic, bold, challenger brand' },
+    { id:'warm',         label:'Warm & Human',                desc:'Friendly, approachable, people-first' },
+    { id:'innovative',   label:'Innovative & Forward-looking', desc:'Tech-forward, ambitious, visionary' },
+    { id:'premium',      label:'Premium & Refined',           desc:'Luxury, high-touch, selective' },
+  ];
+  const SECTION_OPTIONS = [
+    { id:'hero',         label:'Hero',            desc:'Opening statement & CTA',          default:true  },
+    { id:'stats',        label:'Company Stats',   desc:'Key numbers (size, growth, etc.)', default:true  },
+    { id:'culture',      label:'Culture & Values',desc:'Why work here section',            default:true  },
+    { id:'benefits',     label:'Benefits',        desc:'Perks and employee benefits',      default:true  },
+    { id:'find_your_fit',label:'Find Your Fit',   desc:'AI-powered job matching widget',   default:false },
+    { id:'jobs',         label:'Jobs Board',      desc:'Live open role listings',          default:true  },
+    { id:'team',         label:'Meet the Team',   desc:'People carousel',                  default:false },
+    { id:'testimonials', label:'Employee Stories',desc:'Quotes from current employees',    default:false },
+    { id:'cta',          label:'CTA Banner',      desc:'Closing call to action',           default:true  },
+  ];
+  const STEPS = [{ label:'Company', icon:'🏢' },{ label:'Brand', icon:'🎨' },{ label:'Sections', icon:'📋' },{ label:'Content', icon:'✍️' }];
+
+  const [step,          setStep]          = useState(0);
+  const [generating,    setGenerating]    = useState(false);
+  const [generated,     setGenerated]     = useState(null);
+  const [error,         setError]         = useState('');
+  const [applying,      setApplying]      = useState(false);
+  const [profileData,   setProfileData]   = useState(null);
+  const [brandKits,     setBrandKits]     = useState([]);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [usedBrandKit,  setUsedBrandKit]  = useState(null);
+  const [form, setForm] = useState({
+    company:'', tagline:'', industry:'', logo_url:'', tone:'professional',
+    palette:PALETTES[0], customPalette:null,
+    sections:SECTION_OPTIONS.filter(s=>s.default).map(s=>s.id),
+    messages:'', stats_input:'', benefits:'', team_intro:'',
+  });
+  const gset = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // ── Auto-load profile + brand kits ────────────────────────────────────────
+  useEffect(()=>{
+    const envId = portal?.environment_id;
+    if(!envId){ setProfileLoaded(true); return; }
+    const hdr = { 'X-Tenant-Slug':envId, 'X-User-Id':'portal-builder' };
+    Promise.all([
+      fetch(`/api/company-profile?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>null),
+      fetch(`/api/brand-kits?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>[]),
+    ]).then(([profile, kits])=>{
+      if(profile && !profile.error){
+        setProfileData(profile);
+        setForm(f=>({
+          ...f,
+          company    : f.company   || profile.name        || '',
+          tagline    : f.tagline   || profile.evp?.headline || profile.description?.slice(0,80) || '',
+          industry   : f.industry  || profile.industry    || '',
+          logo_url   : f.logo_url  || profile.logo_url    || '',
+          tone       : profile.tone || f.tone,
+          messages   : f.messages  || [profile.evp?.statement, profile.evp?.pillars?.length ? 'Key pillars: '+profile.evp.pillars.join(', ') : ''].filter(Boolean).join(' '),
+          stats_input: f.stats_input || [profile.size&&profile.size+' employees', profile.locations?.length&&profile.locations.length+' offices', profile.founded&&'Founded '+profile.founded].filter(Boolean).join(', '),
+          benefits   : f.benefits  || (profile.benefits||[]).join(', '),
+        }));
+      }
+      if(Array.isArray(kits)) setBrandKits(kits.filter(k=>!k.deleted_at));
+      setProfileLoaded(true);
+    });
+  },[portal?.environment_id]);
+
+  const applyBrandKit = (kit) => {
+    const t=kit.theme||{};
+    const custom={ id:'kit_'+kit.id, name:kit.name||'Brand Kit', isKit:true, logo:kit.logo||'',
+      primary:t.primaryColor||'#4361EE', secondary:t.secondaryColor||'#7C3AED', bg:t.bgColor||'#FFFFFF', text:t.textColor||'#0F1729' };
+    setForm(f=>({...f, palette:custom, customPalette:custom, logo_url:f.logo_url||kit.logo||''}));
+    setUsedBrandKit(kit);
+  };
+
+  const ginp = (value, onChange, placeholder, type='text') => (
+    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      style={{width:'100%',padding:'11px 14px',borderRadius:8,border:`1.5px solid ${GC.border}`,background:'rgba(255,255,255,0.06)',color:GC.text1,fontSize:14,fontFamily:GF,outline:'none',boxSizing:'border-box'}}
+      onFocus={e=>e.target.style.borderColor=GC.accent} onBlur={e=>e.target.style.borderColor=GC.border}/>
+  );
+  const glbl = (text, optional) => (
+    <div style={{fontSize:11,fontWeight:700,color:GC.text2,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6,marginTop:16,display:'flex',alignItems:'center',gap:6}}>
+      {text}{optional&&<span style={{fontWeight:400,textTransform:'none',color:GC.text3,letterSpacing:0}}>· optional</span>}
+    </div>
+  );
+  const SrcBadge = ({src}) => <span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:src==='profile'?GC.green+'20':GC.accent+'20',color:src==='profile'?GC.green:GC.accent,fontWeight:600,marginLeft:6}}>{src==='profile'?'↑ profile':'↑ brand kit'}</span>;
+
+  const generate = async () => {
+    if(!form.company){setError('Please enter your company name.');return;}
+    setGenerating(true); setError('');
+    try {
+      const envId = portal?.environment_id;
+      const res = await fetch('/api/portals/generate',{method:'POST',
+        headers:{'Content-Type':'application/json','X-Tenant-Slug':envId||'','X-User-Id':'portal-builder'},
+        body:JSON.stringify({...form, palette:form.palette})});
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
+      setGenerated({...portal,theme:data.portal.theme||portal.theme,nav:data.portal.nav||portal.nav,footer:data.portal.footer||portal.footer,pages:data.portal.pages||portal.pages,branding:{...(portal.branding||{}),company_name:form.company,tagline:form.tagline,logo_url:form.logo_url||portal?.branding?.logo_url||''}});
+      setStep(5);
+    } catch(e){setError(e.message||'Generation failed.');setStep(3);}
+    finally{setGenerating(false);}
+  };
+  const handleApply = () => { setApplying(true); setTimeout(()=>{onApply(generated);onClose();},400); };
+  const canContinue = () => { if(!profileLoaded||generating)return false; if(step===0)return form.company.trim().length>0; if(step===2)return form.sections.length>=2; return true; };
+  const handleNext = () => { if(step===0&&!form.company){setError('Please enter your company name.');return;} setError(''); if(step===3)generate(); else setStep(s=>s+1); };
+
+  const gcard = {background:GC.card,borderRadius:12,padding:'16px',border:`1px solid ${GC.border}`};
+
+  const renderStep = () => {
+    if(!profileLoaded) return (<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:40}}><div style={{textAlign:'center'}}><style>{`@keyframes asg-sp{to{transform:rotate(360deg);}}`}</style><div style={{width:36,height:36,borderRadius:'50%',border:`3px solid ${GC.accent}30`,borderTopColor:GC.accent,animation:'asg-sp 0.8s linear infinite',margin:'0 auto 12px'}}/><div style={{fontSize:13,color:GC.text2}}>Loading your profile data…</div></div></div>);
+    if(generating) return (<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:40,textAlign:'center'}}><style>{`@keyframes asg-spin{to{transform:rotate(360deg);}}@keyframes asg-pulse{0%,100%{opacity:1;}50%{opacity:.4;}}`}</style><div style={{position:'relative',width:80,height:80,margin:'0 auto 28px'}}><div style={{width:80,height:80,borderRadius:'50%',border:`4px solid ${GC.accent}22`,borderTopColor:GC.accent,animation:'asg-spin 1s linear infinite'}}/><div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>✨</div></div><h2 style={{margin:'0 0 12px',fontSize:22,fontWeight:800,color:GC.text1,fontFamily:GF}}>Building your career site…</h2>{['Crafting your hero section…','Writing candidate-facing copy…','Configuring job listings…','Designing your brand palette…','Adding the finishing touches…'].map((msg,i)=>(<div key={i} style={{fontSize:13,color:GC.text2,animation:`asg-pulse 1.5s ease-in-out ${i*0.3}s infinite`}}>{msg}</div>))}</div>);
+
+    if(step===0) return (<div style={{padding:'24px 32px',maxWidth:520}}>
+      {profileData&&(profileData.name||profileData.industry)&&(<div style={{marginBottom:20,padding:'12px 14px',borderRadius:10,background:`${GC.green}14`,border:`1px solid ${GC.green}30`,display:'flex',alignItems:'flex-start',gap:10}}><span style={{fontSize:16,flexShrink:0}}>✓</span><div><div style={{fontSize:12,fontWeight:700,color:GC.green,marginBottom:3}}>Company profile found</div><div style={{fontSize:12,color:GC.text2,lineHeight:1.5}}>Pre-filled from Settings → Company Profile. Review and adjust anything before continuing.</div></div></div>)}
+      <h2 style={{margin:'0 0 6px',fontSize:22,fontWeight:800,color:GC.text1,fontFamily:GF}}>Tell us about your company</h2>
+      <p style={{margin:'0 0 20px',fontSize:14,color:GC.text2}}>This becomes the foundation of your career site copy and branding.</p>
+      <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{fontSize:11,fontWeight:700,color:GC.text2,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Company Name *</div>{profileData?.name&&form.company===profileData.name&&<SrcBadge src="profile"/>}</div>
+      {ginp(form.company,v=>gset('company',v),'e.g. Acme Technologies')}
+      {glbl('Tagline',true)}
+      {ginp(form.tagline,v=>gset('tagline',v),'e.g. Build the future, together')}
+      {glbl('Industry')}
+      <select value={form.industry} onChange={e=>gset('industry',e.target.value)} style={{width:'100%',padding:'11px 14px',borderRadius:8,border:`1.5px solid ${GC.border}`,background:'rgba(255,255,255,0.06)',color:GC.text1,fontSize:14,fontFamily:GF,outline:'none'}}>
+        <option value="">Select industry…</option>{INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
+      </select>
+      {glbl('Logo URL',true)}
+      {ginp(form.logo_url,v=>gset('logo_url',v),'https://…')}
+      {form.logo_url&&<div style={{marginTop:8,display:'flex',alignItems:'center',gap:10}}><img src={form.logo_url} alt="logo" style={{height:32,objectFit:'contain',borderRadius:4}} onError={e=>e.target.style.display='none'}/><span style={{fontSize:11,color:GC.text2}}>Preview</span></div>}
+      {error&&<div style={{marginTop:16,padding:'10px 14px',borderRadius:8,background:'rgba(239,68,68,0.1)',color:'#FCA5A5',fontSize:13}}>{error}</div>}
+    </div>);
+
+    if(step===1) return (<div style={{padding:'24px 32px'}}>
+      <h2 style={{margin:'0 0 6px',fontSize:22,fontWeight:800,color:GC.text1,fontFamily:GF}}>Brand & Tone</h2>
+      <p style={{margin:'0 0 20px',fontSize:14,color:GC.text2}}>Choose a colour palette and the tone of voice for your site copy.</p>
+      {brandKits.length>0&&(<div style={{marginBottom:20}}>
+        {glbl('Your Saved Brand Kits')}
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {brandKits.map(kit=>{ const t=kit.theme||{}; const isActive=usedBrandKit?.id===kit.id; return (
+            <div key={kit.id} onClick={()=>isActive?()=>{setUsedBrandKit(null);gset('palette',PALETTES[0]);gset('customPalette',null);}:applyBrandKit(kit)}
+              style={{borderRadius:10,border:`2px solid ${isActive?GC.accent:GC.border}`,background:isActive?GC.accentL:'transparent',overflow:'hidden',cursor:'pointer',transition:'all .15s'}}>
+              <div style={{display:'flex',height:6}}>{[t.primaryColor,t.secondaryColor,t.accentColor,t.bgColor,t.textColor].filter(Boolean).map((cc,i)=><div key={i} style={{flex:1,background:cc}}/>)}</div>
+              <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+                {kit.logo?<img src={kit.logo} alt="" style={{height:24,maxWidth:60,objectFit:'contain'}} onError={e=>e.target.style.display='none'}/>:<div style={{width:24,height:24,borderRadius:6,background:t.primaryColor||GC.accent}}/>}
+                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:GC.text1}}>{kit.name}</div>{kit.source_url&&<div style={{fontSize:11,color:GC.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{kit.source_url}</div>}</div>
+                <div style={{fontSize:12,fontWeight:700,color:isActive?GC.green:GC.accent,flexShrink:0}}>{isActive?'✓ Applied':'Use this'}</div>
+              </div>
+            </div>
+          );})}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0 16px'}}><div style={{flex:1,height:1,background:GC.border}}/><span style={{fontSize:11,color:GC.text3,fontWeight:600}}>OR CHOOSE A PRESET</span><div style={{flex:1,height:1,background:GC.border}}/></div>
+      </div>)}
+      {glbl('Colour Palette')}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:4,opacity:usedBrandKit?0.4:1,pointerEvents:usedBrandKit?'none':'auto'}}>
+        {PALETTES.map(p=>(<div key={p.id} onClick={()=>{gset('palette',p);gset('customPalette',null);}} style={{borderRadius:10,overflow:'hidden',cursor:'pointer',border:`2.5px solid ${!usedBrandKit&&form.palette?.id===p.id?GC.accent:'transparent'}`,transition:'all .15s'}}>
+          <div style={{height:32,background:`linear-gradient(135deg,${p.primary},${p.secondary})`}}/><div style={{padding:'6px 8px',background:p.bg,borderTop:`1px solid ${GC.border}`}}><div style={{fontSize:10,fontWeight:700,color:p.text,marginBottom:2}}>{p.name}</div><div style={{height:3,background:p.primary,borderRadius:2}}/></div>
+        </div>))}
+      </div>
+      <div style={{marginTop:10,padding:'8px 12px',borderRadius:8,background:`${usedBrandKit?GC.green:GC.accent}18`,border:`1px solid ${usedBrandKit?GC.green:GC.accent}30`,fontSize:12,color:GC.text2,display:'flex',alignItems:'center',gap:8}}>
+        <div style={{width:12,height:12,borderRadius:3,background:form.palette?.primary||GC.accent,flexShrink:0}}/>
+        <span>{usedBrandKit?<><strong style={{color:GC.green}}>Brand kit: </strong>{usedBrandKit.name}</>:<><strong style={{color:GC.text1}}>{form.palette?.name}</strong> — {form.palette?.primary}</>}</span>
+        {usedBrandKit&&<button onClick={()=>{setUsedBrandKit(null);gset('palette',PALETTES[0]);gset('customPalette',null);}} style={{marginLeft:'auto',background:'none',border:'none',color:GC.text3,cursor:'pointer',fontSize:11,fontFamily:GF}}>Clear ×</button>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>{glbl('Tone of Voice')}{profileData?.tone&&<SrcBadge src="profile"/>}</div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {TONES.map(t=>(<div key={t.id} onClick={()=>gset('tone',t.id)} style={{padding:'10px 14px',borderRadius:8,cursor:'pointer',transition:'all .12s',border:`1.5px solid ${form.tone===t.id?GC.accent:GC.border}`,background:form.tone===t.id?GC.accentL:'transparent',display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:14,height:14,borderRadius:'50%',flexShrink:0,border:`2px solid ${form.tone===t.id?GC.accent:GC.text3}`,background:form.tone===t.id?GC.accent:'transparent'}}/>
+          <div><div style={{fontSize:13,fontWeight:600,color:GC.text1}}>{t.label}</div><div style={{fontSize:11,color:GC.text2}}>{t.desc}</div></div>
+        </div>))}
+      </div>
+    </div>);
+
+    if(step===2) return (<div style={{padding:'24px 32px'}}>
+      <h2 style={{margin:'0 0 6px',fontSize:22,fontWeight:800,color:GC.text1,fontFamily:GF}}>Which sections do you want?</h2>
+      <p style={{margin:'0 0 24px',fontSize:14,color:GC.text2}}>Select everything you want on your career site. You can edit or add more after.</p>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {SECTION_OPTIONS.map(s=>{ const on=form.sections.includes(s.id); return (<div key={s.id} onClick={()=>gset('sections',on?form.sections.filter(x=>x!==s.id):[...form.sections,s.id])} style={{padding:'10px 14px',borderRadius:8,cursor:'pointer',transition:'all .12s',border:`1.5px solid ${on?GC.accent:GC.border}`,background:on?GC.accentL:'transparent',display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:18,height:18,borderRadius:4,flexShrink:0,border:`2px solid ${on?GC.accent:GC.text3}`,background:on?GC.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            {on&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+          </div>
+          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:GC.text1}}>{s.label}</div><div style={{fontSize:11,color:GC.text2}}>{s.desc}</div></div>
+        </div>);})}
+      </div>
+      {form.sections.length<2&&<div style={{marginTop:12,padding:'10px 14px',borderRadius:8,background:`${GC.amber}18`,color:GC.amber,fontSize:12}}>Select at least 2 sections.</div>}
+    </div>);
+
+    if(step===3) return (<div style={{padding:'24px 32px',maxWidth:520}}>
+      <h2 style={{margin:'0 0 6px',fontSize:22,fontWeight:800,color:GC.text1,fontFamily:GF}}>Key messages</h2>
+      {profileData&&(profileData.evp?.statement||profileData.description)&&<div style={{marginBottom:16,padding:'10px 14px',borderRadius:8,background:`${GC.green}14`,border:`1px solid ${GC.green}30`,fontSize:12,color:GC.text2}}><span style={{color:GC.green,fontWeight:700}}>✓ </span>Pre-filled from your Company Profile. Review and adjust anything that needs updating.</div>}
+      <div style={{display:'flex',alignItems:'center',gap:6}}>{glbl("Why should someone join you?")}{profileData&&form.messages&&<SrcBadge src="profile"/>}</div>
+      <textarea value={form.messages} onChange={e=>gset('messages',e.target.value)} placeholder="e.g. Remote-first, meaningful equity, an engineering team that cares about quality." rows={4}
+        style={{width:'100%',padding:'11px 14px',borderRadius:8,border:`1.5px solid ${GC.border}`,background:'rgba(255,255,255,0.06)',color:GC.text1,fontSize:14,fontFamily:GF,outline:'none',boxSizing:'border-box',resize:'vertical'}}
+        onFocus={e=>e.target.style.borderColor=GC.accent} onBlur={e=>e.target.style.borderColor=GC.border}/>
+      {form.sections.includes('stats')&&<><div style={{display:'flex',alignItems:'center',gap:6}}>{glbl('Company stats',true)}{profileData&&form.stats_input&&<SrcBadge src="profile"/>}</div>{ginp(form.stats_input,v=>gset('stats_input',v),'e.g. 500+ team, 4.8★ Glassdoor, 40 countries')}</>}
+      {form.sections.includes('benefits')&&<>{glbl('Benefits',true)}{ginp(form.benefits,v=>gset('benefits',v),'e.g. Unlimited PTO, private health, £5k learning budget')}</>}
+      {form.sections.includes('team')&&<>{glbl('Team intro',true)}{ginp(form.team_intro,v=>gset('team_intro',v),'e.g. A team of 50 engineers from 20+ countries')}</>}
+      {error&&<div style={{marginTop:16,padding:'10px 14px',borderRadius:8,background:'rgba(239,68,68,0.1)',color:'#FCA5A5',fontSize:13}}>{error}</div>}
+      <div style={{marginTop:20,padding:'14px 16px',borderRadius:10,background:GC.accentL,border:`1px solid ${GC.accent}40`}}>
+        <div style={{fontSize:12,fontWeight:700,color:GC.accent,marginBottom:4}}>✨ Ready to generate</div>
+        <div style={{fontSize:12,color:GC.text2,lineHeight:1.5}}>Building for <strong style={{color:GC.text1}}>{form.company}</strong> · {form.sections.length} sections{usedBrandKit?` · ${usedBrandKit.name} palette`:''} · Takes ~15 seconds</div>
+      </div>
+    </div>);
+
+    if(step===5&&generated) return (<div style={{padding:'24px 32px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <div style={{width:36,height:36,borderRadius:10,background:GC.green+'22',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>✓</div>
+        <div><h2 style={{margin:0,fontSize:18,fontWeight:800,color:GC.text1,fontFamily:GF}}>Your career site is ready</h2><p style={{margin:0,fontSize:13,color:GC.text2}}>{generated.pages?.[0]?.rows?.length||0} sections · {form.sections.length} content types{usedBrandKit?` · ${usedBrandKit.name} palette`:` · ${form.palette?.name} palette`}</p></div>
+      </div>
+      <div style={{...gcard,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:700,color:GC.text2,marginBottom:10}}>SECTIONS GENERATED</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+          {(generated.pages?.[0]?.rows||[]).map((row,i)=>{ const LABELS={hero:'Hero',stats:'Stats',text:'Culture',jobs:'Jobs Board',team:'Team',cta_banner:'CTA',find_your_fit:'Find Your Fit',testimonials:'Testimonials'}; const lbl=LABELS[row.cells?.[0]?.widgetType]||row.cells?.[0]?.widgetType; return lbl?(<span key={i} style={{padding:'3px 10px',borderRadius:99,background:GC.accentL,color:GC.accent,fontSize:11,fontWeight:600}}>{lbl}</span>):null; })}
+        </div>
+      </div>
+      {generated.pages?.[0]?.rows?.[0]?.cells?.[0]?.widgetConfig&&(()=>{ const hero=generated.pages[0].rows[0].cells[0].widgetConfig; const pr=generated.theme?.primaryColor||GC.accent; const sc=generated.theme?.secondaryColor||'#7C3AED'; return (<div style={{...gcard,marginBottom:16,overflow:'hidden'}}>
+        <div style={{fontSize:11,fontWeight:700,color:GC.text2,marginBottom:10}}>HERO PREVIEW</div>
+        <div style={{background:`linear-gradient(135deg,${pr},${sc})`,borderRadius:8,padding:'20px',textAlign:hero.align||'center'}}>
+          <div style={{fontSize:17,fontWeight:800,color:'white',marginBottom:6,lineHeight:1.3}}>{hero.headline||form.company}</div>
+          <div style={{fontSize:12,color:'rgba(255,255,255,0.75)',marginBottom:12}}>{hero.subheading||''}</div>
+          {hero.primaryCta&&<div style={{display:'inline-block',padding:'7px 18px',borderRadius:8,background:'white',color:pr,fontSize:12,fontWeight:700}}>{hero.primaryCta}</div>}
+        </div>
+      </div>);})()} 
+      <div style={{...gcard,marginBottom:20}}>
+        <div style={{fontSize:11,fontWeight:700,color:GC.text2,marginBottom:10}}>THEME APPLIED</div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {[['Primary',generated.theme?.primaryColor],['Secondary',generated.theme?.secondaryColor],['Background',generated.theme?.bgColor],['Text',generated.theme?.textColor]].map(([k,v])=>v&&(<div key={k} style={{display:'flex',alignItems:'center',gap:6}}><div style={{width:16,height:16,borderRadius:4,background:v,border:'1px solid rgba(255,255,255,0.2)'}}/><span style={{fontSize:11,color:GC.text2}}>{k}: {v}</span></div>))}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:10}}>
+        <button onClick={()=>{setGenerated(null);setStep(3);}} style={{padding:'11px 20px',borderRadius:9,border:`1.5px solid ${GC.border}`,background:'transparent',color:GC.text1,fontSize:14,fontWeight:600,fontFamily:GF,cursor:'pointer'}}>↩ Regenerate</button>
+        <button onClick={handleApply} disabled={applying} style={{flex:1,padding:'11px 20px',borderRadius:9,border:'none',background:GC.accent,color:'white',fontSize:14,fontWeight:700,fontFamily:GF,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{applying?'…':'✨ Apply to portal'}</button>
+      </div>
+      <p style={{margin:'10px 0 0',fontSize:11,color:GC.text3,textAlign:'center'}}>Replaces current theme, nav, footer and pages. Everything is editable after applying.</p>
+    </div>);
+    return null;
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',background:'rgba(0,0,0,0.6)',backdropFilter:'blur(4px)'}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{width:580,maxWidth:'100vw',background:GC.bg,display:'flex',flexDirection:'column',height:'100%',boxShadow:'-24px 0 64px rgba(0,0,0,.5)',marginLeft:'auto',overflow:'hidden'}}>
+        <div style={{padding:'20px 32px 16px',borderBottom:`1px solid ${GC.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:32,height:32,borderRadius:8,background:GC.accentL,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>✨</div>
+            <div><div style={{fontSize:15,fontWeight:800,color:GC.text1,fontFamily:GF}}>Generate with AI</div><div style={{fontSize:11,color:GC.text2}}>Career site builder</div></div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:GC.text2,fontSize:20,lineHeight:1,padding:4}}>×</button>
+        </div>
+        {profileLoaded&&!generating&&step<4&&(<div style={{padding:'16px 32px 0',flexShrink:0}}>
+          <div style={{display:'flex',gap:0,position:'relative'}}>
+            {STEPS.map((s,i)=>(<div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',position:'relative'}}>
+              {i>0&&<div style={{position:'absolute',top:14,left:'-50%',right:'50%',height:2,background:i<=step?GC.accent:GC.border,transition:'background .3s'}}/>}
+              <div style={{width:28,height:28,borderRadius:'50%',position:'relative',zIndex:1,border:`2px solid ${i<=step?GC.accent:GC.border}`,background:i<step?GC.accent:i===step?GC.accentL:GC.surface,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .3s'}}>
+                {i<step?<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>:<span style={{fontSize:11,color:i===step?GC.accent:GC.text3}}>{i+1}</span>}
+              </div>
+              <div style={{fontSize:10,marginTop:4,fontWeight:600,color:i===step?GC.accent:GC.text3}}>{s.label}</div>
+            </div>))}
+          </div>
+        </div>)}
+        <div style={{flex:1,overflowY:'auto'}}>{renderStep()}</div>
+        {profileLoaded&&!generating&&step!==5&&(<div style={{padding:'16px 32px',borderTop:`1px solid ${GC.border}`,display:'flex',justifyContent:'space-between',flexShrink:0}}>
+          {step>0?<button onClick={()=>setStep(s=>s-1)} style={{padding:'10px 20px',borderRadius:8,border:`1.5px solid ${GC.border}`,background:'transparent',color:GC.text2,fontSize:14,fontFamily:GF,cursor:'pointer'}}>← Back</button>:<div/>}
+          <button onClick={handleNext} disabled={!canContinue()} style={{padding:'10px 24px',borderRadius:8,border:'none',background:canContinue()?GC.accent:GC.text3,color:'white',fontSize:14,fontWeight:700,fontFamily:GF,cursor:canContinue()?'pointer':'not-allowed',transition:'background .15s'}}>
+            {step===3?'✨ Generate site':'Continue →'}
+          </button>
+        </div>)}
+      </div>
+    </div>
+  );
+};
+
 // ─── Portal Builder (full-screen editor) ──────────────────────────────────────
 const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const [portal, setPortal] = useState({
@@ -4005,6 +4331,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
   const [showDomainWizard, setShowDomainWizard] = useState(false);
   const [showBrandKit,     setShowBrandKit]     = useState(false);
+  const [showAiGen,        setShowAiGen]        = useState(false);
   const [showPortalSettings, setShowPortalSettings] = useState(false);
   const [pageActionsFor,  setPageActionsFor]  = useState(null);
   const [isEditing, setIsEditing] = useState(true);
@@ -4155,6 +4482,9 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             <Ic n="sparkles" s={12} c={C.text2}/>Brand Kit
           </button>
           <Btn v="secondary" s="sm" icon="library" onClick={()=>setShowLibrary(true)}>Sections</Btn>
+          <button onClick={()=>setShowAiGen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 13px",borderRadius:7,background:C.accent,color:"white",fontSize:12,fontWeight:700,fontFamily:F,border:"none",cursor:"pointer",flexShrink:0}}>
+            <Ic n="sparkles" s={13} c="white"/> Generate
+          </button>
           <Btn v="primary" s="sm" onClick={handleSave} disabled={saving}>{saving?"Saving…":isDirty?"Save":"Saved ✓"}</Btn>
           <Btn v={portal.status==="published"?"success":"secondary"} s="sm"
             onClick={async ()=>{
@@ -4223,6 +4553,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         environmentId={portal.environment_id}
         onApply={(theme,logo)=>setPortal(p=>({...p,theme:{...p.theme,...theme},nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||""}}))}
         onClose={()=>setShowBrandKit(false)}/>}
+      {showAiGen&&<AiSiteGenerator portal={portal} onApply={p=>{setPortal(p);setShowAiGen(false);}} onClose={()=>setShowAiGen(false)}/>}
       {showTheme&&<>
         <div onClick={()=>setShowTheme(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
         <ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>

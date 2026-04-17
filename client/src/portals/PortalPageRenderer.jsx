@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
@@ -2183,6 +2183,289 @@ ${cfg.css||''}</style></head><body>${cfg.html}</body></html>`;
   );
 };
 
+const FindYourFitWidget = ({ cfg, theme, portal, api, track }) => {
+  const T = theme || {};
+  const primary     = T.primaryColor  || '#4361EE';
+  const textColor   = T.textColor     || '#0F1729';
+  const fontFamily  = T.fontFamily    || "'DM Sans', sans-serif";
+  const headingFont = T.headingFont   || fontFamily;
+  const radius      = parseInt(T.borderRadius) || 12;
+
+  const headline     = cfg.headline     || 'Find Your Perfect Role';
+  const subheading   = cfg.subheading   || "Tell us about yourself and we'll match you with the best opportunities.";
+  const enableCv     = cfg.enableCv     !== false;
+  const enableGuided = cfg.enableGuided !== false;
+  const enableAlerts = cfg.enableAlerts !== false;
+  const cvLabel      = cfg.cvLabel      || 'Analyse my CV or profile';
+  const guidedLabel  = cfg.guidedLabel  || 'Guide me to the right role';
+  const bgStyle      = cfg.bgStyle      || 'light';
+
+  const [phase,        setPhase]        = useState('chooser');
+  const [file,         setFile]         = useState(null);
+  const [dragOver,     setDragOver]     = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState('');
+  const [results,      setResults]      = useState([]);
+  const [profile,      setProfile]      = useState(null);
+  const [qStep,        setQStep]        = useState(0);
+  const [answers,      setAnswers]      = useState({});
+  const [depts,        setDepts]        = useState([]);
+  const [tagInput,     setTagInput]     = useState('');
+  const [alertEmail,   setAlertEmail]   = useState('');
+  const [alertSaved,   setAlertSaved]   = useState(false);
+  const [alertLoading, setAlertLoading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!portal?.environment_id) return;
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(objs => {
+        const jobObj = (Array.isArray(objs)?objs:[]).find(o=>o.slug==='jobs');
+        if (!jobObj) return null;
+        return api.get(`/records?object_id=${jobObj.id}&environment_id=${portal.environment_id}&limit=200`);
+      })
+      .then(data => {
+        if (!data) return;
+        const recs = data.records||data||[];
+        setDepts([...new Set(recs.map(r=>r.data?.department).filter(Boolean))]);
+      }).catch(()=>{});
+  }, [portal?.environment_id]);
+
+  const bg       = bgStyle==='dark'?'#0F1729':bgStyle==='accent'?primary+'10':'#F8F9FC';
+  const cardBg   = bgStyle==='dark'?'rgba(255,255,255,0.07)':'#FFFFFF';
+  const cardBdr  = bgStyle==='dark'?'rgba(255,255,255,0.12)':'#E8ECF8';
+  const fg       = bgStyle==='dark'?'#F1F5F9':textColor;
+  const fgMuted  = bgStyle==='dark'?'rgba(255,255,255,0.5)':'#64748B';
+  const btnF = { background:primary,color:'#fff',border:'none',padding:'11px 24px',borderRadius:radius,fontSize:14,fontWeight:700,fontFamily,cursor:'pointer' };
+  const btnO = { background:'transparent',color:primary,border:`2px solid ${primary}`,padding:'9px 20px',borderRadius:radius,fontSize:14,fontWeight:600,fontFamily,cursor:'pointer' };
+
+  const ScoreRing = ({ score }) => {
+    const r=24,circ=2*Math.PI*r,fill=(score/100)*circ;
+    const col=score>=70?'#10B981':score>=45?'#F59E0B':'#EF4444';
+    return (<div style={{position:'relative',width:64,height:64,flexShrink:0}}>
+      <svg width={64} height={64} style={{transform:'rotate(-90deg)'}}>
+        <circle cx={32} cy={32} r={r} fill="none" stroke={col+'22'} strokeWidth={5}/>
+        <circle cx={32} cy={32} r={r} fill="none" stroke={col} strokeWidth={5} strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"/>
+      </svg>
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+        <span style={{fontSize:15,fontWeight:800,color:col,lineHeight:1}}>{score}</span>
+        <span style={{fontSize:8,color:fgMuted,lineHeight:1,marginTop:1}}>match</span>
+      </div>
+    </div>);
+  };
+
+  const runFitCheck = async (profileData, filePayload) => {
+    setLoading(true); setError('');
+    if(track) track('fit_check_start',{method:filePayload?'cv':'questions'});
+    try {
+      const payload = filePayload||{profile:profileData};
+      const data = await api.post(`/portals/${portal.id}/fit-check`, payload);
+      if(data.error) throw new Error(data.error);
+      setResults(data.matches||[]);
+      setProfile(data.profile||profileData||{});
+      setPhase('results');
+      if(track) track('fit_check_complete',{results:data.matches?.length||0});
+    } catch(e) {
+      setError(e.message||'Something went wrong. Please try again.');
+      setPhase(filePayload?'cv_upload':'questions');
+    } finally { setLoading(false); }
+  };
+
+  const handleFileUpload = (f) => {
+    if(!f) return; setFile(f); setPhase('processing');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target.result.split(',')[1];
+      runFitCheck(null, {file:base64, filename:f.name});
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const QUESTIONS = [
+    {id:'department',question:'What type of role are you looking for?',hint:'Pick the area that best matches your expertise.',type:'chips',
+      options:depts.length>0?depts:['Engineering','Product','Design','Sales','Marketing','Finance','HR','Operations','Other']},
+    {id:'location',question:'Where are you based?',hint:'Helps us find local and remote options.',type:'text',placeholder:'e.g. Dubai, UAE'},
+    {id:'years_experience',question:'How much experience do you have?',hint:'In the type of role you selected.',type:'options',
+      options:[{label:'Just starting out',value:0},{label:'1–2 years',value:1},{label:'3–5 years',value:4},{label:'6–10 years',value:7},{label:'10+ years',value:12}]},
+    {id:'skills',question:'What are your key skills?',hint:'Press Enter or comma to add each one.',type:'tags',placeholder:'e.g. React, SQL, project management…'},
+    {id:'work_type',question:'Work location preference?',hint:'',type:'options',
+      options:[{label:'Remote',value:'Remote'},{label:'Hybrid',value:'Hybrid'},{label:'On-site',value:'On-site'},{label:'No preference',value:'Any'}]},
+  ];
+
+  const currentQ = QUESTIONS[qStep];
+  const answerQuestion = (val) => {
+    const updated={...answers,[currentQ.id]:val};
+    setAnswers(updated);
+    if(qStep<QUESTIONS.length-1){ setQStep(s=>s+1); }
+    else {
+      setPhase('processing');
+      runFitCheck({department:updated.department||'',location:updated.location||'',years_experience:updated.years_experience||0,skills:Array.isArray(updated.skills)?updated.skills:[],work_type:updated.work_type||'Any'});
+    }
+  };
+  const addTag=(v)=>{const c=v.trim();if(!c)return;const cur=answers.skills||[];if(!cur.includes(c))setAnswers(a=>({...a,skills:[...cur,c]}));setTagInput('');};
+  const removeTag=(t)=>setAnswers(a=>({...a,skills:(a.skills||[]).filter(x=>x!==t)}));
+
+  const saveAlert=async()=>{
+    if(!alertEmail.includes('@')) return;
+    setAlertLoading(true);
+    try{ await api.post(`/portals/${portal.id}/talent-alert`,{email:alertEmail,skills:profile?.skills||[],department:profile?.department||'',location:profile?.location||''});setAlertSaved(true);if(track)track('talent_alert_signup');}catch{}finally{setAlertLoading(false);}
+  };
+
+  const W=({children,mw=640})=>(<div style={{background:bg,padding:'48px 24px',fontFamily}}><div style={{maxWidth:mw,margin:'0 auto'}}>{children}</div></div>);
+  const BackBtn=({to})=>(<button onClick={()=>setPhase(to)} style={{background:'none',border:'none',color:fgMuted,fontSize:13,cursor:'pointer',fontFamily,marginBottom:24,padding:0,display:'flex',alignItems:'center',gap:6}}>← Back</button>);
+
+  if(phase==='chooser') return (<W mw={760}>
+    <div style={{textAlign:'center',marginBottom:40}}>
+      <h2 style={{margin:'0 0 10px',fontSize:'clamp(22px,4vw,32px)',fontWeight:800,color:fg,fontFamily:headingFont,letterSpacing:'-0.5px',lineHeight:1.2}}>{headline}</h2>
+      <p style={{margin:0,fontSize:16,color:fgMuted,maxWidth:480,marginInline:'auto',lineHeight:1.6}}>{subheading}</p>
+    </div>
+    <div style={{display:'flex',gap:16,flexWrap:'wrap',justifyContent:'center'}}>
+      {enableCv&&(<div onClick={()=>setPhase('cv_upload')} style={{flex:'1 1 280px',maxWidth:320,padding:'32px 24px',background:cardBg,border:`2px solid ${cardBdr}`,borderRadius:radius+4,cursor:'pointer',transition:'all .18s',textAlign:'center'}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=primary;e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 8px 28px ${primary}22`;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=cardBdr;e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none';}}>
+        <div style={{width:52,height:52,borderRadius:14,background:primary+'18',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+          <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+        <h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:fg,fontFamily:headingFont}}>{cvLabel}</h3>
+        <p style={{margin:0,fontSize:13,color:fgMuted,lineHeight:1.5}}>Upload your CV. Our AI reads your skills and experience and matches you to the best-fit roles instantly.</p>
+        <div style={{marginTop:20,color:primary,fontSize:13,fontWeight:600}}>Get started →</div>
+      </div>)}
+      {enableGuided&&(<div onClick={()=>{setQStep(0);setAnswers({});setPhase('questions');}} style={{flex:'1 1 280px',maxWidth:320,padding:'32px 24px',background:cardBg,border:`2px solid ${cardBdr}`,borderRadius:radius+4,cursor:'pointer',transition:'all .18s',textAlign:'center'}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=primary;e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 8px 28px ${primary}22`;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=cardBdr;e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none';}}>
+        <div style={{width:52,height:52,borderRadius:14,background:primary+'18',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+          <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx={12} cy={12} r={10}/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:fg,fontFamily:headingFont}}>{guidedLabel}</h3>
+        <p style={{margin:0,fontSize:13,color:fgMuted,lineHeight:1.5}}>Answer 5 quick questions. Takes under 2 minutes — no account, no CV needed.</p>
+        <div style={{marginTop:20,color:primary,fontSize:13,fontWeight:600}}>Get started →</div>
+      </div>)}
+    </div>
+  </W>);
+
+  if(phase==='cv_upload') return (<W>
+    <BackBtn to="chooser"/>
+    <h2 style={{margin:'0 0 8px',fontSize:24,fontWeight:800,color:fg,fontFamily:headingFont}}>Upload your CV</h2>
+    <p style={{margin:'0 0 28px',fontSize:14,color:fgMuted}}>We'll analyse it and match you with the most relevant open roles.</p>
+    <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
+      onDrop={e=>{e.preventDefault();setDragOver(false);const f=e.dataTransfer.files[0];if(f)handleFileUpload(f);}}
+      onClick={()=>fileInputRef.current?.click()}
+      style={{border:`2px dashed ${dragOver?primary:cardBdr}`,borderRadius:radius,padding:'44px 24px',textAlign:'center',cursor:'pointer',transition:'all .15s',background:dragOver?primary+'08':cardBg}}>
+      <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke={dragOver?primary:fgMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{margin:'0 auto 12px',display:'block'}}>
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p style={{margin:'0 0 4px',fontSize:15,fontWeight:600,color:fg}}>{dragOver?'Drop your file here':'Drag & drop or click to upload'}</p>
+      <p style={{margin:0,fontSize:12,color:fgMuted}}>PDF or DOCX · up to 10MB</p>
+      <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)handleFileUpload(f);}} style={{display:'none'}}/>
+    </div>
+    {error&&<div style={{marginTop:16,padding:'12px 16px',borderRadius:radius,background:'#FEF2F2',border:'1px solid #FCA5A5',color:'#B91C1C',fontSize:13}}>{error}</div>}
+  </W>);
+
+  if(phase==='processing'||loading) return (<W>
+    <div style={{textAlign:'center',padding:'20px 0'}}>
+      <style>{`@keyframes fyf-spin{to{transform:rotate(360deg);}}`}</style>
+      <div style={{width:60,height:60,borderRadius:'50%',border:`4px solid ${primary}22`,borderTopColor:primary,margin:'0 auto 24px',animation:'fyf-spin 0.85s linear infinite'}}/>
+      <h3 style={{margin:'0 0 8px',fontSize:20,fontWeight:700,color:fg,fontFamily:headingFont}}>{file?'Reading your profile…':'Finding your matches…'}</h3>
+      <p style={{margin:0,fontSize:14,color:fgMuted}}>{file?'Extracting your skills and experience.':'Scoring you against all open roles.'}</p>
+    </div>
+  </W>);
+
+  if(phase==='questions') { const q=currentQ; return (<W>
+    <div style={{marginBottom:32}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <button onClick={()=>qStep>0?setQStep(s=>s-1):setPhase('chooser')} style={{background:'none',border:'none',color:fgMuted,fontSize:13,cursor:'pointer',fontFamily,padding:0,display:'flex',alignItems:'center',gap:6}}>← {qStep>0?'Back':'Start over'}</button>
+        <span style={{fontSize:12,color:fgMuted}}>{qStep+1} of {QUESTIONS.length}</span>
+      </div>
+      <div style={{height:3,background:cardBdr,borderRadius:99}}>
+        <div style={{height:'100%',width:`${(qStep/QUESTIONS.length)*100}%`,background:primary,borderRadius:99,transition:'width .3s'}}/>
+      </div>
+    </div>
+    <h2 style={{margin:'0 0 8px',fontSize:'clamp(18px,3.5vw,26px)',fontWeight:800,color:fg,fontFamily:headingFont,lineHeight:1.25}}>{q.question}</h2>
+    {q.hint&&<p style={{margin:'0 0 28px',fontSize:14,color:fgMuted}}>{q.hint}</p>}
+    {q.type==='chips'&&(<div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+      {q.options.map(opt=>(<button key={opt} onClick={()=>answerQuestion(opt)} style={{padding:'10px 18px',borderRadius:99,border:`2px solid ${answers[q.id]===opt?primary:cardBdr}`,background:answers[q.id]===opt?primary:cardBg,color:answers[q.id]===opt?'#fff':fg,fontSize:14,fontWeight:600,fontFamily,cursor:'pointer',transition:'all .12s'}}>{opt}</button>))}
+    </div>)}
+    {q.type==='text'&&(<div>
+      <input value={answers[q.id]||''} onChange={e=>setAnswers(a=>({...a,[q.id]:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&answers[q.id]&&answerQuestion(answers[q.id])} placeholder={q.placeholder} autoFocus
+        style={{width:'100%',padding:'14px 16px',borderRadius:radius,border:`2px solid ${cardBdr}`,fontSize:15,fontFamily,color:fg,background:cardBg,outline:'none',boxSizing:'border-box'}}
+        onFocus={e=>e.target.style.borderColor=primary} onBlur={e=>e.target.style.borderColor=cardBdr}/>
+      <button onClick={()=>answers[q.id]&&answerQuestion(answers[q.id])} disabled={!answers[q.id]} style={{...btnF,marginTop:16,opacity:answers[q.id]?1:0.4}}>Continue →</button>
+    </div>)}
+    {q.type==='options'&&(<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {q.options.map(opt=>(<button key={opt.value} onClick={()=>answerQuestion(opt.value)} style={{padding:'14px 18px',borderRadius:radius,border:`2px solid ${answers[q.id]===opt.value?primary:cardBdr}`,background:answers[q.id]===opt.value?primary+'12':cardBg,color:answers[q.id]===opt.value?primary:fg,fontSize:14,fontWeight:600,fontFamily,cursor:'pointer',textAlign:'left',transition:'all .12s',display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${answers[q.id]===opt.value?primary:cardBdr}`,background:answers[q.id]===opt.value?primary:'transparent',flexShrink:0}}/>{opt.label}
+      </button>))}
+    </div>)}
+    {q.type==='tags'&&(<div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12,minHeight:38}}>
+        {(answers.skills||[]).map(tag=>(<span key={tag} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:99,background:primary+'18',color:primary,fontSize:13,fontWeight:600}}>
+          {tag}<button onClick={()=>removeTag(tag)} style={{background:'none',border:'none',cursor:'pointer',color:primary,padding:0}}>×</button>
+        </span>))}
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <input value={tagInput} onChange={e=>setTagInput(e.target.value)} autoFocus onKeyDown={e=>{if((e.key==='Enter'||e.key===',')&&tagInput.trim()){e.preventDefault();addTag(tagInput);}}} placeholder={q.placeholder}
+          style={{flex:1,padding:'12px 14px',borderRadius:radius,border:`2px solid ${cardBdr}`,fontSize:14,fontFamily,color:fg,background:cardBg,outline:'none'}}
+          onFocus={e=>e.target.style.borderColor=primary} onBlur={e=>e.target.style.borderColor=cardBdr}/>
+        <button onClick={()=>tagInput.trim()&&addTag(tagInput)} style={{...btnO,padding:'12px 16px'}}>Add</button>
+      </div>
+      <button onClick={()=>answerQuestion(answers.skills||[])} style={{...btnF,marginTop:16}}>{(answers.skills||[]).length>0?'Find my matches →':'Skip →'}</button>
+    </div>)}
+  </W>);}
+
+  if(phase==='results') return (<W mw={720}>
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:28,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{margin:'0 0 6px',fontSize:24,fontWeight:800,color:fg,fontFamily:headingFont}}>{results.length>0?`Your top ${results.length} match${results.length>1?'es':''}`:'No matches found'}</h2>
+        <p style={{margin:0,fontSize:14,color:fgMuted}}>{results.length>0?'Based on your skills, experience, and preferences.':'Try broadening your criteria to see more roles.'}</p>
+      </div>
+      <button onClick={()=>setPhase('chooser')} style={{...btnO,fontSize:13,padding:'8px 16px'}}>Start over</button>
+    </div>
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      {results.map((m,i)=>(<div key={m.job.id||i} style={{background:cardBg,border:`1.5px solid ${cardBdr}`,borderRadius:radius,padding:'20px',display:'flex',gap:16,transition:'box-shadow .15s,border-color .15s'}}
+        onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 20px ${primary}18`;e.currentTarget.style.borderColor=primary+'44';}}
+        onMouseLeave={e=>{e.currentTarget.style.boxShadow='none';e.currentTarget.style.borderColor=cardBdr;}}>
+        <ScoreRing score={m.score}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{marginBottom:6}}>
+            <h3 style={{margin:'0 0 4px',fontSize:16,fontWeight:700,color:fg,fontFamily:headingFont}}>{m.job.title}</h3>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
+              {m.job.department&&<span style={{fontSize:11,color:fgMuted}}>📁 {m.job.department}</span>}
+              {m.job.location&&<span style={{fontSize:11,color:fgMuted}}>📍 {m.job.location}</span>}
+              {m.job.work_type&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:99,background:primary+'15',color:primary,fontWeight:600}}>{m.job.work_type}</span>}
+              {(m.job.salary_min||m.job.salary_max)&&<span style={{fontSize:11,color:fgMuted}}>💰 {m.job.currency||'USD'} {m.job.salary_min?m.job.salary_min.toLocaleString():''}{m.job.salary_min&&m.job.salary_max?'–':''}{m.job.salary_max?m.job.salary_max.toLocaleString():''}</span>}
+            </div>
+          </div>
+          {(m.reasons.length>0||m.gaps.length>0)&&(<div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+            {m.reasons.map((r,ri)=>(<span key={ri} style={{fontSize:11,padding:'3px 9px',borderRadius:99,background:'#ECFDF5',color:'#065F46',fontWeight:500}}>✓ {r}</span>))}
+            {m.gaps.map((g,gi)=>(<span key={'g'+gi} style={{fontSize:11,padding:'3px 9px',borderRadius:99,background:'#FFFBEB',color:'#92400E',fontWeight:500}}>△ {g}</span>))}
+          </div>)}
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>{if(track)track('fit_apply',{job_id:m.job.id});window.dispatchEvent(new CustomEvent('vercentic:viewJob',{detail:{jobId:m.job.id,apply:true}}));}} style={{...btnF,fontSize:13,padding:'9px 18px'}}>Apply now</button>
+            <button onClick={()=>{if(track)track('fit_view',{job_id:m.job.id});window.dispatchEvent(new CustomEvent('vercentic:viewJob',{detail:{jobId:m.job.id}}));}} style={{...btnO,fontSize:13,padding:'7px 16px'}}>See full role</button>
+          </div>
+        </div>
+      </div>))}
+    </div>
+    {enableAlerts&&results.length>0&&(<div style={{marginTop:28,padding:24,borderRadius:radius,background:primary+'0E',border:`1.5px solid ${primary}30`}}>
+      {alertSaved?(<div style={{textAlign:'center',color:primary}}><div style={{fontSize:28,marginBottom:8}}>✓</div><p style={{margin:0,fontSize:14,fontWeight:600}}>You're on the list!</p><p style={{margin:'4px 0 0',fontSize:13,color:fgMuted}}>We'll notify you when new matching roles open.</p></div>):(<div>
+        <p style={{margin:'0 0 14px',fontSize:14,fontWeight:600,color:fg}}>Want to know when new matching roles open?</p>
+        <div style={{display:'flex',gap:8}}>
+          <input type="email" value={alertEmail} onChange={e=>setAlertEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveAlert()} placeholder="your@email.com"
+            style={{flex:1,padding:'10px 14px',borderRadius:radius,border:`1.5px solid ${primary}40`,fontSize:14,fontFamily,color:fg,background:cardBg,outline:'none'}}/>
+          <button onClick={saveAlert} disabled={alertLoading||!alertEmail.includes('@')} style={{...btnF,padding:'10px 18px',fontSize:13,opacity:alertEmail.includes('@')?1:0.4}}>{alertLoading?'…':'Notify me'}</button>
+        </div>
+        <p style={{margin:'8px 0 0',fontSize:11,color:fgMuted}}>No account needed. Unsubscribe any time.</p>
+      </div>)}
+    </div>)}
+  </W>);
+
+  return null;
+};
+
 const Widget = ({ cell, theme, portal, api, track }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
@@ -2201,6 +2484,7 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'job_list':       return <JobsWidget    cfg={{...cfg, compact:true}} theme={theme} portal={portal} api={api} track={track}/>
     case 'hm_profile':     return <TeamWidget    cfg={cfg} theme={theme} portal={portal} api={api}/>
     case 'multistep_form': return <MultistepFormWidget cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
+    case 'find_your_fit':  return <FindYourFitWidget cfg={cfg} theme={theme} portal={portal} api={api} track={track}/>
     case 'html_embed':     return <HtmlEmbedWidget     cfg={cfg} theme={theme}/>
     case 'testimonials':   return <TestimonialsWidget cfg={cfg} theme={theme}/>
     case 'rich_text':      return <RichTextWidget     cfg={cfg} theme={theme}/>
