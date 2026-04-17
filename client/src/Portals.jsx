@@ -3980,7 +3980,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
 
 // ─── HM Widget Configurator (for hm_portal type) ─────────────────────────────
 // ─── AI Site Generator ────────────────────────────────────────────────────────
-const AiSiteGenerator = ({ portal, onApply, onClose }) => {
+const AiSiteGenerator = ({ portal, api, onApply, onClose }) => {
   const GF = "'DM Sans', -apple-system, sans-serif";
   const GC = { bg:'#0F1729', surface:'#1A2340', card:'#1E2C4A', border:'rgba(255,255,255,0.1)',
     accent:'#4361EE', accentL:'rgba(67,97,238,0.18)', text1:'#F1F5F9', text2:'#94A3B8',
@@ -4050,10 +4050,9 @@ const AiSiteGenerator = ({ portal, onApply, onClose }) => {
   useEffect(()=>{
     const envId = portal?.environment_id;
     if(!envId){ setProfileLoaded(true); return; }
-    const hdr = { 'X-Tenant-Slug':envId, 'X-User-Id':'portal-builder' };
     Promise.all([
-      fetch(`/api/company-research?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>null),
-      fetch(`/api/brand-kits?environment_id=${envId}`,{headers:hdr}).then(r=>r.json()).catch(()=>[]),
+      api.get(`/company-research?environment_id=${envId}`).catch(()=>null),
+      api.get(`/brand-kits?environment_id=${envId}`).catch(()=>[]),
     ]).then(([profile, kits])=>{
       if(profile && !profile.error && profile.name){
         setProfileData(profile);
@@ -4107,11 +4106,7 @@ const AiSiteGenerator = ({ portal, onApply, onClose }) => {
     if(!form.company){setError('Please enter your company name.');return;}
     setGenerating(true); setError('');
     try {
-      const envId = portal?.environment_id;
-      const res = await fetch('/api/portals/generate',{method:'POST',
-        headers:{'Content-Type':'application/json','X-Tenant-Slug':envId||'','X-User-Id':'portal-builder'},
-        body:JSON.stringify({...form, palette:form.palette})});
-      const data = await res.json();
+      const data = await api.post('/portals/generate', {...form, palette:form.palette});
       if(data.error) throw new Error(data.error);
       setGenerated({...portal,theme:data.portal.theme||portal.theme,nav:data.portal.nav||portal.nav,footer:data.portal.footer||portal.footer,pages:data.portal.pages||portal.pages,branding:{...(portal.branding||{}),company_name:form.company,tagline:form.tagline,logo_url:form.logo_url||portal?.branding?.logo_url||''}});
       setStep(5);
@@ -4508,16 +4503,16 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
                   {icon:"sparkles", label:"Brand Kit",  onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
                   {icon:"library",  label:"Sections",   onClick:()=>{setShowLibrary(true);setShowMoreMenu(false);}},
                   {icon:"settings", label:"Settings",   onClick:()=>{setShowPortalSettings(s=>!s);setShowMoreMenu(false);}},
-                ].map((item,i)=>(<>
-                  {i===2&&<div key="div" style={{height:1,background:C.border,margin:"3px 0"}}/>}
-                  <button key={item.label} onClick={item.onClick}
+                ].map((item,i)=>(<div key={item.label}>
+                  {i===2&&<div style={{height:1,background:C.border,margin:"3px 0"}}/>}
+                  <button onClick={item.onClick}
                     style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 11px",borderRadius:8,border:"none",
                       background:"transparent",cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:500,color:C.text1,textAlign:"left",transition:"background .1s"}}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <Ic n={item.icon} s={13} c={C.text2}/>{item.label}
                   </button>
-                </>))}
+                </div>))}
               </div>
             </>}
           </div>
@@ -4611,7 +4606,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         environmentId={portal.environment_id}
         onApply={(theme,logo)=>setPortal(p=>({...p,theme:{...p.theme,...theme},nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||""}}))}
         onClose={()=>setShowBrandKit(false)}/>}
-      {showAiGen&&<AiSiteGenerator portal={portal} onApply={p=>{setPortal(p);setShowAiGen(false);}} onClose={()=>setShowAiGen(false)}/>}
+      {showAiGen&&<AiSiteGenerator portal={portal} api={api} onApply={p=>{setPortal(p);setShowAiGen(false);}} onClose={()=>setShowAiGen(false)}/>}
       {showTheme&&<>
         <div onClick={()=>setShowTheme(false)} style={{position:"fixed",inset:0,zIndex:499}}/>
         <ThemeDrawer theme={portal.theme} onChange={t=>setPortal(p=>({...p,theme:t}))} onClose={()=>setShowTheme(false)}/>
