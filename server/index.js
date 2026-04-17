@@ -159,7 +159,7 @@ const AUTH_EXEMPT = [
   '/digest/preview',
   '/digest/send',
   '/portals/public', '/portals/by-slug', '/portals/slug',
-  '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout',
+  '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout', '/portal-auth/users',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/campaign-links',
     '/integrations',  

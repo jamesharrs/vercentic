@@ -20,26 +20,46 @@ router.post('/auth', (req, res) => {
 // ── Read .env ─────────────────────────────────────────────────────────────────
 router.get('/env', (req, res) => {
   try {
-    const raw = fs.readFileSync(ENV_PATH, 'utf8');
-    const lines = raw.split('\n');
-    const vars = [];
-    let currentComment = '';
+    // On Railway there is no .env file — env vars are injected directly.
+    // Try to read the file; if it doesn't exist, fall back to process.env.
+    let vars = [];
+    let raw  = '';
 
-    lines.forEach((line, i) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('# ─')) {
-        currentComment = trimmed.replace(/^#\s*─+\s*/, '').replace(/\s*─+\s*$/, '').trim();
-      } else if (trimmed.startsWith('#')) {
-        // inline comment — skip
-      } else if (trimmed.includes('=')) {
-        const eqIdx = trimmed.indexOf('=');
-        const key   = trimmed.slice(0, eqIdx).trim();
-        const value = trimmed.slice(eqIdx + 1).trim();
-        vars.push({ key, value, group: currentComment || 'General', line: i });
-      }
-    });
+    const envFileExists = fs.existsSync(ENV_PATH);
+    if (envFileExists) {
+      raw = fs.readFileSync(ENV_PATH, 'utf8');
+      const lines = raw.split('\n');
+      let currentComment = '';
+      lines.forEach((line, i) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('# ─')) {
+          currentComment = trimmed.replace(/^#\s*─+\s*/, '').replace(/\s*─+\s*$/, '').trim();
+        } else if (trimmed.startsWith('#')) {
+          // inline comment — skip
+        } else if (trimmed.includes('=')) {
+          const eqIdx = trimmed.indexOf('=');
+          const key   = trimmed.slice(0, eqIdx).trim();
+          const value = trimmed.slice(eqIdx + 1).trim();
+          vars.push({ key, value, group: currentComment || 'General', line: i });
+        }
+      });
+    } else {
+      // Railway / no .env file — expose process.env (filter out internal Node vars)
+      const SKIP = ['PATH','HOME','USER','SHELL','TERM','COLORTERM','TMPDIR','LANG',
+                    'LC_ALL','PWD','OLDPWD','SHLVL','_','RAILWAY_'];
+      Object.entries(process.env).forEach(([key, value], i) => {
+        if (SKIP.some(s => key.startsWith(s))) return;
+        const group = key.startsWith('TWILIO') ? 'Twilio (SMS + WhatsApp)'
+                    : key.startsWith('SENDGRID') ? 'SendGrid (Email)'
+                    : key.startsWith('ANTHROPIC') ? 'AI'
+                    : key.startsWith('DATABASE') || key.startsWith('PG') ? 'Database'
+                    : 'General';
+        vars.push({ key, value: value || '', group, line: i, from_env: true });
+      });
+      raw = '# Environment variables sourced from Railway process.env (no .env file present)';
+    }
 
-    res.json({ vars, raw });
+    res.json({ vars, raw, env_file_exists: envFileExists });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
