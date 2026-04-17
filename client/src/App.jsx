@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, startTransition } from "react";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
-import { FeatureProvider } from "./hooks/useFeature.jsx";
+import { FeatureProvider, useFeature } from "./hooks/useFeature.jsx";
 import { useI18n } from "./i18n/I18nContext.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
@@ -1445,7 +1445,7 @@ function ThemePanel({ onClose }) {
 
 // ─── Record Page ─────────────────────────────────────────────────────────────
 // Standalone page — no overlay, no z-index, just a regular routed view
-function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNavigate, onHistoryUpdate, onRecordLoad }) {
+function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNavigate, onHistoryUpdate, onRecordLoad, featureFlags }) {
   const [state, setState] = useState(null); // { record, fields, object }
   const [loading, setLoading] = useState(true);
 
@@ -1507,16 +1507,33 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
       onUpdate={(updated) => setState(s => s ? { ...s, record: updated } : s)}
       onDelete={async (id) => { await api.delete(`/records/${id}`); onBack(); }}
       onNavigate={onNavigate}
+      featureFlags={featureFlags}
     />
   );
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
-function App() {
+function App({ onEnvReady }) {
   // ── ALL hooks must be called unconditionally before any early returns ────────
   const { TourPortal, startTour } = useTour();
   const { prefs, update } = useTheme();
   const { t, isRTL } = useI18n();
+
+  // ── Feature flags — reads from FeatureProvider in AppRoot ────────────────────
+  const featCopilot    = useFeature('ai_copilot');
+  const featInterviews = useFeature('interviews');
+  const featOffers     = useFeature('offers');
+  const featReports    = useFeature('reports');
+  const featOrgChart   = useFeature('org_chart');
+  const featWorkflows  = useFeature('workflows');
+  const featSourcing   = useFeature('workflows');
+  const featCampaigns  = useFeature('portals');
+  const featBulk       = useFeature('bulk_actions');
+  const featComms      = useFeature('communications_panel');
+  const featDupDetect  = useFeature('duplicate_detection');
+  const featCvParse    = useFeature('cv_parsing');
+  const featLinkedIn   = useFeature('linkedin_finder');
+  const featAiMatching = useFeature('ai_matching');
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   // ── App function — all hooks must be called unconditionally ─────────────────
@@ -1618,7 +1635,7 @@ function App() {
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
-      'help','matching','getting-started','setup_wizard','setup-wizard',
+      'help','matching','getting-started','company_profile','setup_wizard','setup-wizard',
     ];
     if (named.includes(seg0)) return seg0;
     return 'dashboard';
@@ -1696,25 +1713,43 @@ function App() {
       const def = (userEnvId && envs.find(e => e.id === userEnvId))
                || envs.find(e => e.is_default)
                || envs[0];
-      if (def) setSelectedEnv(def);
+      if (def) { setSelectedEnv(def); onEnvReady?.(def.id); }
       setLoading(false);
     }).catch(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiOnline, userId]);
 
-  useEffect(() => {
-    if (!selectedEnv?.id) return;
-    api.get(`/objects?environment_id=${selectedEnv.id}`).then(d => {
+  const loadNavObjects = useCallback((envId) => {
+    if (!envId) return;
+    api.get(`/objects?environment_id=${envId}`).then(d => {
       const objs = Array.isArray(d) ? d : [];
       setNavObjects(objs);
-      // Re-resolve activeNav now that we have objects — handles direct URL loads
-      // Only update if the URL genuinely points somewhere different from current nav
       const resolved = navFromPath(window.location.pathname, objs);
-      if (resolved !== activeNavRef.current) {
-        setActiveNav(resolved);
+      if (resolved !== activeNavRef.current) setActiveNav(resolved);
+      // If empty, retry once after 1.5s — catches the brief window after server restart
+      if (objs.length === 0) {
+        setTimeout(() => {
+          api.get(`/objects?environment_id=${envId}`).then(d2 => {
+            const objs2 = Array.isArray(d2) ? d2 : [];
+            if (objs2.length > 0) {
+              setNavObjects(objs2);
+              const r = navFromPath(window.location.pathname, objs2);
+              if (r !== activeNavRef.current) setActiveNav(r);
+            }
+          }).catch(() => {});
+        }, 1500);
       }
-    });
-  }, [selectedEnv?.id]);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadNavObjects(selectedEnv?.id);
+  }, [selectedEnv?.id, loadNavObjects]);
+
+  // Re-fetch objects whenever apiOnline flips back to true (server restart recovery)
+  useEffect(() => {
+    if (apiOnline === true && selectedEnv?.id) loadNavObjects(selectedEnv.id);
+  }, [apiOnline]);
 
   // Persist session context for error reporter
   useEffect(() => {
@@ -1762,19 +1797,19 @@ function App() {
     {
       label: t("nav.tools"),
       items: [
-        { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
+        featInterviews && { id: "interviews",  icon: "calendar",     label: t("nav.interviews") },
         { id: "calendar",    icon: "calendar-days", label: t("nav.calendar") },
-        { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
-        { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
-        { id: "campaigns",     icon: "zap",       label: "Campaigns" },
+        featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
+        featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
         { id: "chat",        icon: "message-circle", label: "Chat" },
         { id: "documents",   icon: "file-text",    label: "Documents" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
-        { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
+        featReports    && { id: "reports",     icon: "bar-chart-2",  label: t("nav.reports") },
         { id: "search",      icon: "search",       label: t("nav.search") },
-      ]
+      ].filter(Boolean)
     },
     // configure section removed — Help + Settings are in the user footer menu
   ];
@@ -1785,10 +1820,10 @@ function App() {
     items: section.items.filter(item => {
       if (['dashboard','dashboard_interviews','dashboard_offers','dashboard_agents','dashboard_admin','dashboard_screening','dashboard_onboarding','dashboard_custom','dashboard_insights'].includes(item.id))
         return canGlobal('access_dashboard');
-      if (item.id === 'org_chart')  return canGlobal('access_org_chart');
-      if (item.id === 'interviews') return canGlobal('access_interviews');
-      if (item.id === 'offers')     return canGlobal('access_offers');
-      if (item.id === 'reports')    return canGlobal('access_reports');
+      if (item.id === 'org_chart')  return canGlobal('access_org_chart') && featOrgChart;
+      if (item.id === 'interviews') return canGlobal('access_interviews') && featInterviews;
+      if (item.id === 'offers')     return canGlobal('access_offers')     && featOffers;
+      if (item.id === 'reports')    return canGlobal('access_reports')    && featReports;
       if (item.id === 'search')     return canGlobal('access_search');
       if (item.id === 'calendar')   return canGlobal('access_calendar');
       if (item.id === 'settings')   return canGlobal('manage_settings');
@@ -2095,7 +2130,6 @@ function App() {
   }
 
   return (
-    <FeatureProvider environmentId={selectedEnv?.id}>
     <PermissionProvider userId={userId}>
     <div style={{ minHeight: "100vh", background: "var(--t-bg)", fontFamily: "var(--t-font)", display: "flex" }}>
       <MaintenanceOverlay />
@@ -2196,7 +2230,7 @@ function App() {
                   t={t}
                   environments={environments}
                   selectedEnv={selectedEnv}
-                  onSwitchEnv={(env) => { setSelectedEnv(env); setActiveNav("dashboard"); }}
+                  onSwitchEnv={(env) => { setSelectedEnv(env); onEnvReady?.(env.id); setActiveNav("dashboard"); }}
                 />
               : <div style={{ display: "flex", justifyContent: "center", padding: "4px 0" }}>
                   <div
@@ -2272,10 +2306,13 @@ function App() {
           activeNav.startsWith("dashboard") ? "page-dashboard" :
           activeNav.startsWith("record_")   ? "page-record" :
           activeNav.startsWith("obj_")      ? "page-obj" :
+          activeNav.startsWith("resolve_")  ? "page-resolve" :
           `page-${activeNav}`
         } style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0, overflow:"auto",
           background: activeNav === "dashboard" || activeNav.startsWith("dashboard_") ? "#F8F7FF" : undefined }}>
-        { activeNav === "getting-started" ? (
+        { activeNav.startsWith("resolve_") ? (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>
+        ) : activeNav === "getting-started" ? (
           <GettingStarted environment={selectedEnv} navObjects={navObjects} onNavigate={switchNav} />
         ) : activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
@@ -2316,6 +2353,9 @@ function App() {
             autoCreate={createTarget?.id === _obj?.id ? createTarget : null}
             onAutoCreateConsumed={() => setCreateTarget(null)}
             session={session}
+            featureFlags={{ bulk_actions: featBulk, communications_panel: featComms,
+              duplicate_detection: featDupDetect, cv_parsing: featCvParse,
+              linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews }}
           />
           );
         })()
@@ -2323,6 +2363,7 @@ function App() {
           const parts = activeNav.split("_"); const recordId = parts[1]; const objectId = parts[2];
           const obj = navObjects.find(o => o.id === objectId);
           return <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"visible"}}><RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
+            featureFlags={{ bulk_actions: featBulk, communications_panel: featComms, duplicate_detection: featDupDetect, cv_parsing: featCvParse, linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews }}
             onRecordLoad={(rec, recObj) => {
             setActiveRecord(rec); setActiveRecordObj(recObj);
             // Swap UUID URL for clean numeric URL once record is loaded
@@ -2340,9 +2381,9 @@ function App() {
             }}/>
           </Suspense>
         ) : activeNav === "reports" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <ReportsPage environment={selectedEnv} initialReport={reportPreset} />
-          </Suspense>
+          featReports
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><ReportsPage environment={selectedEnv} initialReport={reportPreset} /></Suspense>
+            : <AccessDenied feature="Reports"/>
         ) : activeNav === "help" ? (
           <Suspense fallback={null}>
             <HelpPage onOpenCopilot={(msg) => {
@@ -2361,33 +2402,25 @@ function App() {
             />
           </Suspense>
         ) : activeNav === "orgchart" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <div style={{ padding:"28px 32px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column" }}>
-              <OrgChart environment={selectedEnv} />
-            </div>
-          </Suspense>
+          featOrgChart
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ padding:"28px 32px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column" }}><OrgChart environment={selectedEnv} /></div></Suspense>
+            : <AccessDenied feature="Org Chart"/>
         ) : activeNav === "interviews" ? (
-          canGlobal("access_interviews")
+          (canGlobal("access_interviews") && featInterviews)
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}><Interviews environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Interviews"/>
         ) : activeNav === "sourcing" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-              <SourcingHub environment={selectedEnv} />
-            </div>
-          </Suspense>
+          featSourcing
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><SourcingHub environment={selectedEnv} /></div></Suspense>
+            : <AccessDenied feature="Sourcing Hub"/>
         ) : activeNav === "offers" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-              <OffersModule environment={selectedEnv} />
-            </div>
-          </Suspense>
+          featOffers
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><OffersModule environment={selectedEnv} /></div></Suspense>
+            : <AccessDenied feature="Offers"/>
         ) : activeNav === "campaigns" ? (
-          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
-            <div style={{ flex:1, overflow:"auto" }}>
-              <Campaigns environment={selectedEnv} />
-            </div>
-          </Suspense>
+          featCampaigns
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"auto" }}><Campaigns environment={selectedEnv} /></div></Suspense>
+            : <AccessDenied feature="Campaigns"/>
         ) : activeNav === "integrations" ? (
           <div style={{ flex:1, overflow:"auto", padding:"32px" }}>
             <IntegrationsPage environment={selectedEnv} />
@@ -2429,7 +2462,7 @@ function App() {
         )}
         </div>
       </div>
-      {canGlobal('access_copilot') && (
+      {canGlobal('access_copilot') && featCopilot && (
         <AICopilot
           environment={selectedEnv}
           activeNav={activeNav}
@@ -2476,7 +2509,6 @@ function App() {
         </Suspense>
       )}
     </PermissionProvider>
-    </FeatureProvider>
   );
 }
 
@@ -2690,6 +2722,20 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
 }
 
 // ─── Root export wrapped in ThemeProvider ─────────────────────────────────────
+// ── Main app shell — owns the FeatureProvider so App() can call useFeature() ──
+function MainApp() {
+  const [featureEnvId, setFeatureEnvId] = useState(null);
+  return (
+    <ReportingErrorBoundary>
+      <ThemeProvider>
+        <FeatureProvider environmentId={featureEnvId}>
+          <App onEnvReady={setFeatureEnvId} />
+        </FeatureProvider>
+      </ThemeProvider>
+    </ReportingErrorBoundary>
+  );
+}
+
 export default function AppRoot() {
   const _path = window.location.pathname;
 
@@ -2726,11 +2772,5 @@ export default function AppRoot() {
   }
 
   // ── Main authenticated app ────────────────────────────────────────────────
-  return (
-    <ReportingErrorBoundary>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </ReportingErrorBoundary>
-  );
+  return <MainApp />;
 }

@@ -559,6 +559,51 @@ function migrateEducationField() {
 }
 migrateEducationField();
 
+// ── Add work_history table field to People objects ────────────────────────────
+function migrateWorkHistoryField() {
+  const { v4: uid } = require('uuid');
+  let added = 0, fixed = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    const peopleObjs = (store.objects || []).filter(o => o.slug === 'people' && !o.deleted_at);
+    for (const obj of peopleObjs) {
+      const existing = (store.fields || []).find(f => f.object_id === obj.id && f.api_key === 'work_history' && !f.deleted_at);
+      const WH_COLS = [
+        { id: 'wh_company', name: 'Company',     type: 'text', width: 180 },
+        { id: 'wh_title',   name: 'Job Title',   type: 'text', width: 180 },
+        { id: 'wh_start',   name: 'From',        type: 'date', width: 110 },
+        { id: 'wh_end',     name: 'To',          type: 'date', width: 110 },
+        { id: 'wh_current', name: 'Current',     type: 'boolean', width: 80 },
+        { id: 'wh_desc',    name: 'Description', type: 'textarea', width: 260 },
+      ];
+      if (existing) {
+        if (!existing.table_columns || existing.table_columns.length === 0) {
+          existing.table_columns = WH_COLS;
+          existing.updated_at = new Date().toISOString();
+          fixed++;
+        }
+      } else {
+        const maxOrder = (store.fields || []).filter(f => f.object_id === obj.id && !f.deleted_at)
+          .reduce((m, f) => Math.max(m, f.sort_order || 0), 0);
+        if (!store.fields) store.fields = [];
+        store.fields.push({
+          id: uid(), object_id: obj.id, environment_id: obj.environment_id,
+          name: 'Work History', api_key: 'work_history', field_type: 'table',
+          is_required: false, is_unique: false, show_in_list: false, show_in_form: true,
+          is_system: true, sort_order: 21,
+          table_template: 'work_history',
+          table_columns: WH_COLS,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+        added++;
+      }
+    }
+    if (added > 0 || fixed > 0) saveStoreNow(key);
+  }
+  if (added > 0) console.log(`✅ Added work_history field to ${added} People object(s)`);
+  if (fixed > 0)  console.log(`✅ Fixed work_history table_columns on ${fixed} existing field(s)`);
+}
+migrateWorkHistoryField();
+
 // ── Standardise People object field schema ────────────────────────────────────
 // Adds missing standard fields, renames/reorders existing ones, adds section
 // separators to match the agreed candidate profile field schema.
@@ -672,6 +717,134 @@ function migrateStandardCandidateFields() {
   if (changed > 0) console.log(`✅ Standard candidate fields migrated (${changed} changes)`);
 }
 migrateStandardCandidateFields();
+
+// ── Standardise Jobs object field schema ──────────────────────────────────────
+function migrateStandardJobFields() {
+  const { v4: uid } = require('uuid');
+  const now = new Date().toISOString();
+  let changed = 0;
+
+  // Full ordered Jobs schema
+  // [sort_order, api_key, name, field_type, options, is_system]
+  const SCHEMA = [
+    // ── OVERVIEW ─────────────────────────────────────────────────────────────
+    [1,  'section_overview',    'Overview',            'section_separator', null],
+    [2,  'job_title',           'Job Title',           'text',              null],
+    [3,  'department',          'Department',          'select',            ['Engineering','Product','Sales','Marketing','Finance','HR','Operations','Legal','Customer Success','Design','Data','Other']],
+    [4,  'sub_department',      'Sub-department',      'text',              null],
+    [5,  'location',            'Location',            'text',              null],
+    [6,  'work_type',           'Work Type',           'select',            ['On-site','Hybrid','Remote']],
+    [7,  'employment_type',     'Employment Type',     'select',            ['Full-time','Part-time','Contract','Freelance','Internship','Temporary']],
+    [8,  'status',              'Status',              'select',            ['Draft','Open','On Hold','Filled','Cancelled']],
+    [9,  'priority',            'Priority',            'select',            ['Critical','High','Medium','Low']],
+    [10, 'job_code',            'Job Code / Req No.',  'text',              null],
+    [11, 'headcount',           'Headcount',           'number',            null],
+    [12, 'reason_for_hire',     'Reason for Hire',     'select',            ['New Role','Backfill','Replacement','Expansion']],
+    // ── COMPENSATION ─────────────────────────────────────────────────────────
+    [20, 'section_compensation','Compensation',        'section_separator', null],
+    [21, 'salary_min',          'Salary Min',          'currency',          null],
+    [22, 'salary_max',          'Salary Max',          'currency',          null],
+    [23, 'salary_currency',     'Currency',            'select',            ['AED','USD','GBP','EUR','SAR','QAR','KWD','INR']],
+    [24, 'pay_frequency',       'Pay Frequency',       'select',            ['Annual','Monthly','Hourly','Daily']],
+    [25, 'bonus_percent',       'Bonus (%)',           'number',            null],
+    [26, 'equity',              'Equity / Stock',      'boolean',           null],
+    [27, 'visa_sponsorship',    'Visa Sponsorship',    'boolean',           null],
+    [28, 'benefits',            'Benefits',            'multi_select',      ['Health Insurance','Pension','Car Allowance','Housing Allowance','Annual Flights','Gym','Remote Stipend','Childcare','Learning Budget']],
+    // ── REQUIREMENTS ─────────────────────────────────────────────────────────
+    [30, 'section_requirements','Requirements',        'section_separator', null],
+    [31, 'experience_min_years','Min. Experience (yrs)','number',           null],
+    [32, 'education_level',     'Education Level',     'select',            ['Any','High School','Degree','Masters','PhD','Professional Certification']],
+    [33, 'required_skills',     'Required Skills',     'skills',            null],
+    [34, 'nice_to_have_skills', 'Nice-to-have Skills', 'multi_select',      []],
+    [35, 'languages_required',  'Languages Required',  'multi_select',      ['English','Arabic','French','German','Spanish','Mandarin','Portuguese','Hindi','Japanese']],
+    [36, 'certifications',      'Certifications',      'text',              null],
+    // ── TEAM ─────────────────────────────────────────────────────────────────
+    [40, 'section_team',        'Team',                'section_separator', null],
+    [41, 'hiring_manager',      'Hiring Manager',      'people',            null],
+    [42, 'recruiter',           'Recruiter',           'people',            null],
+    [43, 'coordinator',         'Coordinator',         'people',            null],
+    [44, 'interviewers',        'Interviewers',        'multi_lookup',      null],
+    [45, 'sourcing_partner',    'Sourcing Partner',    'people',            null],
+    // ── POSTING ──────────────────────────────────────────────────────────────
+    [50, 'section_posting',     'Posting',             'section_separator', null],
+    [51, 'posting_status',      'Posting Status',      'select',            ['Not Posted','Draft','Live','Paused','Closed']],
+    [52, 'career_site_visible', 'Career Site Visible', 'boolean',           null],
+    [53, 'internal_only',       'Internal Only',       'boolean',           null],
+    [54, 'job_boards',          'Job Boards',          'multi_select',      ['LinkedIn','Indeed','Glassdoor','Bayt','Naukri','Monster','Reed','Total Jobs','Company Website','Referral','Other']],
+    [55, 'posted_date',         'Posted Date',         'date',              null],
+    [56, 'application_deadline','Application Deadline','date',              null],
+    [57, 'external_job_url',    'External Job URL',    'url',               null],
+    [58, 'referral_bonus',      'Referral Bonus',      'currency',          null],
+    [59, 'description',         'Job Description',     'rich_text',         null],
+    // ── PROCESS & TIMELINE ───────────────────────────────────────────────────
+    [60, 'section_process',     'Process & Timeline',  'section_separator', null],
+    [61, 'open_date',           'Open Date',           'date',              null],
+    [62, 'target_close_date',   'Target Close Date',   'date',              null],
+    [63, 'actual_close_date',   'Actual Close Date',   'date',              null],
+    [64, 'target_start_date',   'Target Start Date',   'date',              null],
+    [65, 'time_to_fill_target', 'Time-to-Fill Target (days)','number',      null],
+    // ── APPROVAL ─────────────────────────────────────────────────────────────
+    [70, 'section_approval',    'Approval',            'section_separator', null],
+    [71, 'approval_status',     'Approval Status',     'select',            ['Not Required','Pending','Approved','Rejected']],
+    [72, 'approved_by',         'Approved By',         'people',            null],
+    [73, 'approval_date',       'Approval Date',       'date',              null],
+    [74, 'cost_centre',         'Cost Centre',         'text',              null],
+    [75, 'budget_code',         'Budget Code',         'text',              null],
+  ];
+
+  for (const [key, store] of Object.entries(storeCache)) {
+    const jobsObjs = (store.objects || []).filter(o => o.slug === 'jobs' && !o.deleted_at);
+    for (const obj of jobsObjs) {
+      if (!store.fields) store.fields = [];
+      const existing = store.fields.filter(f => f.object_id === obj.id && !f.deleted_at);
+      const byKey = {};
+      existing.forEach(f => { byKey[f.api_key] = f; });
+
+      // Remove broken 'new_inte' field
+      store.fields = store.fields.filter(f =>
+        !(f.object_id === obj.id && f.api_key === 'new_inte')
+      );
+      if (byKey['new_inte']) { changed++; }
+
+      // Convert hiring_manager from text to people if still text
+      const hmField = store.fields.find(f => f.object_id === obj.id && f.api_key === 'hiring_manager' && !f.deleted_at);
+      if (hmField && hmField.field_type === 'text') {
+        hmField.field_type = 'people';
+        hmField.updated_at = now;
+        changed++;
+      }
+
+      for (const [sort_order, api_key, name, field_type, options] of SCHEMA) {
+        if (byKey[api_key]) {
+          const f = byKey[api_key];
+          let dirty = false;
+          if (f.sort_order !== sort_order) { f.sort_order = sort_order; dirty = true; }
+          if (f.name !== name)              { f.name = name; dirty = true; }
+          if (options && options.length && JSON.stringify(f.options) !== JSON.stringify(options)) { f.options = options; dirty = true; }
+          if (dirty) { f.updated_at = now; changed++; }
+        } else {
+          // Skip fields that need a lookup_object_id — can't resolve here without the people object
+          // They'll be added with null and the app handles gracefully
+          store.fields.push({
+            id: uid(), object_id: obj.id, environment_id: obj.environment_id,
+            name, api_key, field_type,
+            sort_order, is_required: false, is_unique: false,
+            show_in_list: ['job_title','department','location','status','employment_type','work_type'].includes(api_key),
+            show_in_form: true, is_system: true,
+            options: options || null,
+            lookup_object_id: null,
+            condition_field: null, condition_value: null,
+            created_at: now, updated_at: now,
+          });
+          changed++;
+        }
+      }
+    }
+    if (changed > 0) saveStoreNow(key);
+  }
+  if (changed > 0) console.log(`✅ Standard jobs fields migrated (${changed} changes)`);
+}
+migrateStandardJobFields();
 
 // ── Prune orphaned people_links on startup ───────────────────────────────────
 // Removes any people_link where the person_record or target_record no longer exists.

@@ -1,22 +1,36 @@
 // client/src/hooks/useFeature.js
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const FeatureContext = createContext({ features: new Set(['core']), loading: false, refresh: () => {} });
+// All stable features on by default — prevents flash of missing nav items on load
+const DEFAULT_FEATURES = new Set([
+  'core','ai_copilot','ai_matching','communications_panel','workflows',
+  'portals','reports','org_chart','interviews','offers','forms',
+  'bulk_actions','cv_parsing','duplicate_detection',
+]);
+
+const FeatureContext = createContext({ features: DEFAULT_FEATURES, loading: false, refresh: () => {} });
 
 export function FeatureProvider({ environmentId, children }) {
-  const [features, setFeatures] = useState(new Set(['core']));
+  const [features, setFeatures] = useState(DEFAULT_FEATURES);
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
     if (!environmentId) { setLoading(false); return; }
     try {
-      const res  = await fetch(`/api/feature-packs?environment_id=${environmentId}`);
+      const sess = (() => { try { return JSON.parse(localStorage.getItem('talentos_session')||'null'); } catch { return null; } })();
+      const headers = {};
+      if (sess?.tenant_slug) headers['X-Tenant-Slug'] = sess.tenant_slug;
+      if (sess?.user?.id)    headers['X-User-Id']     = sess.user.id;
+      const res  = await fetch(`/api/feature-flags?environment_id=${environmentId}`, { headers });
       const data = await res.json();
-      const enabled = new Set(Array.isArray(data) ? data.filter(p => p.enabled).map(p => p.key) : []);
-      enabled.add('core');
+      // data is { flag_key: boolean, ... }
+      const enabled = new Set(['core']);
+      if (data && typeof data === 'object') {
+        Object.entries(data).forEach(([key, val]) => { if (val) enabled.add(key); });
+      }
       setFeatures(enabled);
     } catch {
-      setFeatures(new Set(['core']));
+      setFeatures(DEFAULT_FEATURES);
     }
     setLoading(false);
   }, [environmentId]);

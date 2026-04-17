@@ -1,55 +1,36 @@
 /**
- * FeatureFlags — React hook + FeatureGate component
+ * FeatureFlags — legacy compatibility shim
  *
- * Usage:
- *   const flags = useFeatureFlags();
- *   if (flags.ai_copilot) { ... }
- *
- *   <FeatureGate flag="voice_copilot"><VoiceCopilot/></FeatureGate>
- *
- * Wrap in App.jsx after login:
- *   <FeatureFlagsProvider environmentId={selectedEnv?.id}>
- *     {children}
- *   </FeatureFlagsProvider>
+ * The canonical feature flag system is in hooks/useFeature.jsx (FeatureProvider).
+ * This file exists for backward-compat imports — it re-exports from that module
+ * and keeps invalidateFlagCache() as a no-op (the new provider manages its own state).
  */
-import { useState, useEffect, useContext, createContext, useCallback } from 'react';
+import { useFeature, useFeatures, FeatureGate, FeatureProvider } from './hooks/useFeature.jsx';
 
-const FlagsContext = createContext({});
-let _cachedFlags = null, _cacheEnvId = null;
+export { useFeature, useFeatures, FeatureGate, FeatureProvider };
 
-export function FeatureFlagsProvider({ environmentId, children }) {
-  const [flags, setFlags]   = useState(_cachedFlags || {});
-  const [loading, setLoading] = useState(!_cachedFlags);
-
-  const loadFlags = useCallback(async () => {
-    if (!environmentId) return;
-    if (_cacheEnvId === environmentId && _cachedFlags) { setFlags(_cachedFlags); setLoading(false); return; }
-    try {
-      const res = await fetch(`/api/feature-flags?environment_id=${environmentId}`);
-      if (res.ok) { const data = await res.json(); _cachedFlags = data; _cacheEnvId = environmentId; setFlags(data); }
-    } catch { setFlags({}); }
-    finally { setLoading(false); }
-  }, [environmentId]);
-
-  useEffect(() => { loadFlags(); }, [loadFlags]);
-  return <FlagsContext.Provider value={{ flags, loading, reload: loadFlags }}>{children}</FlagsContext.Provider>;
+/** @deprecated — the new FeatureProvider manages its own reload via refresh(). */
+export function invalidateFlagCache() {
+  // No-op — retained for import compatibility in FeatureFlagsSettings.jsx
 }
 
-/** Full flags object */
-export function useFeatureFlags() { return useContext(FlagsContext).flags; }
-
-/** Single flag — defaults to true (fail-open) while loading */
+/** Thin wrapper matching the old useFlag() API (fail-open while loading) */
 export function useFlag(flagKey) {
-  const { flags, loading } = useContext(FlagsContext);
+  const { features, loading } = useFeatures();
   if (loading) return true;
-  return flags[flagKey] ?? true;
+  return features.has(flagKey);
 }
 
-/** Renders children only when flag is enabled */
-export function FeatureGate({ flag, fallback = null, children }) {
-  const enabled = useFlag(flag);
-  return enabled ? children : fallback;
+/** Full flags as a plain object — matches old useFeatureFlags() shape */
+export function useFeatureFlags() {
+  const { features } = useFeatures();
+  const obj = {};
+  features.forEach(k => { obj[k] = true; });
+  return obj;
 }
 
-/** Call after toggling a flag in Settings to force a reload */
-export function invalidateFlagCache() { _cachedFlags = null; _cacheEnvId = null; }
+/** @deprecated — use FeatureProvider from hooks/useFeature.jsx directly */
+export function FeatureFlagsProvider({ environmentId, children }) {
+  // Just render children — FeatureProvider is now mounted at AppRoot level
+  return children;
+}

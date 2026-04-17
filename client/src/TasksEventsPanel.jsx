@@ -104,6 +104,13 @@ export function TasksEventsPanel({ record, environment }) {
   // Real-time push: reload when the server broadcasts a task/event change for this record
   useRecordSync(recId, () => load());
 
+  // Reload when Copilot creates a task
+  useEffect(()=>{
+    const handler = () => load();
+    window.addEventListener('talentos:tasks-updated', handler);
+    return () => window.removeEventListener('talentos:tasks-updated', handler);
+  }, [load]);
+
   const handleToggle = async task => {
     await tFetch(`/api/calendar/tasks/${task.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:task.status==="done"?"todo":"done"})});
     load();

@@ -43,6 +43,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     workflow:"M22 12h-4l-3 9L9 3l-3 9H2",
     calendar:"M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
     "refresh-cw":"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+    phone:"M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.82 19.79 19.79 0 01.06 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z",
     "alert-triangle":"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
     "arrow-right":"M5 12h14M12 5l7 7-7 7",
     paperclip:"M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48",
@@ -453,13 +454,13 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
           </span>
         )}
         {mode==="person" && lockedRecord?.data?.location && (
-          <span style={{fontSize:11,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:C.text2,flexShrink:0}}>
-            📍 {lockedRecord.data.location}
+          <span style={{fontSize:11,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:C.text2,flexShrink:0,display:"flex",alignItems:"center",gap:3}}>
+            <Ic n="globe" s={10} c={C.text2}/> {lockedRecord.data.location}
           </span>
         )}
         {mode==="job" && lockedRecord?.data?.location && (
-          <span style={{fontSize:11,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:C.text2,flexShrink:0}}>
-            📍 {lockedRecord.data.location}
+          <span style={{fontSize:11,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:C.text2,flexShrink:0,display:"flex",alignItems:"center",gap:3}}>
+            <Ic n="globe" s={10} c={C.text2}/> {lockedRecord.data.location}
           </span>
         )}
 
@@ -545,7 +546,7 @@ const TaskResultCards = ({ tasks, onNavigate }) => {
               <div style={{ width:8, height:8, borderRadius:'50%', background: TASK_PRIORITY_COLOR[t.priority]||'#9ca3af', flexShrink:0 }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:C.text1, textDecoration:t.status==='done'?'line-through':'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
-                {t.record_name && <div style={{ fontSize:11, color:C.text3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📌 {t.record_name}</div>}
+                {t.record_name && <div style={{ fontSize:11, color:C.text3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}><Ic n="link" s={10} c={C.text3}/> {t.record_name}</div>}
               </div>
               {t.due_date && <div style={{ fontSize:11, color: t.due_date < today && t.status!=='done' ? '#ef4444' : C.text3, flexShrink:0 }}>{t.due_date}</div>}
               {t.record_id && <Ic n="arrowR" s={11} c={C.text3}/>}
@@ -923,6 +924,13 @@ Output: <DB_QUERY>{"slug":"people","filters":[{"field":"updated_at","op":"before
 Supported operators: eq, neq, contains, not_contains, gt, lt, gte, lte, before_days (older than N days), after_days (within last N days), is_empty, not_empty, in, not_in
 System fields: updated_at, created_at (use ISO date or before_days/after_days operators)
 Data fields: use exact api_key from FIELDS list (e.g. status, department, rating)
+
+CRITICAL — ALWAYS use DB_QUERY for these (NEVER say you can't filter by date):
+- "not updated in X days" / "stale" / "no activity" → {field:"updated_at",op:"before_days",value:X}
+- "created this week/month" → {field:"created_at",op:"after_days",value:7}
+- "stuck in [stage] for X days" → combine status eq + updated_at before_days
+- Always add status not_in "Archived,Placed,Hired" for candidate staleness queries
+
 Use SEARCH_QUERY for name/text searches. Use DB_QUERY for date/comparison/multi-field queries.
 
 RECORD CREATION INSTRUCTIONS:
@@ -1587,11 +1595,16 @@ const SuggestedActions = ({ activeNav, settingsSection, currentObject, onSend, i
   const isReports = activeNav === 'reports';
   const isSettings = activeNav === 'settings';
   const isPortals = isSettings && settingsSection === 'portals';
+
+  // Don't show bottom chips when we'd fall back to the generic default set —
+  // the top CONTEXT_ACTIONS already cover those pages (dashboard, general nav, etc.)
+  const hasSpecificActions = isPortals || isSettings || isReports || (slug && SUGGESTED_ACTIONS[slug]);
+  if (!hasSpecificActions) return null;
+
   const actions = isPortals ? SUGGESTED_ACTIONS.portals
     : isSettings ? SUGGESTED_ACTIONS.settings
     : isReports ? SUGGESTED_ACTIONS.reports
-    : slug && SUGGESTED_ACTIONS[slug] ? SUGGESTED_ACTIONS[slug]
-    : SUGGESTED_ACTIONS.default;
+    : SUGGESTED_ACTIONS[slug];
   return (
     <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginTop:8, marginLeft:34 }}>
       {actions.map((a, i) => (
@@ -1683,6 +1696,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [pendingStage,  setPendingStage]    = useState(null);
   const [bulkConfirmed, setBulkConfirmed]   = useState(false);
   const [nextActions,   setNextActions]     = useState([]); // suggested follow-ups after an action
+  const [pendingNote,   setPendingNote]     = useState(null);  // ADD_NOTE confirmation
   const [listening,     setListening]       = useState(false); // voice input active
   const recognitionRef = useRef(null);
   const [companyDocs,    setCompanyDocs]    = useState([]);
@@ -2555,6 +2569,35 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           :"\n\nINTERVIEW TYPES: None configured yet — you can still schedule a custom interview.",
         // Live list context (current filters, record count, visible fields from RecordsView)
         lastCreatedRecord ? `\n\nLAST_CREATED_RECORD: ${JSON.stringify(lastCreatedRecord)} — the user may refer to this as "that person/job I just created", "them", "it" etc.` : "",
+        // Comms context: inject recent communications when viewing a person record
+        ...(await (async () => {
+          if (!currentRecord?.id) return [];
+          try {
+            const comms = await api.get(`/comms?record_id=${currentRecord.id}&limit=10`);
+            const items = (comms?.items || comms || []).slice(0, 10);
+            if (!items.length) return [];
+            const lines = items.map(c => {
+              const dir = c.direction === 'inbound' ? '← Received' : '→ Sent';
+              const when = c.created_at ? new Date(c.created_at).toLocaleDateString() : '';
+              const preview = (c.body || c.content || '').slice(0, 80);
+              return `- [${c.type||'message'}] ${dir} ${when}: ${c.subject||''}${preview ? ' — '+preview : ''}`;
+            }).join('\n');
+            return [`\n\nRECENT_COMMUNICATIONS (last 10 on this record):\n${lines}\n\nUse this to answer questions like "when did we last contact them" or "what emails have been sent".`];
+          } catch { return []; }
+        })()),
+        // Calendar context: inject today's schedule when on interviews/calendar or scheduling
+        ...(await (async () => {
+          const isScheduling = ['interviews','calendar'].includes(activeNav) || (input||'').toLowerCase().match(/schedul|calendar|interview|when.*free|availab/);
+          if (!isScheduling || !environment?.id) return [];
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            const r = await api.get(`/interviews?environment_id=${environment.id}&date_from=${today}&limit=20`);
+            const interviews = (Array.isArray(r) ? r : r?.interviews || []).filter(i => !i.deleted_at);
+            if (!interviews.length) return [`\n\nCALENDAR_TODAY (${today}): No interviews scheduled today.`];
+            const lines = interviews.map(i => `- ${i.time||'?'} ${i.interview_type_name||i.format||'Interview'} with ${i.candidate_name||'Unknown'}`).join('\n');
+            return [`\n\nCALENDAR_TODAY (${today}):\n${lines}\nUse this to avoid double-booking and know what's already scheduled.`];
+          } catch { return []; }
+        })()),
         listContext ? `\n\nCURRENT LIST STATE (USE THIS to answer questions about the visible records — breakdowns show exact counts per value):\n${typeof listContext === 'string' ? listContext : JSON.stringify(listContext, null, 2)}` : "",
         // Live objects context for dashboard/report creation
         objects.length ? `\n\nLIVE OBJECTS (use these slugs and IDs for dashboard panels):\n${objects.map(o=>`- ${o.plural_name||o.name} | slug: ${o.slug} | id: ${o.id}`).join("\n")}` : "",
@@ -2822,7 +2865,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(!created?.id) throw new Error(created?.error || "Record creation failed — no ID returned");
       const d = pendingRecord.data;
       const name = (d.first_name?`${d.first_name} ${d.last_name||""}`.trim():null)||d.job_title||d.pool_name||"Record";
-      setMessages(m=>[...m,{role:"assistant",content:`✅ **${name}** created successfully!`,ts:new Date(),createdRecord:{id:created.id,name,objectName:obj.name,objectColor:obj.color,objectSlug:obj.slug,sub:d.email||d.department||d.category||""}}]);
+      setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${name}** created successfully!`,ts:new Date(),createdRecord:{id:created.id,name,objectName:obj.name,objectColor:obj.color,objectSlug:obj.slug,sub:d.email||d.department||d.category||""}}]);
       const actionType = obj.slug==='people' ? 'person_created' : obj.slug==='jobs' ? 'job_created' : null;
       if(actionType) showNextActions(actionType, { name });
       setPendingRecord(null);
@@ -2861,7 +2904,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         id: `step_${i}`, name: s.name, automation_type: s.automation_type || null, config: s.config || {},
       }));
       await api.put(`/workflows/${wf.id}/steps`, { steps });
-      setMessages(m => [...m, { role:"assistant", content:`✅ **${wf.name}** created`, ts:new Date(),
+      setMessages(m => [...m, { role:"assistant", content:`**Done** — **${wf.name}** created`, ts:new Date(),
         createdNav:{ label:`${wf.name} workflow`, nav:"workflows", icon:"workflow", color:"#7c3aed", sub:`${steps.length} stage${steps.length!==1?"s":""}` }
       }]);
       setPendingWorkflow(null);
@@ -2889,7 +2932,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         email:      pendingUser.email,
         role_id:    role.id,
       });
-      setMessages(m=>[...m,{role:"assistant",content:`✅ **${result.first_name} ${result.last_name}** invited as **${role.name}**! Temporary password: \`${result.temp_password}\``,ts:new Date()}]);
+      setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${result.first_name} ${result.last_name}** invited as **${role.name}**! Temporary password: \`${result.temp_password}\``,ts:new Date()}]);
       setPendingUser(null);
       // Refresh users list
       api.get("/users").then(u=>{ if(Array.isArray(u)) setAdminUsers(u); }).catch(()=>{});
@@ -2914,7 +2957,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         color:       pendingRole.color || "#3b5bdb",
         clone_from_role_id: pendingRole.clone_from_role_id || null,
       });
-      setMessages(m=>[...m,{role:"assistant",content:`✅ **${result.name}** role created`,ts:new Date(),
+      setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${result.name}** role created`,ts:new Date(),
         createdNav:{ label:`${result.name} role`, nav:"settings", icon:"users", color:result.color||"#e03131", sub:"Assign users in Settings → Users" }
       }]);
       setPendingRole(null);
@@ -2941,7 +2984,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           years_experience:parsedPerson.years_experience||0,status:'Active',
         },created_by:'Copilot'})}).then(r=>r.json());
       const name = `${parsedPerson.first_name||''} ${parsedPerson.last_name||''}`.trim();
-      setMessages(m=>[...m,{role:'assistant',content:`✅ **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
+      setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
       setParsedPerson(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -2964,7 +3007,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           salary_max:parsedJob.salary_max||0,description:parsedJob.description||'',
           requirements:parsedJob.requirements||'',skills:parsedJob.skills||[],status:'Open',
         },created_by:'Copilot'})}).then(r=>r.json());
-      setMessages(m=>[...m,{role:'assistant',content:`✅ **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
+      setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
       setParsedJob(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -2993,7 +3036,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
       const created = await r.json();
       setPendingTask(null);
-      setMessages(m=>[...m,{role:'assistant',content:`✅ Task created: **${created.title||pendingTask.title}**${pendingTask.due_date?` · Due ${pendingTask.due_date}`:''}`,ts:new Date()}]);
+      setMessages(m=>[...m,{role:'assistant',content:`**Done** — Task created: **${created.title||pendingTask.title}**${pendingTask.due_date?` · Due ${pendingTask.due_date}`:''}`,ts:new Date()}]);
       window.dispatchEvent(new CustomEvent('talentos:tasks-updated'));
     } catch(e) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed to create task: ${e.message}`,ts:new Date(),error:true}]);
@@ -3006,7 +3049,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setCreating(true);
     const { action_type, payload, title } = proposedAction;
     try {
-      let resultMsg = `✅ Done — ${title}`;
+      let resultMsg = `**Done** — Done — ${title}`;
 
       // ── Add / update a note on a record ────────────────────────────────────
       if (action_type === 'add_note' && payload?.record_id && payload?.content) {
@@ -3019,7 +3062,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             author: payload.author || 'Copilot',
           }),
         });
-        resultMsg = `✅ Note added to record`;
+        resultMsg = `**Done** — Note added to record`;
 
       // ── Update a single field on a record ───────────────────────────────────
       } else if (action_type === 'update_field' && payload?.record_id && payload?.field) {
@@ -3031,7 +3074,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         });
         // Notify the open record page to reload
         window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: payload.record_id } }));
-        resultMsg = `✅ **${payload.field}** updated to **${payload.value}**`;
+        resultMsg = `**Done** — **${payload.field}** updated to **${payload.value}**`;
 
       // ── Legacy: status_change (alias for update_field) ──────────────────────
       } else if (action_type === 'status_change' && payload?.record_id && payload?.field && payload?.value) {
@@ -3043,7 +3086,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         });
         // Notify the open record page to reload
         window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: payload.record_id } }));
-        resultMsg = `✅ Status updated to **${payload.value}**`;
+        resultMsg = `**Done** — Status updated to **${payload.value}**`;
 
       // ── Log a communication (call / email / sms) ────────────────────────────
       } else if (action_type === 'log_comm' && payload?.record_id) {
@@ -3061,7 +3104,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             author: payload.author || 'Copilot',
           }),
         });
-        resultMsg = `✅ ${payload.comm_type || 'Call'} logged`;
+        resultMsg = `**Done** — ${payload.comm_type || 'Call'} logged`;
 
       // ── Move a person through a pipeline stage ──────────────────────────────
       } else if (action_type === 'pipeline_move' && payload?.link_id && payload?.new_stage) {
@@ -3070,7 +3113,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ current_stage: payload.new_stage }),
         });
-        resultMsg = `✅ Moved to **${payload.new_stage}**`;
+        resultMsg = `**Done** — Moved to **${payload.new_stage}**`;
 
       // ── Assign a record to a user / recruiter ───────────────────────────────
       } else if (action_type === 'assign' && payload?.record_id) {
@@ -3080,7 +3123,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: { ...rec.data, assigned_to: payload.assigned_to, recruiter: payload.assigned_to } }),
         });
-        resultMsg = `✅ Assigned to **${payload.assigned_to}**`;
+        resultMsg = `**Done** — Assigned to **${payload.assigned_to}**`;
 
       // ── Bulk update multiple records ────────────────────────────────────────
       } else if (action_type === 'bulk_op' && payload?.record_ids?.length) {
@@ -3091,12 +3134,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             body: JSON.stringify({ data: payload.data }),
           })
         ));
-        resultMsg = `✅ Updated ${payload.record_ids.length} records`;
+        resultMsg = `**Done** — Updated ${payload.record_ids.length} records`;
 
       // ── Delete a record ─────────────────────────────────────────────────────
       } else if (action_type === 'delete' && payload?.record_id) {
         await tFetch(`/api/records/${payload.record_id}`, { method: 'DELETE' });
-        resultMsg = `✅ Record deleted`;
+        resultMsg = `**Done** — Record deleted`;
 
       // ── Create a new field on an object ────────────────────────────────────
       } else if (action_type === 'create_field' && payload?.object_id && payload?.name) {
@@ -3115,7 +3158,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fieldPayload),
         });
-        resultMsg = `✅ Field **${payload.name}** added to **${payload.object_name || 'object'}**`;
+        resultMsg = `**Done** — Field **${payload.name}** added to **${payload.object_name || 'object'}**`;
 
       // ── Create a new object ─────────────────────────────────────────────────
       } else if (action_type === 'create_object' && payload?.name && payload?.environment_id) {
@@ -3132,12 +3175,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             color:          payload.color || '#6366f1',
           }),
         });
-        resultMsg = `✅ Object **${payload.name}** created`;
+        resultMsg = `**Done** — Object **${payload.name}** created`;
 
       } else {
         // Unknown action type — log it
         console.warn('[Copilot] Unknown action_type:', action_type, payload);
-        resultMsg = `✅ Done — action completed successfully.`;
+        resultMsg = `**Done** — Done — action completed successfully.`;
       }
 
       setMessages(m => [...m, { role: 'assistant', content: resultMsg, ts: new Date() }]);
@@ -3307,7 +3350,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const ivNames = (iv.interviewers||[]).map(i=>i.name).filter(Boolean);
       const ivStr = ivNames.length ? ` with ${ivNames.join(' & ')}` : '';
       const reschedNote = `Calendar invites with a reschedule option have been sent to all attendees.`;
-      setMessages(m=>[...m,{role:"assistant",content:`✅ **Interview scheduled!**\n\n**${candidateName}** has been booked for a **${fmt}** interview${ivStr} on **${dateStr}** (${dur} min).\n\n${reschedNote}`,ts:new Date()}]);
+      setMessages(m=>[...m,{role:"assistant",content:`**Done** — **Interview scheduled!**\n\n**${candidateName}** has been booked for a **${fmt}** interview${ivStr} on **${dateStr}** (${dur} min).\n\n${reschedNote}`,ts:new Date()}]);
       showNextActions('interview_scheduled', { name: candidateName });
       setPendingInterview(null);
     } catch(err) {
@@ -3367,7 +3410,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
       setMessages(m => [...m, {
         role: "assistant",
-        content: `✅ **${portal.name || pendingPortal.name || "New Portal"}** portal created as a draft! It has ${pages.length} page${pages.length !== 1 ? "s" : ""} with ${widgetCount} widget${widgetCount !== 1 ? "s" : ""}. Go to Settings → Portals to preview and publish it.`,
+        content: `**Done** — **${portal.name || pendingPortal.name || "New Portal"}** portal created as a draft! It has ${pages.length} page${pages.length !== 1 ? "s" : ""} with ${widgetCount} widget${widgetCount !== 1 ? "s" : ""}. Go to Settings → Portals to preview and publish it.`,
         ts: new Date(),
         createdNav: {
           label: portal.name,
@@ -3426,7 +3469,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         fields,
         created_by:     'Copilot',
       });
-      setMessages(m=>[...m,{role:"assistant",content:`✅ **${form.name}** created`,ts:new Date(),
+      setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${form.name}** created`,ts:new Date(),
         createdNav:{ label:`${form.name}`, nav:"settings", settingsSection:"forms", icon:"form", color:"#0caf77", sub:`${fields.length} field${fields.length!==1?'s':''}` }
       }]);
       setPendingForm(null);
@@ -3483,7 +3526,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if (!dash?.id) throw new Error(dash?.error || "Dashboard creation failed");
       setMessages(m => [...m, {
         role: "assistant",
-        content: `✅ **${dash.name}** dashboard created with ${panels.length} panel${panels.length !== 1 ? "s" : ""}!`,
+        content: `**Done** — **${dash.name}** dashboard created with ${panels.length} panel${panels.length !== 1 ? "s" : ""}!`,
         ts: new Date(),
         createdNav: {
           label: dash.name,
@@ -4399,16 +4442,16 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 )}
 
 {/* ── Task Creation Card ── */}
-                {msg.role==="assistant"&&msg.hasTask&&(msg.taskData||pendingTask)&&i===messages.length-1&&(()=>{const td=msg.taskData||pendingTask;const TICO={'call':'📞','email':'✉️','follow_up':'🔄','review':'👁','interview':'🗓','meeting':'👥','send_docs':'📄','chase':'⚡','other':'○'};return(
+                {msg.role==="assistant"&&msg.hasTask&&(msg.taskData||pendingTask)&&i===messages.length-1&&(()=>{const td=msg.taskData||pendingTask;const TICO={'call':'phone','email':'mail','follow_up':'refresh-cw','review':'search','interview':'calendar','meeting':'users','send_docs':'fileText','chase':'zap','other':'check'};return(
                   <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #c7d2fe",background:"#EEF2FF"}}>
                     <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
-                      <div style={{width:32,height:32,borderRadius:8,background:"#4361EE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{TICO[td.task_type]||'✓'}</div>
+                      <div style={{width:32,height:32,borderRadius:8,background:"#4361EE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic n={TICO[td.task_type]||'check'} s={16} c="white"/></div>
                       <div style={{flex:1}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#0D0D0F",marginBottom:3}}>{td.title}</div>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:11,color:"#6b7280"}}>
                           {td.priority&&<span style={{fontWeight:700,color:{urgent:"#ef4444",high:"#f97316",medium:"#eab308",low:"#22c55e"}[td.priority]||"#6b7280"}}>{td.priority}</span>}
                           {td.due_date&&<span>Due {td.due_date}{td.due_time?` at ${td.due_time}`:""}</span>}
-                          {td.reminder&&<span>🔔 {td.reminder} before</span>}
+                          {td.reminder&&<span style={{display:"flex",alignItems:"center",gap:3}}><Ic n="clock" s={11} c={C.text3}/> {td.reminder} before</span>}
                         </div>
                         {td.description&&<div style={{fontSize:12,color:"#374151",marginTop:5,lineHeight:1.4}}>{td.description}</div>}
                       </div>

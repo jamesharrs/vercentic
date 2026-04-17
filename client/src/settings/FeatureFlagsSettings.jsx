@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invalidateFlagCache } from '../FeatureFlags.jsx';
+import { useFeatures } from '../hooks/useFeature.jsx';
+import { authHeaders } from '../apiClient.js';
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = { accent:'#4361EE', text1:'#1a1a2e', text2:'#4b5563', text3:'#9ca3af', border:'#e5e7eb', surface:'#ffffff' };
@@ -44,12 +46,13 @@ export default function FeatureFlagsSettings({ environment }) {
   const [flags, setFlags]   = useState([]);
   const [saving, setSaving] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { refresh: refreshFeatureCtx } = useFeatures(); // live context refresh
 
   const load = async () => {
     if (!environment?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/feature-flags/all?environment_id=${environment.id}`);
+      const res = await fetch(`/api/feature-flags/all?environment_id=${environment.id}`, { headers: authHeaders() });
       if (res.ok) setFlags((await res.json()).flags || []);
     } finally { setLoading(false); }
   };
@@ -57,15 +60,27 @@ export default function FeatureFlagsSettings({ environment }) {
 
   const toggle = async (key, currentlyEnabled) => {
     setSaving(key);
-    await fetch(`/api/feature-flags/${key}`, { method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ environment_id: environment.id, enabled: !currentlyEnabled }) });
-    invalidateFlagCache(); await load(); setSaving(null);
+    await fetch(`/api/feature-flags/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ environment_id: environment.id, enabled: !currentlyEnabled }),
+    });
+    invalidateFlagCache();   // clear legacy cache
+    await load();            // refresh settings display
+    await refreshFeatureCtx(); // update live feature context → nav/UI updates instantly
+    setSaving(null);
   };
 
   const reset = async (key) => {
     setSaving(key);
-    await fetch(`/api/feature-flags/${key}?environment_id=${environment.id}`, { method:'DELETE' });
-    invalidateFlagCache(); await load(); setSaving(null);
+    await fetch(`/api/feature-flags/${key}?environment_id=${environment.id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    invalidateFlagCache();
+    await load();
+    await refreshFeatureCtx();
+    setSaving(null);
   };
 
   const flagMap = Object.fromEntries(flags.map(f => [f.key, f]));
@@ -76,7 +91,8 @@ export default function FeatureFlagsSettings({ environment }) {
       <div style={{ marginBottom:24 }}>
         <h2 style={{ margin:'0 0 6px', fontSize:18, fontWeight:700, color:C.text1 }}>Feature Flags</h2>
         <p style={{ margin:0, fontSize:13, color:C.text2, lineHeight:1.6 }}>
-          Control which features are enabled for <strong>{environment?.name || 'this environment'}</strong>. Changes take effect on next page load.
+          Control which features are enabled for <strong>{environment?.name || 'this environment'}</strong>.
+          Changes take effect immediately across the app.
         </p>
       </div>
       {Object.entries(FLAG_GROUPS).map(([group, keys]) => (
@@ -84,23 +100,43 @@ export default function FeatureFlagsSettings({ environment }) {
           <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>{group}</div>
           <div style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden' }}>
             {keys.map((key, i) => {
-              const f = flagMap[key]; const enabled = f?.enabled ?? true; const overridden = f?.overridden ?? false; const isSaving = saving === key;
+              const f = flagMap[key];
+              const enabled    = f?.enabled    ?? true;
+              const overridden = f?.overridden  ?? false;
+              const isSaving   = saving === key;
               return (
-                <div key={key} style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 18px', borderBottom: i<keys.length-1?`1px solid ${C.border}`:'none', opacity:isSaving?0.6:1 }}>
+                <div key={key} style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 18px',
+                  borderBottom: i < keys.length - 1 ? `1px solid ${C.border}` : 'none',
+                  opacity: isSaving ? 0.6 : 1, transition:'opacity .15s' }}>
                   <button onClick={() => toggle(key, enabled)} disabled={isSaving}
-                    style={{ width:40, height:22, borderRadius:11, border:'none', cursor:'pointer', background:enabled?C.accent:'#d1d5db', position:'relative', flexShrink:0, transition:'background .2s' }}>
-                    <span style={{ position:'absolute', top:3, left:enabled?21:3, width:16, height:16, borderRadius:8, background:'white', boxShadow:'0 1px 3px rgba(0,0,0,.2)', transition:'left .2s' }}/>
+                    style={{ width:40, height:22, borderRadius:11, border:'none', cursor:isSaving?'not-allowed':'pointer',
+                      background: enabled ? C.accent : '#d1d5db', position:'relative', flexShrink:0, transition:'background .2s' }}>
+                    <span style={{ position:'absolute', top:3, left: enabled ? 21 : 3, width:16, height:16,
+                      borderRadius:8, background:'white', boxShadow:'0 1px 3px rgba(0,0,0,.2)', transition:'left .2s' }}/>
                   </button>
                   <div style={{ flex:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:14, fontWeight:600, color:C.text1 }}>{FLAG_LABELS[key]||key}</span>
-                      {overridden && <span style={{ fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:99, background:'#eff6ff', color:'#3b82f6', border:'1px solid #bfdbfe' }}>CUSTOM</span>}
+                      <span style={{ fontSize:14, fontWeight:600, color:C.text1 }}>{FLAG_LABELS[key] || key}</span>
+                      {overridden && (
+                        <span style={{ fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:99,
+                          background:'#eff6ff', color:'#3b82f6', border:'1px solid #bfdbfe' }}>CUSTOM</span>
+                      )}
                     </div>
-                    <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>{FLAG_DESC[key]||''}</div>
+                    <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>{FLAG_DESC[key] || ''}</div>
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:99, background:enabled?'#ecfdf5':'#f9fafb', color:enabled?'#059669':C.text3 }}>{enabled?'ON':'OFF'}</span>
-                    {overridden && <button onClick={() => reset(key)} disabled={isSaving} style={{ fontSize:11, color:C.text3, background:'none', border:'none', cursor:'pointer', textDecoration:'underline', fontFamily:F }}>reset</button>}
+                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:99,
+                      background: enabled ? '#ecfdf5' : '#f9fafb',
+                      color: enabled ? '#059669' : C.text3 }}>
+                      {enabled ? 'ON' : 'OFF'}
+                    </span>
+                    {overridden && (
+                      <button onClick={() => reset(key)} disabled={isSaving}
+                        style={{ fontSize:11, color:C.text3, background:'none', border:'none',
+                          cursor:'pointer', textDecoration:'underline', fontFamily:F }}>
+                        reset
+                      </button>
+                    )}
                   </div>
                 </div>
               );

@@ -7,7 +7,7 @@ const DASHBOARD_GROUPS = [
     items: [
       { id:"appearance",   icon:"sun",       label:"Appearance",        desc:"Theme, colour scheme, font and density" },
       { id:"language",     icon:"globe",     label:"Language",          desc:"Interface language and regional format" },
-      { id:"setup_wizard", icon:"building",  label:"Company Profile",   desc:"Logo, brand name and company details" },
+      { id:"company_profile", icon:"building",  label:"Company Profile",   desc:"Logo, brand name and company details" },
     ],
   },
   {

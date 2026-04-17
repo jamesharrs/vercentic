@@ -59,7 +59,7 @@ router.put('/:key', (req, res) => {
   if (!(key in DEFAULT_FLAGS)) return res.status(404).json({ error: `Unknown flag: ${key}` });
   const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === key);
   if (existing) {
-    update('feature_flags', existing.id, { enabled: !!enabled, updated_at: new Date().toISOString() });
+    update('feature_flags', f => f.id === existing.id, { enabled: !!enabled, updated_at: new Date().toISOString() });
   } else {
     insert('feature_flags', { id: uuidv4(), environment_id, flag_key: key, enabled: !!enabled, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
   }
@@ -72,8 +72,8 @@ router.delete('/:key', (req, res) => {
   const { key } = req.params;
   const { environment_id } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === key);
-  if (existing) { const { remove } = require('../db/init'); remove('feature_flags', existing.id); }
+  const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === flagKey);
+  if (existing) { const { remove } = require('../db/init'); remove('feature_flags', f => f.id === existing.id); }
   res.json({ key, environment_id, enabled: DEFAULT_FLAGS[key], reset: true });
 });
 

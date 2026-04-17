@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import api from "./apiClient.js";
-import ActivationChecklist from "./ActivationChecklist.jsx";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -564,8 +563,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
         </div>
         <div data-tour="dashboard-stats" style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
-      {/* Activation checklist — compact mode in header */}
-      {environment?.id && <ActivationChecklist environmentId={environment.id} compact={true}/>}
+
           {/* Dashboard nav pills */}
           {[
             { label:"Overview",   color:"#6B7280", nav:"overview",   current:true },

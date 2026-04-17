@@ -96,7 +96,8 @@ function TaskRow({ task, last, phaseColor, navObjects, onNavigate, onTick, ticki
       if (obj) { onNavigate(`obj_${obj.id}`); return; }
     }
     if (task.navTarget === "setup_wizard") {
-      window.dispatchEvent(new CustomEvent("talentos:launch-setup-wizard"));
+      onNavigate("settings");
+      sessionStorage.setItem("talentos_settings_section", "company_profile");
       return;
     }
     if (task.navTarget) {

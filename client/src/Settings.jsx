@@ -2337,10 +2337,17 @@ function CompanyProfilePanel({ environment }) {
           <p style={{ fontSize:13, color:C.text3, margin:"0 0 20px", maxWidth:360, marginLeft:"auto", marginRight:"auto", lineHeight:1.6 }}>
             Click "Run AI Research" to automatically populate your profile, or add your details manually using the sections below.
           </p>
-          <button onClick={() => startEdit("identity", { name:"", industry:"", size:"", founded:"", website:"", logo_url:"", brand_color:"#4361EE", headquarters:"", description:"", tone:"professional" })}
-            style={{ padding:"9px 20px", borderRadius:10, border:`1.5px solid ${C.border}`, background:"white", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
-            + Add manually
-          </button>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+            <button onClick={launchWizard}
+              style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 22px", borderRadius:10, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>
+              <Ic n="sparkle" s={14} c="white"/>
+              Run AI Research
+            </button>
+            <button onClick={() => startEdit("identity", { name:"", industry:"", size:"", founded:"", website:"", logo_url:"", brand_color:"#4361EE", headquarters:"", description:"", tone:"professional" })}
+              style={{ padding:"9px 20px", borderRadius:10, border:`1.5px solid ${C.border}`, background:"white", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+              + Add manually
+            </button>
+          </div>
         </div>
       )}
 
@@ -2552,7 +2559,7 @@ const NAV_GROUPS = [
       { id:"appearance",  icon:"sun",       label:"Appearance" },
       { id:"language",    icon:"globe",     label:"Language" },
       { id:"notifications", icon:"bell",  label:"Notifications" },
-      { id:"setup_wizard", icon:"building", label:"Company Profile" },
+      { id:"company_profile", icon:"building", label:"Company Profile" },
     ],
   },
   {
@@ -2817,7 +2824,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="datasets"    && <DatasetsSection environment={environment}/>}
         {activeSection==="enterprise"  && <EnterpriseSettings environment={environment}/>}
         {activeSection==="integration_hub" && <IntegrationHub environment={environment}/>}
-        {activeSection==="setup_wizard" && (
+        {activeSection==="company_profile" && (
           <CompanyProfilePanel environment={environment}/>
         )}
       </div>

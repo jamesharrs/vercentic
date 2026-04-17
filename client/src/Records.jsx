@@ -146,7 +146,7 @@ const Inp = ({ label, value, onChange, placeholder, type="text", disabled, multi
     {multiline
       ? <textarea rows={rows} value={value ?? ""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} autoFocus={autoFocus}
           style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:disabled?"#f9fafb":C.surface, resize:"vertical", ...style }}/>
-      : <input type={type} value={value ?? ""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} autoFocus={autoFocus}
+      : <input type={type} value={value ?? ""} onChange={e=>onChange(e.target.value)} onWheel={type==="number"?e=>e.target.blur():undefined} placeholder={placeholder} disabled={disabled} autoFocus={autoFocus}
           style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:F, outline:"none", color:C.text1, background:disabled?"#f9fafb":C.surface, width:"100%", boxSizing:"border-box", ...style }}/>
     }
   </div>
@@ -702,8 +702,8 @@ const CountryPicker = ({ value, onChange, autoFocus }) => {
       <input placeholder="Search countries…" value={search} onChange={e=>setSearch(e.target.value)} autoFocus={autoFocus} style={{flex:1,padding:"6px 10px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:12,color:C.text1}}/>
     </div>
     <div style={{maxHeight:180,overflowY:"auto",border:"1.5px solid #e5e7eb",borderRadius:8,background:"white"}}>
-      {value&&<div onClick={()=>{onChange("");setSearch("");}} style={{padding:"6px 10px",fontSize:12,color:C.text3,cursor:"pointer",borderBottom:"1px solid #f0f0f0"}}>✕ Clear</div>}
-      {filtered.map(c=><div key={c.code} onClick={()=>{onChange(c.code);setSearch("");}} style={{padding:"5px 10px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:value===c.code?"#f0f4ff":"transparent",color:value===c.code?C.accent:C.text1}} onMouseEnter={e=>{if(value!==c.code)e.currentTarget.style.background="#f9fafb";}} onMouseLeave={e=>{if(value!==c.code)e.currentTarget.style.background="transparent";}}>
+      {value&&<div onMouseDown={e=>{e.preventDefault();onChange("");setSearch("");}} style={{padding:"6px 10px",fontSize:12,color:C.text3,cursor:"pointer",borderBottom:"1px solid #f0f0f0"}}>✕ Clear</div>}
+      {filtered.map(c=><div key={c.code} onMouseDown={e=>{e.preventDefault();onChange(c.code);setSearch("");}} style={{padding:"5px 10px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:value===c.code?"#f0f4ff":"transparent",color:value===c.code?C.accent:C.text1}} onMouseEnter={e=>{if(value!==c.code)e.currentTarget.style.background="#f9fafb";}} onMouseLeave={e=>{if(value!==c.code)e.currentTarget.style.background="transparent";}}>
         <span>{c.flag}</span><span>{c.name}</span><span style={{marginLeft:"auto",fontSize:10,color:C.text3}}>{c.code}</span>
       </div>)}
       {!filtered.length&&<div style={{padding:10,fontSize:12,color:C.text3,textAlign:"center"}}>No countries found</div>}
@@ -818,7 +818,7 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
       </div>;
     }
     case "percent":
-      return <div style={{position:"relative"}}><input type="number" min={0} max={100} step={0.1} value={value??""} placeholder="0" onChange={e=>onChange(e.target.value===''?null:Number(e.target.value))} autoFocus={autoFocus} style={{width:"100%",padding:"7px 32px 7px 10px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:C.text1,boxSizing:"border-box"}}/><span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:13,fontWeight:700,color:C.text3}}>%</span></div>;
+      return <div style={{position:"relative"}}><input type="number" min={0} max={100} step={0.1} value={value??""} placeholder="0" onChange={e=>onChange(e.target.value===''?null:Number(e.target.value))} onWheel={e=>e.target.blur()} autoFocus={autoFocus} style={{width:"100%",padding:"7px 32px 7px 10px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:C.text1,boxSizing:"border-box"}}/><span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:13,fontWeight:700,color:C.text3}}>%</span></div>;
     case "datetime":
       return <input type="datetime-local" value={value?String(value).slice(0,16):""} onChange={e=>onChange(e.target.value)} autoFocus={autoFocus} style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:C.text1,boxSizing:"border-box"}}/>;
     case "duration":
@@ -863,6 +863,7 @@ const PeoplePicker = ({ field, value, onChange }) => {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [dropUp, setDropUp] = useState(false);
+  const [dropRect, setDropRect] = useState(null);
   const ref = useRef(null);
   const inputRef = useRef(null);
   const isMulti = field.field_type === "multi_lookup" || field.field_type === "people" || field.people_multi !== false;
@@ -882,23 +883,27 @@ const PeoplePicker = ({ field, value, onChange }) => {
   const checkDropDirection = () => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    setDropUp(window.innerHeight - rect.bottom < 220);
+    const up = window.innerHeight - rect.bottom < 220;
+    setDropUp(up);
+    setDropRect(rect);
   };
 
   // Load options once — use module-level cache keyed by objectId+envId
   useEffect(() => {
-    if (!open || !_currentEnvId) return;
+    if (!open) return;
+    const envId = _currentEnvId || field.environment_id;
+    if (!envId) { setLoaded(true); return; } // no env — show empty rather than loading forever
     const filterSuffix = field.people_selection_mode === "specific"
       ? `_specific_${(field.people_allowed_ids||[]).length}`
       : field.people_selection_mode === "saved_list"
       ? `_list_${field.people_saved_list_id||''}`
       : field.people_filter_field ? `_${field.people_filter_field}_${field.people_filter_value}` : '';
-    const cacheKey = `${field.lookup_object_id||field.related_object_slug||'people'}_${_currentEnvId}${filterSuffix}`;
+    const cacheKey = `${field.lookup_object_id||field.related_object_slug||'people'}_${envId}${filterSuffix}`;
     if (_pickerCache[cacheKey]) { setOptions(_pickerCache[cacheKey]); setLoaded(true); return; }
     if (loaded) return;
 
     const fetchRecords = (objectId) =>
-      api.get(`/records?object_id=${objectId}&environment_id=${_currentEnvId}&limit=200`)
+      api.get(`/records?object_id=${objectId}&environment_id=${envId}&limit=200`)
         .then(async (res) => {
           const recs = Array.isArray(res) ? res : (res.records || []);
           // Apply people selection mode filters
@@ -954,7 +959,7 @@ const PeoplePicker = ({ field, value, onChange }) => {
 
     if (field.lookup_object_id) { fetchRecords(field.lookup_object_id); return; }
     const slug = field.related_object_slug || "people";
-    api.get(`/objects?environment_id=${_currentEnvId}`)
+    api.get(`/objects?environment_id=${envId}`)
       .then(objs => (Array.isArray(objs) ? objs : []).find(o => o.slug === slug))
       .then(obj => obj && fetchRecords(obj.id))
       .catch(() => {});
@@ -1001,17 +1006,22 @@ const PeoplePicker = ({ field, value, onChange }) => {
             </span>
           );
         })}
-        <input ref={inputRef} value={search} onChange={e=>{ setSearch(e.target.value); checkDropDirection(); setOpen(true); }}
+        <input ref={inputRef} value={search} onChange={e=>{ setSearch(e.target.value); if(!dropRect) checkDropDirection(); setOpen(true); }}
           onFocus={()=>setOpen(true)}
           placeholder={selected.length===0?(field.placeholder||`Search ${field.name||"people"}…`):""}
           style={{border:"none",outline:"none",fontSize:13,fontFamily:F,color:C.text1,background:"transparent",
             minWidth:80,flex:1,padding:"1px 0"}}/>
       </div>
-      {/* Dropdown */}
-      {open && (
-        <div style={{position:"absolute",
-          ...(dropUp ? {bottom:"calc(100% + 3px)"} : {top:"calc(100% + 3px)"}),
-          left:0,right:0,zIndex:400,background:C.surface,
+      {/* Dropdown — portal so it renders above overflow:hidden panels */}
+      {open && dropRect && ReactDOM.createPortal(
+        <div style={{
+          position:"fixed",
+          left: dropRect.left,
+          width: dropRect.width,
+          ...(dropUp
+            ? { bottom: window.innerHeight - dropRect.top + 3 }
+            : { top: dropRect.bottom + 3 }),
+          zIndex:9990, background:C.surface,
           border:`1px solid ${C.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.1)",
           maxHeight:200,overflowY:"auto"}}>
           {!loaded && <div style={{padding:"12px",fontSize:12,color:C.text3,textAlign:"center"}}>Loading…</div>}
@@ -1086,7 +1096,8 @@ const PeoplePicker = ({ field, value, onChange }) => {
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1098,6 +1109,7 @@ const DatasetPicker = ({ field, value, onChange }) => {
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState([]);
   const [open, setOpen] = useState(false);
+  const [dropRect, setDropRect] = useState(null);
   const ref = useRef(null);
   const isMulti = field.dataset_multi !== false && field.dataset_multi !== "false";
   const selected = Array.isArray(value) ? value : (value ? [value] : []);
@@ -1114,10 +1126,17 @@ const DatasetPicker = ({ field, value, onChange }) => {
   }, [field.dataset_id]);
 
   useEffect(() => {
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target) && !e.target.closest('[data-dataset-dropdown]')) setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const openDrop = () => {
+    if (ref.current) setDropRect(ref.current.getBoundingClientRect());
+    setOpen(o => !o);
+  };
 
   const filtered = options.filter(o => !search || o.label.toLowerCase().includes(search.toLowerCase()));
   const toggle = (label) => {
@@ -1134,10 +1153,11 @@ const DatasetPicker = ({ field, value, onChange }) => {
     return <div style={{fontSize:12,color:C.text3,padding:"4px 0"}}>No data set configured for this field</div>;
   }
 
+  const dropUp = dropRect && (window.innerHeight - dropRect.bottom) < 260;
+
   return (
     <div ref={ref} style={{position:"relative"}}>
-      {/* Selected pills + input trigger */}
-      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",flexWrap:"wrap",gap:4,padding:"6px 8px",borderRadius:8,border:`1.5px solid ${open?C.accent:C.border}`,background:"white",cursor:"pointer",minHeight:36,alignItems:"center"}}>
+      <div onClick={openDrop} style={{display:"flex",flexWrap:"wrap",gap:4,padding:"6px 8px",borderRadius:8,border:`1.5px solid ${open?C.accent:C.border}`,background:"white",cursor:"pointer",minHeight:36,alignItems:"center"}}>
         {selected.map(s => {
           const opt = options.find(o=>o.label===s);
           return (
@@ -1150,9 +1170,15 @@ const DatasetPicker = ({ field, value, onChange }) => {
         })}
         {selected.length===0 && <span style={{fontSize:13,color:C.text3,userSelect:"none"}}>{field.placeholder||`Choose ${field.name}…`}</span>}
       </div>
-      {/* Dropdown */}
-      {open && (
-        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:200,background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",maxHeight:240,display:"flex",flexDirection:"column"}}>
+      {/* Dropdown — portal to escape overflow:hidden panels */}
+      {open && dropRect && ReactDOM.createPortal(
+        <div data-dataset-dropdown="1" style={{
+          position:"fixed",
+          left: dropRect.left, width: dropRect.width,
+          ...(dropUp ? { bottom: window.innerHeight - dropRect.top + 3 } : { top: dropRect.bottom + 3 }),
+          zIndex:9990, background:"white", borderRadius:10,
+          border:`1.5px solid ${C.border}`, boxShadow:"0 8px 24px rgba(0,0,0,0.12)",
+          maxHeight:240, display:"flex", flexDirection:"column"}}>
           <div style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}>
             <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
               style={{width:"100%",border:"none",outline:"none",fontSize:13,fontFamily:F,color:C.text1,background:"transparent"}}/>
@@ -1161,17 +1187,20 @@ const DatasetPicker = ({ field, value, onChange }) => {
             {filtered.map(opt => {
               const active = selected.includes(opt.label);
               return (
-                <div key={opt.id} onClick={()=>toggle(opt.label)}
-                  style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",background:active?`${C.accent}08`:"white"}}>
+                <div key={opt.id} onMouseDown={e=>{e.preventDefault();toggle(opt.label);}}
+                  style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",background:active?`${C.accent}08`:"white"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=active?`${C.accent}12`:"#f9fafb"}
+                  onMouseLeave={e=>e.currentTarget.style.background=active?`${C.accent}08`:"white"}>
                   {opt.color && <div style={{width:10,height:10,borderRadius:"50%",background:opt.color,flexShrink:0}}/>}
                   <span style={{flex:1,fontSize:13,color:C.text1,fontWeight:active?600:400}}>{opt.label}</span>
-                  {active && <span style={{color:C.accent,fontSize:16}}>✓</span>}
+                  {active && <Ic n="check" s={13} c={C.accent}/>}
                 </div>
               );
             })}
             {filtered.length===0 && <div style={{padding:"12px",textAlign:"center",fontSize:12,color:C.text3}}>No options found</div>}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1478,6 +1507,8 @@ const Avatar = ({ name, color=C.accent, size=32, photoUrl=null }) => {
 /* ─── Avatar with Duplicate Badge ─────────────────────────────────────────── */
 const AvatarWithDupBadge = ({ name, color, size = 32, photoUrl, dupInfo }) => {
   const [tip, setTip] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const badgeRef = useRef(null);
 
   if (!dupInfo) {
     return <Avatar name={name} color={color} size={size} photoUrl={photoUrl} />;
@@ -1486,13 +1517,22 @@ const AvatarWithDupBadge = ({ name, color, size = 32, photoUrl, dupInfo }) => {
   const isStrong   = dupInfo.score >= 80;
   const badgeColor = isStrong ? "#EF4444" : "#F59F00";
 
+  const showTip = () => {
+    if (badgeRef.current) {
+      const r = badgeRef.current.getBoundingClientRect();
+      setTipPos({ x: r.left + r.width / 2, y: r.top });
+    }
+    setTip(true);
+  };
+
   return (
     <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
       <Avatar name={name} color={color} size={size} photoUrl={photoUrl} />
 
       {/* Badge dot */}
       <div
-        onMouseEnter={() => setTip(true)}
+        ref={badgeRef}
+        onMouseEnter={showTip}
         onMouseLeave={() => setTip(false)}
         style={{
           position:"absolute", bottom:-2, right:-2,
@@ -1506,15 +1546,17 @@ const AvatarWithDupBadge = ({ name, color, size = 32, photoUrl, dupInfo }) => {
           <path d="M3.5 0.7L6.2 5.3H0.8L3.5 0.7Z" fill="white"/>
         </svg>
 
-        {tip && (
+        {tip && ReactDOM.createPortal(
           <div style={{
-            position:"absolute", bottom:18, left:"50%",
-            transform:"translateX(-50%)",
+            position:"fixed",
+            left: tipPos.x,
+            top: tipPos.y - 8,
+            transform:"translate(-50%, -100%)",
             background:"#0F1729", color:"white",
             padding:"9px 12px", borderRadius:10,
             fontSize:11, lineHeight:1.6,
             boxShadow:"0 8px 28px rgba(0,0,0,.28)",
-            whiteSpace:"nowrap", zIndex:9999,
+            whiteSpace:"nowrap", zIndex:99999,
             pointerEvents:"none", minWidth:170,
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
@@ -1541,7 +1583,8 @@ const AvatarWithDupBadge = ({ name, color, size = 32, photoUrl, dupInfo }) => {
               borderRight:"5px solid transparent",
               borderTop:"5px solid #0F1729",
             }}/>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
@@ -1820,9 +1863,12 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                     <Ic n="copy" s={13} c="inherit"/> Copy existing
                   </button>
 
-                  {showCopyPicker && (
-                    <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, width:320, zIndex:1100,
-                      background:"white", borderRadius:10, border:`1px solid ${C.border}`,
+                  {showCopyPicker && copyRef.current && ReactDOM.createPortal(
+                    <div style={{ position:"fixed",
+                      left: copyRef.current.getBoundingClientRect().left,
+                      top: copyRef.current.getBoundingClientRect().bottom + 6,
+                      width: Math.max(320, copyRef.current.getBoundingClientRect().width),
+                      zIndex:9990, background:"white", borderRadius:10, border:`1px solid ${C.border}`,
                       boxShadow:"0 8px 32px rgba(0,0,0,.12)", overflow:"hidden" }}>
                       <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
                         <input autoFocus value={copySearch} onChange={e=>setCopySearch(e.target.value)}
@@ -1872,7 +1918,8 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                           <div style={{ padding:16, textAlign:"center", fontSize:12, color:C.text3 }}>No records found</div>
                         )}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
 
@@ -7404,34 +7451,28 @@ const SuggestedActions = ({ record, environment, onAction }) => {
     return "M12 5v14M5 12h14";
   };
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 16px 7px 14px",
-      background:"linear-gradient(90deg,#FFFBEB 0%,#FEFCE8 100%)",
-      borderBottom:"1px solid #FDE68A", flexShrink:0, overflowX:"auto" }}>
+    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 16px 7px 12px",
+      background:"#1e1b4b",
+      borderBottom:"1px solid #312e81", flexShrink:0, overflowX:"auto" }}>
       <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0, marginRight:4 }}>
-        <div style={{ width:22, height:22, borderRadius:6, flexShrink:0,
-          background:"linear-gradient(135deg,#F59E0B,#EF4444)",
-          display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="white" stroke="none">
-            <path d="M12 2L9.1 9.1 2 12l7.1 2.9L12 22l2.9-7.1L22 12l-7.1-2.9L12 2z"/>
-          </svg>
-        </div>
-        <span style={{ fontSize:11, fontWeight:700, color:"#92400E", letterSpacing:"0.04em", textTransform:"uppercase", whiteSpace:"nowrap" }}>AI Suggested</span>
-        <div style={{ width:1, height:14, background:"#FCD34D", marginLeft:2, flexShrink:0 }}/>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="2" style={{flexShrink:0}}>
+          <path d="M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0L9.937 15.5z"/>
+        </svg>
+        <span style={{ fontSize:11, fontWeight:700, color:"#e0e7ff", letterSpacing:"0.04em", textTransform:"uppercase", whiteSpace:"nowrap" }}>AI Suggested</span>
+        <div style={{ width:1, height:14, background:"#4338ca", marginLeft:2, flexShrink:0 }}/>
       </div>
       <div style={{ display:"flex", gap:5, alignItems:"center", flex:1 }}>
         {actions.map((action, idx) => (
           <button key={idx} onClick={()=>onAction?.(action)}
             onMouseEnter={()=>setHovered(idx)} onMouseLeave={()=>setHovered(null)}
             style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px 5px 9px",
-              borderRadius:20, border:`1.5px solid ${hovered===idx?"#D97706":"#FCD34D"}`,
-              background:hovered===idx?"#FEF3C7":"white",
-              color:hovered===idx?"#92400E":"#B45309",
+              borderRadius:7, border:`1.5px solid ${hovered===idx?"#6366f1":"#4338ca"}`,
+              background:hovered===idx?"#6366f1":"#312e81",
+              color:"#e0e7ff",
               fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-              whiteSpace:"nowrap", transition:"all .12s",
-              boxShadow:hovered===idx?"0 2px 8px rgba(217,119,6,.15)":"0 1px 2px rgba(0,0,0,.06)",
-              transform:hovered===idx?"translateY(-1px)":"translateY(0)" }}>
+              whiteSpace:"nowrap", transition:"all .12s" }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              stroke="#a5b4fc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d={actionIcon(action.type)}/>
             </svg>
             {action.label||action.title||"Take action"}
@@ -7441,10 +7482,10 @@ const SuggestedActions = ({ record, environment, onAction }) => {
       <button onClick={()=>setDismissed(true)} title="Dismiss"
         style={{ flexShrink:0, marginLeft:4, width:22, height:22, borderRadius:6,
           border:"none", background:"transparent", cursor:"pointer",
-          display:"flex", alignItems:"center", justifyContent:"center", color:"#D97706", transition:"all .12s" }}
-        onMouseEnter={e=>{e.currentTarget.style.background="#FDE68A";}}
+          display:"flex", alignItems:"center", justifyContent:"center", color:"#a5b4fc", transition:"all .12s" }}
+        onMouseEnter={e=>{e.currentTarget.style.background="#312e81";}}
         onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
   );
@@ -7507,9 +7548,13 @@ const ActionBtn = ({ icon, label, onClick, accent, danger }) => (
   </button>
 );
 
-export const RecordDetail = ({ record, fields, allObjects, environment, objectName, objectColor, onClose, fullPage, onToggleFullPage, onUpdate, onDelete, onNavigate }) => {
+export const RecordDetail = ({ record, fields, allObjects, environment, objectName, objectColor, onClose, fullPage, onToggleFullPage, onUpdate, onDelete, onNavigate, featureFlags = {} }) => {
+  const ff = { bulk_actions:true, communications_panel:true, duplicate_detection:true,
+    cv_parsing:true, linkedin_finder:true, ai_copilot:true, ai_matching:true, interviews:true, ...featureFlags };
   const _permCtx = usePermCtx();
   const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
+  // Ensure module-level env ID is always set — PeoplePicker depends on it
+  useEffect(() => { if (environment?.id) _currentEnvId = environment.id; }, [environment?.id]);
   // ── Job context — Person records only ────────────────────────────────────
   const [highlightEmptyFields, setHighlightEmptyFields] = useState(false);
   const [showFormPicker, setShowFormPicker] = useState(false);
@@ -7548,7 +7593,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     return {comms:true,notes:true,attachments:true,activity:false,workflows:false,match:false,reporting:true,user:true,forms:false};
   });
   const [composeType, setComposeType] = useState(null);   // drives compose modal in CommunicationsPanel
-  const [showCommMenu, setShowCommMenu] = useState(false);
+  const [showCommMenu, setShowCommMenu] = useState(null); // null or DOMRect
   const [showTalentCard, setShowTalentCard] = useState(false);
   const [showCampaignLinks, setShowCampaignLinks] = useState(false);
   // Track which custom sections are collapsed (by separatorId)
@@ -7888,7 +7933,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       } else {
         const att = await res.json();
         load();
-        if (ft?.parse_cv) {
+        if (ft?.parse_cv && ff.cv_parsing) {
           if (confirm(`"${ft.name}" file uploaded. Parse CV fields automatically?`)) {
             handleCvParse(att);
           }
@@ -8383,7 +8428,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                       style={{ display:"flex", alignItems:isEditing?"flex-start":"center", gap:12,
                         padding:"11px 14px",
                         borderBottom: i < section.fs.length-1 ? `1px solid ${C.border}` : "none",
-                        background:isEditing?"#fafbff":"transparent", transition:"background .1s" }}
+                        background:isEditing?"#fafbff":"transparent", transition:"background .1s",
+                        cursor: field.field_type==="table" && !isReadonly ? "pointer" : "default" }}
+                      onClick={field.field_type==="table" && !isReadonly ? ()=>setTableModalField({field,value:originalVal}) : undefined}
                       onMouseEnter={e=>{ if(!isEditing&&!isReadonly){e.currentTarget.style.background="#f0f4ff";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=1;}}}
                       onMouseLeave={e=>{ e.currentTarget.style.background=isEditing?"#fafbff":"transparent";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=0;}}>
                       <div style={{ width:130, fontSize:12, fontWeight:600, color:C.text3, flexShrink:0 }}>{field.name}</div>
@@ -8468,10 +8515,17 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           <div style={{ background:"#f8f9fc", borderRadius:12, border:`1px solid ${C.border}`, overflow:"hidden" }}>
             {section.fs.map((field, i) => {
               const isEditing = editing.hasOwnProperty(field.api_key);
-              const val = isEditing ? editing[field.api_key] : record.data?.[field.api_key];
+              const isTable = field.field_type === "table";
+              const originalVal = record.data?.[field.api_key];
+              const val = isEditing ? editing[field.api_key] : originalVal;
               const READONLY_KEYS = ["id","created_at","updated_at"];
               const isReadonly = READONLY_KEYS.includes(field.api_key);
               const isClickSave = CLICK_SAVE_TYPES.includes(field.field_type);
+              const handleRowClick = () => {
+                if (isReadonly) return;
+                if (isTable) { setTableModalField({ field, value: originalVal }); return; }
+                if (!isEditing && !isClickSave) setEditing(prev=>({...prev,[field.api_key]:originalVal??null}));
+              };
               return (
                 <div key={field.id}
                   style={{ display:"flex", alignItems:isEditing?"flex-start":"center", gap:12,
@@ -8479,20 +8533,30 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                     borderBottom: i < section.fs.length-1 ? `1px solid ${C.border}` : "none",
                     transition:"background .1s", cursor: isReadonly||isEditing ? "default" : "pointer",
                     background: isEditing ? `${C.accent}06` : "transparent" }}
-                  onMouseEnter={e=>{ if (!isEditing&&!isReadonly) e.currentTarget.style.background="#f8f9fc"; }}
-                  onMouseLeave={e=>{ if (!isEditing) e.currentTarget.style.background="transparent"; }}
-                  onClick={()=>{ if(!isEditing&&!isReadonly&&!isClickSave) setEditing(prev=>({...prev,[field.api_key]:record.data?.[field.api_key]??null})); }}>
+                  onMouseEnter={e=>{ if(!isEditing&&!isReadonly){e.currentTarget.style.background="#f8f9fc";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=1;}}}
+                  onMouseLeave={e=>{ e.currentTarget.style.background=isEditing?`${C.accent}06`:"transparent";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=0;}}
+                  onClick={handleRowClick}>
                   <span style={{ fontSize:12, color:C.text3, width:130, flexShrink:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{field.name}</span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    {isEditing ? (
+                    {isTable ? (
+                      <TableFieldValue field={field} value={originalVal}/>
+                    ) : isEditing ? (
                       <FieldEditor field={field} value={val} env={environment?.id}
-                        onChange={v=>{ if(isClickSave){ setEditing(p=>({...p,[field.api_key]:v})); handleSaveFieldValue(field.api_key, record.data?.[field.api_key], v); } else setEditing(p=>({...p,[field.api_key]:v})); }}
-                        onSave={()=>handleSaveField(field.api_key, record.data?.[field.api_key])}
+                        onChange={v=>{ if(isClickSave){ setEditing(p=>({...p,[field.api_key]:v})); handleSaveFieldValue(field.api_key, originalVal, v); } else setEditing(p=>({...p,[field.api_key]:v})); }}
+                        onSave={()=>handleSaveField(field.api_key, originalVal)}
                         onCancel={()=>setEditing(p=>{const n={...p};delete n[field.api_key];return n;})}/>
                     ) : (
                       <FieldValue field={field} value={val} allFieldValues={record.data || {}}/>
                     )}
                   </div>
+                  {!isReadonly && !isEditing && (
+                    <button className="edit-hint" onClick={e=>{ e.stopPropagation(); handleRowClick(); }}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:C.accent, opacity:0,
+                        padding:"3px 6px", display:"flex", alignItems:"center", gap:4, fontSize:11,
+                        fontWeight:600, borderRadius:6, transition:"opacity .1s", flexShrink:0, fontFamily:F }}>
+                      <Ic n="edit" s={12} c={C.accent}/> {isTable ? "Open" : "Edit"}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -8500,12 +8564,24 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         </div>
       );
     }
-    if (id==="comms") return canRecord('record_view_comms') ? (
-      <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
-    ) : <AccessDeniedPanel label="Communications"/>;
-    if (id==="coordination") return (
-      <PersonInterviewsPanel record={record} environment={environment} linkedJobRecords={linkedJobRecords} activeJobContext={activeJobContext}/>
-    );
+    if (id==="comms") {
+      if (!ff.communications_panel) return null;
+      return canRecord('record_view_comms') ? (
+        <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
+      ) : <AccessDeniedPanel label="Communications"/>;
+    }
+    if (id==="coordination") {
+      if (!ff.interviews) return null;
+      return <PersonInterviewsPanel record={record} environment={environment} linkedJobRecords={linkedJobRecords} activeJobContext={activeJobContext}/>;
+    }
+    if (id==="interview_plan") {
+      if (!ff.interviews) return null;
+      return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
+    }
+    if (id==="scorecard") {
+      if (!ff.interviews) return null;
+      return <ScorecardPanel record={record} environment={environment}/>;
+    }
     if (id==="notes") return canRecord('record_add_note') || canRecord('record_view_comms') ? (
       <NotesPanel record={record} notes={notes} onNotesChange={load} canAdd={canRecord('record_add_note')} canDelete={canRecord('record_delete_note')} linkedJobRecords={linkedJobRecords} activeJobContext={activeJobContext}/>
     ) : <AccessDeniedPanel label="Notes"/>;
@@ -8585,7 +8661,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                  {isCV && att.filename && canRecord('record_parse_cv') && (
+                  {isCV && att.filename && canRecord('record_parse_cv') && ff.cv_parsing && (
                     <button onClick={()=>handleCvParse(att)} disabled={cvParsing} title="Parse CV fields"
                       style={{background:'none',border:`1px solid ${C.accent}30`,borderRadius:6,cursor:'pointer',padding:'4px 7px',color:C.accent,fontSize:10,fontWeight:700,fontFamily:F}}>
                       {cvParsing&&cvParseAtt?.id===att.id?'…':'Parse CV'}
@@ -8638,18 +8714,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         {docExtractResult && ReactDOM.createPortal(
           <DocExtractModal result={docExtractResult} mappings={docExtractMappings} record={record}
             onApply={handleApplyDocFields} onClose={()=>{ setDocExtractResult(null); setDocExtractAtt(null); }}/>,
-          document.body
-        )}
-        {tableModalField && ReactDOM.createPortal(
-          <TableModal
-            field={tableModalField.field}
-            value={tableModalField.value}
-            onSave={(rows)=>{
-              handleSaveFieldValue(tableModalField.field.api_key, tableModalField.value, rows);
-              setTableModalField(null);
-            }}
-            onClose={()=>setTableModalField(null)}
-          />,
           document.body
         )}
       </div>
@@ -8708,21 +8772,24 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
     if (id==="user") return <UserPanel record={record}/>;
-    if (id==="scorecard")    return <ScorecardPanel record={record} environment={environment}/>;
-    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
+    if (id==="scorecard")    return ff.interviews ? <ScorecardPanel record={record} environment={environment}/> : null;
+    if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
-    if (id==="interview_plan") return <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense>;
+    // interview_plan and scorecard are handled earlier with ff.interviews gate
 
-    if (id==="match") return (
-      <StableMatchPanel
-        recordId={record.id}
-        objectName={objectName}
-        environment={environment}
-        record={record}
-        onNavigate={onNavigate}
-      />
-    );
+    if (id==="match") {
+      if (!ff.ai_matching) return null;
+      return (
+        <StableMatchPanel
+          recordId={record.id}
+          objectName={objectName}
+          environment={environment}
+          record={record}
+          onNavigate={onNavigate}
+        />
+      );
+    }
 
     if (id==="fields") return (
       <div>
@@ -8766,9 +8833,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     { id:"notes",       icon:"messageSquare", label:`Notes${notes.length?` (${notes.length})`:""}` },
     { id:"attachments", icon:"paperclip",     label:`Files${attachments.length?` (${attachments.length})`:""}` },
     { id:"forms",       icon:"form",          label:"Forms" },
-
     ...( objectName === "Person" ? [{ id:"linked", icon:"link", label:"Linked Records" }] : [] ),
-    ...( ["Person","Job"].includes(objectName) ? [{ id:"match", icon:"sparkles", label:"Recommendations" }] : [] ),
+    ...( ["Person","Job"].includes(objectName) && ff.ai_matching ? [{ id:"match", icon:"sparkles", label:"Recommendations" }] : [] ),
   ];
 
   if (!fullPage) return (
@@ -8936,21 +9002,23 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
 
         {/* Communicate dropdown — Person only */}
-        {objectName === "Person" && canRecord('record_view_comms') && (
+        {objectName === "Person" && canRecord('record_view_comms') && ff.communications_panel && (
           <div style={{ position:"relative" }}>
-            <button
-              onClick={()=>setShowCommMenu(v=>!v)}
-              onBlur={()=>setTimeout(()=>setShowCommMenu(false),150)}
+            <button ref={el => { if (el) el._commBtn = el; }}
+              id="comm-btn-anchor"
+              onClick={e=>{ const r=e.currentTarget.getBoundingClientRect(); setShowCommMenu(v=>v?null:r); }}
+              onBlur={()=>setTimeout(()=>setShowCommMenu(null),150)}
               style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8,
                 border:`1.5px solid ${C.accent}`, background:C.accentLight, color:C.accent,
                 fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:F, whiteSpace:"nowrap" }}>
               <Ic n="mail" s={12} c={C.accent}/> Communicate
               <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity:0.7 }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
             </button>
-            {showCommMenu && (
-              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, background:C.surface,
-                border:`1.5px solid ${C.border}`, borderRadius:12, boxShadow:"0 8px 32px rgba(0,0,0,.14)",
-                minWidth:200, zIndex:200, overflow:"hidden", padding:"4px 0" }}>
+            {showCommMenu && ReactDOM.createPortal(
+              <div style={{ position:"fixed", top: showCommMenu.bottom + 6, left: showCommMenu.left,
+                background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
+                boxShadow:"0 8px 32px rgba(0,0,0,.14)", minWidth:200, zIndex:9990,
+                overflow:"hidden", padding:"4px 0" }}>
                 {COMM_OPTIONS.filter(opt => {
                   if (opt.type==='email') return canRecord('record_send_email');
                   if (opt.type==='sms' || opt.type==='whatsapp') return canRecord('record_send_sms');
@@ -8971,7 +9039,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                 <div style={{ borderTop:`1px solid ${C.border}`, margin:"4px 0", padding:"2px 16px 2px" }}>
                   <div style={{ fontSize:11, color:C.text3, paddingTop:4 }}>Shortcut: <kbd style={{ background:"#f1f5f9", borderRadius:4, padding:"1px 5px", fontFamily:"monospace" }}>C</kbd></div>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )}
@@ -9051,10 +9120,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               <Ic n="search" s={12}/> Search
             </button>
           )}
-          {/* Search results dropdown */}
-          {recordSearchOpen && recordSearch.trim() && (
-            <div style={{ position:"absolute", top:"calc(100% + 8px)", right:0, zIndex:600,
-              background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
+          {/* Search results dropdown — portal to escape panel overflow */}
+          {recordSearchOpen && recordSearch.trim() && recordSearchRef.current && ReactDOM.createPortal(
+            <div style={{ position:"fixed",
+              top: recordSearchRef.current.getBoundingClientRect().bottom + 8,
+              right: window.innerWidth - recordSearchRef.current.getBoundingClientRect().right,
+              zIndex:9990, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
               boxShadow:"0 12px 40px rgba(0,0,0,.14)", minWidth:340, maxWidth:440, maxHeight:380, overflowY:"auto" }}>
               {recordSearchResults.length === 0 ? (
                 <div style={{ padding:"20px 16px", textAlign:"center", fontSize:13, color:C.text3 }}>
@@ -9090,11 +9161,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   ))}
                 </>
               )}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
-
-        {/* Slim divider before destructive actions */}
         <div style={{ width:1, height:20, background:C.border, flexShrink:0, margin:"0 4px" }}/>
 
         {/* Delete + Close */}
@@ -9314,6 +9384,20 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           />
         </Suspense>
       )}
+
+      {/* Table field editor — always at top level so it renders regardless of which panel is active */}
+      {tableModalField && ReactDOM.createPortal(
+        <TableModal
+          field={tableModalField.field}
+          value={tableModalField.value}
+          onSave={(rows)=>{
+            handleSaveFieldValue(tableModalField.field.api_key, tableModalField.value, rows);
+            setTableModalField(null);
+          }}
+          onClose={()=>setTableModalField(null)}
+        />,
+        document.body
+      )}
     </div>
   );
 };
@@ -9477,7 +9561,10 @@ function buildListContext(object, records, total, fields) {
   return lines.join("\n");
 }
 
-export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed, allObjects = [] }) {
+export default function RecordsView({ environment, object, onOpenRecord, initialFilter, session, autoCreate, onAutoCreateConsumed, allObjects = [], featureFlags = {} }) {
+  // Destructure feature flags with safe defaults (all on unless explicitly disabled)
+  const ff = { bulk_actions:true, communications_panel:true, duplicate_detection:true,
+    cv_parsing:true, linkedin_finder:true, ai_copilot:true, ai_matching:true, interviews:true, ...featureFlags };
   // Make environment available to PeoplePicker without prop drilling
   useEffect(() => { _currentEnvId = environment?.id; resolveMyPersonId(); }, [environment?.id]);
 
@@ -9493,6 +9580,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Background duplicate scan — only for People objects, runs after records load
   useEffect(() => {
+    if (!ff.duplicate_detection) { setDupMap({}); return; }
     const isPeople = object?.slug === "people" ||
                      object?.name?.toLowerCase().includes("person");
     if (!isPeople || !environment?.id || !object?.id || records.length < 2) {
@@ -10313,7 +10401,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       )}
 
       {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
+      {ff.bulk_actions && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
           total={displayedRecords.length}
@@ -10344,9 +10432,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             
               dupMap={dupMap}
               onStatusUpdate={updated => setRecords(prev => prev.map(r => r.id===updated.id ? updated : r))}
-            selectedIds={selectedIds}
-            onToggleSelect={id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })}
-            onToggleAll={() => setSelectedIds(prev => prev.size === displayedRecords.length ? new Set() : new Set(displayedRecords.map(r => r.id)))}
+            selectedIds={ff.bulk_actions ? selectedIds : new Set()}
+            onToggleSelect={ff.bulk_actions ? (id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })) : null}
+            onToggleAll={ff.bulk_actions ? (() => setSelectedIds(prev => prev.size === displayedRecords.length ? new Set() : new Set(displayedRecords.map(r => r.id)))) : null}
             sortBy={sortBy} sortDir={sortDir} onSort={handleSort}
             activeFilters={activeFilters}
             onColumnFilter={handleColumnFilter}
@@ -10401,6 +10489,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           onUpdate={handleDetailUpdate}
           onDelete={handleDelete}
           onNavigate={onOpenRecord}
+          featureFlags={ff}
         />
       )}
 
