@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-04-17 — DevOps & Deployment Controls
+
+**GitHub Actions CI/CD pipeline deployed**
+- `ci.yml` — runs on every PR to `main` and `develop`: Vite build check, server syntax + startup check, Playwright E2E suite (PRs to main only)
+- `deploy-staging.yml` — auto-deploys Vercel preview on every push to `develop`
+- `deploy-production.yml` — gates on CI pass, then auto-deploys Vercel production + Railway health check on merge to `main`
+- `develop` branch created and pushed to GitHub
+
+**Backlog**
+- [ ] Set GitHub branch protection rules on `main` and `develop` (require PR + status checks, block force pushes)
+- [ ] Create Railway staging service connected to `develop` branch with its own volume
+
+---
+
 ## 2026-04-02 — Major Feature Release (Post March 21)
 
 ---
