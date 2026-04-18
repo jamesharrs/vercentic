@@ -637,5 +637,23 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ── Graceful shutdown — flush all pending debounced saves before exit ─────────
+const { saveStoreNow, listTenants } = require('./db/init');
+function gracefulShutdown(signal) {
+  console.log(`\n[shutdown] Received ${signal} — flushing store to disk…`);
+  try {
+    // Flush master store
+    saveStoreNow('master');
+    // Flush all tenant stores
+    listTenants().forEach(slug => { try { saveStoreNow(slug); } catch {} });
+    console.log('[shutdown] ✅ Store flushed. Exiting.');
+  } catch (e) {
+    console.error('[shutdown] Store flush error:', e.message);
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
 // Export app for testing (supertest uses this without starting a server)
 module.exports = app;

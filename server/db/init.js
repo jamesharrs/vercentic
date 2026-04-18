@@ -244,13 +244,18 @@ async function initDB() {
         store.fields.push({ id: uuidv4(), object_id: jobsObj.id, environment_id: jobsObj.environment_id, name: 'Interviewers', api_key: 'interviewers', field_type: 'multi_lookup', is_required: 0, is_unique: 0, is_system: 1, show_in_list: 0, show_in_form: 1, sort_order: maxOrder + 1, options: null, lookup_object_id: peopleObj ? peopleObj.id : null, default_value: null, placeholder: 'Search people…', help_text: null, condition_field: null, condition_value: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       }
     }
-    // Deduplicate roles — keep first occurrence of each slug, remove non-system strays
-    const VALID_SLUGS = new Set(['super_admin','admin','recruiter','hiring_manager','read_only']);
+    // Deduplicate system roles only — keep first occurrence of each slug
+    // DO NOT delete custom roles (user-created roles with non-system slugs)
+    const SYSTEM_SLUGS = new Set(['super_admin','admin','recruiter','hiring_manager','read_only']);
     const seenSlugs = new Set();
     store.roles = (store.roles || []).filter(r => {
-      if (!VALID_SLUGS.has(r.slug)) return false; // remove non-system roles like 'test'
-      if (seenSlugs.has(r.slug)) return false;    // remove duplicate slugs
-      seenSlugs.add(r.slug);
+      // For system roles: deduplicate by slug (keep first)
+      if (SYSTEM_SLUGS.has(r.slug)) {
+        if (seenSlugs.has(r.slug)) return false; // remove duplicate system role
+        seenSlugs.add(r.slug);
+        return true;
+      }
+      // Custom roles: always keep
       return true;
     });
     // Deduplicate users by email — keep first occurrence
