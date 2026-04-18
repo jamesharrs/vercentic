@@ -71,14 +71,24 @@ export default function FeatureFlagsSettings({ environment }) {
 
   const toggle = async (key, currentlyEnabled) => {
     setSaving(key);
-    await fetch(`/api/feature-flags/${key}`, {
-      method: 'PUT',
-      headers: { 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ environment_id: environment.id, enabled: !currentlyEnabled }),
-    });
-    invalidateFlagCache();   // clear legacy cache
-    await load();            // refresh settings display
-    await refreshFeatureCtx(); // update live feature context → nav/UI updates instantly
+    try {
+      const res = await fetch(`/api/feature-flags/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', ...authHeaders() },
+        body: JSON.stringify({ environment_id: environment.id, enabled: !currentlyEnabled }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Feature flag toggle failed:', err);
+        setSaving(null);
+        return;
+      }
+      invalidateFlagCache();
+      await load();
+      try { await refreshFeatureCtx(); } catch {}
+    } catch (e) {
+      console.error('Feature flag toggle error:', e);
+    }
     setSaving(null);
   };
 
