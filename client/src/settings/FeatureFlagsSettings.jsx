@@ -138,18 +138,73 @@ export default function FeatureFlagsSettings({ environment }) {
   const flagMap = Object.fromEntries(flags.map(f => [f.key, f]));
   if (loading) return <div style={{ padding:32, color:C.text3, fontFamily:F }}>Loading flags…</div>;
 
+  // Bulk toggle — set all keys in a group (or all keys) to enabled/disabled
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const toggleAll = async (keys, enable) => {
+    setBulkSaving(true);
+    // Optimistic update
+    setFlags(prev => prev.map(f => keys.includes(f.key) ? { ...f, enabled: enable, overridden: true } : f));
+    try {
+      await Promise.all(keys.map(key =>
+        fetch(`/api/feature-flags/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type':'application/json', ...authHeaders() },
+          body: JSON.stringify({ environment_id: environment.id, enabled: enable }),
+        })
+      ));
+      invalidateFlagCache();
+      load(true);
+      try { await refreshFeatureCtx(); } catch {}
+    } catch (e) {
+      console.error('Bulk toggle error:', e);
+      load(true); // revert to server state on error
+    }
+    setBulkSaving(false);
+  };
+
+  const allKeys = Object.values(FLAG_GROUPS).flat();
+  const allEnabled  = allKeys.every(k => (flagMap[k]?.enabled ?? true));
+  const allDisabled = allKeys.every(k => !(flagMap[k]?.enabled ?? true));
+
+  const BulkBtn = ({ onClick, children, danger }) => (
+    <button type="button" onClick={onClick} disabled={bulkSaving}
+      style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${danger ? '#fca5a5' : C.border}`,
+        background: danger ? '#fef2f2' : '#f8f9fc', color: danger ? '#dc2626' : C.text2,
+        fontSize:11, fontWeight:600, cursor: bulkSaving ? 'not-allowed' : 'pointer',
+        fontFamily:F, transition:'all .15s', opacity: bulkSaving ? 0.5 : 1 }}>
+      {children}
+    </button>
+  );
+
   return (
     <div style={{ maxWidth:760, fontFamily:F }}>
       <div style={{ marginBottom:24 }}>
-        <h2 style={{ margin:'0 0 6px', fontSize:18, fontWeight:700, color:C.text1 }}>Feature Flags</h2>
-        <p style={{ margin:0, fontSize:13, color:C.text2, lineHeight:1.6 }}>
-          Control which features are enabled for <strong>{environment?.name || 'this environment'}</strong>.
-          Changes take effect immediately across the app.
-        </p>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16 }}>
+          <div>
+            <h2 style={{ margin:'0 0 6px', fontSize:18, fontWeight:700, color:C.text1 }}>Feature Flags</h2>
+            <p style={{ margin:0, fontSize:13, color:C.text2, lineHeight:1.6 }}>
+              Control which features are enabled for <strong>{environment?.name || 'this environment'}</strong>.
+              Changes take effect immediately across the app.
+            </p>
+          </div>
+          <div style={{ display:'flex', gap:6, flexShrink:0, paddingTop:2 }}>
+            <BulkBtn onClick={() => toggleAll(allKeys, true)} disabled={allEnabled}>Enable all</BulkBtn>
+            <BulkBtn onClick={() => toggleAll(allKeys, false)} danger disabled={allDisabled}>Disable all</BulkBtn>
+          </div>
+        </div>
       </div>
-      {Object.entries(FLAG_GROUPS).map(([group, keys]) => (
+      {Object.entries(FLAG_GROUPS).map(([group, keys]) => {
+        const groupEnabled  = keys.every(k => (flagMap[k]?.enabled ?? true));
+        const groupDisabled = keys.every(k => !(flagMap[k]?.enabled ?? true));
+        return (
         <div key={group} style={{ marginBottom:28 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>{group}</div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em' }}>{group}</div>
+            <div style={{ display:'flex', gap:5 }}>
+              <BulkBtn onClick={() => toggleAll(keys, true)} disabled={groupEnabled}>Enable all</BulkBtn>
+              <BulkBtn onClick={() => toggleAll(keys, false)} danger disabled={groupDisabled}>Disable all</BulkBtn>
+            </div>
+          </div>
           <div style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden' }}>
             {keys.map((key, i) => {
               const f = flagMap[key];
@@ -188,7 +243,8 @@ export default function FeatureFlagsSettings({ environment }) {
             })}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
