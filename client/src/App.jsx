@@ -1709,52 +1709,74 @@ function App({ onEnvReady }) {
   const [welcomeChecked, setWelcomeChecked] = useState(false);
 
   useEffect(() => {
+    // Initial health check
     fetch("/api/health")
       .then(r => r.json())
       .then(() => setApiOnline(true))
       .catch(() => setApiOnline(false));
+
+    // Poll every 5s — detects server restarts so nav objects reload automatically
+    const poll = setInterval(() => {
+      fetch("/api/health")
+        .then(r => r.json())
+        .then(() => setApiOnline(prev => {
+          // Flipping false→true triggers the environments/objects reload via the useEffect below
+          if (prev !== true) return true;
+          return prev; // already online — no state change, no unnecessary re-render
+        }))
+        .catch(() => setApiOnline(prev => prev === true ? false : prev));
+    }, 5000);
+    return () => clearInterval(poll);
   }, []);
 
   useEffect(() => {
     if (apiOnline !== true) return;
     // Re-runs when userId changes (i.e. after login) so we always fetch
     // environments in the correct tenant context.
-    api.get("/environments").then(data => {
-      const envs = Array.isArray(data) ? data : [];
-      setEnvironments(envs);
-      // If the logged-in user belongs to a specific environment, use that.
-      // Otherwise fall back to the default or first environment.
-      const userEnvId = session?.user?.environment_id;
-      const def = (userEnvId && envs.find(e => e.id === userEnvId))
-               || envs.find(e => e.is_default)
-               || envs[0];
-      if (def) { setSelectedEnv(def); onEnvReady?.(def.id); }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const fetchEnvs = (retries, delay) => {
+      api.get("/environments").then(data => {
+        const envs = Array.isArray(data) ? data : [];
+        // If empty and retries left, server may still be seeding — retry
+        if (envs.length === 0 && retries > 0) {
+          setTimeout(() => fetchEnvs(retries - 1, Math.min(delay * 2, 4000)), delay);
+          return;
+        }
+        setEnvironments(envs);
+        const userEnvId = session?.user?.environment_id;
+        const def = (userEnvId && envs.find(e => e.id === userEnvId))
+                 || envs.find(e => e.is_default)
+                 || envs[0];
+        if (def) { setSelectedEnv(def); onEnvReady?.(def.id); }
+        setLoading(false);
+      }).catch(() => {
+        if (retries > 0) setTimeout(() => fetchEnvs(retries - 1, Math.min(delay * 2, 4000)), delay);
+        else setLoading(false);
+      });
+    };
+    fetchEnvs(5, 600); // up to 5 retries: 600ms, 1.2s, 2.4s, 4s, 4s
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiOnline, userId]);
 
   const loadNavObjects = useCallback((envId) => {
     if (!envId) return;
-    api.get(`/objects?environment_id=${envId}`).then(d => {
-      const objs = Array.isArray(d) ? d : [];
-      setNavObjects(objs);
-      const resolved = navFromPath(window.location.pathname, objs);
-      if (resolved !== activeNavRef.current) setActiveNav(resolved);
-      // If empty, retry once after 1.5s — catches the brief window after server restart
-      if (objs.length === 0) {
-        setTimeout(() => {
-          api.get(`/objects?environment_id=${envId}`).then(d2 => {
-            const objs2 = Array.isArray(d2) ? d2 : [];
-            if (objs2.length > 0) {
-              setNavObjects(objs2);
-              const r = navFromPath(window.location.pathname, objs2);
-              if (r !== activeNavRef.current) setActiveNav(r);
-            }
-          }).catch(() => {});
-        }, 1500);
-      }
-    }).catch(() => {});
+    // Retry with exponential backoff — handles the brief window after server restart
+    // where the store is loaded but seeding hasn't finished yet
+    const attempt = (retries, delay) => {
+      api.get(`/objects?environment_id=${envId}`).then(d => {
+        const objs = Array.isArray(d) ? d : [];
+        setNavObjects(objs);
+        const resolved = navFromPath(window.location.pathname, objs);
+        if (resolved !== activeNavRef.current) setActiveNav(resolved);
+        // If still empty and we have retries left, try again
+        if (objs.length === 0 && retries > 0) {
+          setTimeout(() => attempt(retries - 1, Math.min(delay * 2, 5000)), delay);
+        }
+      }).catch(() => {
+        // Server not ready yet — retry if we have attempts left
+        if (retries > 0) setTimeout(() => attempt(retries - 1, Math.min(delay * 2, 5000)), delay);
+      });
+    };
+    attempt(6, 500); // up to 6 retries: 500ms, 1s, 2s, 4s, 5s, 5s
   }, []);
 
   useEffect(() => {
