@@ -6,6 +6,8 @@ const DEFAULT_FEATURES = new Set([
   'core','ai_copilot','ai_matching','communications_panel','workflows',
   'portals','reports','org_chart','interviews','offers','forms',
   'bulk_actions','cv_parsing','duplicate_detection',
+  // Nav sections
+  'access_calendar','access_search','access_chat','access_documents',
   // Record panels — on by default
   'panel_notes','panel_files','panel_activity','panel_forms',
   'panel_recommendations','panel_linked_records',

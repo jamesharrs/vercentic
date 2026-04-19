@@ -1534,6 +1534,10 @@ function App({ onEnvReady }) {
   const featCvParse    = useFeature('cv_parsing');
   const featLinkedIn   = useFeature('linkedin_finder');
   const featAiMatching = useFeature('ai_matching');
+  const featCalendar   = useFeature('access_calendar');
+  const featChat       = useFeature('access_chat');
+  const featDocuments  = useFeature('access_documents');
+  const featSearch     = useFeature('access_search');
   // Panel-level feature flags
   const featPanelNotes       = useFeature('panel_notes');
   const featPanelFiles       = useFeature('panel_files');
@@ -1873,8 +1877,10 @@ function App({ onEnvReady }) {
       if (item.id === 'interviews') return canGlobal('access_interviews') && featInterviews;
       if (item.id === 'offers')     return canGlobal('access_offers')     && featOffers;
       if (item.id === 'reports')    return canGlobal('access_reports')    && featReports;
-      if (item.id === 'search')     return canGlobal('access_search');
-      if (item.id === 'calendar')   return canGlobal('access_calendar');
+      if (item.id === 'search')     return canGlobal('access_search')   && featSearch;
+      if (item.id === 'calendar')   return canGlobal('access_calendar') && featCalendar;
+      if (item.id === 'chat')       return featChat;
+      if (item.id === 'documents')  return featDocuments;
       if (item.id === 'settings')   return canGlobal('manage_settings');
       return true;
     })

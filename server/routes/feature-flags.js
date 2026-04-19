@@ -8,11 +8,15 @@ const { query, insert, update, findOne } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
 
 const DEFAULT_FLAGS = {
+  // Feature access flags — nav sections
   // Stable — on by default
   ai_copilot: true, ai_matching: true, communications_panel: true,
   workflows: true, portals: true, reports: true, org_chart: true,
   interviews: true, offers: true, forms: true,
   bulk_actions: true, cv_parsing: true, duplicate_detection: true,
+  // Nav section flags
+  access_calendar: true, access_search: true,
+  access_chat: true, access_documents: true,
   // Record panels — on by default
   panel_notes: true, panel_files: true, panel_activity: true,
   panel_forms: true, panel_recommendations: true,
