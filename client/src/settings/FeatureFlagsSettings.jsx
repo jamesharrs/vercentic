@@ -72,9 +72,10 @@ const FLAG_DESC = {
 };
 
 export default function FeatureFlagsSettings({ environment }) {
-  const [flags, setFlags]   = useState([]);
-  const [saving, setSaving] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [flags, setFlags]       = useState([]);
+  const [saving, setSaving]     = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [bulkSaving, setBulkSaving] = useState(false);
   const { refresh: refreshFeatureCtx } = useFeatures(); // live context refresh
 
   const load = async (silent = false) => {
@@ -139,7 +140,6 @@ export default function FeatureFlagsSettings({ environment }) {
   if (loading) return <div style={{ padding:32, color:C.text3, fontFamily:F }}>Loading flags…</div>;
 
   // Bulk toggle — set all keys in a group (or all keys) to enabled/disabled
-  const [bulkSaving, setBulkSaving] = useState(false);
   const toggleAll = async (keys, enable) => {
     setBulkSaving(true);
     // Optimistic update
