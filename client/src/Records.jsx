@@ -5997,11 +5997,287 @@ const CoordinationPanel = ({ record, environment }) => {
 };
 
 // ─── Agents Record Panel ─────────────────────────────────────────────────────
+
+// Human-readable summary of what each action step does
+const describeAction = (action) => {
+  switch (action.type) {
+    case 'ai_summarise':    return `Summarise the record using AI${action.field_key ? ` → save to "${action.field_key}"` : ''}`;
+    case 'ai_analyse':      return `Analyse the record using AI${action.criteria ? ` against: "${action.criteria}"` : ''}`;
+    case 'ai_score':        return `Score the record using AI${action.criteria ? ` against: "${action.criteria}"` : ''}`;
+    case 'ai_draft_email':  return `Draft a personalised email using AI${action.email_purpose ? ` (${action.email_purpose})` : ''}`;
+    case 'send_email':      return `Send email${action.email_subject ? `: "${action.email_subject}"` : ''}`;
+    case 'update_field':    return `Set "${action.field_key}" ${action.field_value ? `to "${action.field_value}"` : 'using AI output'}`;
+    case 'add_note':        return `Add a note to this record${action.note_template?.includes('{{ai_output}}') ? ' (using AI output)' : ''}`;
+    case 'add_to_pool':     return 'Add this person to a talent pool';
+    case 'create_task':     return `Create a follow-up task`;
+    case 'notify_user':     return 'Send an in-app notification';
+    case 'webhook':         return `Call webhook${action.webhook_url ? `: ${action.webhook_url}` : ''}`;
+    case 'human_review':    return 'Pause and wait for human approval';
+    case 'ai_interview':    return 'Send candidate a link to an AI voice interview';
+    case 'interview_coordinator': return 'Coordinate interview availability automatically';
+    default:                return action.type;
+  }
+};
+
+// Determine if an action needs runtime input from the user
+const getActionInputs = (action) => {
+  const inputs = [];
+  if (action.type === 'ai_draft_email' && !action.email_purpose)
+    inputs.push({ key: 'email_purpose', label: 'Email purpose', type: 'text', placeholder: 'e.g. Follow-up after interview' });
+  if (action.type === 'ai_analyse' && !action.criteria)
+    inputs.push({ key: 'criteria', label: 'Analysis criteria', type: 'textarea', placeholder: 'e.g. Evaluate fit for a senior engineering role' });
+  if (action.type === 'ai_score' && !action.criteria)
+    inputs.push({ key: 'criteria', label: 'Scoring criteria', type: 'textarea', placeholder: 'e.g. Score against communication, leadership, and technical depth' });
+  if (action.type === 'webhook' && !action.webhook_url)
+    inputs.push({ key: 'webhook_url', label: 'Webhook URL', type: 'text', placeholder: 'https://...' });
+  return inputs;
+};
+
+// Collect all inputs needed across all actions of an agent
+const getAllRequiredInputs = (agent) => {
+  const seen = new Set();
+  const inputs = [];
+  (agent.actions || []).forEach(action => {
+    getActionInputs(action).forEach(inp => {
+      if (!seen.has(inp.key)) { seen.add(inp.key); inputs.push(inp); }
+    });
+  });
+  return inputs;
+};
+
 const AgentsRecordPanel = ({ record, environment }) => {
-  const [agents,  setAgents]  = useState([]);
-  const [runs,    setRuns]    = useState([]);
-  const [running, setRunning] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [agents,   setAgents]   = useState([]);
+  const [runs,     setRuns]     = useState([]);
+  const [running,  setRunning]  = useState({});
+  const [loading,  setLoading]  = useState(true);
+  const [confirm,  setConfirm]  = useState(null);  // { agent } — the agent pending confirmation
+  const [inputs,   setInputs]   = useState({});    // runtime inputs keyed by field key
+
+  const load = useCallback(async () => {
+    if (!environment?.id || !record?.id) return;
+    try {
+      const [a, r] = await Promise.all([
+        api.get(`/agents?environment_id=${environment.id}`),
+        api.get(`/agents/runs/by-record/${record.id}`),
+      ]);
+      setAgents(Array.isArray(a) ? a.filter(ag => ag.active !== false) : []);
+      setRuns(Array.isArray(r) ? r.slice(0, 10) : []);
+    } catch (_) {}
+    setLoading(false);
+  }, [record?.id, environment?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openConfirm = (agent) => {
+    setInputs({});
+    setConfirm(agent);
+  };
+
+  const runAgent = async (agent, runtimeInputs = {}) => {
+    setConfirm(null);
+    setRunning(r => ({ ...r, [agent.id]: true }));
+    try {
+      await api.post(`/agents/${agent.id}/run`, {
+        record_id: record.id, environment_id: environment.id,
+        runtime_inputs: runtimeInputs,
+      });
+      const r = await api.get(`/agents/runs/by-record/${record.id}`);
+      if (Array.isArray(r)) setRuns(r.slice(0, 10));
+    } catch (e) { console.error(e); }
+    setRunning(r => ({ ...r, [agent.id]: false }));
+  };
+
+  if (loading) return <div style={{ padding:16, color:C.text3, fontSize:13 }}>Loading…</div>;
+
+  if (agents.length === 0) return (
+    <div style={{ padding:20, textAlign:'center', color:C.text3, fontFamily:F }}>
+      <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin:'0 auto 8px', display:'block' }}>
+        <path d="M12 2l1.6 6.1a2 2 0 001.4 1.4L21 11.2a.5.5 0 010 1l-6 1.7a2 2 0 00-1.4 1.4L12 21.3a.5.5 0 01-1 0l-1.6-6a2 2 0 00-1.4-1.4L2 12.2a.5.5 0 010-1l6-1.7A2 2 0 009.4 8L12 2z"/>
+      </svg>
+      <div style={{ fontSize:13, marginBottom:4 }}>No active agents configured.</div>
+      <div style={{ fontSize:11 }}>Create agents in the Agents section to automate actions on records.</div>
+    </div>
+  );
+
+  const STATUS_COLORS = { success:'#10b981', error:'#ef4444', running:'#f59e0b', pending:'#6b7280' };
+  const requiredInputs = confirm ? getAllRequiredInputs(confirm) : [];
+  const hasInputs = requiredInputs.length > 0;
+  const inputsComplete = requiredInputs.every(inp => inputs[inp.key]?.trim());
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+      {/* ── Confirmation / Input modal ── */}
+      {confirm && (
+        <div
+          onClick={() => setConfirm(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(15,23,41,0.5)', zIndex:1200,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background:'white', borderRadius:16, width:'100%', maxWidth:420,
+              boxShadow:'0 24px 60px rgba(0,0,0,0.22)', fontFamily:F, overflow:'hidden' }}>
+            {/* Header */}
+            <div style={{ padding:'18px 20px 14px', borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:36, height:36, borderRadius:10,
+                  background: confirm.avatar_color || confirm.color || C.accent,
+                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2l1.6 6.1a2 2 0 001.4 1.4L21 11.2a.5.5 0 010 1l-6 1.7a2 2 0 00-1.4 1.4L12 21.3a.5.5 0 01-1 0l-1.6-6a2 2 0 00-1.4-1.4L2 12.2a.5.5 0 010-1l6-1.7A2 2 0 009.4 8L12 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700, color:C.text1 }}>{confirm.name}</div>
+                  {confirm.description && (
+                    <div style={{ fontSize:12, color:C.text3, marginTop:1 }}>{confirm.description}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* What this agent will do */}
+            <div style={{ padding:'14px 20px' }}>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase',
+                letterSpacing:'.06em', marginBottom:8 }}>This agent will</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                {(confirm.actions || []).map((action, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8,
+                    padding:'7px 10px', borderRadius:8, background:'#f8f9fc',
+                    border:`1px solid ${C.border}` }}>
+                    <div style={{ width:20, height:20, borderRadius:5, background:C.accentLight,
+                      display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                      <span style={{ fontSize:10, fontWeight:800, color:C.accent }}>{i + 1}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:C.text2, lineHeight:1.5 }}>
+                      {describeAction(action)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Runtime inputs — only shown if needed */}
+            {hasInputs && (
+              <div style={{ padding:'0 20px 14px', borderTop:`1px solid ${C.border}`, paddingTop:14 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase',
+                  letterSpacing:'.06em', marginBottom:10 }}>Additional information needed</div>
+                {requiredInputs.map(inp => (
+                  <div key={inp.key} style={{ marginBottom:10 }}>
+                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:C.text2, marginBottom:4 }}>
+                      {inp.label}
+                    </label>
+                    {inp.type === 'textarea' ? (
+                      <textarea
+                        placeholder={inp.placeholder}
+                        value={inputs[inp.key] || ''}
+                        onChange={e => setInputs(prev => ({ ...prev, [inp.key]: e.target.value }))}
+                        rows={3}
+                        style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:8,
+                          border:`1.5px solid ${C.border}`, fontSize:12, fontFamily:F,
+                          resize:'vertical', outline:'none', color:C.text1 }}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder={inp.placeholder}
+                        value={inputs[inp.key] || ''}
+                        onChange={e => setInputs(prev => ({ ...prev, [inp.key]: e.target.value }))}
+                        style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:8,
+                          border:`1.5px solid ${C.border}`, fontSize:12, fontFamily:F,
+                          outline:'none', color:C.text1 }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ padding:'12px 20px 16px', borderTop:`1px solid ${C.border}`,
+              display:'flex', gap:8 }}>
+              <button
+                onClick={() => setConfirm(null)}
+                style={{ flex:1, padding:'9px 0', borderRadius:9, border:`1px solid ${C.border}`,
+                  background:'transparent', fontSize:13, fontWeight:600, cursor:'pointer',
+                  fontFamily:F, color:C.text2 }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => runAgent(confirm, inputs)}
+                disabled={hasInputs && !inputsComplete}
+                style={{ flex:2, padding:'9px 0', borderRadius:9, border:'none',
+                  background: (hasInputs && !inputsComplete) ? C.border : C.accent,
+                  color: (hasInputs && !inputsComplete) ? C.text3 : 'white',
+                  fontSize:13, fontWeight:700, cursor: (hasInputs && !inputsComplete) ? 'default' : 'pointer',
+                  fontFamily:F, transition:'all .15s' }}>
+                ✦ Run agent
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Agent cards ── */}
+      {agents.map(agent => {
+        const lastRun = runs.filter(r => r.agent_id === agent.id)[0];
+        const isRunning = !!running[agent.id];
+        return (
+          <div key={agent.id} style={{
+            padding:'10px 12px', borderRadius:10, border:`1.5px solid ${C.border}`,
+            background: C.surface, display:'flex', alignItems:'center', gap:10,
+          }}>
+            <div style={{ width:32, height:32, borderRadius:8,
+              background: agent.avatar_color || agent.color || C.accent,
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l1.6 6.1a2 2 0 001.4 1.4L21 11.2a.5.5 0 010 1l-6 1.7a2 2 0 00-1.4 1.4L12 21.3a.5.5 0 01-1 0l-1.6-6a2 2 0 00-1.4-1.4L2 12.2a.5.5 0 010-1l6-1.7A2 2 0 009.4 8L12 2z"/>
+              </svg>
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{agent.name}</div>
+              {lastRun ? (
+                <div style={{ fontSize:11, color:C.text3, display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
+                  <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLORS[lastRun.status]||'#6b7280', flexShrink:0, display:'inline-block' }}/>
+                  {lastRun.status} · {new Date(lastRun.created_at).toLocaleDateString('en',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                </div>
+              ) : (
+                <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>Never run on this record</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => !isRunning && openConfirm(agent)}
+              disabled={isRunning}
+              style={{
+                padding:'5px 12px', borderRadius:8,
+                border:`1.5px solid ${isRunning ? C.border : C.accent}`,
+                background: isRunning ? C.surface2 : C.accentLight,
+                color: isRunning ? C.text3 : C.accent,
+                fontSize:11, fontWeight:700, cursor: isRunning ? 'default' : 'pointer',
+                fontFamily:F, flexShrink:0, transition:'all .15s',
+              }}>
+              {isRunning ? 'Running…' : 'Run'}
+            </button>
+          </div>
+        );
+      })}
+
+      {/* ── Recent run history ── */}
+      {runs.length > 0 && (
+        <div style={{ marginTop:4, padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Recent runs</div>
+          {runs.slice(0, 5).map(run => (
+            <div key={run.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', fontSize:12 }}>
+              <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLORS[run.status]||'#6b7280', flexShrink:0, display:'inline-block' }}/>
+              <span style={{ color:C.text2, flex:1 }}>{run.agent_name || run.agent_id}</span>
+              <span style={{ color:C.text3 }}>{new Date(run.created_at).toLocaleDateString('en',{day:'numeric',month:'short'})}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
   const load = useCallback(async () => {
     if (!environment?.id || !record?.id) return;
@@ -6029,81 +6305,6 @@ const AgentsRecordPanel = ({ record, environment }) => {
     } catch (e) { console.error(e); }
     setRunning(r => ({ ...r, [agent.id]: false }));
   };
-
-  if (loading) return <div style={{ padding:16, color:C.text3, fontSize:13 }}>Loading…</div>;
-
-  if (agents.length === 0) return (
-    <div style={{ padding:20, textAlign:'center', color:C.text3, fontFamily:F }}>
-      <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin:'0 auto 8px', display:'block' }}>
-        <path d="M12 2l1.6 6.1a2 2 0 001.4 1.4L21 11.2a.5.5 0 010 1l-6 1.7a2 2 0 00-1.4 1.4L12 21.3a.5.5 0 01-1 0l-1.6-6a2 2 0 00-1.4-1.4L2 12.2a.5.5 0 010-1l6-1.7A2 2 0 009.4 8L12 2z"/>
-      </svg>
-      <div style={{ fontSize:13, marginBottom:4 }}>No active agents configured.</div>
-      <div style={{ fontSize:11 }}>Create agents in the Agents section to automate actions on records.</div>
-    </div>
-  );
-
-  const STATUS_COLORS = { success:'#10b981', error:'#ef4444', running:'#f59e0b', pending:'#6b7280' };
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-      {agents.map(agent => {
-        const lastRun = runs.filter(r => r.agent_id === agent.id)[0];
-        const isRunning = !!running[agent.id];
-        return (
-          <div key={agent.id} style={{
-            padding:'10px 12px', borderRadius:10, border:`1.5px solid ${C.border}`,
-            background: C.surface, display:'flex', alignItems:'center', gap:10,
-            transition:'border-color .15s',
-          }}>
-            <div style={{
-              width:32, height:32, borderRadius:8,
-              background: agent.color || C.accent,
-              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
-            }}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l1.6 6.1a2 2 0 001.4 1.4L21 11.2a.5.5 0 010 1l-6 1.7a2 2 0 00-1.4 1.4L12 21.3a.5.5 0 01-1 0l-1.6-6a2 2 0 00-1.4-1.4L2 12.2a.5.5 0 010-1l6-1.7A2 2 0 009.4 8L12 2z"/>
-              </svg>
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{agent.name}</div>
-              {lastRun ? (
-                <div style={{ fontSize:11, color:C.text3, display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
-                  <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLORS[lastRun.status]||'#6b7280', flexShrink:0, display:'inline-block' }}/>
-                  {lastRun.status} · {new Date(lastRun.created_at).toLocaleDateString('en',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
-                </div>
-              ) : (
-                <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>Never run on this record</div>
-              )}
-            </div>
-            <button onClick={() => runAgent(agent)} disabled={isRunning}
-              style={{
-                padding:'5px 12px', borderRadius:8,
-                border:`1.5px solid ${isRunning ? C.border : C.accent}`,
-                background: isRunning ? C.surface2 : C.accentLight,
-                color: isRunning ? C.text3 : C.accent,
-                fontSize:11, fontWeight:700, cursor: isRunning ? 'default' : 'pointer',
-                fontFamily:F, flexShrink:0, transition:'all .15s',
-              }}>
-              {isRunning ? 'Running…' : 'Run'}
-            </button>
-          </div>
-        );
-      })}
-      {runs.length > 0 && (
-        <div style={{ marginTop:4, padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Recent runs on this record</div>
-          {runs.slice(0, 5).map(run => (
-            <div key={run.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', fontSize:12 }}>
-              <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLORS[run.status]||'#6b7280', flexShrink:0, display:'inline-block' }}/>
-              <span style={{ color:C.text2, flex:1 }}>{run.agent_name || run.agent_id}</span>
-              <span style={{ color:C.text3 }}>{new Date(run.created_at).toLocaleDateString('en',{day:'numeric',month:'short'})}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
 
 export const PANEL_META = {
   fields:       { icon:"edit",          label:"Profile Fields",      defaultOpen:true  },
