@@ -36,9 +36,15 @@ export function FeatureProvider({ environmentId, children }) {
       if (data && typeof data === 'object') {
         Object.entries(data).forEach(([key, val]) => { if (val) enabled.add(key); });
       }
-      setFeatures(enabled);
+      // Only update state if something actually changed — prevents unnecessary
+      // re-renders (and nav flicker) when refresh is called after a flag toggle
+      setFeatures(prev => {
+        if (prev.size === enabled.size && [...enabled].every(k => prev.has(k))) return prev;
+        return enabled;
+      });
     } catch {
-      setFeatures(DEFAULT_FEATURES);
+      // On error keep the last known good state — don't reset to defaults
+      // as that would cause nav items to disappear
     }
     setLoading(false);
   }, [environmentId]);

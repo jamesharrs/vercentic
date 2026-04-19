@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invalidateFlagCache } from '../FeatureFlags.jsx';
 import { useFeatures } from '../hooks/useFeature.jsx';
 import { authHeaders } from '../apiClient.js';
@@ -77,6 +77,16 @@ export default function FeatureFlagsSettings({ environment }) {
   const [loading, setLoading]   = useState(true);
   const [bulkSaving, setBulkSaving] = useState(false);
   const { refresh: refreshFeatureCtx } = useFeatures(); // live context refresh
+  const refreshTimer = useRef(null);
+  // Debounced refresh — coalesces rapid toggle calls into one refresh
+  // 600ms after the last change, preventing nav flicker during bulk toggles
+  const scheduleRefresh = () => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      invalidateFlagCache();
+      refreshFeatureCtx().catch(() => {});
+    }, 600);
+  };
 
   const load = async (silent = false) => {
     if (!environment?.id) return;
@@ -115,7 +125,7 @@ export default function FeatureFlagsSettings({ environment }) {
       invalidateFlagCache();
       // Silent background refresh to sync server state — no loading flash, no scroll reset
       load(true);
-      try { await refreshFeatureCtx(); } catch {}
+      scheduleRefresh();
     } catch (e) {
       console.error('Feature flag toggle error:', e);
       // Revert on error
@@ -131,8 +141,8 @@ export default function FeatureFlagsSettings({ environment }) {
       headers: authHeaders(),
     });
     invalidateFlagCache();
-    await load();
-    await refreshFeatureCtx();
+    load(true);
+    scheduleRefresh();
     setSaving(null);
   };
 
@@ -154,7 +164,7 @@ export default function FeatureFlagsSettings({ environment }) {
       ));
       invalidateFlagCache();
       load(true);
-      try { await refreshFeatureCtx(); } catch {}
+      scheduleRefresh();
     } catch (e) {
       console.error('Bulk toggle error:', e);
       load(true); // revert to server state on error
