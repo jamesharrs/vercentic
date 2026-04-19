@@ -1567,21 +1567,12 @@ function App({ onEnvReady }) {
     const subdomainSlug = getTenantSlug();
     if (sess && subdomainSlug) {
       const sessionTenant = sess.tenant_slug || null;
-      // Clear if: session belongs to a different tenant, OR session has no tenant_slug
-      // (master admin) but we're on a tenant subdomain — master users can't access tenant apps
       if (sessionTenant !== subdomainSlug) {
         try { localStorage.removeItem('talentos_session'); } catch {}
         return null;
       }
     }
     return sess;
-  });
-  // sessionValidated: null = pending, true = ok, false = invalid
-  // Block all data fetches until we've confirmed the stored session is still good.
-  const [sessionValidated, setSessionValidated] = useState(() => {
-    // If there's no stored session, nothing to validate — skip straight to login
-    const sess = getSession();
-    return sess ? null : true;
   });
   const isMobile = useIsMobile();
   const userId = session?.user?.id || null;
@@ -1751,37 +1742,24 @@ function App({ onEnvReady }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On startup: validate the stored session against the server.
-  // If the server doesn't recognise the user (stale session after restart),
-  // clear localStorage and show the login screen immediately.
-  // sessionValidated gates ALL subsequent data fetches so they never fire 401s.
+  // If the server rejects it (stale after restart), clear and show login.
+  // Uses a fire-and-forget fetch — no state gating, just cleans up if needed.
   useEffect(() => {
-    if (!userId) { setSessionValidated(true); return; } // no session — show login immediately
+    if (!userId) return;
     const sess = getSession();
-    const userIdHeader = sess?.user?.id;
-    const tenantSlug   = sess?.tenant_slug || '';
-    if (!userIdHeader) { setSessionValidated(true); return; }
+    if (!sess?.user?.id) return;
     fetch('/api/environments', {
-      headers: {
-        'X-User-Id':     userIdHeader,
-        'X-Tenant-Slug': tenantSlug,
-      },
+      headers: { 'X-User-Id': sess.user.id, 'X-Tenant-Slug': sess.tenant_slug || '' },
     }).then(r => {
       if (r.status === 401) {
         try { localStorage.removeItem('talentos_session'); } catch {}
         setSession(null);
-        setSessionValidated(false);
-      } else {
-        setSessionValidated(true);
       }
-    }).catch(() => {
-      // Server offline — let apiOnline/health poll handle it, don't block
-      setSessionValidated(true);
-    });
+    }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (apiOnline !== true) return;
-    if (sessionValidated !== true) return;  // wait for session validation before fetching
     // Re-runs when userId changes (i.e. after login) so we always fetch
     // environments in the correct tenant context.
     const fetchEnvs = (retries, delay) => {
@@ -1816,7 +1794,7 @@ function App({ onEnvReady }) {
     };
     fetchEnvs(5, 600); // up to 5 retries: 600ms, 1.2s, 2.4s, 4s, 4s
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiOnline, userId, sessionValidated]);
+  }, [apiOnline, userId]);
 
   const loadNavObjects = useCallback((envId) => {
     if (!envId) return;
