@@ -129,7 +129,7 @@ export default function FeatureFlagsSettings({ environment }) {
                 <div key={key} style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 18px',
                   borderBottom: i < keys.length - 1 ? `1px solid ${C.border}` : 'none',
                   opacity: isSaving ? 0.6 : 1, transition:'opacity .15s' }}>
-                  <button onClick={() => toggle(key, enabled)} disabled={isSaving}
+                  <button type="button" onClick={() => toggle(key, enabled)} disabled={isSaving}
                     style={{ width:40, height:22, borderRadius:11, border:'none', cursor:isSaving?'not-allowed':'pointer',
                       background: enabled ? C.accent : '#d1d5db', position:'relative', flexShrink:0, transition:'background .2s' }}>
                     <span style={{ position:'absolute', top:3, left: enabled ? 21 : 3, width:16, height:16,

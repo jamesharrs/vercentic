@@ -1534,6 +1534,13 @@ function App({ onEnvReady }) {
   const featCvParse    = useFeature('cv_parsing');
   const featLinkedIn   = useFeature('linkedin_finder');
   const featAiMatching = useFeature('ai_matching');
+  // Panel-level feature flags
+  const featPanelNotes       = useFeature('panel_notes');
+  const featPanelFiles       = useFeature('panel_files');
+  const featPanelActivity    = useFeature('panel_activity');
+  const featPanelForms       = useFeature('panel_forms');
+  const featPanelRecommend   = useFeature('panel_recommendations');
+  const featPanelLinked      = useFeature('panel_linked_records');
 
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   // ── App function — all hooks must be called unconditionally ─────────────────
@@ -2355,7 +2362,9 @@ function App({ onEnvReady }) {
             session={session}
             featureFlags={{ bulk_actions: featBulk, communications_panel: featComms,
               duplicate_detection: featDupDetect, cv_parsing: featCvParse,
-              linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews }}
+              linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews,
+              panel_notes: featPanelNotes, panel_files: featPanelFiles, panel_activity: featPanelActivity,
+              panel_forms: featPanelForms, panel_recommendations: featPanelRecommend, panel_linked_records: featPanelLinked }}
           />
           );
         })()
@@ -2363,7 +2372,9 @@ function App({ onEnvReady }) {
           const parts = activeNav.split("_"); const recordId = parts[1]; const objectId = parts[2];
           const obj = navObjects.find(o => o.id === objectId);
           return <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"visible"}}><RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
-            featureFlags={{ bulk_actions: featBulk, communications_panel: featComms, duplicate_detection: featDupDetect, cv_parsing: featCvParse, linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews }}
+            featureFlags={{ bulk_actions: featBulk, communications_panel: featComms, duplicate_detection: featDupDetect, cv_parsing: featCvParse, linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews,
+              panel_notes: featPanelNotes, panel_files: featPanelFiles, panel_activity: featPanelActivity,
+              panel_forms: featPanelForms, panel_recommendations: featPanelRecommend, panel_linked_records: featPanelLinked }}
             onRecordLoad={(rec, recObj) => {
             setActiveRecord(rec); setActiveRecordObj(recObj);
             // Swap UUID URL for clean numeric URL once record is loaded
