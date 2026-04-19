@@ -2411,6 +2411,7 @@ function App({ onEnvReady }) {
           const _obj = navObjects.find(o => `obj_${o.id}` === activeNav);
           if (!_obj) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>;
           return (
+          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
           <RecordsView
             object={_obj}
             environment={selectedEnv}
@@ -2429,6 +2430,7 @@ function App({ onEnvReady }) {
               panel_reporting: featPanelReporting, panel_agents: featPanelAgents, panel_user: featPanelUser,
               panel_insights: featPanelInsights, panel_questions: featPanelQuestions }}
           />
+          </Suspense>
           );
         })()
         : activeNav.startsWith("record_") ? (() => {
