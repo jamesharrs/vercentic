@@ -31,6 +31,53 @@ test.describe('People list', () => {
   });
 });
 
+// Regression: nav objects (People, Jobs etc.) were disappearing after
+// navigating to a record — caused by fetchEnvs retry calling setSelectedEnv
+// with a new object reference on every attempt, triggering loadNavObjects
+// which could return [] mid-flight and wipe the sidebar.
+test.describe('Nav stability', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page, 'admin@talentos.io', 'Admin1234!');
+    await page.locator('button, a, span').filter({ hasText: 'Dashboard' })
+      .first().waitFor({ state: 'visible', timeout: 10000 });
+  });
+
+  test('nav objects remain visible after opening a record', async ({ page }) => {
+    // Go to People list
+    await page.locator('nav button, nav a').filter({ hasText: /^People$/ }).first().click();
+    await page.waitForLoadState('networkidle');
+
+    // Click the first record name link
+    const firstRow = page.locator('table tbody tr').first();
+    const nameLink = firstRow.locator('a, button').first();
+    await nameLink.click({ timeout: 8000 });
+    await page.waitForLoadState('networkidle');
+
+    // Nav should still show People and Jobs after navigating to the record
+    const peopleNav = page.locator('nav button, nav a').filter({ hasText: /^People$/ }).first();
+    const jobsNav   = page.locator('nav button, nav a').filter({ hasText: /^Jobs$/ }).first();
+    await expect(peopleNav).toBeVisible({ timeout: 5000 });
+    await expect(jobsNav).toBeVisible({ timeout: 5000 });
+  });
+
+  test('nav objects remain visible after navigating back to list', async ({ page }) => {
+    // Open a record then go back — nav must still be intact
+    await page.locator('nav button, nav a').filter({ hasText: /^People$/ }).first().click();
+    await page.waitForLoadState('networkidle');
+
+    const nameLink = page.locator('table tbody tr').first().locator('a, button').first();
+    await nameLink.click({ timeout: 8000 });
+    await page.waitForLoadState('networkidle');
+
+    // Navigate back via browser back or breadcrumb
+    await page.goBack();
+    await page.waitForLoadState('networkidle');
+
+    const peopleNav = page.locator('nav button, nav a').filter({ hasText: /^People$/ }).first();
+    await expect(peopleNav).toBeVisible({ timeout: 5000 });
+  });
+});
+
 test.describe('CSRF protection in browser', () => {
   test.beforeEach(async ({ page }) => {
     await login(page, 'admin@talentos.io', 'Admin1234!');
