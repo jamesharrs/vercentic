@@ -572,16 +572,229 @@ function AddressConfig({ form, set }) {
   </>;
 }
 
-function PeopleConfig({ form, set, objects }) {
-  return <>
-    <Sel label="Reference Object" value={form.related_object_slug||"people"} onChange={v=>set("related_object_slug",v)}
-      options={(objects||[]).map(o=>({value:o.slug,label:o.plural_name||o.name}))}/>
-    <Sel label="Selection Mode" value={form.people_multi?"multi":"single"} onChange={v=>set("people_multi",v==="multi")}
-      options={[{value:"single",label:"Single select (one person)"},{value:"multi",label:"Multi select (team, panel)"}]}/>
-    <Sel label="Display Format" value={form.people_display||"avatar_name"} onChange={v=>set("people_display",v)}
-      options={[{value:"name",label:"Name only"},{value:"avatar_name",label:"Avatar + Name"},{value:"avatar_name_title",label:"Avatar + Name + Title"}]}/>
-    <HelpBox>Links to records in another object. Use for Hiring Manager, Interviewers, Assigned To, Referred By etc. Shows as avatar chips.</HelpBox>
-  </>;
+function PeopleConfig({ form, set, objects, selEnv }) {
+  const [savedLists, setSavedLists] = useState([]);
+  const [linkedFields, setLinkedFields] = useState([]);
+  const [fieldValues, setFieldValues] = useState({});
+  const [peopleRecords, setPeopleRecords] = useState([]);
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [pSearch, setPSearch] = useState("");
+
+  const slug = form.related_object_slug || "people";
+
+  // Load saved lists + fields + distinct values from the linked object
+  useEffect(() => {
+    if (!selEnv?.id) return;
+    tFetch(`/api/objects?environment_id=${selEnv.id}`).then(r => r.json()).then(objs => {
+      const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+      if (!obj) return;
+      tFetch(`/api/saved-views?object_id=${obj.id}&environment_id=${selEnv.id}`).then(r => r.json())
+        .then(lists => setSavedLists(Array.isArray(lists) ? lists : [])).catch(()=>{});
+      tFetch(`/api/fields?object_id=${obj.id}`).then(r => r.json()).then(fields => {
+        setLinkedFields(Array.isArray(fields) ? fields : []);
+      });
+      tFetch(`/api/records?object_id=${obj.id}&environment_id=${selEnv.id}&limit=300`).then(r => r.json()).then(res => {
+        const recs = Array.isArray(res) ? res : (res?.records || []);
+        const vals = {};
+        recs.forEach(r => Object.entries(r.data||{}).forEach(([k,v]) => {
+          if (!vals[k]) vals[k] = new Set();
+          if (Array.isArray(v)) v.forEach(i => vals[k].add(String(i)));
+          else if (v !== null && v !== undefined && v !== "") vals[k].add(String(v));
+        }));
+        const result = {};
+        Object.entries(vals).forEach(([k,s]) => { result[k] = [...s].sort(); });
+        setFieldValues(result);
+      });
+    }).catch(()=>{});
+  }, [selEnv?.id, slug]);
+
+  // Load people records when mode is "specific"
+  useEffect(() => {
+    if (form.people_selection_mode !== "specific" || !selEnv?.id || peopleRecords.length > 0) return;
+    setLoadingPeople(true);
+    tFetch(`/api/objects?environment_id=${selEnv.id}`).then(r => r.json()).then(objs => {
+      const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+      if (!obj) { setLoadingPeople(false); return; }
+      tFetch(`/api/records?object_id=${obj.id}&environment_id=${selEnv.id}&limit=500`).then(r => r.json()).then(res => {
+        const recs = Array.isArray(res) ? res : (res?.records || []);
+        setPeopleRecords(recs.map(r => ({
+          id: r.id,
+          name: [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.name || r.data?.email || r.id,
+          subtitle: [r.data?.job_title, r.data?.department, r.data?.person_type].filter(Boolean).join(" · "),
+        })));
+        setLoadingPeople(false);
+      });
+    }).catch(() => setLoadingPeople(false));
+  }, [form.people_selection_mode, selEnv?.id, slug, peopleRecords.length]);
+
+  const allowedSet = new Set(form.people_allowed_ids || []);
+  const togglePerson = id => {
+    const next = allowedSet.has(id)
+      ? (form.people_allowed_ids||[]).filter(i => i !== id)
+      : [...(form.people_allowed_ids||[]), id];
+    set("people_allowed_ids", next);
+  };
+  const filteredPeople = peopleRecords.filter(p =>
+    p.name.toLowerCase().includes(pSearch.toLowerCase()) ||
+    (p.subtitle||"").toLowerCase().includes(pSearch.toLowerCase())
+  );
+
+  const MODE_OPTIONS = [
+    { v:"all",        l:"All",           desc:"Everyone from the linked object" },
+    { v:"saved_list", l:"Saved list",    desc:"Use a saved list as the source" },
+    { v:"filter",     l:"Filter",        desc:"Match a field value" },
+    { v:"specific",   l:"Specific",      desc:"Hand-pick who appears" },
+  ];
+
+  const inputStyle = { width:"100%", padding:"6px 8px", borderRadius:8, border:"1px solid #e8eaed",
+    fontSize:12, fontFamily:"inherit", background:"white", color:"#1a1a2e", outline:"none" };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <Sel label="Reference Object" value={slug} onChange={v=>set("related_object_slug",v)}
+        options={(objects||[]).map(o=>({value:o.slug,label:o.plural_name||o.name}))}/>
+      <Sel label="Selection Mode" value={form.people_multi?"multi":"single"} onChange={v=>set("people_multi",v==="multi")}
+        options={[{value:"single",label:"Single select (one person)"},{value:"multi",label:"Multi select (team, panel)"}]}/>
+      <Sel label="Display Format" value={form.people_display||"avatar_name"} onChange={v=>set("people_display",v)}
+        options={[{value:"name",label:"Name only"},{value:"avatar_name",label:"Avatar + Name"},{value:"avatar_name_title",label:"Avatar + Name + Title"}]}/>
+
+      {/* Picker restriction */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:"0.04em" }}>Who appears in the picker</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+          {MODE_OPTIONS.map(m => (
+            <button key={m.v} onClick={()=>{ set("people_selection_mode", m.v); }}
+              title={m.desc}
+              style={{ padding:"7px 8px", borderRadius:8, border:`2px solid ${(form.people_selection_mode||"all")===m.v?"#3b5bdb":"#e8eaed"}`,
+                background:(form.people_selection_mode||"all")===m.v?"#3b5bdb":"#fff",
+                color:(form.people_selection_mode||"all")===m.v?"#fff":"#6b7280",
+                cursor:"pointer", fontSize:11, fontWeight:600, fontFamily:"inherit", textAlign:"center" }}>
+              {m.l}
+            </button>
+          ))}
+        </div>
+
+        {/* Saved list picker */}
+        {(form.people_selection_mode||"all") === "saved_list" && (
+          <div style={{ background:"#f8f9fc", borderRadius:8, border:"1px solid #e8eaed", padding:"10px" }}>
+            {savedLists.length === 0 ? (
+              <div style={{ textAlign:"center", color:"#9ca3af", fontSize:12, padding:"8px 0" }}>
+                No saved lists found. Create one from the records page first.
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {savedLists.map(list => {
+                  const isSel = form.people_saved_list_id === list.id;
+                  return (
+                    <div key={list.id} onClick={()=>set("people_saved_list_id", isSel ? "" : list.id)}
+                      style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:8,
+                        cursor:"pointer", border:`2px solid ${isSel?"#3b5bdb":"#e8eaed"}`,
+                        background:isSel?"#eef2ff":"white", transition:"all .15s" }}>
+                      <div style={{ width:16, height:16, borderRadius:"50%", border:`2px solid ${isSel?"#3b5bdb":"#d1d5db"}`,
+                        background:isSel?"#3b5bdb":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {isSel && <div style={{ width:6, height:6, borderRadius:"50%", background:"white" }}/>}
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:isSel?700:500, color:"#1a1a2e" }}>{list.name}</div>
+                        <div style={{ fontSize:10, color:"#9ca3af" }}>{(list.filters||[]).length} filter{(list.filters||[]).length!==1?"s":""} · {list.is_shared?"Shared":"Private"}</div>
+                      </div>
+                      {isSel && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b5bdb" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {form.people_saved_list_id && (
+              <div style={{ marginTop:6, padding:"5px 8px", background:"#eef2ff", borderRadius:6, fontSize:11, color:"#3b5bdb", fontWeight:500 }}>
+                People matching "{savedLists.find(l=>l.id===form.people_saved_list_id)?.name||"…"}" will appear
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter by field value */}
+        {(form.people_selection_mode||"all") === "filter" && (
+          <div style={{ padding:"10px", background:"#f8f9fc", borderRadius:8, border:"1px solid #e8eaed" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <div>
+                <label style={{ fontSize:10, fontWeight:600, color:"#6b7280", display:"block", marginBottom:3 }}>WHERE FIELD</label>
+                <select value={form.people_filter_field||""} onChange={e=>{set("people_filter_field",e.target.value);set("people_filter_value","");}} style={inputStyle}>
+                  <option value="">Select field…</option>
+                  {linkedFields.filter(f=>["select","multi_select","status","text","email","boolean"].includes(f.field_type)).map(f=>(
+                    <option key={f.id} value={f.api_key}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:10, fontWeight:600, color:"#6b7280", display:"block", marginBottom:3 }}>EQUALS</label>
+                {(() => {
+                  const selField = linkedFields.find(f => f.api_key === form.people_filter_field);
+                  const opts = selField && Array.isArray(selField.options) && selField.options.length > 0
+                    ? selField.options
+                    : (fieldValues[form.people_filter_field] || []);
+                  if (opts.length > 0) return (
+                    <select value={form.people_filter_value||""} onChange={e=>set("people_filter_value",e.target.value)} style={inputStyle}>
+                      <option value="">Select value…</option>
+                      {opts.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  );
+                  return <input value={form.people_filter_value||""} onChange={e=>set("people_filter_value",e.target.value)}
+                    placeholder={form.people_filter_field?"Type a value…":"Select a field first"} style={inputStyle}/>;
+                })()}
+              </div>
+            </div>
+            {form.people_filter_field && form.people_filter_value && (
+              <div style={{ marginTop:6, padding:"5px 8px", background:"#eef2ff", borderRadius:6, fontSize:11, color:"#3b5bdb", fontWeight:500 }}>
+                Only people where <strong>{linkedFields.find(f=>f.api_key===form.people_filter_field)?.name||form.people_filter_field}</strong> = <strong>{form.people_filter_value}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Specific people picker */}
+        {(form.people_selection_mode||"all") === "specific" && (
+          <div style={{ background:"white", borderRadius:8, border:"1px solid #e8eaed", overflow:"hidden" }}>
+            <div style={{ padding:"6px 8px", borderBottom:"1px solid #f0f0f0" }}>
+              <input value={pSearch} onChange={e=>setPSearch(e.target.value)} placeholder="Search people…"
+                style={{ ...inputStyle, padding:"5px 8px" }}/>
+            </div>
+            <div style={{ padding:"4px 10px", fontSize:11, color:"#3b5bdb", fontWeight:600, background:"#eef2ff", borderBottom:"1px solid #e8eaed", display:"flex", alignItems:"center", gap:8 }}>
+              {allowedSet.size} selected
+              {allowedSet.size > 0 && <button onClick={()=>set("people_allowed_ids",[])} style={{ background:"none", border:"none", color:"#ef4444", fontSize:11, fontWeight:600, cursor:"pointer" }}>Clear all</button>}
+            </div>
+            <div style={{ maxHeight:180, overflowY:"auto" }}>
+              {loadingPeople ? (
+                <div style={{ padding:12, color:"#9ca3af", fontSize:12, textAlign:"center" }}>Loading…</div>
+              ) : filteredPeople.length === 0 ? (
+                <div style={{ padding:12, color:"#9ca3af", fontSize:12, textAlign:"center" }}>{pSearch?"No matches":"No records found"}</div>
+              ) : filteredPeople.map(p => {
+                const checked = allowedSet.has(p.id);
+                return (
+                  <div key={p.id} onClick={()=>togglePerson(p.id)}
+                    style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", cursor:"pointer",
+                      borderBottom:"1px solid #f8f8f8", background:checked?"#eef2ff":"transparent" }}>
+                    <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${checked?"#3b5bdb":"#d1d5db"}`,
+                      background:checked?"#3b5bdb":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                    <div style={{ width:24, height:24, borderRadius:"50%", background:checked?"#3b5bdb":"#6366f1", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <span style={{ color:"white", fontSize:9, fontWeight:700 }}>{(p.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</span>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:checked?700:500, color:"#1a1a2e", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div>
+                      {p.subtitle && <div style={{ fontSize:10, color:"#9ca3af", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.subtitle}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <HelpBox>Links to records in another object. Use for Hiring Manager, Interviewers, Assigned To etc. Restrict who appears using "Saved list", "Filter", or "Specific" modes.</HelpBox>
+    </div>
+  );
 }
 
 function LookupConfig({ form, set, objects }) {
@@ -671,8 +884,8 @@ function SectionConfig({ form, set }) {
 }
 
 // ── Config panel router ───────────────────────────────────────────────────────
-function TypeConfig({ fieldType, form, set, objectFields, objects, datasets }) {
-  const p = { form, set, objectFields, objects, datasets };
+function TypeConfig({ fieldType, form, set, objectFields, objects, datasets, selEnv }) {
+  const p = { form, set, objectFields, objects, datasets, selEnv };
   switch (fieldType) {
     case "text":             return <TextConfig {...p}/>;
     case "textarea":         return <TextareaConfig {...p}/>;
@@ -1206,7 +1419,7 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
                   {selectedType.label} Settings
                 </div>
                 <TypeConfig fieldType={form.field_type} form={form} set={set}
-                  objectFields={objectFields} objects={objects} datasets={datasets}/>
+                  objectFields={objectFields} objects={objects} datasets={datasets} selEnv={selEnv}/>
               </div>
 
               {/* ── Common settings (collapsible) ── */}

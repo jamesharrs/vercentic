@@ -2527,7 +2527,7 @@ function testFilter(filt, fields, record) {
 
 // ── $me dynamic user filter ────────────────────────────────────────────────────
 const ME_TOKEN = "$me";
-const ME_DISPLAY = "👤 Logged in user";
+const ME_DISPLAY = "Logged in user";
 
 let _mePersonRecordId = null;
 let _mePersonResolved = false;
@@ -2747,6 +2747,189 @@ function FieldSearchPicker({ value, onChange, groups, flat, placeholder = "Choos
   );
 }
 
+// ── FilterPeoplePicker — searchable people picker for filter rows ─────────────
+// Shows "Logged in user" as first option, then the restricted set of people
+// (same cache + filtering logic as PeoplePicker so saved-list / filter / specific modes work).
+const FilterPeoplePicker = ({ field, value, onSelect }) => {
+  const [open,    setOpen]    = useState(false);
+  const [search,  setSearch]  = useState("");
+  const [options, setOptions] = useState([]);
+  const [loaded,  setLoaded]  = useState(false);
+  const btnRef  = useRef(null);
+  const inputRef = useRef(null);
+
+  // Load people records using the same cache + filter logic as PeoplePicker
+  useEffect(() => {
+    if (!open || loaded) return;
+    const envId = _currentEnvId;
+    if (!envId) { setLoaded(true); return; }
+
+    const slug = field?.related_object_slug || "people";
+    const filterSuffix = field?.people_selection_mode === "specific"
+      ? `_specific_${(field?.people_allowed_ids||[]).length}`
+      : field?.people_selection_mode === "saved_list"
+      ? `_list_${field?.people_saved_list_id||""}`
+      : field?.people_filter_field ? `_${field.people_filter_field}_${field.people_filter_value}` : "";
+    const cacheKey = `${field?.lookup_object_id||slug}_${envId}${filterSuffix}`;
+
+    if (_pickerCache[cacheKey]) { setOptions(_pickerCache[cacheKey]); setLoaded(true); return; }
+
+    const doFetch = async (objectId) => {
+      const res = await api.get(`/records?object_id=${objectId}&environment_id=${envId}&limit=300`);
+      let recs = Array.isArray(res) ? res : (res?.records || []);
+
+      if (field?.people_selection_mode === "specific" && (field?.people_allowed_ids||[]).length > 0) {
+        const allowed = new Set(field.people_allowed_ids);
+        recs = recs.filter(r => allowed.has(r.id));
+      } else if (field?.people_selection_mode === "saved_list" && field?.people_saved_list_id) {
+        try {
+          const listData = await api.get(`/saved-views/${field.people_saved_list_id}`);
+          if (listData && Array.isArray(listData.filters) && listData.filters.length > 0) {
+            const flds = await api.get(`/fields?object_id=${objectId}`);
+            const fieldsList = Array.isArray(flds) ? flds : [];
+            recs = recs.filter(r => listData.filters.every(f => {
+              const fld = fieldsList.find(fl => fl.id === (f.fieldId || f.field_id));
+              if (!fld) return true;
+              const val = r.data?.[fld.api_key];
+              const sv = String(val||"").toLowerCase();
+              const fv = String(f.value||"").toLowerCase();
+              switch (f.op||f.operator) {
+                case "is": return sv === fv;
+                case "is not": return sv !== fv;
+                case "contains": return sv.includes(fv);
+                case "starts with": return sv.startsWith(fv);
+                case "includes": return Array.isArray(val) && val.some(v => String(v).toLowerCase() === fv);
+                case "is empty": return !val || val === "";
+                case "is not empty": return val && val !== "";
+                default: return sv === fv;
+              }
+            }));
+          }
+        } catch(e) { /* saved list not found — show all */ }
+      } else if (field?.people_filter_field && field?.people_filter_value) {
+        const fk = field.people_filter_field;
+        const fv = field.people_filter_value.toLowerCase();
+        recs = recs.filter(r => {
+          const val = r.data?.[fk];
+          if (Array.isArray(val)) return val.some(v => String(v).toLowerCase() === fv);
+          return String(val||"").toLowerCase() === fv;
+        });
+      }
+
+      const opts = recs.map(r => ({
+        id: r.id,
+        name: `${r.data?.first_name||""} ${r.data?.last_name||""}`.trim() || r.data?.name || r.data?.job_title || r.id,
+      }));
+      _pickerCache[cacheKey] = opts;
+      setOptions(opts);
+      setLoaded(true);
+    };
+
+    api.get(`/objects?environment_id=${envId}`).then(objs => {
+      const obj = (Array.isArray(objs) ? objs : []).find(o => o.slug === slug);
+      if (!obj) { setLoaded(true); return; }
+      doFetch(obj.id).catch(() => setLoaded(true));
+    }).catch(() => setLoaded(true));
+  }, [open, loaded, field]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => {
+      if (btnRef.current?.contains(e.target)) return;
+      setOpen(false); setSearch("");
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = options.filter(o => !q || o.name.toLowerCase().includes(q));
+
+  const displayLabel = value === ME_TOKEN
+    ? "Logged in user"
+    : (value ? (options.find(o => o.id === value)?.name || value) : null);
+
+  const sel = { padding:"7px 10px", borderRadius:8, border:`1.5px solid ${open ? C.accent : C.border}`,
+    fontSize:13, fontFamily:F, background: open ? C.accentLight : C.surface,
+    color: displayLabel ? C.text1 : C.text3, outline:"none", transition:"border-color .15s",
+    width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, cursor:"pointer" };
+
+  const dropdown = open && ReactDOM.createPortal(
+    <>
+      <div style={{ position:"fixed", inset:0, zIndex:9880 }} onMouseDown={() => { setOpen(false); setSearch(""); }}/>
+      <div style={{
+        position:"fixed",
+        top: (() => { const r = btnRef.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0; })(),
+        left: (() => { const r = btnRef.current?.getBoundingClientRect(); return r ? r.left : 0; })(),
+        minWidth: Math.max(200, btnRef.current?.getBoundingClientRect()?.width || 200),
+        maxWidth: 280, maxHeight:"50vh",
+        background:"white", border:`1px solid ${C.border}`, borderRadius:12,
+        boxShadow:"0 8px 28px rgba(0,0,0,.14)", zIndex:9881,
+        display:"flex", flexDirection:"column", overflow:"hidden", fontFamily:F,
+      }}>
+        <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:7, background:C.bg, borderRadius:7, padding:"5px 9px", border:`1px solid ${C.border}` }}>
+            <Ic n="search" s={12} c={C.text3}/>
+            <input ref={inputRef} value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="Search people…"
+              style={{ border:"none", background:"transparent", outline:"none", fontSize:12, fontFamily:F, flex:1, color:C.text1 }}/>
+          </div>
+        </div>
+        <div style={{ overflowY:"auto", flex:1 }}>
+          {/* "Logged in user" always first */}
+          {!q && (
+            <button
+              onMouseDown={e => { e.preventDefault(); onSelect(ME_TOKEN); setOpen(false); setSearch(""); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
+                border:"none", background: value === ME_TOKEN ? C.accentLight : "transparent",
+                cursor:"pointer", fontFamily:F, textAlign:"left", fontSize:13,
+                color: value === ME_TOKEN ? C.accent : C.text2, fontWeight: value === ME_TOKEN ? 700 : 500,
+              }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:`${C.accent}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <Ic n="user" s={12} c={C.accent}/>
+              </div>
+              Logged in user
+            </button>
+          )}
+          {!q && <div style={{ height:1, background:`${C.border}66`, margin:"2px 0" }}/>}
+          {!loaded && <div style={{ padding:"10px 12px", fontSize:12, color:C.text3 }}>Loading…</div>}
+          {loaded && filtered.length === 0 && <div style={{ padding:"10px 12px", fontSize:12, color:C.text3 }}>No matches</div>}
+          {filtered.map(o => (
+            <button key={o.id}
+              onMouseDown={e => { e.preventDefault(); onSelect(o.id); setOpen(false); setSearch(""); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 12px",
+                border:"none", background: value === o.id ? C.accentLight : "transparent",
+                cursor:"pointer", fontFamily:F, textAlign:"left", fontSize:13,
+                color: value === o.id ? C.accent : C.text1, fontWeight: value === o.id ? 600 : 400,
+              }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:`${C.accent}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:10, fontWeight:700, color:C.accent }}>
+                {o.name.charAt(0).toUpperCase()}
+              </div>
+              {o.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+
+  return (
+    <div style={{ flex:1, position:"relative" }} ref={btnRef}>
+      <button onClick={() => { setOpen(p=>!p); setTimeout(()=>inputRef.current?.focus(),30); }} style={sel}>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, display:"flex", alignItems:"center", gap:6 }}>
+          {value === ME_TOKEN && <Ic n="user" s={12} c={C.accent}/>}
+          {displayLabel || <span style={{ color:C.text3 }}>Select person…</span>}
+        </span>
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.5 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </div>
+  );
+};
+
 // ── FilterRow — module-level so it is never recreated on parent re-render ─────
 // (defining inside AdvancedFilterPanel caused focus loss on every keystroke)
 const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) => {
@@ -2844,47 +3027,40 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
         {ops.map(op => <option key={op} value={op}>{op}</option>)}
       </select>
 
-      {/* Value + $me button */}
-      {showVal && <>
-        <button
-          onClick={() => onUpdate(filt.id, { value: ME_TOKEN })}
-          title="Match the currently logged-in user"
-          style={{
-            padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:700, flexShrink:0,
-            border: filt.value === ME_TOKEN ? `2px solid ${C.accent}` : `1.5px solid ${C.border}`,
-            background: filt.value === ME_TOKEN ? C.accentLight : "white",
-            color: filt.value === ME_TOKEN ? C.accent : C.text2,
-            cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:4,
-            fontFamily:F, transition:"all .15s"
-          }}>
-          <Ic n="user" s={11} c={filt.value === ME_TOKEN ? C.accent : C.text3}/> Me
-        </button>
-        {filt.value !== ME_TOKEN && (opts.length > 0
-        ? <select value={filt.value} onChange={e => onUpdate(filt.id, { value: e.target.value })}
-            style={{ ...sel, flex:1 }}
-            onFocus={e=>e.target.style.borderColor=C.accent}
-            onBlur={e=>e.target.style.borderColor=C.border}>
-            <option value="">Select…</option>
-            {opts.map(o => {
-              const v = typeof o === "object" ? o.value : o;
-              const l = typeof o === "object" ? o.label : o;
-              return <option key={v} value={v}>{l}</option>;
-            })}
-          </select>
-        : field?.field_type === "date"
-          ? <input type="date" value={filt.value}
-              onChange={e => onUpdate(filt.id, { value: e.target.value })}
-              style={{ ...sel, flex:1 }}/>
-          : (field?.field_type === "number" || field?.field_type === "currency" || field?.field_type === "rating")
-            ? <input type="number" value={filt.value} placeholder="Value"
-                onChange={e => onUpdate(filt.id, { value: e.target.value })}
-                style={{ ...sel, flex:1 }}/>
-            : <input value={filt.value} placeholder="Value…"
-                onChange={e => onUpdate(filt.id, { value: e.target.value })}
+      {/* Value — people/multi_lookup: searchable picker with "Logged in user"; others: existing inputs */}
+      {showVal && (
+        (field?.field_type === "people" || field?.field_type === "multi_lookup")
+          ? <FilterPeoplePicker
+              field={field}
+              value={filt.value}
+              onSelect={v => onUpdate(filt.id, { value: v })}
+            />
+          : opts.length > 0
+            ? <select value={filt.value} onChange={e => onUpdate(filt.id, { value: e.target.value })}
                 style={{ ...sel, flex:1 }}
                 onFocus={e=>e.target.style.borderColor=C.accent}
-                onBlur={e=>e.target.style.borderColor=C.border}/>
-      )}</>}
+                onBlur={e=>e.target.style.borderColor=C.border}>
+                <option value="">Select…</option>
+                {opts.map(o => {
+                  const v = typeof o === "object" ? o.value : o;
+                  const l = typeof o === "object" ? o.label : o;
+                  return <option key={v} value={v}>{l}</option>;
+                })}
+              </select>
+            : field?.field_type === "date"
+              ? <input type="date" value={filt.value}
+                  onChange={e => onUpdate(filt.id, { value: e.target.value })}
+                  style={{ ...sel, flex:1 }}/>
+              : (field?.field_type === "number" || field?.field_type === "currency" || field?.field_type === "rating")
+                ? <input type="number" value={filt.value} placeholder="Value"
+                    onChange={e => onUpdate(filt.id, { value: e.target.value })}
+                    style={{ ...sel, flex:1 }}/>
+                : <input value={filt.value} placeholder="Value…"
+                    onChange={e => onUpdate(filt.id, { value: e.target.value })}
+                    style={{ ...sel, flex:1 }}
+                    onFocus={e=>e.target.style.borderColor=C.accent}
+                    onBlur={e=>e.target.style.borderColor=C.border}/>
+      )}
       {!showVal && <div style={{ flex:1 }}/>}
 
       <button onClick={() => onRemove(filt.id)}
