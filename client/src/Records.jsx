@@ -10499,7 +10499,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   return (
-    <div style={{ minHeight:0, padding:"0 32px" }}>
+    <div style={{ flex:1, minHeight:0, overflow:"auto", padding:"0 32px" }}>
       {/* Toolbar */}
       <div data-tour="records-toolbar" style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", position:"sticky", top:0, zIndex:50, background:"var(--t-bg, #f4f5f8)", paddingBottom:12, paddingTop:24, marginTop:0 }}>
         <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>
