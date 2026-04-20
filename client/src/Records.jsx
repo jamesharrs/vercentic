@@ -6309,33 +6309,6 @@ const AgentsRecordPanel = ({ record, environment }) => {
   );
 };
 
-  const load = useCallback(async () => {
-    if (!environment?.id || !record?.id) return;
-    try {
-      const [a, r] = await Promise.all([
-        api.get(`/agents?environment_id=${environment.id}`),
-        api.get(`/agents/runs/by-record/${record.id}`),
-      ]);
-      setAgents(Array.isArray(a) ? a.filter(ag => ag.active !== false) : []);
-      setRuns(Array.isArray(r) ? r.slice(0, 10) : []);
-    } catch (_) {}
-    setLoading(false);
-  }, [record?.id, environment?.id]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const runAgent = async (agent) => {
-    setRunning(r => ({ ...r, [agent.id]: true }));
-    try {
-      await api.post(`/agents/${agent.id}/run`, {
-        record_id: record.id, environment_id: environment.id,
-      });
-      const r = await api.get(`/agents/runs/by-record/${record.id}`);
-      if (Array.isArray(r)) setRuns(r.slice(0, 10));
-    } catch (e) { console.error(e); }
-    setRunning(r => ({ ...r, [agent.id]: false }));
-  };
-
 export const PANEL_META = {
   fields:       { icon:"edit",          label:"Profile Fields",      defaultOpen:true  },
   tasks:        { icon:"checkSquare",   label:"Tasks & Reminders",   defaultOpen:true  },

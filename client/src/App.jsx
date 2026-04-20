@@ -11,14 +11,17 @@ import { useHistory } from "./useHistory";
 // Chunk-load error handler — reloads once when a lazy chunk fails (stale deployment cache)
 const lazyWithRetry = (factory) => lazy(() =>
   factory().catch((err) => {
-    // Only auto-reload once per session to avoid infinite loops
+    console.error('[lazyWithRetry] chunk load failed:', err);
     const reloadKey = "vrc_chunk_reload";
     if (!sessionStorage.getItem(reloadKey)) {
       sessionStorage.setItem(reloadKey, "1");
       window.location.reload();
     }
-    // If already reloaded and still failing, show error instead of silent null
-    return { default: () => <div style={{padding:40,color:"#e03131",fontSize:14}}>Failed to load component. <button onClick={()=>{sessionStorage.clear();location.reload();}}>Clear cache & reload</button></div> };
+    const msg = err?.message || String(err);
+    return { default: () => <div style={{padding:40,color:"#e03131",fontSize:13,fontFamily:"monospace"}}>
+      <b>Chunk load error:</b> {msg}<br/><br/>
+      <button onClick={()=>{sessionStorage.clear();location.reload();}}>Clear cache &amp; reload</button>
+    </div> };
   })
 );
 
