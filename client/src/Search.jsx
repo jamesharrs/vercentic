@@ -204,7 +204,7 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
   const [query,      setQuery]      = useState("");
   const [objects,    setObjects]    = useState([]);
   const [fields,     setFields]     = useState({});   // { object_id: [fields] }
-  const [allRecords, setAllRecords] = useState({});   // { object_id: [records] }
+  const [allRecords, setAllRecords] = useState({});   // { object_id: [records] } — kept for future use
   const [loading,    setLoading]    = useState(false);
   const [searched,   setSearched]   = useState(false);
   const [results,    setResults]    = useState([]);
@@ -263,33 +263,24 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
     }
   }, [objects.length]);
 
-  // Load all records when searching
-  const loadAllRecords = useCallback(async () => {
-    const recordMap = {};
-    await Promise.all(objects.map(async obj => {
-      const r = await api.get(`/records?object_id=${obj.id}&environment_id=${environment.id}&limit=500`);
-      recordMap[obj.id] = r.records || [];
-    }));
-    setAllRecords(recordMap);
-    return recordMap;
-  }, [objects, environment?.id]);
-
   const handleSearch = useCallback(async () => {
     if (!query.trim() && !filters.length) return;
     if (!objects.length) return; // wait for objects to load
     setLoading(true);
     setSearched(true);
-    // Always reload records — stale cache from a different object set causes missed results
-    const recordMap = await loadAllRecords();
+    // Always fetch fresh records directly — avoids stale-closure loop with allRecords
+    const recordMap = {};
+    await Promise.all(objects.map(async obj => {
+      const r = await api.get(`/records?object_id=${obj.id}&environment_id=${environment?.id}&limit=500`);
+      recordMap[obj.id] = r.records || [];
+    }));
 
     let combined = [];
     for (const obj of objects) {
       let recs = recordMap[obj.id] || [];
-      // Text search
       if (query.trim()) {
         recs = recs.filter(r => JSON.stringify(r.data||{}).toLowerCase().includes(query.toLowerCase()));
       }
-      // Apply filters (only for activeObject if set)
       if (filters.length && activeObject?.id === obj.id) {
         recs = applyFilters(recs, filters, fields[obj.id]||[]);
       }
@@ -297,7 +288,8 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
     }
     setResults(combined);
     setLoading(false);
-  }, [query, filters, objects, allRecords, loadAllRecords, activeObject, fields]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, filters, objects, activeObject, fields, environment?.id]);
 
   // Live search as user types — also re-run when objects finish loading
   useEffect(() => {
