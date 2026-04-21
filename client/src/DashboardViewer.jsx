@@ -208,7 +208,7 @@ function DashboardSwitcher({ dashboards, current, onChange }) {
   </div>;
 }
 
-export default function DashboardViewer({ environment, session, onNavigate, onOpenRecord, onManage }) {
+export default function DashboardViewer({ environment, session, onNavigate, onOpenRecord, onManage, initialDashId }) {
   const [dashboards,setDashboards]=useState([]);
   const [current,setCurrent]=useState(null);
   const [panelData,setPanelData]=useState({});
@@ -235,7 +235,7 @@ export default function DashboardViewer({ environment, session, onNavigate, onOp
       const list=Array.isArray(dbs)?dbs:[];
       setDashboards(list);
       if(!list.length){setLoading(false);return;}
-      const def=list.find(d=>d.is_default)||list[0];
+      const def = (initialDashId && list.find(d=>d.id===initialDashId)) || list.find(d=>d.is_default) || list[0];
       const full=await api.get(`/dashboards/${def.id}`);
       if(full?.id){setCurrent(full);loadAllPanelData(full);}
       setLoading(false);

@@ -21,6 +21,7 @@ const Loader = () => (
 
 export default function DashboardHub({ tab = "overview", onTabChange, environment, session, onOpenRecord, onNavigate, builderMode, setBuilderMode, onViewAll }) {
   const [editDashId, setEditDashId] = useState(null);
+  const [viewDashId, setViewDashId] = useState(null);
   const showNav = ["overview","screening","interviews","offers","onboarding"].includes(tab);
 
   const navigate = (id) => {
@@ -59,11 +60,13 @@ export default function DashboardHub({ tab = "overview", onTabChange, environmen
       {tab === "custom" && !builderMode && (
         <DashboardViewer environment={environment} session={session}
           onOpenRecord={onOpenRecord} onNavigate={onNavigate}
+          initialDashId={viewDashId}
           onManage={(dashId) => { setEditDashId(dashId||null); setBuilderMode(true); }}/>
       )}
       {tab === "custom" && builderMode && (
         <DashboardBuilder environment={environment} session={session}
           initialEditId={editDashId}
+          onView={(dashId) => { setViewDashId(dashId); setBuilderMode(false); }}
           onBack={() => { setBuilderMode(false); setEditDashId(null); }}/>
       )}
     </Suspense>

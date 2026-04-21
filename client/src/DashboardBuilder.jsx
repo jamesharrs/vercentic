@@ -280,7 +280,7 @@ Respond ONLY with valid JSON: { name, description, panels:[{type,title,position:
   }
 }
 
-export default function DashboardBuilder({ environment, session, onBack, initialEditId }) {
+export default function DashboardBuilder({ environment, session, onBack, initialEditId, onView }) {
   const [dashboards, setDashboards] = useState([]);
   const [editing,    setEditing]    = useState(null);
   const [selPanel,   setSelPanel]   = useState(null);
@@ -406,7 +406,8 @@ export default function DashboardBuilder({ environment, session, onBack, initial
                 <span>{d.access?.type==="everyone"?"🌐 Everyone":d.access?.type==="roles"?`🔒 ${(d.access?.role_ids||[]).length} roles`:`👤 ${(d.access?.user_ids||[]).length} users`}</span>
               </div>
               <div style={{ display:"flex",gap:6 }}>
-                {d.can_edit!==false&&<button onClick={()=>handleEdit(d)} style={{ flex:1,padding:"7px",borderRadius:8,border:`1.5px solid ${V.accent}`,background:"transparent",color:V.accent,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F }}>Edit</button>}
+                <button onClick={()=>onView?.(d.id)} style={{ flex:1,padding:"7px",borderRadius:8,border:`1.5px solid ${V.accent}`,background:V.accent,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F }}>View</button>
+                {d.can_edit!==false&&<button onClick={()=>handleEdit(d)} style={{ flex:1,padding:"7px",borderRadius:8,border:`1.5px solid ${V.border}`,background:"transparent",color:V.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F }}>Edit</button>}
                 {!d.is_default&&d.can_edit!==false&&<button onClick={()=>handleSetDefault(d)} style={{ padding:"7px 10px",borderRadius:8,border:`1px solid ${V.border}`,background:"transparent",color:V.text3,fontSize:11,cursor:"pointer",fontFamily:F }}>Default</button>}
                 {d.can_edit!==false&&<button onClick={()=>handleDuplicate(d)} style={{ padding:"7px 10px",borderRadius:8,border:`1px solid ${V.border}`,background:"transparent",color:V.text3,fontSize:11,cursor:"pointer",fontFamily:F }}><Ic n="copy" s={13} c={V.text3}/></button>}
                 {d.can_edit!==false&&<button onClick={()=>handleDelete(d.id)} style={{ padding:"7px 10px",borderRadius:8,border:`1px solid ${V.border}`,background:"transparent",color:V.red,fontSize:11,cursor:"pointer",fontFamily:F }}><Ic n="trash" s={13} c={V.red}/></button>}
