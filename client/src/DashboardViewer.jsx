@@ -87,7 +87,7 @@ function ChartPanel({ panel, data }) {
   if (!chartData.length) return <ErrorState msg="No data"/>;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column" }}>
     {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10,flexShrink:0 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
-    <div style={{ flex:1,minHeight:0,minWidth:0 }}>
+    <div style={{ flex:1,minHeight:200,minWidth:0 }}>
       <ResponsiveContainer width="100%" height="100%">
         {chartType==="pie"?
           <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="35%" outerRadius="65%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/></PieChart>
