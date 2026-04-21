@@ -844,7 +844,7 @@ export default function Reports({ environment, initialReport }) {
           const base = { _group: k, [grp]: k, _count: grpRows.length };
           // Aggregate each formula column across the group
           activeFormulaCols.forEach(f => {
-            const vals = grpRows.map(r => parseFloat(r[f.name])).filter(v => !isNaN(v));
+            const vals = grpRows.map(r => parseFloat(r[f.name])).filter(v => !isNaN(v) && v !== 0);
             if (vals.length) {
               const expr = f.expression.trim().toUpperCase();
               if (expr.startsWith("AVG(") || expr.startsWith("AVG ")) {
@@ -970,10 +970,10 @@ export default function Reports({ environment, initialReport }) {
       const xVal = String(row[xKey] ?? "Unknown");
       if (!groups[xVal]) groups[xVal] = { [xKey]: xVal, _count: 0, _sums: {}, _counts: {} };
       groups[xVal]._count++;
-      // Accumulate numeric fields for averaging
+      // Accumulate numeric fields for averaging — skip zeros (missing data)
       Object.entries(row).forEach(([k, v]) => {
         const n = parseFloat(v);
-        if (!isNaN(n) && k !== xKey) {
+        if (!isNaN(n) && n !== 0 && k !== xKey && !k.startsWith("_")) {
           groups[xVal]._sums[k]   = (groups[xVal]._sums[k]   || 0) + n;
           groups[xVal]._counts[k] = (groups[xVal]._counts[k] || 0) + 1;
         }
@@ -981,13 +981,22 @@ export default function Reports({ environment, initialReport }) {
     });
     return Object.values(groups).map(g => {
       const row = { [xKey]: g[xKey], _count: g._count };
-      // Average numeric fields including formula cols
+      // Average numeric fields including formula cols — only for rows that had a value
       Object.keys(g._sums).forEach(k => {
         row[k] = parseFloat((g._sums[k] / g._counts[k]).toFixed(2));
       });
       return row;
     }).sort((a, b) => b._count - a._count).slice(0, 30);
   }, [results, chartX, chartY, groupBy]);
+
+  // Debug: log chartData and yKey whenever they change
+  useEffect(() => {
+    if (chartData.length && chartY) {
+      console.log('[Chart] xKey:', chartX, 'yKey:', chartY);
+      console.log('[Chart] first row:', chartData[0]);
+      console.log('[Chart] yKey value in first row:', chartData[0]?.[chartY]);
+    }
+  }, [chartData, chartX, chartY]);
 
   const goToFiltered = (filterKey,filterValue) => {
     const obj=objects.find(o=>o.id===selObject);
