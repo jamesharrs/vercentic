@@ -84,19 +84,18 @@ function ChartPanel({ panel, data }) {
   if (data.error) return <ErrorState msg={data.error}/>;
   const { chartData=[], chartType="bar" } = data;
   console.log('[ChartPanel]', panel.title, { chartDataLen: chartData.length, chartType, firstRow: chartData[0] });
+  if (!chartData.length) return <ErrorState msg="No data"/>;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column" }}>
-    {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
-    <div style={{ flex:1,minHeight:0,overflow:"hidden" }}>
-      <AutoSizedChart style={{ height:"100%" }}>
-        {(w,h)=><ResponsiveContainer width={w} height={h}>
-          {chartType==="pie"?
-            <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="35%" outerRadius="65%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/></PieChart>
-          :chartType==="line"?
-            <AreaChart data={chartData} margin={{ top:4,right:8,bottom:0,left:-20 }}><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={V.accent} stopOpacity={0.15}/><stop offset="95%" stopColor={V.accent} stopOpacity={0}/></linearGradient></defs><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/><Area type="monotone" dataKey="value" stroke={V.accent} strokeWidth={2} fill="url(#ag)" dot={false}/></AreaChart>
-          :
-            <BarChart data={chartData} margin={{ top:4,right:8,bottom:0,left:-20 }}><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/><Bar dataKey="value" radius={[4,4,0,0]}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Bar></BarChart>}
-        </ResponsiveContainer>}
-      </AutoSizedChart>
+    {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10,flexShrink:0 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
+    <div style={{ flex:1,minHeight:0,minWidth:0 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        {chartType==="pie"?
+          <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="35%" outerRadius="65%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/></PieChart>
+        :chartType==="line"?
+          <AreaChart data={chartData} margin={{ top:4,right:8,bottom:0,left:-20 }}><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={V.accent} stopOpacity={0.15}/><stop offset="95%" stopColor={V.accent} stopOpacity={0}/></linearGradient></defs><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/><Area type="monotone" dataKey="value" stroke={V.accent} strokeWidth={2} fill="url(#ag)" dot={false}/></AreaChart>
+        :
+          <BarChart data={chartData} margin={{ top:4,right:8,bottom:0,left:-20 }}><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/><Bar dataKey="value" radius={[4,4,0,0]}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Bar></BarChart>}
+      </ResponsiveContainer>
     </div>
   </div>;
 }
@@ -157,22 +156,20 @@ function SavedReportPanel({ panel, data, onNavigate, onOpenRecord }) {
   if (!report) return <ErrorState msg="Report not configured"/>;
   const showChart   = (displayMode === "chart" || displayMode === "both") && chartData.length > 0;
   const showTable   = (displayMode === "table" || displayMode === "both") && records.length > 0;
-  const chartH      = showTable ? 120 : "100%";
+  const chartH      = showTable ? 140 : 200;
   const title = panel.title || report.name;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
     {title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
       <span>{title}</span>
       {total>0&&<span style={{ fontSize:11,color:V.text3,fontWeight:400 }}>{total} total</span>}
     </div>}
-    {showChart&&<div style={{ flex:showTable?0:1,height:chartH,minHeight:showTable?chartH:0,overflow:"hidden" }}>
-      <AutoSizedChart style={{ height:"100%" }}>
-        {(w,h)=><ResponsiveContainer width={w} height={h}>
-          {chartType==="pie"
-            ? <PieChart><Pie data={chartData} dataKey={chartY} nameKey={chartX} cx="50%" cy="50%" innerRadius="30%" outerRadius="60%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:11,fontFamily:F,borderRadius:8 }}/></PieChart>
-            : <BarChart data={chartData} margin={{ top:2,right:4,bottom:0,left:-24 }}><XAxis dataKey={chartX} tick={{ fontSize:9,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:9,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:11,fontFamily:F,borderRadius:8 }}/><Bar dataKey={chartY} radius={[3,3,0,0]}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Bar></BarChart>
-          }
-        </ResponsiveContainer>}
-      </AutoSizedChart>
+    {showChart&&<div style={{ height:chartH,flexShrink:0 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        {chartType==="pie"
+          ? <PieChart><Pie data={chartData} dataKey={chartY} nameKey={chartX} cx="50%" cy="50%" innerRadius="30%" outerRadius="60%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:11,fontFamily:F,borderRadius:8 }}/></PieChart>
+          : <BarChart data={chartData} margin={{ top:2,right:4,bottom:0,left:-24 }}><XAxis dataKey={chartX} tick={{ fontSize:9,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:9,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:11,fontFamily:F,borderRadius:8 }}/><Bar dataKey={chartY} radius={[3,3,0,0]}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Bar></BarChart>
+        }
+      </ResponsiveContainer>
     </div>}
     {showTable&&<div style={{ flex:1,overflowY:"auto",marginTop:showChart?8:0 }}>
       {columns.length>0&&<div style={{ display:"grid",gridTemplateColumns:`repeat(${Math.min(columns.length,4)},1fr)`,gap:"0 8px",paddingBottom:4,marginBottom:4,borderBottom:`1px solid ${V.border}`,flexShrink:0 }}>
