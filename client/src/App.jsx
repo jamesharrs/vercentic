@@ -1624,9 +1624,22 @@ function App({ onEnvReady }) {
     return _sessionPerms.some(p => p.object_slug === objectSlug && p.action === action && p.allowed);
   };
   const [environments, setEnvironments] = useState([]);
-  const [selectedEnv, setSelectedEnv] = useState(null);
+  // Seed selectedEnv from sessionStorage so Vite HMR doesn't reset it to null.
+  // sessionStorage persists across hot reloads (same tab) but not page refreshes.
+  const [selectedEnv, setSelectedEnv] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('vercentic_selected_env');
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
   const [selectedObject, setSelectedObject] = useState(null);
   const [allObjects, setAllObjects] = useState([]);
+
+  // Persist selectedEnv to sessionStorage so HMR remounts start with the right env
+  useEffect(() => {
+    if (!selectedEnv) return;
+    try { sessionStorage.setItem('vercentic_selected_env', JSON.stringify(selectedEnv)); } catch {}
+  }, [selectedEnv?.id]);
   // ── URL-based routing helpers ──────────────────────────────────────────────
   // Convert a URL path to an activeNav value (called on mount + popstate)
   const navFromPath = (path, objects = []) => {
@@ -1703,7 +1716,13 @@ function App({ onEnvReady }) {
   const [copilotDocked, setCopilotDocked] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const [dashBuilderMode, setDashBuilderMode] = useState(false);
-  const [navObjects, setNavObjects] = useState([]);
+  // Seed navObjects from sessionStorage so HMR doesn't wipe the sidebar
+  const [navObjects, setNavObjects] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('vercentic_nav_objects');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(null);
   const [showTheme, setShowTheme] = useState(false);
@@ -1817,7 +1836,14 @@ function App({ onEnvReady }) {
         if (d?.code === 'UNAUTHENTICATED') return;
         // Never replace a loaded list with an empty one — prevents nav blinking
         // during re-fetches while already showing objects
-        setNavObjects(prev => (objs.length === 0 && prev.length > 0) ? prev : objs);
+        setNavObjects(prev => {
+          const next = (objs.length === 0 && prev.length > 0) ? prev : objs;
+          // Persist to sessionStorage so HMR remounts show the nav immediately
+          if (next.length > 0) {
+            try { sessionStorage.setItem('vercentic_nav_objects', JSON.stringify(next)); } catch {}
+          }
+          return next;
+        });
         const resolved = navFromPath(window.location.pathname, objs.length > 0 ? objs : []);
         if (objs.length > 0 && resolved !== activeNavRef.current) setActiveNav(resolved);
         // If still empty and we have retries left, try again
