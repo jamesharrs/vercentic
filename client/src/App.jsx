@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, startTransition } from "react";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
 import { ThemeProvider, useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
-import { FeatureProvider, useFeature } from "./hooks/useFeature.jsx";
+import { FeatureProvider, useFeature, useFeatures } from "./hooks/useFeature.jsx";
 import { useI18n } from "./i18n/I18nContext.jsx";
 import { getSession, clearSession } from "./usePermissions.js";
 import { PermissionProvider, usePermissions, Gate } from "./PermissionContext.jsx";
