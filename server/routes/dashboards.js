@@ -164,15 +164,57 @@ function fetchPanelData(panel, user, environment_id) {
       // Build chart data if group_by is set
       let chartData = [];
       const grp = report.group_by;
+      const activeFormulas = (report.formulas || []).filter(f => f.name && f.expression);
+      const chartYKey = report.chart_y || '_count';
+      // Simple formula evaluator for server-side use
+      const evalFormula = (expr, row) => {
+        try {
+          const e = (expr||'').trim();
+          const nv = k => { const clean=k.replace(/^\{|\}$/g,'').toLowerCase(); const v=row[clean]; return typeof v==='number'?v:parseFloat(v)||0; };
+          const m1 = fn => { const m=e.match(new RegExp(`^${fn}\\s*\\(([^)]+)\\)$`,'i')); if(m)return m[1]; const m2=e.match(new RegExp(`^${fn}\\s+(.+)$`,'i')); return m2?m2[1].trim():null; };
+          if (/^COUNT\(\)$/i.test(e)) return 1;
+          const avgF=m1('AVG'); if(avgF!==null)return nv(avgF);
+          const sumF=m1('SUM'); if(sumF!==null)return nv(sumF);
+          const maxF=m1('MAX'); if(maxF!==null)return nv(maxF);
+          const minF=m1('MIN'); if(minF!==null)return nv(minF);
+          return null;
+        } catch { return null; }
+      };
       if (grp) {
+        // Group records and aggregate count + formula columns
         const groups = {};
         recs.forEach(r => {
           const v = r.data?.[grp];
-          const vals = Array.isArray(v) ? v : [v || 'Unknown'];
-          vals.forEach(val => { const key = String(val || 'Unknown'); groups[key] = (groups[key] || 0) + 1; });
+          const vals = Array.isArray(v) ? v : [String(v || 'Unknown')];
+          vals.forEach(val => {
+            const key = String(val || 'Unknown');
+            if (!groups[key]) groups[key] = { _count: 0, _sums: {}, _counts: {} };
+            groups[key]._count++;
+            // Accumulate formula values
+            activeFormulas.forEach(f => {
+              const fval = evalFormula(f.expression, r.data || {});
+              if (fval !== null && fval !== 0 && !isNaN(fval)) {
+                groups[key]._sums[f.name] = (groups[key]._sums[f.name] || 0) + fval;
+                groups[key]._counts[f.name] = (groups[key]._counts[f.name] || 0) + 1;
+              }
+            });
+          });
         });
-        chartData = Object.entries(groups).sort(([,a],[,b])=>b-a).slice(0,15)
-          .map(([name,value])=>({ name, value, [report.chart_x||'name']:name, [report.chart_y||'_count']:value }));
+        chartData = Object.entries(groups).sort(([,a],[,b])=>b._count-a._count).slice(0,20).map(([name, g]) => {
+          const row = { name, _count: g._count, [report.chart_x||'name']: name };
+          // Compute formula averages per group
+          activeFormulas.forEach(f => {
+            const expr = f.expression.trim().toUpperCase();
+            if (expr.startsWith('SUM(') || expr.startsWith('SUM ') || expr.startsWith('COUNT(')) {
+              row[f.name] = parseFloat((g._sums[f.name] || 0).toFixed(2));
+            } else {
+              row[f.name] = g._counts[f.name] ? parseFloat((g._sums[f.name] / g._counts[f.name]).toFixed(2)) : 0;
+            }
+          });
+          // If chart_y is a formula name, that key is already set; otherwise fall back to count
+          if (!activeFormulas.some(f => f.name === chartYKey)) row[chartYKey] = g._count;
+          return row;
+        });
       }
       // Return data based on display_mode
       const displayMode = cfg.display_mode || 'both';
