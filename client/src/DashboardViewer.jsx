@@ -85,8 +85,8 @@ function ChartPanel({ panel, data }) {
   const { chartData=[], chartType="bar" } = data;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column" }}>
     {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
-    <div style={{ flex:1,minHeight:0 }}>
-      <AutoSizedChart>
+    <div style={{ flex:1,minHeight:0,overflow:"hidden" }}>
+      <AutoSizedChart style={{ height:"100%" }}>
         {(w,h)=><ResponsiveContainer width={w} height={h}>
           {chartType==="pie"?
             <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="35%" outerRadius="65%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/></PieChart>
@@ -155,15 +155,15 @@ function SavedReportPanel({ panel, data, onNavigate, onOpenRecord }) {
   if (!report) return <ErrorState msg="Report not configured"/>;
   const showChart   = (displayMode === "chart" || displayMode === "both") && chartData.length > 0;
   const showTable   = (displayMode === "table" || displayMode === "both") && records.length > 0;
-  const chartHeight = showTable ? 110 : "100%";
+  const chartH      = showTable ? 120 : "100%";
   const title = panel.title || report.name;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
     {title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
       <span>{title}</span>
       {total>0&&<span style={{ fontSize:11,color:V.text3,fontWeight:400 }}>{total} total</span>}
     </div>}
-    {showChart&&<div style={{ flex:showTable?0:1,height:chartHeight,minHeight:showTable?chartHeight:0 }}>
-      <AutoSizedChart>
+    {showChart&&<div style={{ flex:showTable?0:1,height:chartH,minHeight:showTable?chartH:0,overflow:"hidden" }}>
+      <AutoSizedChart style={{ height:"100%" }}>
         {(w,h)=><ResponsiveContainer width={w} height={h}>
           {chartType==="pie"
             ? <PieChart><Pie data={chartData} dataKey={chartY} nameKey={chartX} cx="50%" cy="50%" innerRadius="30%" outerRadius="60%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:11,fontFamily:F,borderRadius:8 }}/></PieChart>
