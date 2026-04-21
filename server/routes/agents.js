@@ -4,6 +4,29 @@ const router = express.Router();
 const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
 
+// ── AI Activity Logger ────────────────────────────────────────────────────────
+function logAiActivity({ record_id, environment_id, agent_name, action_type, summary, ai_output }) {
+  if (!record_id) return;
+  try {
+    const rec = query('records', r => r.id === record_id)[0];
+    if (!rec) return;
+    insert('activity', {
+      id: uuidv4(),
+      record_id,
+      object_id: rec.object_id,
+      environment_id: environment_id || rec.environment_id,
+      action: action_type,          // e.g. 'ai_analyse', 'ai_summarise', 'ai_score'
+      actor: `AI · ${agent_name}`,
+      changes: {
+        agent_name,
+        action_type,
+        summary: summary || (ai_output ? ai_output.slice(0, 120) : null),
+      },
+      created_at: new Date().toISOString(),
+    });
+  } catch (e) { console.error('[logAiActivity]', e.message); }
+}
+
 // ── Init store collections ────────────────────────────────────────────────────
 const store = getStore();
 if (!store.agents)       { store.agents = [];       saveStore(); }
@@ -392,6 +415,7 @@ async function executeAgent(agent, run, record_id) {
       if (['ai_analyse','ai_draft_email','ai_summarise','ai_score'].includes(action.type)) {
         aiOutput = await runAiAction(action, recordContext, record, fields, aiOutput);
         s.agent_runs[runIdx].ai_output = aiOutput; saveStore();
+        logAiActivity({ record_id, environment_id: agent.environment_id, agent_name: agent.name, action_type: action.type, summary: aiOutput?.slice(0, 120) });
         addStep(`AI action completed`);
       } else if (action.type === 'human_review') {
         pendingActions.push({ action, action_index: pendingActions.length, ai_output: aiOutput, record_preview: recordContext.slice(0,300), approved: undefined, created_at: new Date().toISOString() });
@@ -599,6 +623,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
 
       saveStore();
       addStep(`✓ AI Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}. Link: /interview/${token}`);
+      logAiActivity({ record_id, environment_id, agent_name: 'AI Interview Agent', action_type: 'ai_interview', summary: `Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}` });
       break;
     }
     case 'interview_coordinator': {

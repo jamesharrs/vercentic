@@ -6996,8 +6996,9 @@ const ACTIVITY_CATEGORIES = [
   { id:"note",          label:"Notes",        color:"#f59f00" },
   { id:"communication", label:"Comms",        color:"#0891b2" },
   { id:"file",          label:"Files",        color:"#7048e8" },
-  { id:"pipeline",      label:"Linked People",     color:"#0ca678" },
+  { id:"pipeline",      label:"Linked People",color:"#0ca678" },
   { id:"status",        label:"Status",       color:"#e03131" },
+  { id:"ai",            label:"AI Actions",   color:"#7c3aed" },
   { id:"created",       label:"Created",      color:"#16a34a" },
 ];
 
@@ -7017,6 +7018,12 @@ const ACT_META = {
   unlinked:      { icon:"x",         bg:"#fef2f2", ic:"#e03131" },
   status_changed:{ icon:"activity",  bg:"#fef2f2", ic:"#e03131" },
   updated:       { icon:"edit",      bg:"#eff6ff", ic:"#3b5bdb" },
+  ai_action:     { icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
+  ai_analyse:    { icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
+  ai_summarise:  { icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
+  ai_score:      { icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
+  ai_draft_email:{ icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
+  ai_interview:  { icon:"sparkles",  bg:"#f5f3ff", ic:"#7c3aed" },
 };
 
 const ActivityPanel = memo(({ record, onViewAll }) => {
@@ -7070,6 +7077,12 @@ const ActivityPanel = memo(({ record, onViewAll }) => {
     if (a.action==="linked")         return "linked to a record";
     if (a.action==="unlinked")       return "unlinked a record";
     if (a.action==="status_changed") return `Status → ${ch.new_value||""}`;
+    if (a.action==="ai_analyse")    return `AI: ${ch.agent_name||"Agent"} analysed`;
+    if (a.action==="ai_summarise")  return `AI: ${ch.agent_name||"Agent"} summarised`;
+    if (a.action==="ai_score")      return `AI: ${ch.agent_name||"Agent"} scored`;
+    if (a.action==="ai_draft_email")return `AI: ${ch.agent_name||"Agent"} drafted email`;
+    if (a.action==="ai_interview")  return `AI: ${ch.agent_name||"Agent"} generated interview`;
+    if (a.action && a.action.startsWith("ai_")) return `AI: ${ch.agent_name||"Agent"} ran ${a.action.replace("ai_","")}`;
     return "updated this record";
   };
 
@@ -7087,6 +7100,7 @@ const ActivityPanel = memo(({ record, onViewAll }) => {
       if (from)        return `${from} → (cleared)`;
     }
     if (a.action==="note_added" && ch.preview) return `"${ch.preview.slice(0,60)}"`;
+    if (a.action && a.action.startsWith("ai_") && ch.summary) return ch.summary.slice(0,80);
     return null;
   };
 

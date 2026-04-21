@@ -69,6 +69,7 @@ function categorise(a) {
   if (a.action === 'file_uploaded' || a.action === 'file_deleted') return 'file';
   if (['stage_changed','linked','unlinked'].includes(a.action)) return 'pipeline';
   if (a.action === 'status_changed') return 'status';
+  if (a.action && a.action.startsWith('ai_')) return 'ai';
   return 'other';
 }
 
