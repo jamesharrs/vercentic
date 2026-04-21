@@ -6498,7 +6498,7 @@ export const PANEL_META = {
   linked:       { icon:"link",          label:"Linked Records",      defaultOpen:true  },
   match:        { icon:"sparkles",      label:"Recommendations",     defaultOpen:false },
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true  },
-  user:         { icon:"user",          label:"Platform User",       defaultOpen:true  },
+  user:         { icon:"user",          label:"Platform User",       defaultOpen:false, hidden:true },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
   assessments:  { icon:"clipboard",     label:"Assessments",          defaultOpen:true  },
   questions:    { icon:"listChecks",     label:"Screening & Interview Questions", defaultOpen:false },
@@ -8012,6 +8012,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
   // A panel is visible if its feature flag is on (and for match, also needs ai_matching)
   const panelVisible = (id) => {
+    if (PANEL_META[id]?.hidden) return false;
     const flag = PANEL_FLAGS[id];
     if (!flag) return true;
     if (id === 'match') return ff[flag] && ff.ai_matching;
