@@ -1175,7 +1175,7 @@ export default function Reports({ environment, initialReport }) {
         </div>
         <div style={{ display:"flex",gap:8 }}>
           <button onClick={exportCSV} style={{ fontSize:11,padding:"7px 14px",borderRadius:20,border:"1.5px solid #E5E7EB",background:B.card,color:B.gray,cursor:"pointer",fontFamily:F }}>Export CSV</button>
-          <button onClick={()=>setShowSaveDialog(true)} style={{ fontSize:11,padding:"7px 14px",borderRadius:20,border:"1.5px solid #E5E7EB",background:B.card,color:B.gray,cursor:"pointer",fontFamily:F }}>Save report</button>
+          <button onClick={()=>{setShowSaveDialog(true);setPanel("saved");}} style={{ fontSize:11,padding:"7px 14px",borderRadius:20,border:"1.5px solid #E5E7EB",background:B.card,color:B.gray,cursor:"pointer",fontFamily:F }}>Save report</button>
           <button onClick={()=>runReport()} style={{ fontSize:11,padding:"7px 14px",borderRadius:20,border:"none",background:B.purple,color:"#fff",cursor:"pointer",fontFamily:F,fontWeight:700 }}>
             {running?"Running…":"▶ Run"}
           </button>
@@ -1343,8 +1343,8 @@ export default function Reports({ environment, initialReport }) {
               <div style={{ fontSize:12,fontWeight:700,color:"#111827",marginBottom:12 }}>Saved reports</div>
               {showSaveDialog&&(
                 <div style={{ background:"#F8F7FF",borderRadius:10,padding:12,marginBottom:12 }}>
-                  <input key="save-input" defaultValue={reportName} onChange={e=>setReportName(e.target.value)}
-                    placeholder="Report name…"
+                  <input value={reportName} onChange={e=>setReportName(e.target.value)}
+                    autoFocus placeholder="Report name…"
                     style={{ width:"100%",padding:"7px 9px",borderRadius:8,border:"1.5px solid #E5E7EB",fontSize:12,fontFamily:F,marginBottom:8,boxSizing:"border-box" }}/>
                   <label style={{ display:"flex",alignItems:"center",gap:6,fontSize:12,color:B.gray,cursor:"pointer",marginBottom:10 }}>
                     <input type="checkbox" checked={reportShared} onChange={e=>setReportShared(e.target.checked)} style={{ accentColor:B.purple }}/>Share with all users
