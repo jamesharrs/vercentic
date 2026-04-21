@@ -164,7 +164,17 @@ function PanelConfigEditor({ panel, objects, savedReports, onChange }) {
       <textarea value={config.content||""} onChange={e=>set("content",e.target.value)} placeholder="Enter text…" style={{ width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${V.border}`,fontSize:13,fontFamily:F,color:V.text1,background:V.card,outline:"none",minHeight:100,resize:"vertical",marginTop:6 }}/>
       <div style={{ display:"flex",alignItems:"center",gap:8,marginTop:8 }}><label style={{ fontSize:11,color:V.text3 }}>Background:</label><input type="color" value={config.bg_color||"#ffffff"} onChange={e=>set("bg_color",e.target.value)} style={{ width:36,height:28,border:"none",borderRadius:6,cursor:"pointer",background:"none",padding:0 }}/></div>
     </div>}
-    {type==="saved_report"&&<div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Report</label><Sel val={config.report_id||""} onChange={v=>set("report_id",v)} placeholder="Select report…" opts={(savedReports||[]).map(r=>({value:r.id,label:r.name}))} style={{ marginTop:6 }}/></div>}
+    {type==="saved_report"&&<>
+      <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Report</label><Sel val={config.report_id||""} onChange={v=>set("report_id",v)} placeholder="Select report…" opts={(savedReports||[]).map(r=>({value:r.id,label:r.name}))} style={{ marginTop:6 }}/></div>
+      <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Display as</label>
+        <div style={{ display:"flex",gap:6,marginTop:6 }}>
+          <Pill label="Table" active={!config.display_mode||config.display_mode==="table"} onClick={()=>set("display_mode","table")}/>
+          <Pill label="Chart" active={config.display_mode==="chart"} onClick={()=>set("display_mode","chart")}/>
+          <Pill label="Both" active={config.display_mode==="both"} onClick={()=>set("display_mode","both")}/>
+        </div>
+      </div>
+      <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Max rows</label><Inp val={config.limit||10} onChange={v=>set("limit",Number(v))} style={{ marginTop:6 }}/></div>
+    </>}
   </div>;
 }
 

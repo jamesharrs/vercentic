@@ -174,12 +174,16 @@ function fetchPanelData(panel, user, environment_id) {
         chartData = Object.entries(groups).sort(([,a],[,b])=>b-a).slice(0,15)
           .map(([name,value])=>({ name, value, [report.chart_x||'name']:name, [report.chart_y||'_count']:value }));
       }
-      // Return recent records for table view
+      // Return data based on display_mode
+      const displayMode = cfg.display_mode || 'both';
       const columns = fields.filter(f => (report.columns||[]).includes(f.id) || f.show_in_list).slice(0,6);
-      const records = recs.slice(0, cfg.limit || 10).map(r => ({ id:r.id, object_id:r.object_id, data:r.data||{} }));
+      const records = displayMode !== 'chart'
+        ? recs.slice(0, cfg.limit || 10).map(r => ({ id:r.id, object_id:r.object_id, data:r.data||{} }))
+        : [];
+      const retChartData = displayMode !== 'table' ? chartData : [];
       return {
         report,
-        chartData,
+        chartData: retChartData,
         chartType: report.chart_type || 'bar',
         chartX: report.chart_x || (grp || '_group'),
         chartY: report.chart_y || '_count',
@@ -187,6 +191,7 @@ function fetchPanelData(panel, user, environment_id) {
         columns,
         total: recs.length,
         object: obj,
+        displayMode,
       };
     }
     default: return { error: `Unknown panel type: ${panel.type}` };
