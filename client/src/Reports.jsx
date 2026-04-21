@@ -631,6 +631,130 @@ function AxisPicker({ label, value, onChange, resultCols, fields, formulas }) {
   );
 }
 
+// Standalone field-picker button used inside FormulaCard
+function ExprFieldPicker({ fields, onPick }) {
+  const [open, setOpen]     = useState(false);
+  const [search, setSearch] = useState("");
+  const filtered = fields.filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.api_key.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div style={{ position:"relative", flexShrink:0 }}>
+      <button onClick={()=>{setOpen(p=>!p);setSearch("");}} onMouseDown={e=>e.preventDefault()}
+        style={{ padding:"5px 8px", borderRadius:7, border:"1.5px solid #E5E7EB",
+          background:open?"#F5F3FF":"white", color:"#8B7EC8",
+          fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F }}>
+        {"{…}"}
+      </button>
+      {open&&(
+        <div style={{ position:"absolute", right:0, top:"110%", zIndex:200, background:"white",
+          border:"1.5px solid #E5E7EB", borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.12)",
+          width:220, padding:6 }}>
+          <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search fields…"
+            style={{ width:"100%", padding:"5px 8px", borderRadius:7, border:"1.5px solid #E5E7EB",
+              fontSize:11, fontFamily:F, boxSizing:"border-box", marginBottom:4 }}/>
+          <div style={{ maxHeight:160, overflowY:"auto" }}>
+            {filtered.map(f=>(
+              <div key={f.api_key} onClick={()=>{onPick(f.api_key);setOpen(false);setSearch("");}}
+                style={{ padding:"5px 8px", borderRadius:6, cursor:"pointer", fontSize:11, color:"#111827",
+                  display:"flex", justifyContent:"space-between" }}
+                onMouseEnter={e=>e.currentTarget.style.background="#F5F3FF"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span>{f.name}</span>
+                <span style={{ color:"#9CA3AF", fontFamily:"ui-monospace,monospace", fontSize:10 }}>{f.api_key}</span>
+              </div>
+            ))}
+            {!filtered.length && <div style={{ fontSize:11, color:"#9CA3AF", padding:"6px 8px" }}>No fields found</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// FormulaCard — uses local draft state so typing doesn't trigger parent re-renders/re-runs
+// Only calls onApply when the user explicitly clicks "Apply"
+function FormulaCard({ formula, fields, onApply, onRemove }) {
+  const [name, setName]       = useState(formula.name || "");
+  const [expr, setExpr]       = useState(formula.expression || "");
+  const [applied, setApplied] = useState(!formula.draft); // already-saved formulas start as applied
+
+  const hasName     = !!name.trim();
+  const hasExpr     = !!expr.trim();
+  const validation  = hasExpr ? validateExpr(expr, fields) : null;
+  const exprValid   = !hasExpr || validation?.valid !== false;
+  const canApply    = hasName && hasExpr && exprValid;
+  const isDirty     = name !== formula.name || expr !== formula.expression;
+
+  // Border/bg reflects applied state, not draft typing state
+  const borderColor = applied && canApply ? "#1D9E75" : !applied ? "#8B7EC8" : B.rose;
+  const bgColor     = applied && canApply ? "#F0FDF4"  : "#F8F7FF";
+
+  const handleApply = () => {
+    if (!canApply) return;
+    setApplied(true);
+    onApply({ ...formula, name: name.trim(), expression: expr.trim() });
+  };
+
+  return (
+    <div style={{ marginBottom:8, background:bgColor, borderRadius:10, padding:"10px 12px", border:`1.5px solid ${borderColor}` }}>
+      {/* Status row */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+        {applied && canApply && !isDirty ? (
+          <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:"#1D9E75" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+            Applied
+          </span>
+        ) : isDirty ? (
+          <span style={{ fontSize:10, color:"#8B7EC8", fontWeight:600 }}>Unsaved changes</span>
+        ) : (
+          <span style={{ fontSize:10, color:"#9CA3AF" }}>
+            {!hasName && !hasExpr ? "Add a name and expression" : !hasName ? "Add a column name" : !hasExpr ? "Add an expression" : validation?.error || ""}
+          </span>
+        )}
+        <button onClick={onRemove} style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", fontSize:16, lineHeight:1, padding:"0 2px" }}>×</button>
+      </div>
+
+      {/* Name input */}
+      <input
+        value={name}
+        onChange={e => { setName(e.target.value); setApplied(false); }}
+        placeholder="Column name (e.g. avg salary)"
+        style={{ width:"100%", padding:"6px 9px", borderRadius:7, border:"1.5px solid #E5E7EB",
+          fontSize:12, fontFamily:F, marginBottom:6, boxSizing:"border-box", background:"white" }}
+      />
+
+      {/* Expression row */}
+      <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+        <input
+          value={expr}
+          onChange={e => { setExpr(e.target.value); setApplied(false); }}
+          placeholder="AVG({years_experience})"
+          style={{ flex:1, padding:"6px 9px", borderRadius:7, border:`1.5px solid ${!hasExpr||exprValid?"#E5E7EB":B.rose}`,
+            fontSize:11, fontFamily:"ui-monospace,monospace", background:"white", boxSizing:"border-box" }}
+        />
+        <ExprFieldPicker fields={fields} onPick={k => { setExpr(p => p + `{${k}}`); setApplied(false); }} />
+      </div>
+
+      {/* AI generate + Apply button */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <button onClick={()=>{}} style={{ fontSize:11, color:"#8B7EC8", background:"none", border:"none", cursor:"pointer", padding:0, fontFamily:F }}>
+          ✨ Generate with AI
+        </button>
+        <button
+          onClick={handleApply}
+          disabled={!canApply}
+          style={{ fontSize:11, padding:"5px 14px", borderRadius:7, border:"none", fontFamily:F, fontWeight:700,
+            background: canApply ? "#8B7EC8" : "#E5E7EB",
+            color: canApply ? "white" : "#9CA3AF",
+            cursor: canApply ? "pointer" : "not-allowed" }}
+        >
+          {applied && !isDirty ? "✓ Applied" : "Apply"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Reports({ environment, initialReport }) {
   const [objects,       setObjects]       = useState([]);
   const [libCat,    setLibCat]    = useState('all');
@@ -915,7 +1039,7 @@ export default function Reports({ environment, initialReport }) {
   };
 
   const addFilter  = () => setFilters(p=>[...p,{id:Date.now(),field:fields[0]?.api_key||"",op:"contains",value:""}]);
-  const addFormula = () => setFormulas(p=>[...p,{id:Date.now(),name:"",expression:""}]);
+  const addFormula = () => setFormulas(p=>[...p,{id:Date.now(),name:"",expression:"",draft:true}]);
 
   const exportCSV = () => {
     if (!displayedResults?.length) return;
@@ -1182,10 +1306,10 @@ export default function Reports({ environment, initialReport }) {
         </div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"280px minmax(0,1fr)",gap:16 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"280px minmax(0,1fr)",gap:16,alignItems:"start" }}>
 
         {/* ── Left sidebar ── */}
-        <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+        <div style={{ display:"flex",flexDirection:"column",gap:12,position:"sticky",top:0 }}>
           <div style={{ display:"flex",gap:4,flexWrap:"wrap" }}>
             <Pill label="Build"    active={panel==="build"}    onClick={()=>setPanel("build")}/>
             <Pill label="Saved"    active={panel==="saved"}    onClick={()=>setPanel("saved")} badge={savedReports.length||null}/>
@@ -1194,7 +1318,7 @@ export default function Reports({ environment, initialReport }) {
 
           {/* Build panel */}
           {panel==="build" && (
-            <div style={{ background:B.card,borderRadius:14,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",gap:14 }}>
+            <div style={{ background:B.card,borderRadius:14,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",gap:14,minHeight:600 }}>
               <div>
                 <SideLabel>Data source</SideLabel>
                 <div style={{ display:"flex",gap:4,marginBottom:8 }}>
@@ -1286,46 +1410,10 @@ export default function Reports({ environment, initialReport }) {
                     </button>
                   )}
                   {formulas.map((f,i)=>{
-                    const hasName = !!f.name?.trim();
-                    const hasExpr = !!f.expression?.trim();
-                    const validation = hasExpr ? validateExpr(f.expression, fields) : null;
-                    const isReady = hasName && hasExpr && validation?.valid !== false;
-                    const isPartial = !hasName || !hasExpr;
-                    const borderColor = isReady ? "#1D9E75" : isPartial ? "#E5E7EB" : B.rose;
-                    const bgColor    = isReady ? "#F0FDF4" : "#F8F7FF";
-                    return (
-                    <div key={f.id} style={{ marginBottom:8, background:bgColor, borderRadius:10, padding:"10px 12px", border:`1.5px solid ${borderColor}`, transition:"border-color .2s, background .2s" }}>
-                      {/* Status badge row */}
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", marginBottom:4, minHeight:16 }}>
-                        {isReady && (
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:"#1D9E75" }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                            Ready to use
-                          </span>
-                        )}
-                        {!isReady && hasExpr && validation?.valid === false && (
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:B.rose }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={B.rose} strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                            Invalid expression
-                          </span>
-                        )}
-                        {isPartial && !validation?.valid === false && (
-                          <span style={{ fontSize:10, color:"#9CA3AF" }}>
-                            {!hasName && !hasExpr ? "Add a name and expression" : !hasName ? "Add a column name" : "Add an expression"}
-                          </span>
-                        )}
-                      </div>
-                      <FormulaInput
-                        value={f.expression}
-                        onChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,expression:v}:x))}
-                        fields={fields}
-                        formulaName={f.name}
-                        onNameChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,name:v}:x))}
-                        onRemove={()=>setFormulas(p=>p.filter((_,j)=>j!==i))}
-                        placeholder="DIFF({salary_max},{salary_min})"
-                      />
-                    </div>
-                    );
+                    return <FormulaCard key={f.id} formula={f} fields={fields}
+                      onApply={updated => setFormulas(p=>p.map((x,j)=>j===i?{...updated,draft:false}:x))}
+                      onRemove={()=>setFormulas(p=>p.filter((_,j)=>j!==i))}
+                    />;
                   })}
                   {formulas.length > 0 && (
                     <div style={{ marginTop:6, padding:"8px 10px", background:`${B.purple}06`, borderRadius:8, fontSize:10, color:B.gray, lineHeight:1.6 }}>
