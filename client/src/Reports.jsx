@@ -26,21 +26,27 @@ const api = {
 function evalFormula(expr, row) {
   try {
     const e = (expr||"").trim();
-    const eUp = e.toUpperCase();
-    // Strip curly braces and look up field value from row (case-insensitive key)
+    // Strip curly braces and look up field value (case-insensitive)
     const nv = k => {
       const clean = k.replace(/^\{|\}$/g,"").toLowerCase().trim();
       const v = row[clean];
       return typeof v === "number" ? v : parseFloat(v) || 0;
     };
+    // Extract field from both "FUNC({field})" and "FUNC {field}" styles
+    const match1 = (fn) => {
+      const m = e.match(new RegExp(`^${fn}\\s*\\(([^)]+)\\)$`,"i"));
+      if (m) return m[1];
+      const m2 = e.match(new RegExp(`^${fn}\\s+(.+)$`,"i"));
+      return m2 ? m2[1].trim() : null;
+    };
     if (/^COUNT\(\)$/i.test(e)) return 1;
-    if (/^SUM\(([^)]+)\)$/i.test(e))  { const m=e.match(/SUM\(([^)]+)\)/i);  return nv(m[1]); }
-    if (/^AVG\(([^)]+)\)$/i.test(e))  { const m=e.match(/AVG\(([^)]+)\)/i);  return nv(m[1]); }
-    if (/^MAX\(([^)]+)\)$/i.test(e))  { const m=e.match(/MAX\(([^)]+)\)/i);  return nv(m[1]); }
-    if (/^MIN\(([^)]+)\)$/i.test(e))  { const m=e.match(/MIN\(([^)]+)\)/i);  return nv(m[1]); }
-    if (/^UPPER\(([^)]+)\)$/i.test(e)){ const m=e.match(/UPPER\(([^)]+)\)/i); const clean=m[1].replace(/^\{|\}$/g,"").toLowerCase(); return String(row[clean]||"").toUpperCase(); }
-    if (/^LOWER\(([^)]+)\)$/i.test(e)){ const m=e.match(/LOWER\(([^)]+)\)/i); const clean=m[1].replace(/^\{|\}$/g,"").toLowerCase(); return String(row[clean]||"").toLowerCase(); }
-    if (/^LEN\(([^)]+)\)$/i.test(e))  { const m=e.match(/LEN\(([^)]+)\)/i);   const clean=m[1].replace(/^\{|\}$/g,"").toLowerCase(); return String(row[clean]||"").length; }
+    const avgF = match1("AVG"); if (avgF !== null) return nv(avgF);
+    const sumF = match1("SUM"); if (sumF !== null) return nv(sumF);
+    const maxF = match1("MAX"); if (maxF !== null) return nv(maxF);
+    const minF = match1("MIN"); if (minF !== null) return nv(minF);
+    const uppF = match1("UPPER"); if (uppF !== null) { const c=uppF.replace(/^\{|\}$/g,"").toLowerCase(); return String(row[c]||"").toUpperCase(); }
+    const lowF = match1("LOWER"); if (lowF !== null) { const c=lowF.replace(/^\{|\}$/g,"").toLowerCase(); return String(row[c]||"").toLowerCase(); }
+    const lenF = match1("LEN");   if (lenF !== null) { const c=lenF.replace(/^\{|\}$/g,"").toLowerCase(); return String(row[c]||"").length; }
     if (/^ROUND\(([^,)]+),([^)]+)\)$/i.test(e)){const m=e.match(/ROUND\(([^,)]+),([^)]+)\)/i);return +nv(m[1].trim()).toFixed(+m[2].trim());}
     if (/^DIFF\(([^,)]+),([^)]+)\)$/i.test(e)) {const m=e.match(/DIFF\(([^,)]+),([^)]+)\)/i);    return nv(m[1].trim())-nv(m[2].trim());}
     if (/^CONCAT\(([^)]+)\)$/i.test(e)){const m=e.match(/CONCAT\(([^)]+)\)/i);return m[1].split(",").map(p=>{const t=p.trim();return t.startsWith("{")&&t.endsWith("}")?row[t.slice(1,-1).toLowerCase()]||"":t.replace(/^['"]|['"]$/g,"");}).join("");}
@@ -1307,7 +1313,7 @@ export default function Reports({ environment, initialReport }) {
                   })}
                   {formulas.length > 0 && (
                     <div style={{ marginTop:6, padding:"8px 10px", background:`${B.purple}06`, borderRadius:8, fontSize:10, color:B.gray, lineHeight:1.6 }}>
-                      <strong style={{ color:B.purple }}>Functions:</strong>{" "}SUM · AVG · COUNT() · DIFF(a,b) · ROUND(f,N) · IF(x=y,a,b) · CONCAT(a,b) · UPPER · LOWER · LEN
+                      <strong style={{ color:B.purple }}>Functions:</strong>{" "}AVG({"{field}"}) · SUM({"{field}"}) · COUNT() · DIFF({"{a}"},{"{b}"}) · ROUND({"{f}"},N) · MAX({"{field}"}) · MIN({"{field}"}) · IF({"{f}"}=v,a,b) · CONCAT({"{a}"},{"{b}"})
                     </div>
                   )}
                 </div>
