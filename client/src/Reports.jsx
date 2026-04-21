@@ -646,6 +646,7 @@ export default function Reports({ environment, initialReport }) {
   const [selForm,       setSelForm]       = useState("");
   const [joinObject,    setJoinObject]    = useState("");
   const skipReset   = useRef(false);
+  const skipAutoRun = useRef(false); // suppresses debounce auto-run during preset load
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -701,6 +702,7 @@ export default function Reports({ environment, initialReport }) {
     );
     if (obj) {
       skipReset.current = true;
+      skipAutoRun.current = true;
       setSelObject(obj.id);
       if (initialReport.groupBy)   setGroupBy(initialReport.groupBy);
       if (initialReport.chartType) setChartType(initialReport.chartType);
@@ -708,6 +710,11 @@ export default function Reports({ environment, initialReport }) {
       if (initialReport.filters)   setFilters(initialReport.filters);
       if (initialReport.sortBy)    setSortBy(initialReport.sortBy);
       if (initialReport.sortDir)   setSortDir(initialReport.sortDir);
+      // Explicitly set axes — prefer preset values, otherwise derive from groupBy
+      const inferredX = initialReport.chart_x || (initialReport.groupBy ? initialReport.groupBy : "");
+      const inferredY = initialReport.chart_y || (initialReport.groupBy ? "_count" : "");
+      if (inferredX) setChartX(inferredX);
+      if (inferredY) setChartY(inferredY);
       setPanel("build");
       setTimeout(() => runReport(obj.id, initialReport.groupBy), 400);
     }
@@ -716,6 +723,7 @@ export default function Reports({ environment, initialReport }) {
   // Auto-run on config change (NOT on selObject — that's handled directly in load functions)
   useEffect(() => {
     if (!selObject && !(dataMode==="forms"&&selForm)) return;
+    if (skipAutoRun.current) { skipAutoRun.current = false; return; }
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(()=>runReport(),600);
     return ()=>clearTimeout(debounceRef.current);
@@ -998,6 +1006,7 @@ export default function Reports({ environment, initialReport }) {
     const obj = _resolveObj(t.object);
     if (!obj) { alert('Object "'+t.object+'" not found in this environment.'); return; }
     skipReset.current = true;
+    skipAutoRun.current = true;
     setSelObject(obj.id);
     setGroupBy(t.groupBy||'');
     setSortBy(t.sortBy||'');
@@ -1005,8 +1014,12 @@ export default function Reports({ environment, initialReport }) {
     setFilters((t.filters||[]).map((f,i)=>({...f,id:String(i)})));
     setFormulas((t.formulas||[]).map((f,i)=>({...f,id:f.id||String(i)})));
     setChartType(t.chartType||'bar');
+    // Set axes explicitly to avoid race with auto-detection
+    const tx = t.chartX || t.chart_x || (t.groupBy ? t.groupBy : "");
+    const ty = t.chartY || t.chart_y || (t.groupBy ? "_count" : "");
+    if (tx) setChartX(tx);
+    if (ty) setChartY(ty);
     setPanel('build');
-    // Directly run after React has flushed the state updates
     setTimeout(() => runReport(obj.id, t.groupBy||''), 400);
   };
 
