@@ -155,15 +155,48 @@ const applyFilters = (records, filters, fields) => {
 };
 
 /* ─── Result Card ─────────────────────────────────────────────────────────── */
-const ResultCard = ({ record, fields, object, onClick }) => {
+// Highlight search term occurrences in a string
+function Highlight({ text, query }) {
+  if (!query || !text) return <span>{text}</span>;
+  const q = query.trim();
+  if (!q) return <span>{text}</span>;
+  const parts = String(text).split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")})`, "gi"));
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === q.toLowerCase()
+          ? <mark key={i} style={{ background:"#FEF08A", color:"#713F12", borderRadius:2, padding:"0 1px" }}>{part}</mark>
+          : part
+      )}
+    </span>
+  );
+}
+
+// Find all field label+value pairs where the query matches, for "matched in" display
+function getMatchedFields(record, fields, query) {
+  if (!query?.trim()) return [];
+  const q = query.trim().toLowerCase();
+  return fields
+    .filter(f => {
+      const v = record.data?.[f.api_key];
+      if (v === null || v === undefined || v === "") return false;
+      const str = Array.isArray(v) ? v.join(" ") : String(v);
+      return str.toLowerCase().includes(q);
+    })
+    .filter(f => !["first_name","last_name","name","current_title","department","category","description","email"].includes(f.api_key))
+    .slice(0, 3);
+}
+
+const ResultCard = ({ record, fields, object, onClick, query }) => {
   const d = record.data || {};
-  // Build display name from data directly — don't depend on fields being loaded
   const title = [d.first_name, d.last_name].filter(Boolean).join(" ")
     || d.name || d.job_title || d.pool_name || d.title
     || (fields.find(f=>f.api_key==="first_name") ? "" : Object.values(d).find(v=>typeof v==="string"&&v.length>1))
     || record.id?.slice(0,8);
   const sub = d.current_title || d.department || d.category || d.description?.slice(0,60) || d.email || "";
   const bodyFs = fields.filter(f=>f.show_in_list&&!["first_name","last_name","name"].includes(f.api_key)).slice(0,4);
+  // Extra fields where the query matched that aren't already shown in bodyFs
+  const matchedExtras = getMatchedFields(record, fields, query).filter(f => !bodyFs.some(b=>b.id===f.id));
 
   return (
     <div onClick={onClick} style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:"14px 16px", cursor:"pointer", transition:"all .12s", display:"flex", alignItems:"flex-start", gap:12 }}
@@ -172,18 +205,41 @@ const ResultCard = ({ record, fields, object, onClick }) => {
       <Avatar name={title} color={object?.color||C.accent} size={36}/>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-          <span style={{ fontSize:14, fontWeight:700, color:C.text1 }}>{title}</span>
+          <span style={{ fontSize:14, fontWeight:700, color:C.text1 }}>
+            <Highlight text={title} query={query}/>
+          </span>
           <span style={{ fontSize:11, color:C.text3, background:"#f3f4f6", borderRadius:6, padding:"1px 6px" }}>{object?.name}</span>
         </div>
-        {sub && <div style={{ fontSize:12, color:C.text3, marginBottom:6 }}>{sub}</div>}
+        {sub && (
+          <div style={{ fontSize:12, color:C.text3, marginBottom:6 }}>
+            <Highlight text={sub} query={query}/>
+          </div>
+        )}
         <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 16px" }}>
           {bodyFs.map(f => {
             const v = record.data?.[f.api_key];
             if (!v && v!==0) return null;
+            const str = Array.isArray(v) ? v.join(", ") : String(v);
             return (
               <div key={f.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span style={{ fontSize:11, color:C.text3 }}>{f.name}:</span>
-                <FieldValue field={f} value={v}/>
+                <span style={{ fontSize:11, fontWeight:600, color:C.text2 }}>
+                  <Highlight text={str} query={query}/>
+                </span>
+              </div>
+            );
+          })}
+          {/* Show extra matched fields not already in bodyFs */}
+          {matchedExtras.map(f => {
+            const v = record.data?.[f.api_key];
+            if (!v && v!==0) return null;
+            const str = Array.isArray(v) ? v.join(", ") : String(v);
+            return (
+              <div key={f.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <span style={{ fontSize:11, color:"#9333ea", fontWeight:500 }}>{f.name}:</span>
+                <span style={{ fontSize:11, fontWeight:600, color:C.text2 }}>
+                  <Highlight text={str} query={query}/>
+                </span>
               </div>
             );
           })}
@@ -476,7 +532,7 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                       {recs.slice(0,10).map(r => (
-                        <ResultCard key={r.id} record={r} fields={fields[obj.id]||[]} object={obj} onClick={()=>onNavigateToRecord?.(r)}/>
+                        <ResultCard key={r.id} record={r} fields={fields[obj.id]||[]} object={obj} query={query} onClick={()=>onNavigateToRecord?.(r)}/>
                       ))}
                       {recs.length>10 && (
                         <div style={{ fontSize:12, color:C.text3, textAlign:"center", padding:"6px 0" }}>+{recs.length-10} more results</div>
@@ -535,16 +591,21 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
               <div style={{ fontSize:12, fontWeight:700, color:C.text2 }}>Quick Stats</div>
             </div>
             <div style={{ padding:"8px 16px 12px" }}>
-              {objects.map(obj=>(
-                <div key={obj.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${C.border}` }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ width:8, height:8, borderRadius:"50%", background:obj.color||C.accent }}/>
-                    <span style={{ fontSize:12, color:C.text2 }}>{obj.plural_name}</span>
+              {objects.map(obj => {
+                const count = searched ? results.filter(r=>r._object?.id===obj.id).length : null;
+                return (
+                  <div key={obj.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${C.border}` }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ width:8, height:8, borderRadius:"50%", background:obj.color||C.accent }}/>
+                      <span style={{ fontSize:12, color:C.text2 }}>{obj.plural_name}</span>
+                    </div>
+                    <span style={{ fontSize:12, fontWeight:700, color: count > 0 ? C.accent : C.text1 }}>
+                      {count !== null ? count : "—"}
+                    </span>
                   </div>
-                  <span style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{(allRecords[obj.id]||[]).length}</span>
-                </div>
-              ))}
-              {!Object.keys(allRecords).length && (
+                );
+              })}
+              {!searched && (
                 <div style={{ fontSize:11, color:C.text3, padding:"8px 0", textAlign:"center" }}>Search to see counts</div>
               )}
             </div>
