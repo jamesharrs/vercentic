@@ -367,6 +367,107 @@ function ResultRow({ row, cols, groupBy, chartX, onFilter }) {
 }
 
 // ── Main Reports component ────────────────────────────────────────────────────
+// ── AxisPicker — friendly labeled dropdown for chart X/Y axis ────────────────
+function AxisPicker({ label, value, onChange, resultCols, fields }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  // Build a friendly label for each column key
+  const colLabel = key => {
+    if (key === "_count") return "Count";
+    if (key === "_group") return "Group";
+    const f = fields?.find(f => f.api_key === key);
+    return f?.name || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  // Icon by field type
+  const colIcon = key => {
+    if (key === "_count" || key === "_group") return "🔢";
+    const f = fields?.find(f => f.api_key === key);
+    if (!f) return "•";
+    if (["number","currency","rating","percent"].includes(f.field_type)) return "#";
+    if (["date","datetime"].includes(f.field_type)) return "📅";
+    if (["select","multi_select","status","boolean"].includes(f.field_type)) return "≡";
+    return "T";
+  };
+
+  // Group cols: system first, then text/categorical, then numeric
+  const sysCols  = resultCols.filter(k => k.startsWith("_"));
+  const numCols  = resultCols.filter(k => !k.startsWith("_") && ["number","currency","rating","percent"].includes(fields?.find(f=>f.api_key===k)?.field_type));
+  const catCols  = resultCols.filter(k => !k.startsWith("_") && !numCols.includes(k));
+
+  const selectedLabel = value ? colLabel(value) : `Choose ${label}…`;
+  const hasValue = !!value;
+
+  const axisColor = label === "X" ? B.purple : B.teal;
+
+  const DropdownGroup = ({ title, cols }) => cols.length === 0 ? null : (
+    <>
+      <div style={{ padding:"4px 10px 2px", fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:"0.06em" }}>{title}</div>
+      {cols.map(k => (
+        <button key={k} onMouseDown={e => { e.preventDefault(); onChange(k); setOpen(false); }}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+            border:"none", background: value===k ? `${axisColor}12` : "transparent",
+            cursor:"pointer", fontFamily:F, textAlign:"left", fontSize:12,
+            color: value===k ? axisColor : "#374151", fontWeight: value===k ? 700 : 400 }}>
+          <span style={{ width:16, textAlign:"center", fontSize:11, color: value===k ? axisColor : "#9CA3AF", flexShrink:0, fontFamily:"ui-monospace,monospace" }}>
+            {colIcon(k)}
+          </span>
+          {colLabel(k)}
+        </button>
+      ))}
+    </>
+  );
+
+  return (
+    <div ref={ref} style={{ position:"relative", flexShrink:0 }}>
+      <button onClick={() => setOpen(p => !p)}
+        style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", borderRadius:8,
+          border:`1.5px solid ${hasValue ? axisColor+"55" : "#E5E7EB"}`,
+          background: hasValue ? `${axisColor}08` : "white",
+          cursor:"pointer", fontFamily:F, fontSize:11, fontWeight:600,
+          color: hasValue ? axisColor : "#9CA3AF", whiteSpace:"nowrap" }}>
+        {/* Axis label badge */}
+        <span style={{ width:16, height:16, borderRadius:4, background: hasValue ? axisColor : "#E5E7EB",
+          color:"white", fontSize:9, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          {label}
+        </span>
+        <span style={{ maxWidth:110, overflow:"hidden", textOverflow:"ellipsis" }}>{selectedLabel}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:0.5 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:500,
+          background:"white", border:"1.5px solid #E5E7EB", borderRadius:12,
+          boxShadow:"0 8px 28px rgba(0,0,0,.12)", minWidth:200, maxHeight:280,
+          overflowY:"auto", fontFamily:F }}>
+          {/* Clear option */}
+          {hasValue && (
+            <button onMouseDown={e => { e.preventDefault(); onChange(""); setOpen(false); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+                border:"none", borderBottom:"1px solid #F3F4F6", background:"transparent",
+                cursor:"pointer", fontFamily:F, textAlign:"left", fontSize:12, color:"#EF4444", fontWeight:500 }}>
+              <span style={{ fontSize:10 }}>✕</span> Clear {label} axis
+            </button>
+          )}
+          <DropdownGroup title="Aggregated" cols={sysCols}/>
+          <DropdownGroup title="Categories" cols={catCols}/>
+          <DropdownGroup title="Numbers"    cols={numCols}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports({ environment, initialReport }) {
   const [objects,       setObjects]       = useState([]);
   const [libCat,    setLibCat]    = useState('all');
@@ -976,15 +1077,9 @@ export default function Reports({ environment, initialReport }) {
               </div>
               {chartType!=="table"&&(
                 <>
-                  <select value={chartX} onChange={e=>setChartX(e.target.value)} style={{ padding:"5px 9px",borderRadius:8,border:"1.5px solid #E5E7EB",fontSize:11,fontFamily:F,color:B.gray2,background:"white" }}>
-                    <option value="">X axis</option>
-                    {resultCols.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
+                  <AxisPicker label="X" value={chartX} onChange={setChartX} resultCols={resultCols} fields={fields}/>
                   {!["pie","funnel"].includes(chartType)&&(
-                    <select value={chartY} onChange={e=>setChartY(e.target.value)} style={{ padding:"5px 9px",borderRadius:8,border:"1.5px solid #E5E7EB",fontSize:11,fontFamily:F,color:B.gray2,background:"white" }}>
-                      <option value="">Y axis</option>
-                      {resultCols.map(k=><option key={k} value={k}>{k}</option>)}
-                    </select>
+                    <AxisPicker label="Y" value={chartY} onChange={setChartY} resultCols={resultCols} fields={fields}/>
                   )}
                   {activeFilter&&<button onClick={()=>setActiveFilter(null)} style={{ fontSize:11,padding:"4px 10px",borderRadius:14,border:`1.5px solid ${B.purple}`,background:"#F5F3FF",color:B.purple,cursor:"pointer",fontFamily:F }}>{activeFilter} ×</button>}
                 </>
