@@ -128,6 +128,38 @@ function PanelPreview({ panel, liveData }) {
   }
 }
 
+const FILTER_OPS = [
+  { value:"is",           label:"is" },
+  { value:"is_not",       label:"is not" },
+  { value:"contains",     label:"contains" },
+  { value:"not_contains", label:"doesn't contain" },
+  { value:"is_empty",     label:"is empty" },
+  { value:"is_not_empty", label:"is not empty" },
+  { value:"gt",           label:">" },
+  { value:"lt",           label:"<" },
+];
+const NO_VALUE_OPS = ["is_empty","is_not_empty"];
+
+function FilterBuilder({ config, fields, set }) {
+  const selField = fields.find(f => f.api_key === config.filter_field);
+  const selOpts = selField?.field_type === "select" && Array.isArray(selField?.options)
+    ? selField.options.map(o => ({ value: typeof o==="string"?o:o.value, label: typeof o==="string"?o:o.label }))
+    : null;
+  const op = config.filter_op || "is";
+  const needsValue = !NO_VALUE_OPS.includes(op);
+  return <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+    <label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter</label>
+    <Sel val={config.filter_field||""} onChange={v=>set("filter_field",v)} placeholder="No filter" opts={[{value:"",label:"No filter"},...fields.map(f=>({value:f.api_key,label:f.name}))]} />
+    {config.filter_field&&<>
+      <Sel val={op} onChange={v=>set("filter_op",v)} opts={FILTER_OPS}/>
+      {needsValue&&(selOpts
+        ? <Sel val={config.filter_value||""} onChange={v=>set("filter_value",v)} placeholder="Select value…" opts={selOpts}/>
+        : <Inp val={config.filter_value||""} onChange={v=>set("filter_value",v)} placeholder="Value…"/>
+      )}
+    </>}
+  </div>;
+}
+
 function PanelConfigEditor({ panel, objects, savedReports, onChange }) {
   const { type, title, config={}, position={} } = panel;
   const [fields, setFields] = useState([]);
@@ -144,15 +176,23 @@ function PanelConfigEditor({ panel, objects, savedReports, onChange }) {
     <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Title</label><Inp val={title} onChange={v=>onChange({...panel,title:v})} placeholder="Optional…" style={{ marginTop:6 }}/></div>
     {(type==="stat"||type==="chart"||type==="list")&&<div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Object</label><Sel val={config.object_id||""} onChange={v=>set("object_id",v)} placeholder="Select object…" opts={objects.map(o=>({value:o.id,label:o.plural_name||o.name}))} style={{ marginTop:6 }}/></div>}
     {type==="stat"&&fields.length>0&&<>
-      <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter field</label><Sel val={config.filter_field||""} onChange={v=>set("filter_field",v)} placeholder="No filter" opts={fields.map(f=>({value:f.api_key,label:f.name}))} style={{ marginTop:6 }}/></div>
-      {config.filter_field&&<div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter value</label><Inp val={config.filter_value||""} onChange={v=>set("filter_value",v)} placeholder="e.g. Open" style={{ marginTop:6 }}/></div>}
+      <FilterBuilder config={config} fields={fields} set={set}/>
       <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Label</label><Inp val={config.label||""} onChange={v=>set("label",v)} placeholder="Records" style={{ marginTop:6 }}/></div>
     </>}
     {type==="chart"&&fields.length>0&&<>
       <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Group by</label><Sel val={config.group_by_field||""} onChange={v=>set("group_by_field",v)} placeholder="Select field…" opts={fields.map(f=>({value:f.api_key,label:f.name}))} style={{ marginTop:6 }}/></div>
       <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Chart type</label><div style={{ display:"flex",gap:6,marginTop:6 }}>{["bar","line","pie"].map(ct=><Pill key={ct} label={ct.charAt(0).toUpperCase()+ct.slice(1)} active={config.chart_type===ct} onClick={()=>set("chart_type",ct)}/>)}</div></div>
-      <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter field</label><Sel val={config.filter_field||""} onChange={v=>set("filter_field",v)} placeholder="No filter" opts={fields.map(f=>({value:f.api_key,label:f.name}))} style={{ marginTop:6 }}/></div>
-      {config.filter_field&&<div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter value</label><Inp val={config.filter_value||""} onChange={v=>set("filter_value",v)} placeholder="e.g. Active" style={{ marginTop:6 }}/></div>}
+      <FilterBuilder config={config} fields={fields} set={set}/>
+      <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+        <label style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,color:V.text2,cursor:"pointer" }}>
+          <input type="checkbox" checked={!!config.exclude_unknown} onChange={e=>set("exclude_unknown",e.target.checked)} style={{ accentColor:V.accent }}/>
+          Exclude "Unknown" values
+        </label>
+        {config.chart_type==="pie"&&<label style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,color:V.text2,cursor:"pointer" }}>
+          <input type="checkbox" checked={!!config.show_legend} onChange={e=>set("show_legend",e.target.checked)} style={{ accentColor:V.accent }}/>
+          Show legend
+        </label>}
+      </div>
     </>}
     {type==="list"&&fields.length>0&&<>
       <div><label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Columns</label>

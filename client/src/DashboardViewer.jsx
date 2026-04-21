@@ -1,6 +1,6 @@
 // DashboardViewer v3 — fixed chart heights
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import apiClient from "./apiClient";
 
 const V = { bg:"var(--t-bg,#f5f5f7)",card:"var(--t-card,#fff)",accent:"var(--t-accent,#4f46e5)",text1:"var(--t-text1,#111827)",text2:"var(--t-text2,#374151)",text3:"var(--t-text3,#9ca3af)",border:"var(--t-border,#e5e7eb)",red:"#ef4444" };
@@ -83,14 +83,20 @@ function StatPanel({ panel, data, onNavigate }) {
 function ChartPanel({ panel, data }) {
   if (!data) return <Skeleton/>;
   if (data.error) return <ErrorState msg={data.error}/>;
-  const { chartData=[], chartType="bar" } = data;
+  const { chartData=[], chartType="bar", showLegend=false } = data;
   if (!chartData.length) return <ErrorState msg="No data"/>;
   return <div style={{ height:"100%",display:"flex",flexDirection:"column" }}>
     {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10,flexShrink:0 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
     <div style={{ height:220,minHeight:220,width:"100%" }}>
       <ResponsiveContainer width="100%" height={220}>
         {chartType==="pie"?
-          <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="35%" outerRadius="65%" paddingAngle={2}>{chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/></PieChart>
+          <PieChart>
+            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={showLegend?"30%":"35%"} outerRadius={showLegend?"55%":"65%"} paddingAngle={2}>
+              {chartData.map((_,i)=><Cell key={i} fill={PALETTES[i%PALETTES.length]}/>)}
+            </Pie>
+            <Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/>
+            {showLegend&&<Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize:10,fontFamily:F,paddingTop:4 }}/>}
+          </PieChart>
         :chartType==="line"?
           <AreaChart data={chartData} margin={{ top:4,right:8,bottom:0,left:-20 }}><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={V.accent} stopOpacity={0.15}/><stop offset="95%" stopColor={V.accent} stopOpacity={0}/></linearGradient></defs><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize:10,fontFamily:F,fill:V.text3 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ fontSize:12,fontFamily:F,borderRadius:8,border:`1px solid ${V.border}` }}/><Area type="monotone" dataKey="value" stroke={V.accent} strokeWidth={2} fill="url(#ag)" dot={false}/></AreaChart>
         :

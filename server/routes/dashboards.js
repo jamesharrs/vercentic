@@ -57,11 +57,18 @@ function fetchPanelData(panel, user, environment_id) {
         r.object_id === cfg.object_id && r.environment_id === environment_id && !r.deleted_at &&
         (!orgSubtree || orgSubtree.has(r.org_unit_id) || !r.org_unit_id)
       );
-      if (cfg.filter_field && cfg.filter_value) {
+      if (cfg.filter_field && cfg.filter_value !== undefined && cfg.filter_value !== '') {
+        const fv = String(cfg.filter_value).toLowerCase();
+        const op = cfg.filter_op || 'is';
         recs = recs.filter(r => {
-          const v = r.data?.[cfg.filter_field];
-          if (Array.isArray(v)) return v.some(i => String(i).toLowerCase() === String(cfg.filter_value).toLowerCase());
-          return String(v || '').toLowerCase() === String(cfg.filter_value).toLowerCase();
+          const rv = r.data?.[cfg.filter_field];
+          const rvArr = Array.isArray(rv) ? rv.map(x=>String(x).toLowerCase()) : [String(rv||'').toLowerCase()];
+          if (op === 'is')          return rvArr.some(v => v === fv);
+          if (op === 'is_not')      return rvArr.every(v => v !== fv);
+          if (op === 'contains')    return rvArr.some(v => v.includes(fv));
+          if (op === 'is_empty')    return !rv || (Array.isArray(rv) && rv.length===0);
+          if (op === 'is_not_empty')return !!(rv && (!Array.isArray(rv) || rv.length>0));
+          return rvArr.some(v => v === fv);
         });
       }
       const trendDays = cfg.trend_days || 30;
@@ -84,19 +91,35 @@ function fetchPanelData(panel, user, environment_id) {
         r.object_id === cfg.object_id && r.environment_id === environment_id && !r.deleted_at &&
         (!orgSubtree || orgSubtree.has(r.org_unit_id) || !r.org_unit_id)
       );
-      if (cfg.filter_field && cfg.filter_value) {
-        recs = recs.filter(r => String(r.data?.[cfg.filter_field] || '').toLowerCase() === String(cfg.filter_value).toLowerCase());
+      if (cfg.filter_field && cfg.filter_value !== undefined && cfg.filter_value !== '') {
+        const fv = String(cfg.filter_value).toLowerCase();
+        const op = cfg.filter_op || 'is';
+        recs = recs.filter(r => {
+          const rv = r.data?.[cfg.filter_field];
+          const rvArr = Array.isArray(rv) ? rv.map(x=>String(x).toLowerCase()) : [String(rv||'').toLowerCase()];
+          if (op === 'is')          return rvArr.some(v => v === fv);
+          if (op === 'is_not')      return rvArr.every(v => v !== fv);
+          if (op === 'contains')    return rvArr.some(v => v.includes(fv));
+          if (op === 'not_contains')return rvArr.every(v => !v.includes(fv));
+          if (op === 'is_empty')    return !rv || (Array.isArray(rv) && rv.length===0);
+          if (op === 'is_not_empty')return !!(rv && (!Array.isArray(rv) || rv.length>0));
+          if (op === 'gt')          return parseFloat(rvArr[0]||0) > parseFloat(fv);
+          if (op === 'lt')          return parseFloat(rvArr[0]||0) < parseFloat(fv);
+          return rvArr.some(v => v === fv);
+        });
       }
       const groupBy = cfg.group_by_field;
       if (!groupBy) return { error: 'No group_by_field configured' };
       const groups = {};
       recs.forEach(r => {
         const v = r.data?.[groupBy];
-        const vals = Array.isArray(v) ? v : [v || 'Unknown'];
+        const vals = Array.isArray(v) ? (v.length ? v : ['Unknown']) : [v || 'Unknown'];
         vals.forEach(val => { const key = String(val || 'Unknown'); groups[key] = (groups[key] || 0) + 1; });
       });
-      const chartData = Object.entries(groups).sort(([,a],[,b]) => b-a).slice(0, cfg.max_items || 12).map(([name, value]) => ({ name, value }));
-      return { chartData, chartType: cfg.chart_type || 'bar', total: recs.length };
+      let chartEntries = Object.entries(groups).sort(([,a],[,b]) => b-a);
+      if (cfg.exclude_unknown) chartEntries = chartEntries.filter(([k]) => k.toLowerCase() !== 'unknown' && k !== '');
+      const chartData = chartEntries.slice(0, cfg.max_items || 20).map(([name, value]) => ({ name, value }));
+      return { chartData, chartType: cfg.chart_type || 'bar', showLegend: !!cfg.show_legend, total: recs.length };
     }
 
     case 'list': {
