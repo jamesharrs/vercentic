@@ -743,7 +743,7 @@ export default function Reports({ environment, initialReport }) {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(()=>runReport(),600);
     return ()=>clearTimeout(debounceRef.current);
-  }, [filters, selCols, groupBy, sortBy, sortDir, joinObject]);
+  }, [filters, selCols, groupBy, sortBy, sortDir, joinObject, formulas]);
 
   function applyFilter(row, f) {
     const v=String(row[f.field]??"").toLowerCase(), fv=String(f.value??"").toLowerCase();
@@ -965,38 +965,45 @@ export default function Reports({ environment, initialReport }) {
 
     // No groupBy — auto-aggregate by xKey so the chart is meaningful
     if (!chartX) return raw.slice(0, 30);
+
+    // Build a map of formula name → aggregation type so SUM formulas sum, AVG formulas average
+    const formulaAggType = {};
+    formulas.forEach(f => {
+      if (!f.name || !f.expression) return;
+      const expr = f.expression.trim().toUpperCase();
+      if (/^SUM[\s(]/.test(expr) || /^COUNT\(\)/.test(expr)) formulaAggType[f.name] = "sum";
+      else if (/^MAX[\s(]/.test(expr)) formulaAggType[f.name] = "max";
+      else if (/^MIN[\s(]/.test(expr)) formulaAggType[f.name] = "min";
+      else formulaAggType[f.name] = "avg"; // AVG and anything else → average
+    });
+
     const groups = {};
     raw.forEach(row => {
       const xVal = String(row[xKey] ?? "Unknown");
-      if (!groups[xVal]) groups[xVal] = { [xKey]: xVal, _count: 0, _sums: {}, _counts: {} };
+      if (!groups[xVal]) groups[xVal] = { [xKey]: xVal, _count: 0, _sums: {}, _counts: {}, _maxs: {}, _mins: {} };
       groups[xVal]._count++;
-      // Accumulate numeric fields for averaging — skip zeros (missing data)
       Object.entries(row).forEach(([k, v]) => {
         const n = parseFloat(v);
         if (!isNaN(n) && n !== 0 && k !== xKey && !k.startsWith("_")) {
           groups[xVal]._sums[k]   = (groups[xVal]._sums[k]   || 0) + n;
           groups[xVal]._counts[k] = (groups[xVal]._counts[k] || 0) + 1;
+          if (groups[xVal]._maxs[k] === undefined || n > groups[xVal]._maxs[k]) groups[xVal]._maxs[k] = n;
+          if (groups[xVal]._mins[k] === undefined || n < groups[xVal]._mins[k]) groups[xVal]._mins[k] = n;
         }
       });
     });
     return Object.values(groups).map(g => {
       const row = { [xKey]: g[xKey], _count: g._count };
-      // Average numeric fields including formula cols — only for rows that had a value
       Object.keys(g._sums).forEach(k => {
-        row[k] = parseFloat((g._sums[k] / g._counts[k]).toFixed(2));
+        const agg = formulaAggType[k] || "avg";
+        if (agg === "sum")      row[k] = parseFloat(g._sums[k].toFixed(2));
+        else if (agg === "max") row[k] = g._maxs[k] ?? 0;
+        else if (agg === "min") row[k] = g._mins[k] ?? 0;
+        else                    row[k] = parseFloat((g._sums[k] / g._counts[k]).toFixed(2)); // avg
       });
       return row;
     }).sort((a, b) => b._count - a._count).slice(0, 30);
-  }, [results, chartX, chartY, groupBy]);
-
-  // Debug: log chartData and yKey whenever they change
-  useEffect(() => {
-    if (chartData.length && chartY) {
-      console.log('[Chart] xKey:', chartX, 'yKey:', chartY);
-      console.log('[Chart] first row:', chartData[0]);
-      console.log('[Chart] yKey value in first row:', chartData[0]?.[chartY]);
-    }
-  }, [chartData, chartX, chartY]);
+  }, [results, chartX, chartY, groupBy, formulas]);
 
   const goToFiltered = (filterKey,filterValue) => {
     const obj=objects.find(o=>o.id===selObject);
