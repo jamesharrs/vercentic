@@ -6499,11 +6499,11 @@ export const PANEL_META = {
   match:        { icon:"sparkles",      label:"Recommendations",     defaultOpen:false },
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true  },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:false, hidden:true },
-  scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false },
+  scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false, jobOnly:true },
   assessments:  { icon:"clipboard",     label:"Assessments",          defaultOpen:true  },
-  questions:    { icon:"listChecks",     label:"Screening & Interview Questions", defaultOpen:false },
-  interview_plan: { icon:"calendar",      label:"Interview Plan",      defaultOpen:true  },
-  insights: { icon:"barChart", label:"Insights", defaultOpen:true },
+  questions:    { icon:"listChecks",     label:"Screening & Interview Questions", defaultOpen:false, jobOnly:true },
+  interview_plan: { icon:"calendar",      label:"Interview Plan",      defaultOpen:true, jobOnly:true  },
+  insights: { icon:"barChart", label:"Insights", defaultOpen:true, jobOnly:true },
   engagement: { icon:"activity", label:"Engagement Score", defaultOpen:true  },
 };
 
@@ -8013,6 +8013,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // A panel is visible if its feature flag is on (and for match, also needs ai_matching)
   const panelVisible = (id) => {
     if (PANEL_META[id]?.hidden) return false;
+    if (PANEL_META[id]?.jobOnly && objectName !== "Job" && objectName !== "Jobs") return false;
     const flag = PANEL_FLAGS[id];
     if (!flag) return true;
     if (id === 'match') return ff[flag] && ff.ai_matching;
