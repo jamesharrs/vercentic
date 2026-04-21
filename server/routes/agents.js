@@ -399,7 +399,7 @@ async function executeAgent(agent, run, record_id) {
       } else {
         const lastPending = pendingActions[pendingActions.length - 1];
         if (lastPending && lastPending.approved === undefined) { pendingActions.push({ action, action_index: pendingActions.length, queued: true }); }
-        else { await executeAction(action, record_id, agent.environment_id, aiOutput); addStep(`Action executed: ${action.type}`); }
+        else { await executeAction(action, record_id, agent.environment_id, aiOutput, undefined, addStep); addStep(`Action executed: ${action.type}`); }
       }
     }
     const hasPending = pendingActions.some(a => a.approved === undefined);
@@ -465,7 +465,7 @@ async function runAiAction(action, recordContext, record, fields, previousAiOutp
   return data.content?.[0]?.text || '[No response]';
 }
 
-async function executeAction(action, record_id, environment_id, aiOutput, modifierNote) {
+async function executeAction(action, record_id, environment_id, aiOutput, modifierNote, addStep = () => {}) {
   const s = getStore();
   switch(action.type) {
     case 'add_note': {
@@ -524,7 +524,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         qIds = action.question_ids || [];
         sourceLabel = 'manually selected';
         if (qIds.length === 0) {
-          run.steps.push({ step: `⚠ AI Interview skipped — no questions selected. Edit this agent and choose questions manually.`, timestamp: new Date().toISOString() });
+          addStep(`⚠ AI Interview skipped — no questions selected. Edit this agent and choose questions manually.`);
           break;
         }
       } else {
@@ -533,7 +533,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         const linkedJobId = link?.record_id || null;
 
         if (!linkedJobId) {
-          run.steps.push({ step: `⚠ AI Interview skipped — candidate is not linked to any job. Link the candidate to a job first.`, timestamp: new Date().toISOString() });
+          addStep(`⚠ AI Interview skipped — candidate is not linked to any job. Link the candidate to a job first.`);
           break;
         }
 
@@ -543,7 +543,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         qIds = jobAssignments.map(a => a.question_id);
 
         if (qIds.length === 0) {
-          run.steps.push({ step: `⚠ AI Interview skipped — "${jobName}" has no questions assigned. Add questions via Settings → Question Bank.`, timestamp: new Date().toISOString() });
+          addStep(`⚠ AI Interview skipped — "${jobName}" has no questions assigned. Add questions via Settings → Question Bank.`);
           break;
         }
         sourceLabel = `linked job "${jobName}"`;
@@ -560,7 +560,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
 
       if (scorecardQuestions.length === 0) {
-        run.steps.push({ step: `⚠ AI Interview skipped — the selected questions could not be resolved in the question bank.`, timestamp: new Date().toISOString() });
+        addStep(`⚠ AI Interview skipped — the selected questions could not be resolved in the question bank.`);
         break;
       }
 
@@ -598,10 +598,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       });
 
       saveStore();
-      run.steps.push({
-        step: `✓ AI Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}. Link: /interview/${token}`,
-        timestamp: new Date().toISOString(),
-      });
+      addStep(`✓ AI Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}. Link: /interview/${token}`);
       break;
     }
     case 'interview_coordinator': {
