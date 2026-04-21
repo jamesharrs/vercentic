@@ -938,7 +938,42 @@ export default function Reports({ environment, initialReport }) {
     return Object.keys(results[0]).filter(k=>!k.startsWith("_")||k==="_count"||k==="_group");
   },[results]);
 
-  const chartData = results?.slice(0,30)||[];
+  // Auto-aggregate chart data by xKey when no groupBy is set
+  // This prevents 70 individual bars when the user means "group by X"
+  const chartData = useMemo(() => {
+    if (!results?.length) return [];
+    const xKey = chartX || "_group";
+    const yKey = chartY || "_count";
+    const raw  = results.slice(0, 500);
+
+    // If already grouped (groupBy is set), rows have _group — use directly
+    if (groupBy) return raw.slice(0, 30);
+
+    // No groupBy — auto-aggregate by xKey so the chart is meaningful
+    if (!chartX) return raw.slice(0, 30);
+    const groups = {};
+    raw.forEach(row => {
+      const xVal = String(row[xKey] ?? "Unknown");
+      if (!groups[xVal]) groups[xVal] = { [xKey]: xVal, _count: 0, _sums: {}, _counts: {} };
+      groups[xVal]._count++;
+      // Accumulate numeric fields for averaging
+      Object.entries(row).forEach(([k, v]) => {
+        const n = parseFloat(v);
+        if (!isNaN(n) && k !== xKey) {
+          groups[xVal]._sums[k]   = (groups[xVal]._sums[k]   || 0) + n;
+          groups[xVal]._counts[k] = (groups[xVal]._counts[k] || 0) + 1;
+        }
+      });
+    });
+    return Object.values(groups).map(g => {
+      const row = { [xKey]: g[xKey], _count: g._count };
+      // Average numeric fields including formula cols
+      Object.keys(g._sums).forEach(k => {
+        row[k] = parseFloat((g._sums[k] / g._counts[k]).toFixed(2));
+      });
+      return row;
+    }).sort((a, b) => b._count - a._count).slice(0, 30);
+  }, [results, chartX, chartY, groupBy]);
 
   const goToFiltered = (filterKey,filterValue) => {
     const obj=objects.find(o=>o.id===selObject);
@@ -1408,7 +1443,16 @@ export default function Reports({ environment, initialReport }) {
           )}
 
           {results&&results.length>0&&chartType!=="table"&&(
-            <div style={{ background:B.card,borderRadius:14,padding:"16px 16px 8px",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>{renderChart()}</div>
+            <div style={{ background:B.card,borderRadius:14,padding:"16px 16px 8px",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+              {renderChart()}
+              {/* Hint when formula exists but no group by — chart auto-aggregates but user should know */}
+              {formulas.some(f=>f.name&&f.expression) && !groupBy && chartX && (
+                <div style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 10px",marginTop:4,background:`${B.amber}12`,borderRadius:8,fontSize:11,color:"#92400E" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Chart is auto-grouping by <strong style={{margin:"0 3px"}}>{chartX}</strong>. Set <strong style={{margin:"0 3px"}}>Group By</strong> for accurate aggregation.
+                </div>
+              )}
+            </div>
           )}
           <div style={{ background:B.card,borderRadius:14,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",overflow:"hidden" }}>
             {running ? (
