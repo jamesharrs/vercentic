@@ -83,6 +83,7 @@ function ChartPanel({ panel, data }) {
   if (!data) return <Skeleton/>;
   if (data.error) return <ErrorState msg={data.error}/>;
   const { chartData=[], chartType="bar" } = data;
+  console.log('[ChartPanel]', panel.title, { chartDataLen: chartData.length, chartType, firstRow: chartData[0] });
   return <div style={{ height:"100%",display:"flex",flexDirection:"column" }}>
     {panel.title&&<div style={{ fontSize:12,fontWeight:700,color:V.text2,marginBottom:10 }}>{panel.title}<span style={{ fontSize:11,color:V.text3,fontWeight:400,marginLeft:6 }}>{data.total} total</span></div>}
     <div style={{ flex:1,minHeight:0,overflow:"hidden" }}>
@@ -152,6 +153,7 @@ function SavedReportPanel({ panel, data, onNavigate, onOpenRecord }) {
   if (!data) return <Skeleton/>;
   if (data.error) return <ErrorState msg={data.error}/>;
   const { report, chartData=[], chartType="bar", chartX="_group", chartY="_count", records=[], columns=[], total=0, displayMode="both" } = data;
+  console.log('[SavedReportPanel]', panel.title, { displayMode, chartDataLen: chartData.length, chartType, chartX, chartY, recordsLen: records.length, firstChartRow: chartData[0] });
   if (!report) return <ErrorState msg="Report not configured"/>;
   const showChart   = (displayMode === "chart" || displayMode === "both") && chartData.length > 0;
   const showTable   = (displayMode === "table" || displayMode === "both") && records.length > 0;
@@ -214,7 +216,10 @@ export default function DashboardViewer({ environment, session, onNavigate, onOp
 
   const loadAllPanelData=useCallback(async(dash)=>{
     if(!dash?.panels?.length)return;
-    const fetches=dash.panels.map(p=>api.get(`/dashboards/${dash.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>({id:p.id,data:d})));
+    const fetches=dash.panels.map(p=>api.get(`/dashboards/${dash.id}/panels/${p.id}/data?environment_id=${envId}`).then(d=>{
+      console.log('[panel data]', p.type, p.title||p.id, d);
+      return {id:p.id,data:d};
+    }));
     const results=await Promise.all(fetches);
     const map={}; results.forEach(r=>{if(r)map[r.id]=r.data;}); setPanelData(map);
   },[envId]);
