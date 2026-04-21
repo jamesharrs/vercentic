@@ -187,7 +187,7 @@ Rules: use {api_key} curly-brace syntax. Return one expression only.`,
 }
 
 // ── FormulaInput — expression input with field picker + AI button ─────────────
-function FormulaInput({ value, onChange, fields, placeholder }) {
+function FormulaInput({ value, onChange, fields, placeholder, formulaName, onNameChange, onRemove }) {
   const [showPicker, setShowPicker] = useState(false);
   const [showAI,     setShowAI]     = useState(false);
   const [search,     setSearch]     = useState("");
@@ -206,39 +206,70 @@ function FormulaInput({ value, onChange, fields, placeholder }) {
   const filtered = fields.filter(f=>!search||f.name.toLowerCase().includes(search.toLowerCase())||f.api_key.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div style={{ position:"relative" }}>
-      <div style={{ display:"flex",gap:4,alignItems:"center" }}>
+    <div style={{ position:"relative", display:"flex", flexDirection:"column", gap:6 }}>
+      {/* Row 1: column name + remove */}
+      {onNameChange !== undefined && (
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <input value={formulaName??""} onChange={e=>onNameChange(e.target.value)}
+            placeholder="Column name…"
+            style={{ flex:1, padding:"6px 9px", borderRadius:8, border:"1.5px solid #E5E7EB",
+              fontSize:12, fontFamily:F, background:"white", color:"#111827", outline:"none" }}/>
+          {onRemove && (
+            <button onClick={onRemove}
+              style={{ width:26, height:26, borderRadius:6, border:"none", background:"transparent",
+                color:"#9CA3AF", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:16, lineHeight:1, flexShrink:0 }}
+              onMouseEnter={e=>e.currentTarget.style.color="#EF4444"}
+              onMouseLeave={e=>e.currentTarget.style.color="#9CA3AF"}>×</button>
+          )}
+        </div>
+      )}
+      {/* Row 2: expression input + field picker button */}
+      <div style={{ display:"flex", gap:4, alignItems:"center" }}>
         <input ref={inputRef} value={value??""} onChange={e=>onChange(e.target.value)}
           placeholder={placeholder||"e.g. DIFF({salary_max},{salary_min})"}
-          style={{ flex:1,padding:"7px 9px",borderRadius:8,
-            border:validation.valid===false?`1.5px solid ${B.rose}`:"1.5px solid #E5E7EB",
-            fontSize:12,fontFamily:"ui-monospace,monospace",background:"white",color:"#111827" }}/>
+          style={{ flex:1, padding:"6px 9px", borderRadius:8,
+            border: validation.valid===false ? `1.5px solid ${B.rose}` : "1.5px solid #E5E7EB",
+            fontSize:12, fontFamily:"ui-monospace,monospace", background:"white", color:"#111827", outline:"none" }}/>
         <button onClick={()=>{setShowPicker(p=>!p);setShowAI(false);setSearch("");}}
-          title="Insert field" onMouseDown={e=>e.preventDefault()}
-          style={{ padding:"6px 9px",borderRadius:8,border:"1.5px solid #E5E7EB",background:showPicker?"#F5F3FF":"white",color:B.purple,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:F }}>
+          title="Insert field reference" onMouseDown={e=>e.preventDefault()}
+          style={{ padding:"5px 8px", borderRadius:8, border:"1.5px solid #E5E7EB",
+            background:showPicker?"#F5F3FF":"white", color:B.purple,
+            fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F, flexShrink:0 }}>
           {"{…}"}
         </button>
-        <button onClick={()=>setShowAI(true)} title="AI Expression Builder"
-          style={{ padding:"6px 9px",borderRadius:8,border:"none",background:B.purple,color:"white",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:F,whiteSpace:"nowrap" }}>
-          ✨ AI
-        </button>
       </div>
-      {value && !validation.valid && <div style={{ fontSize:10,color:B.rose,marginTop:3 }}>{validation.error}</div>}
+      {/* Row 3: AI button + validation */}
+      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+        <button onClick={()=>setShowAI(true)} title="Generate formula with AI"
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8,
+            border:"none", background:`${B.purple}12`, color:B.purple,
+            fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:F, flexShrink:0 }}>
+          <span style={{ fontSize:13 }}>✨</span> Generate with AI
+        </button>
+        {value && !validation.valid && (
+          <div style={{ fontSize:10, color:B.rose, flex:1 }}>{validation.error}</div>
+        )}
+      </div>
+      {/* Field picker dropdown */}
       {showPicker && (
-        <div style={{ position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:400,background:"white",border:"1.5px solid #E5E7EB",borderRadius:12,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",padding:10,width:260,maxHeight:240,display:"flex",flexDirection:"column" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:400,
+          background:"white", border:"1.5px solid #E5E7EB", borderRadius:12,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.12)", padding:10, width:260, maxHeight:240,
+          display:"flex", flexDirection:"column" }}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search fields…" autoFocus
-            style={{ padding:"6px 9px",borderRadius:7,border:"1px solid #E5E7EB",fontSize:11,fontFamily:F,marginBottom:8 }}/>
+            style={{ padding:"6px 9px", borderRadius:7, border:"1px solid #E5E7EB", fontSize:11, fontFamily:F, marginBottom:8 }}/>
           <div style={{ overflowY:"auto" }}>
             {filtered.map(f=>(
               <div key={f.id} onClick={()=>insertField(f.api_key)}
-                style={{ display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:7,cursor:"pointer" }}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:7, cursor:"pointer" }}
                 onMouseEnter={e=>e.currentTarget.style.background="#F5F3FF"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span style={{ fontFamily:"ui-monospace,monospace",fontSize:11,color:B.purple,background:"#F5F3FF",padding:"2px 6px",borderRadius:4 }}>{f.api_key}</span>
-                <span style={{ fontSize:11,color:B.gray }}>{f.name}</span>
+                <span style={{ fontFamily:"ui-monospace,monospace", fontSize:11, color:B.purple, background:"#F5F3FF", padding:"2px 6px", borderRadius:4 }}>{f.api_key}</span>
+                <span style={{ fontSize:11, color:B.gray }}>{f.name}</span>
               </div>
             ))}
-            {!filtered.length && <div style={{ fontSize:11,color:B.gray,padding:8,textAlign:"center" }}>No fields</div>}
+            {!filtered.length && <div style={{ fontSize:11, color:B.gray, padding:8, textAlign:"center" }}>No fields</div>}
           </div>
         </div>
       )}
@@ -867,12 +898,16 @@ export default function Reports({ environment, initialReport }) {
               </div>
               {formulas.length===0&&<div style={{ fontSize:12,color:B.gray,textAlign:"center",padding:"16px 0" }}>No formulas yet</div>}
               {formulas.map((f,i)=>(
-                <div key={f.id} style={{ marginBottom:12,background:"#F8F7FF",borderRadius:10,padding:10 }}>
-                  <div style={{ display:"flex",gap:4,marginBottom:6 }}>
-                    <div style={{ flex:1 }}><Inp val={f.name} onChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,name:v}:x))} placeholder="Column name…"/></div>
-                    <button onClick={()=>setFormulas(p=>p.filter((_,j)=>j!==i))} style={{ fontSize:12,color:B.rose,background:"none",border:"none",cursor:"pointer" }}>×</button>
-                  </div>
-                  <FormulaInput value={f.expression} onChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,expression:v}:x))} fields={fields} placeholder="DIFF({salary_max},{salary_min})"/>
+                <div key={f.id} style={{ marginBottom:10, background:"#F8F7FF", borderRadius:10, padding:"10px 12px", border:"1px solid #EDE9FE" }}>
+                  <FormulaInput
+                    value={f.expression}
+                    onChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,expression:v}:x))}
+                    fields={fields}
+                    formulaName={f.name}
+                    onNameChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,name:v}:x))}
+                    onRemove={()=>setFormulas(p=>p.filter((_,j)=>j!==i))}
+                    placeholder="DIFF({salary_max},{salary_min})"
+                  />
                 </div>
               ))}
               <div style={{ marginTop:12,padding:"10px 12px",background:`${B.purple}08`,borderRadius:10,fontSize:11,color:B.gray,lineHeight:1.6 }}>
