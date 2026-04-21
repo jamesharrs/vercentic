@@ -534,15 +534,17 @@ function AxisPicker({ label, value, onChange, resultCols, fields, formulas }) {
     return "T";
   };
 
-  // Build full option list: system cols + field cols + formula cols
-  // Prefer resultCols when available (report has run), otherwise derive from fields+formulas
-  const activeFormulas = (formulas||[]).filter(f => f.name && f.expression);
-  const derivedCols = [
-    "_group", "_count",
-    ...(fields||[]).map(f => f.api_key),
-    ...activeFormulas.map(f => f.name),
+  // Build full option list — always use all fields + formulas, not just result cols
+  // resultCols only contains selected columns, so it's too narrow for axis options
+  const activeFormulas = (formulas||[]).filter(f => f.name?.trim() && f.expression?.trim());
+  const allFieldKeys = (fields||[]).map(f => f.api_key);
+  const allFormulaCols = activeFormulas.map(f => f.name);
+  // Merge: system cols first, then all fields, then formulas
+  // Always include _group/_count since they appear when groupBy is set
+  const extraSysCols = ["_group", "_count", ...(resultCols||[]).filter(k => k.startsWith("_") && k !== "_group" && k !== "_count")];
+  const allCols = [
+    ...new Set([...extraSysCols, ...allFieldKeys, ...allFormulaCols])
   ];
-  const allCols = resultCols?.length ? resultCols : derivedCols;
 
   const sysCols = allCols.filter(k => k === "_count" || k === "_group");
   const fmCols  = allCols.filter(k => (formulas||[]).some(f => f.name === k));
