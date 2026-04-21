@@ -1173,8 +1173,36 @@ export default function Reports({ environment, initialReport }) {
                       <span style={{ fontSize:14 }}>∑</span> Add a calculated column
                     </button>
                   )}
-                  {formulas.map((f,i)=>(
-                    <div key={f.id} style={{ marginBottom:8, background:"#F8F7FF", borderRadius:10, padding:"10px 12px", border:"1px solid #EDE9FE" }}>
+                  {formulas.map((f,i)=>{
+                    const hasName = !!f.name?.trim();
+                    const hasExpr = !!f.expression?.trim();
+                    const validation = hasExpr ? validateExpr(f.expression, fields) : null;
+                    const isReady = hasName && hasExpr && validation?.valid !== false;
+                    const isPartial = !hasName || !hasExpr;
+                    const borderColor = isReady ? "#1D9E75" : isPartial ? "#E5E7EB" : B.rose;
+                    const bgColor    = isReady ? "#F0FDF4" : "#F8F7FF";
+                    return (
+                    <div key={f.id} style={{ marginBottom:8, background:bgColor, borderRadius:10, padding:"10px 12px", border:`1.5px solid ${borderColor}`, transition:"border-color .2s, background .2s" }}>
+                      {/* Status badge row */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", marginBottom:4, minHeight:16 }}>
+                        {isReady && (
+                          <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:"#1D9E75" }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Ready to use
+                          </span>
+                        )}
+                        {!isReady && hasExpr && validation?.valid === false && (
+                          <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:B.rose }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={B.rose} strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            Invalid expression
+                          </span>
+                        )}
+                        {isPartial && !validation?.valid === false && (
+                          <span style={{ fontSize:10, color:"#9CA3AF" }}>
+                            {!hasName && !hasExpr ? "Add a name and expression" : !hasName ? "Add a column name" : "Add an expression"}
+                          </span>
+                        )}
+                      </div>
                       <FormulaInput
                         value={f.expression}
                         onChange={v=>setFormulas(p=>p.map((x,j)=>j===i?{...x,expression:v}:x))}
@@ -1185,7 +1213,8 @@ export default function Reports({ environment, initialReport }) {
                         placeholder="DIFF({salary_max},{salary_min})"
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                   {formulas.length > 0 && (
                     <div style={{ marginTop:6, padding:"8px 10px", background:`${B.purple}06`, borderRadius:8, fontSize:10, color:B.gray, lineHeight:1.6 }}>
                       <strong style={{ color:B.purple }}>Functions:</strong>{" "}SUM · AVG · COUNT() · DIFF(a,b) · ROUND(f,N) · IF(x=y,a,b) · CONCAT(a,b) · UPPER · LOWER · LEN
