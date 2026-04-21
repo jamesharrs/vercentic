@@ -1502,6 +1502,7 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
     <RecordDetail
       record={record}
       fields={fields}
+      allObjects={allObjects}
       environment={environment}
       objectName={object.name}
       objectColor={object.color || "#4361EE"}
