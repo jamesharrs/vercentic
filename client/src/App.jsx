@@ -1524,6 +1524,7 @@ function App({ onEnvReady }) {
   const { t, isRTL } = useI18n();
 
   // ── Feature flags — reads from FeatureProvider in AppRoot ────────────────────
+  const { perObject: featPerObject } = useFeatures();
   const featCopilot    = useFeature('ai_copilot');
   const featInterviews = useFeature('interviews');
   const featOffers     = useFeature('offers');
@@ -2479,7 +2480,8 @@ function App({ onEnvReady }) {
               panel_forms: featPanelForms, panel_recommendations: featPanelRecommend, panel_linked_records: featPanelLinked,
               panel_tasks: featPanelTasks, panel_assessments: featPanelAssessments, panel_engagement: featPanelEngagement,
               panel_reporting: featPanelReporting, panel_agents: featPanelAgents, panel_user: featPanelUser,
-              panel_insights: featPanelInsights, panel_questions: featPanelQuestions }}
+              panel_insights: featPanelInsights, panel_questions: featPanelQuestions,
+              _perObject: featPerObject }}
           />
           </Suspense>
           );
@@ -2493,7 +2495,8 @@ function App({ onEnvReady }) {
               panel_forms: featPanelForms, panel_recommendations: featPanelRecommend, panel_linked_records: featPanelLinked,
               panel_tasks: featPanelTasks, panel_assessments: featPanelAssessments, panel_engagement: featPanelEngagement,
               panel_reporting: featPanelReporting, panel_agents: featPanelAgents, panel_user: featPanelUser,
-              panel_insights: featPanelInsights, panel_questions: featPanelQuestions }}
+              panel_insights: featPanelInsights, panel_questions: featPanelQuestions,
+              _perObject: featPerObject }}
             onRecordLoad={(rec, recObj) => {
             setActiveRecord(rec); setActiveRecordObj(recObj);
             // Swap UUID URL for clean numeric URL once record is loaded

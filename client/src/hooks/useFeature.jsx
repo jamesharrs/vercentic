@@ -16,10 +16,11 @@ const DEFAULT_FEATURES = new Set([
   'panel_insights','panel_questions',
 ]);
 
-const FeatureContext = createContext({ features: DEFAULT_FEATURES, loading: false, refresh: () => {} });
+const FeatureContext = createContext({ features: DEFAULT_FEATURES, perObject: {}, loading: false, refresh: () => {} });
 
 export function FeatureProvider({ environmentId, children }) {
   const [features, setFeatures] = useState(DEFAULT_FEATURES);
+  const [perObject, setPerObject] = useState({});
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
@@ -31,20 +32,22 @@ export function FeatureProvider({ environmentId, children }) {
       if (sess?.user?.id)    headers['X-User-Id']     = sess.user.id;
       const res  = await fetch(`/api/feature-flags?environment_id=${environmentId}`, { headers });
       const data = await res.json();
-      // data is { flag_key: boolean, ... }
+      // data is { flag_key: boolean, ..., _perObject: { slug: { panel_key: bool } } }
       const enabled = new Set(['core']);
+      const po = data._perObject || {};
       if (data && typeof data === 'object') {
-        Object.entries(data).forEach(([key, val]) => { if (val) enabled.add(key); });
+        Object.entries(data).forEach(([key, val]) => {
+          if (key === '_perObject') return;
+          if (val) enabled.add(key);
+        });
       }
-      // Only update state if something actually changed — prevents unnecessary
-      // re-renders (and nav flicker) when refresh is called after a flag toggle
       setFeatures(prev => {
         if (prev.size === enabled.size && [...enabled].every(k => prev.has(k))) return prev;
         return enabled;
       });
+      setPerObject(po);
     } catch {
-      // On error keep the last known good state — don't reset to defaults
-      // as that would cause nav items to disappear
+      // On error keep the last known good state
     }
     setLoading(false);
   }, [environmentId]);
@@ -52,7 +55,7 @@ export function FeatureProvider({ environmentId, children }) {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <FeatureContext.Provider value={{ features, loading, refresh: load }}>
+    <FeatureContext.Provider value={{ features, perObject, loading, refresh: load }}>
       {children}
     </FeatureContext.Provider>
   );
@@ -64,9 +67,23 @@ export function useFeature(key) {
   return features.has(key);
 }
 
-/** Returns the full feature context */
+/** Returns the full feature context including perObject overrides */
 export function useFeatures() {
   return useContext(FeatureContext);
+}
+
+/**
+ * Returns true if a panel is enabled for a specific object slug.
+ * Checks slug-specific override first, falls back to global flag.
+ * panelKey: e.g. 'panel_notes', slug: e.g. 'talent-pools'
+ */
+export function usePanelFlag(panelKey, objectSlug) {
+  const { features, perObject } = useContext(FeatureContext);
+  const slug = (objectSlug || '').toLowerCase().replace(/\s+/g, '-');
+  if (slug && perObject[slug] && panelKey in perObject[slug]) {
+    return perObject[slug][panelKey];
+  }
+  return features.has(panelKey);
 }
 
 /** Render children only when feature is enabled; fallback otherwise */

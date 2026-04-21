@@ -8072,10 +8072,21 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (PANEL_META[id]?.jobOnly    && objectName !== "Job" && objectName !== "Jobs") return false;
     if (PANEL_META[id]?.personOnly && objectName !== "Person") return false;
     if (PANEL_META[id]?.personOrJob && objectName !== "Person" && objectName !== "Job" && objectName !== "Jobs") return false;
-    const flag = PANEL_FLAGS[id];
-    if (!flag) return true;
-    if (id === 'match') return ff[flag] && ff.ai_matching;
-    return ff[flag];
+    // Check per-object override first (e.g. panel_tasks__talent-pools)
+    // Derive slug from allObjects — currentObject isn't declared yet at this point
+    const recObj = (allObjects||[]).find(o => o.id === record?.object_id);
+    const slug = (recObj?.slug || '').toLowerCase();
+    const perObj = ff._perObject || {};
+    if (slug && perObj[slug] && id in perObj[slug]) {
+      // Per-object override exists — use it (skip global flag for this slug)
+      if (!perObj[slug][id]) return false;
+    } else {
+      // Fall back to global flag
+      const flag = PANEL_FLAGS[id];
+      if (flag && !ff[flag]) return false;
+    }
+    if (id === 'match') return ff.ai_matching;
+    return true;
   };
   const _permCtx = usePermCtx();
   const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;

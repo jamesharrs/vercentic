@@ -100,7 +100,7 @@ const FLAG_DESC = {
 };
 
 // ── Record Panels sub-section ──────────────────────────────────────────────
-function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, BulkBtn, environment }) {
+function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, BulkBtn, environment, perObject = {} }) {
   const [selectedType, setSelectedType] = useState('all');
   const [objects, setObjects] = useState([]);
 
@@ -113,14 +113,23 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
       .catch(() => {});
   }, [environment?.id]);
 
-  // Build tab list: all + person + job + any other object slugs
-  const customObjects = objects.filter(o =>
-    o.slug !== 'people' && o.slug !== 'jobs' && !o.is_system
-  );
-  // Also include talent-pools and any system objects that aren't people/jobs
-  const otherObjects = objects.filter(o =>
-    o.slug !== 'people' && o.slug !== 'jobs'
-  );
+  const otherObjects = objects.filter(o => o.slug !== 'people' && o.slug !== 'jobs');
+
+  // Is the active tab a custom object slug (not all/person/job)?
+  const isCustomType = selectedType !== 'all' && selectedType !== 'person' && selectedType !== 'job';
+
+  // Resolve effective flag value for the current tab:
+  // - For custom object tabs: check perObject[slug][panelKey] first, else fall back to base flag
+  // - For all/person/job: use base flagMap
+  const getEffectiveEnabled = (panelKey) => {
+    if (isCustomType && selectedType in perObject && panelKey in perObject[selectedType]) {
+      return perObject[selectedType][panelKey];
+    }
+    return flagMap[panelKey]?.enabled ?? true;
+  };
+
+  // The key to pass to toggle() — scoped when on a custom object tab
+  const getScopedKey = (panelKey) => isCustomType ? `${panelKey}__${selectedType}` : panelKey;
 
   // Panels visible for the selected type filter
   const visiblePanels = PANEL_CONFIGS.filter(p => {
@@ -132,8 +141,8 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
   });
 
   const visibleKeys = visiblePanels.map(p => p.key);
-  const groupEnabled  = visibleKeys.every(k => (flagMap[k]?.enabled ?? true));
-  const groupDisabled = visibleKeys.every(k => !(flagMap[k]?.enabled ?? true));
+  const groupEnabled  = visibleKeys.every(k => getEffectiveEnabled(k));
+  const groupDisabled = visibleKeys.every(k => !getEffectiveEnabled(k));
 
   const TYPE_COLORS = { all:'#6b7280', person:'#4361EE', job:'#0CA678', personOrJob:'#7C3AED' };
   const TYPE_LABELS = { all:'All Records', person:'Person only', job:'Job only', personOrJob:'Person & Job' };
@@ -155,8 +164,8 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.08em' }}>Record Panels</div>
         <div style={{ display:'flex', gap:5 }}>
-          <BulkBtn onClick={() => toggleAll(visibleKeys, true)} disabled={groupEnabled}>Enable all</BulkBtn>
-          <BulkBtn onClick={() => toggleAll(visibleKeys, false)} danger disabled={groupDisabled}>Disable all</BulkBtn>
+          <BulkBtn onClick={() => toggleAll(visibleKeys.map(k => getScopedKey(k)), true)} disabled={groupEnabled}>Enable all</BulkBtn>
+          <BulkBtn onClick={() => toggleAll(visibleKeys.map(k => getScopedKey(k)), false)} danger disabled={groupDisabled}>Disable all</BulkBtn>
         </div>
       </div>
 
@@ -180,10 +189,12 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
       <div style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden' }}>
         {visiblePanels.map((panel, i) => {
           const { key, applies, label, desc } = panel;
-          const f = flagMap[key];
-          const enabled    = f?.enabled    ?? true;
-          const overridden = f?.overridden  ?? false;
-          const isSaving   = saving === key;
+          const scopedKey  = getScopedKey(key);
+          const enabled    = getEffectiveEnabled(key);
+          const overridden = isCustomType
+            ? (selectedType in perObject && key in perObject[selectedType])
+            : (flagMap[key]?.overridden ?? false);
+          const isSaving   = saving === scopedKey || saving === key;
           const typeColor  = TYPE_COLORS[applies];
           const typeLabel  = TYPE_LABELS[applies];
 
@@ -192,7 +203,7 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
               borderBottom: i < visiblePanels.length - 1 ? `1px solid ${C.border}` : 'none',
               opacity: isSaving ? 0.6 : 1, transition:'opacity .15s' }}>
 
-              <button type="button" onClick={() => toggle(key, enabled)} disabled={isSaving}
+              <button type="button" onClick={() => toggle(scopedKey, enabled)} disabled={isSaving}
                 style={{ width:40, height:22, borderRadius:11, border:'none', cursor:isSaving?'not-allowed':'pointer',
                   background: enabled ? C.accent : '#d1d5db', position:'relative', flexShrink:0, transition:'background .2s' }}>
                 <span style={{ position:'absolute', top:3, left: enabled ? 21 : 3, width:16, height:16,
@@ -230,6 +241,7 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
 
 export default function FeatureFlagsSettings({ environment }) {
   const [flags, setFlags]       = useState([]);
+  const [perObject, setPerObject] = useState({}); // { slug: { panel_key: bool } }
   const [saving, setSaving]     = useState(null);
   const [loading, setLoading]   = useState(true);
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -249,18 +261,30 @@ export default function FeatureFlagsSettings({ environment }) {
     if (!environment?.id) return;
     if (!silent) setLoading(true);
     try {
+      // Load base flags (for the admin table)
       const res = await fetch(`/api/feature-flags/all?environment_id=${environment.id}`, { headers: authHeaders() });
       if (res.ok) setFlags((await res.json()).flags || []);
+      // Also load per-object overrides from the main GET endpoint
+      const res2 = await fetch(`/api/feature-flags?environment_id=${environment.id}`, { headers: authHeaders() });
+      if (res2.ok) {
+        const d = await res2.json();
+        setPerObject(d._perObject || {});
+      }
     } finally { if (!silent) setLoading(false); }
   };
   useEffect(() => { load(); }, [environment?.id]);
 
   const toggle = async (key, currentlyEnabled) => {
-    // Optimistic update — flip immediately so the toggle feels instant and scroll doesn't jump
-    setFlags(prev => prev.map(f => f.key === key
-      ? { ...f, enabled: !currentlyEnabled, overridden: true }
-      : f
-    ));
+    // Optimistic update — for base keys update flags array; for scoped keys update perObject
+    if (key.includes('__')) {
+      const [baseKey, slug] = key.split('__');
+      setPerObject(prev => ({ ...prev, [slug]: { ...(prev[slug]||{}), [baseKey]: !currentlyEnabled } }));
+    } else {
+      setFlags(prev => prev.map(f => f.key === key
+        ? { ...f, enabled: !currentlyEnabled, overridden: true }
+        : f
+      ));
+    }
     setSaving(key);
     try {
       const res = await fetch(`/api/feature-flags/${key}`, {
@@ -272,10 +296,12 @@ export default function FeatureFlagsSettings({ environment }) {
         const err = await res.json().catch(() => ({}));
         console.error('Feature flag toggle failed:', err);
         // Revert optimistic update on failure
-        setFlags(prev => prev.map(f => f.key === key
-          ? { ...f, enabled: currentlyEnabled }
-          : f
-        ));
+        if (key.includes('__')) {
+          const [baseKey, slug] = key.split('__');
+          setPerObject(prev => ({ ...prev, [slug]: { ...(prev[slug]||{}), [baseKey]: currentlyEnabled } }));
+        } else {
+          setFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: currentlyEnabled } : f));
+        }
         setSaving(null);
         return;
       }
@@ -286,7 +312,12 @@ export default function FeatureFlagsSettings({ environment }) {
     } catch (e) {
       console.error('Feature flag toggle error:', e);
       // Revert on error
-      setFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: currentlyEnabled } : f));
+      if (key.includes('__')) {
+        const [baseKey, slug] = key.split('__');
+        setPerObject(prev => ({ ...prev, [slug]: { ...(prev[slug]||{}), [baseKey]: currentlyEnabled } }));
+      } else {
+        setFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: currentlyEnabled } : f));
+      }
     }
     setSaving(null);
   };
@@ -371,7 +402,7 @@ export default function FeatureFlagsSettings({ environment }) {
             <RecordPanelsSection
               flagMap={flagMap} saving={saving} toggle={toggle}
               toggleAll={toggleAll} bulkSaving={bulkSaving} BulkBtn={BulkBtn}
-              environment={environment}
+              environment={environment} perObject={perObject}
             />
           )}
         <div style={{ marginBottom:28 }}>

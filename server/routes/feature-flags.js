@@ -41,8 +41,19 @@ router.get('/', (req, res) => {
   const { environment_id } = req.query;
   const overrides = environment_id ? query('feature_flags', f => f.environment_id === environment_id) : [];
   const merged = { ...DEFAULT_FLAGS };
-  overrides.forEach(f => { merged[f.flag_key] = f.enabled; });
-  res.json(merged);
+  // perObject: { slug: { panel_notes: bool, panel_tasks: bool, ... } }
+  const perObject = {};
+  overrides.forEach(f => {
+    if (f.flag_key.includes('__')) {
+      // Per-object override: panel_notes__talent-pools
+      const [baseKey, slug] = f.flag_key.split('__');
+      if (!perObject[slug]) perObject[slug] = {};
+      perObject[slug][baseKey] = f.enabled;
+    } else {
+      merged[f.flag_key] = f.enabled;
+    }
+  });
+  res.json({ ...merged, _perObject: perObject });
 });
 
 // GET /api/feature-flags/all — admin view with override status
@@ -67,7 +78,9 @@ router.put('/:key', (req, res) => {
   const { key } = req.params;
   const { environment_id, enabled } = req.body;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  if (!(key in DEFAULT_FLAGS)) return res.status(404).json({ error: `Unknown flag: ${key}` });
+  // Allow base keys from DEFAULT_FLAGS, and also per-object panel keys (panel_xxx__slug)
+  const baseKey = key.includes('__') ? key.split('__')[0] : key;
+  if (!(baseKey in DEFAULT_FLAGS)) return res.status(404).json({ error: `Unknown flag: ${key}` });
   const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === key);
   if (existing) {
     update('feature_flags', f => f.id === existing.id, { enabled: !!enabled, updated_at: new Date().toISOString() });
