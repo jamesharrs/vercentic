@@ -10223,13 +10223,33 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const colStorageKey = `talentos_cols_${object.id}`;
 
+  // Track which object we last successfully loaded — used to decide whether to clear records
+  const lastLoadedObjectRef = useRef(null);
+
   const load = useCallback(async () => {
     setLoading(true);
-    setRecords([]); // clear immediately so stale records from previous object never flash
-    const [f, r] = await Promise.all([
-      api.get(`/fields?object_id=${object.id}&environment_id=${environment.id}`),
-      api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
-    ]);
+    // Only clear records immediately when switching to a different object.
+    // When reloading the SAME object (server restart, filter change, search), keep
+    // existing records visible until new data arrives — prevents blank flash.
+    if (lastLoadedObjectRef.current !== object.id) {
+      setRecords([]);
+    }
+    let f, r;
+    try {
+      [f, r] = await Promise.all([
+        api.get(`/fields?object_id=${object.id}&environment_id=${environment.id}`),
+        api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&page=${page}&limit=50${search?`&search=${encodeURIComponent(search)}`:""}`),
+      ]);
+    } catch (err) {
+      // Network error (server restarting) — leave existing records visible, stop spinner
+      setLoading(false);
+      return;
+    }
+    // Server returned an error object (e.g. 401/403/500) — don't wipe records, just stop spinner
+    if (!r || r.error || (!Array.isArray(r) && !r.records)) {
+      setLoading(false);
+      return;
+    }
     const loadedFields = Array.isArray(f) ? f : [];
     setFields(loadedFields);
     // Restore saved column order/selection, or use defaults
@@ -10271,6 +10291,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     }
     setRecords(filtered);
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
+    lastLoadedObjectRef.current = object.id; // mark successful load
     setLoading(false);
     // Broadcast list summary to copilot so it can answer list questions
     window.dispatchEvent(new CustomEvent("talentos:list-context", {
@@ -10288,6 +10309,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { setFilterChip(initialFilter || null); setPage(1); }, [initialFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Re-trigger load when the server comes back online after a restart.
+  // App.jsx fires 'talentos:server-online' when apiOnline flips false → true.
+  // This ensures the list reloads automatically rather than staying blank
+  // after a nodemon restart wipes the in-memory session store.
+  useEffect(() => {
+    const handler = () => { setReloadKey(k => k + 1); };
+    window.addEventListener('talentos:server-online', handler);
+    return () => window.removeEventListener('talentos:server-online', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
   useEffect(() => {

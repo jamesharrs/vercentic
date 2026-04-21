@@ -1727,7 +1727,13 @@ function App({ onEnvReady }) {
         .then(r => r.json())
         .then(() => setApiOnline(prev => {
           // Flipping false→true triggers the environments/objects reload via the useEffect below
-          if (prev !== true) return true;
+          if (prev !== true) {
+            // Notify RecordsView (and any other subscriber) that the server came back.
+            // This lets list pages recover automatically after a nodemon restart without
+            // requiring the user to navigate away and back.
+            window.dispatchEvent(new CustomEvent('talentos:server-online'));
+            return true;
+          }
           return prev; // already online — no state change, no unnecessary re-render
         }))
         .catch(() => setApiOnline(prev => prev === true ? false : prev));
