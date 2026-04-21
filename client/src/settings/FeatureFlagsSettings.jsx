@@ -100,15 +100,35 @@ const FLAG_DESC = {
 };
 
 // ── Record Panels sub-section ──────────────────────────────────────────────
-function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, BulkBtn }) {
+function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, BulkBtn, environment }) {
   const [selectedType, setSelectedType] = useState('all');
+  const [objects, setObjects] = useState([]);
+
+  // Load all objects to get custom types (Talent Pools, etc.)
+  useEffect(() => {
+    if (!environment?.id) return;
+    fetch(`/api/objects?environment_id=${environment.id}`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setObjects(d); })
+      .catch(() => {});
+  }, [environment?.id]);
+
+  // Build tab list: all + person + job + any other object slugs
+  const customObjects = objects.filter(o =>
+    o.slug !== 'people' && o.slug !== 'jobs' && !o.is_system
+  );
+  // Also include talent-pools and any system objects that aren't people/jobs
+  const otherObjects = objects.filter(o =>
+    o.slug !== 'people' && o.slug !== 'jobs'
+  );
 
   // Panels visible for the selected type filter
   const visiblePanels = PANEL_CONFIGS.filter(p => {
-    if (selectedType === 'all') return true;
+    if (selectedType === 'all')    return true;
     if (selectedType === 'person') return p.applies === 'all' || p.applies === 'person' || p.applies === 'personOrJob';
     if (selectedType === 'job')    return p.applies === 'all' || p.applies === 'job'    || p.applies === 'personOrJob';
-    return p.applies === selectedType;
+    // Any other object type: only show universal panels
+    return p.applies === 'all';
   });
 
   const visibleKeys = visiblePanels.map(p => p.key);
@@ -117,6 +137,18 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
 
   const TYPE_COLORS = { all:'#6b7280', person:'#4361EE', job:'#0CA678', personOrJob:'#7C3AED' };
   const TYPE_LABELS = { all:'All Records', person:'Person only', job:'Job only', personOrJob:'Person & Job' };
+
+  // Tabs: All + Person + Job + one tab per other object
+  const tabs = [
+    { key:'all',    label:'All record types', color:'#6b7280' },
+    { key:'person', label:'Person',           color:'#4361EE' },
+    { key:'job',    label:'Job',              color:'#0CA678' },
+    ...otherObjects.map(o => ({
+      key:   o.slug,
+      label: o.plural_name || o.name,
+      color: o.color || '#6b7280',
+    })),
+  ];
 
   return (
     <div style={{ marginBottom:28 }}>
@@ -128,19 +160,18 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
         </div>
       </div>
 
-      {/* Record type filter tabs */}
+      {/* Record type filter tabs — All + Person + Job + dynamic object types */}
       <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
-        {['all','person','job'].map(t => {
-          const col = TYPE_COLORS[t];
-          const active = selectedType === t;
+        {tabs.map(t => {
+          const active = selectedType === t.key;
           return (
-            <button key={t} onClick={() => setSelectedType(t)} style={{
-              padding:'4px 12px', borderRadius:20, border:`1.5px solid ${active ? col : C.border}`,
-              background: active ? `${col}15` : 'white', color: active ? col : C.text3,
+            <button key={t.key} onClick={() => setSelectedType(t.key)} style={{
+              padding:'4px 12px', borderRadius:20, border:`1.5px solid ${active ? t.color : C.border}`,
+              background: active ? `${t.color}15` : 'white', color: active ? t.color : C.text3,
               fontSize:12, fontWeight: active ? 700 : 500, cursor:'pointer', fontFamily:F,
               transition:'all .15s',
             }}>
-              {t === 'all' ? 'All record types' : t === 'person' ? 'Person' : 'Job'}
+              {t.label}
             </button>
           );
         })}
@@ -340,6 +371,7 @@ export default function FeatureFlagsSettings({ environment }) {
             <RecordPanelsSection
               flagMap={flagMap} saving={saving} toggle={toggle}
               toggleAll={toggleAll} bulkSaving={bulkSaving} BulkBtn={BulkBtn}
+              environment={environment}
             />
           )}
         <div style={{ marginBottom:28 }}>
