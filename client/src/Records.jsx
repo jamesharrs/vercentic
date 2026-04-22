@@ -3378,6 +3378,8 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   const [linkObjFilter,    setLinkObjFilter]    = useState("");
   const [linkTargets,      setLinkTargets]      = useState([]);
   const [linkLoading,      setLinkLoading]      = useState(false);
+  const [linkStaging,      setLinkStaging]      = useState(null); // { record, steps } — stage picker open for this record
+  const [linkStageId,      setLinkStageId]      = useState("");  // selected starting stage id
   const commsRef   = useRef(null);
   const commsBtnRef = useRef(null);
   const editBtnRef  = useRef(null);
@@ -3407,7 +3409,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     return () => document.removeEventListener("mousedown", h);
   }, [showComms]);
 
-  // Load all linkable records (only those with a Linked Person workflow) when modal opens
+  // Load all linkable records — only those with a people_link workflow that has steps
   useEffect(() => {
     if (!showLinkModal || !environment?.id) return;
     (async () => {
@@ -3423,13 +3425,20 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           .catch(() => []),
       ]);
       const allRecs = recordGroups.flat();
-      const assignmentMap = {};
+      // Only consider people_link assignments with at least one step
+      const peopleLinkMap = {}; // record_id → steps[]
       (Array.isArray(allAssignments) ? allAssignments : []).forEach(a => {
-        if ((a.workflow?.steps || []).length > 0) assignmentMap[a.record_id] = true;
+        const wf = a.workflow;
+        if (!wf) return;
+        if (a.type !== "people_link" && wf.workflow_type !== "people_link") return;
+        const steps = wf.steps || [];
+        if (steps.length === 0) return;
+        peopleLinkMap[a.record_id] = steps;
       });
-      const withWorkflow = Object.keys(assignmentMap).length > 0
-        ? allRecs.filter(r => assignmentMap[r.id])
-        : allRecs;
+      // Filter records to only those with a valid people_link workflow
+      const withWorkflow = allRecs
+        .filter(r => peopleLinkMap[r.id])
+        .map(r => ({ ...r, _plSteps: peopleLinkMap[r.id] }));
       setLinkTargets(withWorkflow);
       setLinkLoading(false);
     })();
@@ -3450,9 +3459,25 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
     setNoteText(""); setShowNoteModal(false);
   };
 
-  const handleBulkLink = (targetRecord) => {
-    onBulkAction?.("link", { objectId: targetRecord.object_id, targetId: targetRecord.id });
-    setShowLinkModal(false); setLinkSearch(""); setLinkObjFilter("");
+  const handleBulkLink = (targetRecord, stageId, stageName) => {
+    onBulkAction?.("link", {
+      objectId: targetRecord.object_id,
+      targetId: targetRecord.id,
+      stageId,
+      stageName,
+    });
+    setShowLinkModal(false);
+    setLinkStaging(null);
+    setLinkStageId("");
+    setLinkSearch("");
+    setLinkObjFilter("");
+  };
+
+  // Open stage picker for a target record
+  const handleOpenStagePicker = (r) => {
+    const steps = r._plSteps || [];
+    setLinkStaging({ record: r, steps });
+    setLinkStageId(steps[0]?.id || "");
   };
 
   const selSt = { width:"100%", padding:"6px 8px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text1, boxSizing:"border-box" };
@@ -3594,55 +3619,163 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
       )}
       {showLinkModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
-          onClick={e => e.target === e.currentTarget && setShowLinkModal(false)}>
-          <div style={{ background:"white", borderRadius:16, width:500, maxHeight:"75vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+          onClick={e => e.target === e.currentTarget && (setShowLinkModal(false), setLinkStaging(null))}>
+          <div style={{ background:"white", borderRadius:16, width:520, maxHeight:"80vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+
+            {/* Header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
               <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Link {count} {count===1?"person":"people"} to…</div>
-              <button onClick={() => setShowLinkModal(false)} style={{ background:"none", border:"none", cursor:"pointer" }}><Ic n="x" s={16} c={C.text3}/></button>
+              <button onClick={() => { setShowLinkModal(false); setLinkStaging(null); }} style={{ background:"none", border:"none", cursor:"pointer" }}>
+                <Ic n="x" s={16} c={C.text3}/>
+              </button>
             </div>
-            <div style={{ padding:"10px 16px", background:"#fffbeb", borderBottom:`1px solid #fde68a`, display:"flex", alignItems:"flex-start", gap:8 }}>
-              <Ic n="info" s={14} c="#92400e"/>
-              <span style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Only records with a <strong>Linked Person Workflow</strong> are shown.</span>
-            </div>
-            <div style={{ display:"flex", gap:8, padding:"10px 14px", borderBottom:`1px solid ${C.border}` }}>
-              <input autoFocus value={linkSearch} onChange={e => setLinkSearch(e.target.value)} placeholder="Search records…"
-                style={{ flex:1, padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none" }}/>
-              <select value={linkObjFilter} onChange={e => setLinkObjFilter(e.target.value)}
-                style={{ padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text2 }}>
-                <option value="">All types</option>
-                {[...new Set(linkTargets.map(r => r.object_name))].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-            <div style={{ flex:1, overflowY:"auto" }}>
-              {linkLoading ? <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>
-                : (() => {
+
+            {/* Stage picker sub-panel */}
+            {linkStaging ? (
+              <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
+                {/* Back row */}
+                <div style={{ padding:"10px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <button onClick={() => setLinkStaging(null)}
+                    style={{ background:"none", border:"none", cursor:"pointer", color:C.accent, fontSize:12, fontWeight:600, fontFamily:F, display:"flex", alignItems:"center", gap:5, padding:0 }}>
+                    <Ic n="chevL" s={13} c={C.accent}/> Back to list
+                  </button>
+                </div>
+
+                {/* Target record summary */}
+                <div style={{ padding:"14px 18px", background:C.bg, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12 }}>
+                  {(() => {
+                    const r = linkStaging.record;
+                    const d = r.data||{}; const label = d.job_title||d.pool_name||d.name||d.first_name||r.id.slice(0,8);
+                    const col = r.object_color||C.accent;
+                    return <>
+                      <div style={{ width:36, height:36, borderRadius:10, background:`${col}18`, border:`1.5px solid ${col}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <span style={{ fontSize:14, fontWeight:800, color:col }}>{label.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{label}</div>
+                        <div style={{ fontSize:11, color:C.text3 }}>{r.object_name}</div>
+                      </div>
+                    </>;
+                  })()}
+                </div>
+
+                {/* Stage picker */}
+                <div style={{ flex:1, padding:"20px 18px" }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:C.text2, marginBottom:10 }}>
+                    Starting stage for {count} {count===1?"person":"people"}
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {linkStaging.steps.map((step, i) => (
+                      <label key={step.id} onClick={() => setLinkStageId(step.id)}
+                        style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:10,
+                          border:`2px solid ${linkStageId === step.id ? C.accent : C.border}`,
+                          background: linkStageId === step.id ? C.accentLight : "white",
+                          cursor:"pointer", transition:"all .1s" }}>
+                        <div style={{ width:22, height:22, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+                          background: linkStageId === step.id ? C.accent : C.border,
+                          color:"white", fontSize:11, fontWeight:800 }}>
+                          {i+1}
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:13, fontWeight:600, color: linkStageId===step.id ? C.accent : C.text1 }}>
+                            {step.name || `Stage ${i+1}`}
+                          </div>
+                          {step.description && (
+                            <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{step.description}</div>
+                          )}
+                        </div>
+                        {linkStageId === step.id && <Ic n="check" s={15} c={C.accent}/>}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Confirm footer */}
+                <div style={{ padding:"14px 18px", borderTop:`1px solid ${C.border}`, display:"flex", gap:8, justifyContent:"flex-end" }}>
+                  <button onClick={() => setLinkStaging(null)}
+                    style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.text2, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+                    Cancel
+                  </button>
+                  <button onClick={() => {
+                    const step = linkStaging.steps.find(s => s.id === linkStageId);
+                    handleBulkLink(linkStaging.record, linkStageId, step?.name || "");
+                  }}
+                    style={{ padding:"8px 20px", borderRadius:8, border:"none", background:C.accent, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:F }}>
+                    Link {count} {count===1?"person":"people"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Info banner */}
+                <div style={{ padding:"10px 16px", background:"#fffbeb", borderBottom:`1px solid #fde68a`, display:"flex", alignItems:"flex-start", gap:8 }}>
+                  <Ic n="info" s={14} c="#92400e"/>
+                  <span style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Only records with a <strong>Linked Person Workflow</strong> are shown.</span>
+                </div>
+
+                {/* Search + type filter */}
+                <div style={{ display:"flex", gap:8, padding:"10px 14px", borderBottom:`1px solid ${C.border}` }}>
+                  <input autoFocus value={linkSearch} onChange={e => setLinkSearch(e.target.value)} placeholder="Search records…"
+                    style={{ flex:1, padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none" }}/>
+                  <select value={linkObjFilter} onChange={e => setLinkObjFilter(e.target.value)}
+                    style={{ padding:"7px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:12, fontFamily:F, outline:"none", background:"white", color:C.text2 }}>
+                    <option value="">All types</option>
+                    {[...new Set(linkTargets.map(r => r.object_name))].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+
+                {/* Record list */}
+                <div style={{ flex:1, overflowY:"auto" }}>
+                  {linkLoading ? (
+                    <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>
+                  ) : (() => {
                     const filtered = linkTargets.filter(r => {
                       if (linkObjFilter && r.object_name !== linkObjFilter) return false;
                       if (!linkSearch) return true;
                       const d = r.data || {};
                       return [d.job_title,d.pool_name,d.name,d.first_name].filter(Boolean).join(" ").toLowerCase().includes(linkSearch.toLowerCase());
                     });
-                    if (!filtered.length) return <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>{linkTargets.length===0?"No records with a Linked Person Workflow found.":"No matching records."}</div>;
-                    return filtered.map((r,i) => {
-                      const d = r.data||{}; const label = d.job_title||d.pool_name||d.name||d.first_name||r.id.slice(0,8); const col = r.object_color||C.accent;
+                    if (!filtered.length) return (
+                      <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>
+                        {linkTargets.length === 0 ? "No records with a Linked Person Workflow found." : "No matching records."}
+                      </div>
+                    );
+                    return filtered.map((r, i) => {
+                      const d = r.data||{};
+                      const label = d.job_title||d.pool_name||d.name||d.first_name||r.id.slice(0,8);
+                      const col   = r.object_color||C.accent;
+                      const steps = r._plSteps || [];
                       return (
-                        <div key={r.id} onClick={() => handleBulkLink(r)}
-                          style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", cursor:"pointer", borderBottom: i<filtered.length-1?`1px solid ${C.border}`:"none" }}
+                        <div key={r.id}
+                          style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", cursor:"pointer",
+                            borderBottom: i < filtered.length-1 ? `1px solid ${C.border}` : "none" }}
                           onMouseEnter={e => e.currentTarget.style.background=C.accentLight}
-                          onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                          <div style={{ width:34, height:34, borderRadius:9, background:`${col}18`, border:`1.5px solid ${col}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          onMouseLeave={e => e.currentTarget.style.background="transparent"}
+                          onClick={() => handleOpenStagePicker(r)}>
+                          <div style={{ width:34, height:34, borderRadius:9, background:`${col}18`, border:`1.5px solid ${col}30`,
+                            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                             <span style={{ fontSize:13, fontWeight:800, color:col }}>{label.charAt(0).toUpperCase()}</span>
                           </div>
                           <div style={{ flex:1 }}>
                             <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{label}</div>
-                            <div style={{ fontSize:11, color:C.text3 }}>{r.object_name}</div>
+                            <div style={{ fontSize:11, color:C.text3, marginTop:1 }}>
+                              {r.object_name}
+                              {steps.length > 0 && (
+                                <span style={{ marginLeft:6, color:"#7c3aed", background:"#f5f3ff",
+                                  padding:"1px 6px", borderRadius:99, fontSize:10, fontWeight:600 }}>
+                                  {steps.length} stage{steps.length!==1?"s":""}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span style={{ fontSize:11, color:C.accent, fontWeight:600 }}>+ Link</span>
+                          <span style={{ fontSize:11, color:C.accent, fontWeight:600, flexShrink:0 }}>+ Link</span>
                         </div>
                       );
                     });
                   })()}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -10577,15 +10710,15 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     } else if (action === "link") {
       await Promise.all(ids.map(id =>
         api.post("/people-links", {
-          person_id: id,
-          record_id: payload.targetId,
-          object_id: payload.objectId,
-          environment_id: environment.id,
-          stage: "Added",
-          linked_at: new Date().toISOString(),
+          person_record_id: id,
+          target_record_id: payload.targetId,
+          target_object_id: payload.objectId,
+          environment_id:   environment.id,
+          stage_id:         payload.stageId   || null,
+          stage_name:       payload.stageName || null,
         })
       ));
-      window.__toast?.success?.(`Linked ${ids.length} people`);
+      window.__toast?.success?.(`Linked ${ids.length} ${ids.length === 1 ? "person" : "people"}`);
       load();
     }
     setSelectedIds(new Set());
