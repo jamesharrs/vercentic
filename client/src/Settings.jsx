@@ -2592,7 +2592,6 @@ const NAV_GROUPS = [
       { id:"company_docs", icon:"file",        label:"Company Documents" },
       { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms" },
       { id:"questions",    icon:"help-circle", label:"Question library" },
-      { id:"agents",       icon:"bot",         label:"Agents" },
       { id:"datasets",     icon:"layers",      label:"Data Sets" },
       { id:"enterprise",   icon:"briefcase",   label:"Enterprise Settings", perm:"manage_roles" },
     ],
@@ -2606,6 +2605,7 @@ const NAV_GROUPS = [
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
       { id:"workflows", icon:"workflow", label:"Workflows", perm:"manage_workflows" },
       { id:"portals",   icon:"globe",    label:"Portals",   perm:"manage_portals" },
+      { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles" },
     ],
   },
   {
@@ -2614,16 +2614,16 @@ const NAV_GROUPS = [
     items: [
       { id:"ai_governance", icon:"sparkles", label:"AI governance" },
       { id:"ai_matching",   icon:"zap",      label:"Recommendations" },
+      { id:"agents",        icon:"bot",      label:"Agents" },
     ],
   },
   {
     id: "system",
     label: "System",
     items: [
-      { id:"integration_hub", icon:"zap",       label:"Integrations",   perm:"manage_integrations" },
-      { id:"feature-flags",   icon:"flag",      label:"Feature Flags",  perm:"manage_roles" },
-      { id:"sandbox",         icon:"gitBranch", label:"Sandbox Manager",perm:"manage_roles" },
-      { id:"config",          icon:"refresh",   label:"Import / Export",perm:"manage_roles" },
+      { id:"integration_hub", icon:"zap",      label:"Integrations",   perm:"manage_integrations" },
+      { id:"feature-flags",   icon:"flag",     label:"Feature Flags",  perm:"manage_roles" },
+      { id:"config",          icon:"refresh",  label:"Import / Export",perm:"manage_roles" },
     ],
   },
 ];

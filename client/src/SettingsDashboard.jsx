@@ -6,9 +6,10 @@ const DASHBOARD_GROUPS = [
   {
     id: "preferences", label: "Your Preferences", color: "#4f46e5",
     items: [
-      { id:"appearance",   icon:"sun",       label:"Appearance",        desc:"Theme, colour scheme, font and density" },
-      { id:"language",     icon:"globe",     label:"Language",          desc:"Interface language and regional format" },
-      { id:"company_profile", icon:"building",  label:"Company Profile",   desc:"Logo, brand name and company details" },
+      { id:"appearance",    icon:"sun",      label:"Appearance",      desc:"Theme, colour scheme, font and density" },
+      { id:"language",      icon:"globe",    label:"Language",        desc:"Interface language and regional format" },
+      { id:"notifications", icon:"bell",     label:"Notifications",   desc:"Manage your notification preferences" },
+      { id:"company_profile",icon:"building",label:"Company Profile", desc:"Logo, brand name and company details" },
     ],
   },
   {
@@ -31,34 +32,41 @@ const DASHBOARD_GROUPS = [
   {
     id: "schema", label: "Data & Schema", color: "#059669",
     items: [
-      { id:"datamodel",   icon:"database",    label:"Data Model",       desc:"Configure objects, fields and field types", perm:"manage_data_model" },
-      { id:"file_types",  icon:"paperclip",   label:"File Types",       desc:"Define file categories and extraction rules", perm:"manage_data_model" },
-      { id:"forms",       icon:"clipboard",   label:"Forms",            desc:"Build forms to capture structured data",    perm:"manage_forms" },
+      { id:"datamodel",   icon:"database",    label:"Data Model",       desc:"Configure objects, fields and field types",     perm:"manage_data_model" },
+      { id:"duplicates",  icon:"copy",        label:"Duplicates",       desc:"Merge rules and duplicate detection settings",  perm:"manage_data_model" },
+      { id:"file_types",  icon:"paperclip",   label:"File Types",       desc:"Define file categories and extraction rules",   perm:"manage_data_model" },
+      { id:"company_docs",icon:"file-text",   label:"Company Documents",desc:"Shared documents available across the platform" },
+      { id:"forms",       icon:"clipboard",   label:"Forms",            desc:"Build forms to capture structured data",         perm:"manage_forms" },
       { id:"questions",   icon:"help-circle", label:"Question Library", desc:"Reusable questions for interviews and surveys" },
       { id:"datasets",    icon:"layers",      label:"Data Sets",        desc:"Manage shared data sets and lookup values" },
-      { id:"enterprise",  icon:"briefcase",   label:"Enterprise",       desc:"Enterprise-specific configuration options", perm:"manage_roles" },
+      { id:"enterprise",  icon:"briefcase",   label:"Enterprise",       desc:"Enterprise-specific configuration options",      perm:"manage_roles" },
     ],
   },
   {
     id: "processes", label: "Processes", color: "#7c3aed",
     items: [
-      { id:"workflows", icon:"zap",   label:"Workflows", desc:"Automate steps, triggers and AI actions",                  perm:"manage_workflows" },
-      { id:"portals",   icon:"globe", label:"Portals",   desc:"Career sites, HM portals and external experiences",        perm:"manage_portals" },
-      { id:"agents",    icon:"cpu",   label:"Agents",    desc:"Configure AI agents and their capabilities" },
+      { id:"brand_kits",      icon:"palette",   label:"Brand Kits",      desc:"Manage brand colours, fonts and assets" },
+      { id:"email_templates", icon:"mail",      label:"Email Templates", desc:"Create and manage reusable email templates" },
+      { id:"talent_profile",  icon:"user",      label:"Talent Profile",  desc:"Configure the candidate talent profile card" },
+      { id:"workflows",       icon:"zap",       label:"Workflows",       desc:"Automate steps, triggers and AI actions",       perm:"manage_workflows" },
+      { id:"portals",         icon:"globe",     label:"Portals",         desc:"Career sites, HM portals and external experiences", perm:"manage_portals" },
+      { id:"sandbox",         icon:"git-branch",label:"Sandbox Manager", desc:"Test configuration changes before going live",   perm:"manage_roles" },
     ],
   },
   {
     id: "ai", label: "AI", color: "#b45309",
     items: [
-      { id:"ai_governance", icon:"sparkles", label:"AI Governance", desc:"Usage policies, content controls and audit" },
-      { id:"ai_matching",   icon:"target",   label:"Recommendations",   desc:"Configure candidate-to-job recommendation rules" },
+      { id:"ai_governance", icon:"sparkles", label:"AI Governance",   desc:"Usage policies, content controls and audit" },
+      { id:"ai_matching",   icon:"target",   label:"Recommendations", desc:"Configure candidate-to-job recommendation rules" },
+      { id:"agents",        icon:"cpu",      label:"Agents",          desc:"Configure AI agents and their capabilities" },
     ],
   },
   {
     id: "system", label: "System", color: "#64748b",
     items: [
-      { id:"integration_hub", icon:"link",    label:"Integrations",   desc:"Connect email, SMS, WhatsApp and third-party tools", perm:"manage_integrations" },
-      { id:"config",          icon:"download",label:"Import / Export",desc:"Bulk import data or export configuration",            perm:"manage_roles" },
+      { id:"integration_hub", icon:"link",     label:"Integrations",   desc:"Connect email, SMS, WhatsApp and third-party tools", perm:"manage_integrations" },
+      { id:"feature-flags",   icon:"flag",     label:"Feature Flags",  desc:"Enable or disable platform features per environment",  perm:"manage_roles" },
+      { id:"config",          icon:"download", label:"Import / Export",desc:"Bulk import data or export configuration",             perm:"manage_roles" },
     ],
   },
 ];
@@ -85,6 +93,12 @@ const PATHS = {
   target:        "M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z",
   link:          "M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
   download:      "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
+  copy:          "M20 9H11a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-9a2 2 0 00-2-2zM5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1",
+  flag:          "M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7",
+  bell:          "M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
+  palette:       "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8a2 2 0 110 4 2 2 0 010-4zM6.93 15a7 7 0 0110.14 0",
+  mail:          "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
+  user:          "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z",
   globe2:        "M12 2a10 10 0 100 20A10 10 0 0012 2z",
 };
 
