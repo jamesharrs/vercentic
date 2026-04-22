@@ -3461,6 +3461,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   };
 
   const handleBulkLink = (targetRecord, stageId, stageName) => {
+    console.log("[handleBulkLink] target:", targetRecord?.id?.slice(0,8), "stage:", stageName, "selectedIds:", selectedIds.size);
     onBulkAction?.("link", {
       objectId: targetRecord.object_id,
       targetId: targetRecord.id,
@@ -10736,18 +10737,36 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       }));
       return; // don't clear selection
     } else if (action === "link") {
-      await Promise.all(ids.map(id =>
-        api.post("/people-links", {
-          person_record_id: id,
-          target_record_id: payload.targetId,
-          target_object_id: payload.objectId,
-          environment_id:   environment.id,
-          stage_id:         payload.stageId   || null,
-          stage_name:       payload.stageName || null,
-        })
-      ));
-      window.__toast?.success?.(`Linked ${ids.length} ${ids.length === 1 ? "person" : "people"}`);
-      load();
+      console.log("[bulk link] ids:", ids.length, "target:", payload.targetId, "stage:", payload.stageName);
+      try {
+        // Use allSettled so a 409 (already linked) on one person doesn't abort the rest
+        const results = await Promise.allSettled(ids.map(id =>
+          api.post("/people-links", {
+            person_record_id: id,
+            target_record_id: payload.targetId,
+            target_object_id: payload.objectId,
+            environment_id:   environment.id,
+            stage_id:         payload.stageId   || null,
+            stage_name:       payload.stageName || null,
+          })
+        ));
+        const succeeded = results.filter(r => r.status === "fulfilled" && !r.value?.error).length;
+        const skipped   = results.filter(r => r.status === "fulfilled" &&  r.value?.error === "Link already exists").length;
+        const failed    = results.length - succeeded - skipped;
+        if (succeeded > 0) {
+          const skMsg = skipped > 0 ? ` (${skipped} already linked)` : "";
+          window.__toast?.success?.(`Linked ${succeeded} ${succeeded === 1 ? "person" : "people"}${skMsg}`);
+        } else if (skipped > 0) {
+          window.__toast?.success?.(`All ${skipped} already linked`);
+        } else {
+          window.__toast?.alert?.("Linking failed — please try again");
+        }
+        if (failed > 0) window.__toast?.alert?.(`${failed} failed to link`);
+        load();
+      } catch (err) {
+        console.error("Bulk link error:", err);
+        window.__toast?.alert?.("Linking failed: " + (err.message || "Unknown error"));
+      }
     }
     setSelectedIds(new Set());
   };
