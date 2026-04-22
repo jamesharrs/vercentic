@@ -150,23 +150,23 @@ const ResultCard = ({ record, fields, object, onClick, query }) => {
   const matchedExtras = getMatchedFields(record, fields, query).filter(f => !bodyFs.some(b=>b.id===f.id));
 
   return (
-    <div onClick={onClick} style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:"14px 16px", cursor:"pointer", transition:"all .12s", display:"flex", alignItems:"flex-start", gap:12 }}
-      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="#d1d5db";}}
-      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
-      <Avatar name={title} color={object?.color||C.accent} size={36}/>
+    <div onClick={onClick} style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:"16px 18px", cursor:"pointer", transition:"all .12s", display:"flex", alignItems:"flex-start", gap:14 }}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="#d1d5db";e.currentTarget.style.transform="translateY(-1px)";}}
+      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;e.currentTarget.style.transform="none";}}>
+      <Avatar name={title} color={object?.color||C.accent} size={38}/>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
           <span style={{ fontSize:14, fontWeight:700, color:C.text1 }}>
             <Highlight text={title} query={query}/>
           </span>
           <span style={{ fontSize:11, color:C.text3, background:"#f3f4f6", borderRadius:6, padding:"1px 6px" }}>{object?.name}</span>
         </div>
         {sub && (
-          <div style={{ fontSize:12, color:C.text3, marginBottom:6 }}>
+          <div style={{ fontSize:12, color:C.text3, marginBottom:8 }}>
             <Highlight text={sub} query={query}/>
           </div>
         )}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 16px" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"5px 18px" }}>
           {bodyFs.map(f => {
             const v = record.data?.[f.api_key];
             if (!v && v!==0) return null;
@@ -412,15 +412,17 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
 
           {/* Filter modal */}
           {showFilters && (
-            <FilterModal
-              asModal={false}
-              fields={activeFields}
-              filters={filters}
-              onFiltersChange={setFilters}
-              onApply={() => { handleSearch(); setShowFilters(false); }}
-              onClose={() => setShowFilters(false)}
-              onSave={searched && results.length > 0 ? () => { setShowFilters(false); setShowSave(true); } : undefined}
-            />
+            <div style={{ marginBottom:24 }}>
+              <FilterModal
+                asModal={false}
+                fields={activeFields}
+                filters={filters}
+                onFiltersChange={setFilters}
+                onApply={() => { handleSearch(); setShowFilters(false); }}
+                onClose={() => setShowFilters(false)}
+                onSave={searched && results.length > 0 ? () => { setShowFilters(false); setShowSave(true); } : undefined}
+              />
+            </div>
           )}
 
           {/* Save search dialog */}
@@ -449,32 +451,32 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
           )}
 
           {!loading && results.length>0 && (
-            <div>
+            <div style={{ marginTop: showFilters ? 0 : 8 }}>
               {/* Results by object */}
               {objects.map(obj => {
                 const recs = objResults(obj.id);
                 if (!recs.length) return null;
                 return (
-                  <div key={obj.id} style={{ marginBottom:24 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                      <div style={{ width:24, height:24, borderRadius:6, background:obj.color||C.accent, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <Ic n={OBJECT_ICONS[obj.slug]||"layers"} s={12} c="white"/>
+                  <div key={obj.id} style={{ marginBottom:32 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, paddingBottom:10, borderBottom:`1.5px solid ${C.border}` }}>
+                      <div style={{ width:26, height:26, borderRadius:7, background:obj.color||C.accent, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <Ic n={OBJECT_ICONS[obj.slug]||"layers"} s={13} c="white"/>
                       </div>
-                      <span style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{obj.plural_name}</span>
-                      <span style={{ fontSize:11, color:C.text3, background:"#f3f4f6", borderRadius:99, padding:"1px 8px", fontWeight:600 }}>{recs.length}</span>
+                      <span style={{ fontSize:14, fontWeight:700, color:C.text1 }}>{obj.plural_name}</span>
+                      <span style={{ fontSize:11, color:"white", background:obj.color||C.accent, borderRadius:99, padding:"2px 9px", fontWeight:700 }}>{recs.length}</span>
                     </div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                       {recs.slice(0,10).map(r => (
                         <ResultCard key={r.id} record={r} fields={fields[obj.id]||[]} object={obj} query={query} onClick={()=>onNavigateToRecord?.(r)}/>
                       ))}
                       {recs.length>10 && (
-                        <div style={{ fontSize:12, color:C.text3, textAlign:"center", padding:"6px 0" }}>+{recs.length-10} more results</div>
+                        <div style={{ fontSize:12, color:C.text3, textAlign:"center", padding:"8px 0" }}>+{recs.length-10} more results</div>
                       )}
                     </div>
                   </div>
                 );
               })}
-              <div style={{ fontSize:12, color:C.text3, textAlign:"center", padding:"12px 0" }}>{results.length} total result{results.length!==1?"s":""}</div>
+              <div style={{ fontSize:12, color:C.text3, textAlign:"center", padding:"16px 0", borderTop:`1px solid ${C.border}`, marginTop:8 }}>{results.length} total result{results.length!==1?"s":""}</div>
             </div>
           )}
 
