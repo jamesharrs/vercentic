@@ -1746,7 +1746,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       .map(p => ({ record: p, ...matchCandidateToJob(p, currentRecord) }))
       .sort((a, b) => b.score - a.score)
       .filter(m => m.score > 0)
-      .slice(0, 20);
+      .slice(0, 10);
   }, [currentRecord, currentObject, allPeople]);
   const [settingsSection, setSettingsSection] = useState(null);
   const [editorContext,   setEditorContext]   = useState(null); // { type, name, ... } from sub-editors
@@ -1967,9 +1967,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const scored = allPeople
         .map(p=>({ person:p, ...matchCandidateToJob(p, currentRecord) }))
         .sort((a,b)=>b.score-a.score)
-        .slice(0,20);
+        .slice(0,10);
       parts.push('');
-      parts.push(`REAL CANDIDATE MATCH SCORES — ${allPeople.length} candidates scored against this job by the AI matching engine.`);
+      parts.push(`REAL CANDIDATE MATCH SCORES — top 10 of ${allPeople.length} candidates scored against this job by the AI matching engine.`);
       parts.push('When user asks to "suggest candidates", "who fits", "recommend people", "find candidates", or similar:');
       parts.push('1. USE THESE SCORES DIRECTLY — do NOT use <SEARCH_QUERY>');
       parts.push('2. Output <RECOMMEND_CANDIDATES/> on its own line — this renders an interactive scored card list');
