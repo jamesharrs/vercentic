@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   push:
     branches: [develop]
+  workflow_call:  # allows deploy-production.yml to call this as a reusable workflow
 
 jobs:
   # ── 1. Build check ───────────────────────────────────────────────────────────
