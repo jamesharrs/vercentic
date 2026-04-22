@@ -1925,7 +1925,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
       )}
 
       {showCreate && <CreateObjectModal selEnv={selEnv} onCreated={()=>{ reloadObjects(); }} onClose={()=>setShowCreate(false)}/>}
-      {(showField||editField) && <FieldModal field={editField} selEnv={selEnv} selObj={selObj} onSaved={reloadFields} onClose={()=>{setShowField(false);setEditField(null);}}/>}
+      {(showField||editField) && <FieldModal field={editField} selEnv={selEnv} selObj={selObj} onSaved={()=>{}} onClose={()=>{setShowField(false);setEditField(null);setTimeout(reloadFields,150);}}/>}
     </div>
   );
 };
