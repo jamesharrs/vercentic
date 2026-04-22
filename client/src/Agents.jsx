@@ -535,7 +535,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
   });
 
   useEffect(()=>{ api.get('/agents/meta').then(setMeta).catch(()=>{}); },[]);
-  useEffect(()=>{ api.get('/question-bank').then(d=>setQuestions(Array.isArray(d)?d:[])).catch(()=>{}); },[]);
+  useEffect(()=>{ api.get('/question-bank/questions').then(d=>setQuestions(Array.isArray(d)?d:[])).catch(()=>{}); },[]);
   useEffect(()=>{ if(form.target_object_id) api.get(`/fields?object_id=${form.target_object_id}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{}); },[form.target_object_id]);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -719,6 +719,23 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                         </div>
                       )}
                       {a.type==='add_note'&&(<textarea value={a.note_template} onChange={e=>updateAction(i,'note_template',e.target.value)} placeholder="Note text. Use {{ai_output}} to include AI result…" rows={2} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>)}
+                      {a.type==='send_email'&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          <input value={a.email_subject||''} onChange={e=>updateAction(i,'email_subject',e.target.value)}
+                            placeholder="Email subject… (use {{first_name}}, {{job_title}} etc.)"
+                            style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>
+                          <textarea value={a.email_body||''} onChange={e=>updateAction(i,'email_body',e.target.value)}
+                            placeholder={"Email body…\n\nAvailable variables: {{first_name}}, {{last_name}}, {{email}}, {{job_title}}, {{ai_output}}\n\nLeave blank to let AI generate the email from context."}
+                            rows={5} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,resize:"vertical"}}/>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            <select value={a.email_tone||'professional'} onChange={e=>updateAction(i,'email_tone',e.target.value)}
+                              style={{flex:1,padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,background:"white"}}>
+                              {['professional','friendly','concise','formal'].map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+                            </select>
+                            <div style={{flex:2,fontSize:11,color:C.text3,lineHeight:1.4}}>Tone is used when AI generates the email. Leave subject &amp; body blank to fully auto-generate.</div>
+                          </div>
+                        </div>
+                      )}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
                       {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
                       {a.type==='interview_coordinator'&&(
@@ -1107,9 +1124,9 @@ export default function AgentsModule({ environment }) {
   const [search, setSearch] = useState('');
   const [expandRun, setExpandRun] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent=false) => {
     if(!environment?.id) return;
-    setLoading(true);
+    if(!silent) setLoading(true);
     const [agentsData, objectsData, dashData, feedData] = await Promise.all([
       api.get(`/agents?environment_id=${environment.id}`),
       api.get(`/objects?environment_id=${environment.id}`),
@@ -1122,11 +1139,12 @@ export default function AgentsModule({ environment }) {
     setDash(dashData && !dashData.error ? dashData : null);
     setFeed(feedData && !feedData.error ? feedData : null);
     setPendingCount(aList.reduce((s,a) => s+(a.pending_approvals||0), 0));
-    setLoading(false);
+    if(!silent) setLoading(false);
   }, [environment?.id]);
 
   useEffect(()=>{load();},[load]);
-  useEffect(()=>{ const t=setInterval(load,30000); return ()=>clearInterval(t); },[load]);
+  // Background refresh — silent=true so it never flashes the loading state
+  useEffect(()=>{ const t=setInterval(()=>load(true),30000); return ()=>clearInterval(t); },[load]);
 
   const handleUseTemplate = (tpl) => {
     setShowLibrary(false);
