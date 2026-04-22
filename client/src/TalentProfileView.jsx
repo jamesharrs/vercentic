@@ -387,6 +387,102 @@ const CustomFieldsSection = ({ fields, data, fieldIds }) => {
 };
 
 // ── Main TalentProfileView modal ─────────────────────────────────────────────
+// ── ProfileStageDropdown — styled stage picker for talent profile panel ──────
+function ProfileStageDropdown({ steps, currentId, onMove }) {
+  const [open, setOpen] = useState(false);
+  const [hov,  setHov]  = useState(null);
+  const [pos,  setPos]  = useState({});
+  const btnRef = useRef(null);
+  const current = steps.find(s => s.id === currentId) || steps[0];
+
+  const handleOpen = e => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const flipX = r.right + 200 > window.innerWidth - 12;
+      setPos({ top: r.bottom + 4, left: flipX ? r.right : r.left, flipX });
+    }
+    setOpen(v => !v);
+  };
+
+  const dropdown = open && ReactDOM.createPortal(
+    <>
+      <div style={{ position:'fixed', inset:0, zIndex:9990 }} onMouseDown={() => setOpen(false)}/>
+      <div style={{
+        position:'fixed', top: pos.top,
+        left: pos.left,
+        transform: pos.flipX ? 'translateX(-100%)' : 'none',
+        background:'#1e1b4b', border:'1px solid rgba(255,255,255,.15)', borderRadius:12,
+        boxShadow:'0 16px 40px rgba(0,0,0,.5)', zIndex:9999,
+        minWidth: Math.max(180, btnRef.current?.offsetWidth || 180),
+        maxHeight:320, overflowY:'auto', fontFamily:F,
+      }}>
+        <div style={{ padding:'8px 12px 6px', borderBottom:'1px solid rgba(255,255,255,.1)',
+          fontSize:10, fontWeight:700, color:'rgba(255,255,255,.45)',
+          textTransform:'uppercase', letterSpacing:'0.07em',
+          display:'flex', alignItems:'center', gap:4 }}>
+          <Ic n="zap" s={10} c="rgba(255,255,255,.4)"/> Move to stage
+        </div>
+        {steps.map(s => {
+          const isCurrent = s.id === currentId;
+          const hasAuto   = (s.actions||[]).some(a=>a.type);
+          return (
+            <button key={s.id}
+              onClick={e => { e.stopPropagation(); onMove(s); setOpen(false); }}
+              onMouseEnter={() => setHov(s.id)} onMouseLeave={() => setHov(null)}
+              style={{ width:'100%', display:'flex', alignItems:'center', gap:9, padding:'9px 13px',
+                border:'none', textAlign:'left', fontFamily:F, cursor:'pointer',
+                background: isCurrent ? 'rgba(255,255,255,.12)' : hov===s.id ? 'rgba(255,255,255,.07)' : 'transparent',
+                transition:'background .1s' }}>
+              <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0,
+                background: isCurrent ? 'white' : 'rgba(255,255,255,.2)',
+                display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {isCurrent && <div style={{ width:6, height:6, borderRadius:'50%', background:PURPLE }}/>}
+              </div>
+              <span style={{ fontSize:13, fontWeight: isCurrent?700:400,
+                color: isCurrent ? 'white' : 'rgba(255,255,255,.75)', flex:1 }}>{s.name}</span>
+              {hasAuto && (
+                <span style={{ display:'inline-flex', alignItems:'center', gap:2,
+                  fontSize:9, background:'rgba(245,158,11,.2)', color:'#fcd34d',
+                  padding:'2px 6px', borderRadius:99, fontWeight:700,
+                  border:'1px solid rgba(245,158,11,.3)', whiteSpace:'nowrap' }}>
+                  <Ic n="zap" s={8} c="#fcd34d"/>auto
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </>,
+    document.body
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ width:'100%', display:'flex', alignItems:'center', gap:6,
+          padding:'7px 12px', borderRadius:8, cursor:'pointer', fontFamily:F,
+          border:'1.5px solid rgba(255,255,255,.25)',
+          background: open ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.12)',
+          color:'white', fontSize:12, fontWeight:700, transition:'all .12s' }}>
+        <span style={{ flex:1, textAlign:'left' }}>{current?.name || 'Stage'}</span>
+        {(current?.actions||[]).some(a=>a.type) && (
+          <span style={{ display:'inline-flex', alignItems:'center', gap:2,
+            fontSize:9, background:'rgba(245,158,11,.2)', color:'#fcd34d',
+            padding:'2px 6px', borderRadius:99, fontWeight:700,
+            border:'1px solid rgba(245,158,11,.3)' }}>
+            <Ic n="zap" s={8} c="#fcd34d"/>auto
+          </span>
+        )}
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink:0, opacity:.5 }}>
+          <path d="M2 3.5l3 3 3-3" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
 export default function TalentProfileView({ link, allLinks, onNavigateProfile, matchScore, environmentId, onClose, onNavigate, onMoveStage, steps }) {
   const [profileData, setProfileData] = useState(null);
   const [config, setConfig]           = useState(null);
@@ -552,10 +648,10 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
           {steps?.length > 0 && (
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, opacity:.6, fontWeight:700, textTransform:'uppercase', marginBottom:6 }}>Current Stage</div>
-              <select value={link.stage_id||''} onChange={e=>{const s=steps.find(st=>st.id===e.target.value);if(s&&onMoveStage)onMoveStage(link.id,s);}}
-                style={{ width:'100%', padding:'6px 10px', borderRadius:8, border:'1.5px solid rgba(255,255,255,.3)', background:'rgba(255,255,255,.15)', color:'white', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F, outline:'none' }}>
-                {steps.map(s=><option key={s.id} value={s.id} style={{ color:'#111', background:'white' }}>{s.name}</option>)}
-              </select>
+              <ProfileStageDropdown
+                steps={steps} currentId={link.stage_id}
+                onMove={s => onMoveStage && onMoveStage(link.id, s)}
+              />
               <div style={{ display:'flex', gap:6, marginTop:8 }}>
                 <button onClick={()=>prevStep&&onMoveStage&&onMoveStage(link.id,prevStep)} disabled={!prevStep}
                   style={{ flex:1, padding:'5px 0', borderRadius:7, border:'1.5px solid rgba(255,255,255,.25)', background:prevStep?'rgba(255,255,255,.15)':'rgba(255,255,255,.05)', color:prevStep?'white':'rgba(255,255,255,.3)', fontSize:11, fontWeight:600, cursor:prevStep?'pointer':'default', fontFamily:F }}>

@@ -3407,10 +3407,11 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                           })}
                           {/* Stage — always last before actions */}
                           <td style={{ padding:"7px 8px" }}>
-                            <select value={link.stage_id||""} onChange={e=>{const s=plSteps.find(st=>st.id===e.target.value);if(s)moveStage(link.id,s);}}
-                              style={{ padding:"3px 7px", borderRadius:20, fontSize:11, fontWeight:700, border:`1.5px solid #c4b5fd`, background:"#ede9fe", color:"#6d28d9", cursor:"pointer", fontFamily:F, outline:"none" }}>
-                              {plSteps.map(s=>{ const ha=(s.actions||[]).some(a=>a.type); return <option key={s.id} value={s.id}>{s.name}</option>; })}
-                            </select>
+                            <CardStageDropdown
+                              steps={plSteps} currentId={link.stage_id}
+                              onMove={s => moveStage(link.id, s)}
+                              onRemove={() => removeLink(link.id)}
+                            />
                           </td>
                           <td style={{ padding:"7px 4px" }}>
                             <button onClick={()=>removeLink(link.id)} title="Remove"
