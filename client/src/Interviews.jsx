@@ -856,6 +856,9 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
   const [jobDropOpen, setJobDropOpen] = useState(false);
   const [jobSearch, setJobSearch] = useState("");
   const jobTriggerRef = useRef(null);
+  const [candDropOpen, setCandDropOpen] = useState(false);
+  const [candSearch, setCandSearch] = useState("");
+  const candTriggerRef = useRef(null);
   const [jobInterviewers, setJobInterviewers] = useState([]);
   const [availableAgents, setAvailableAgents] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -980,10 +983,90 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
                     fontSize:13, fontWeight:600, color:C.text1, background:"#f8fafc" }}>
                     {bulkCandidates[bulkIdx]?.name}
                   </div>
-                : <select value={form.candidate_id||""} onChange={e=>{ const c=candidates.find(c=>c.id===e.target.value); set("candidate_id",c?.id||null); set("candidate_name",c?.name||""); }} style={inpSt}>
-                    <option value="">Select candidate…</option>
-                    {candidates.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                : (() => {
+                    const filteredCands = candSearch
+                      ? candidates.filter(c => c.name.toLowerCase().includes(candSearch.toLowerCase()))
+                      : candidates;
+                    const selectedCand = candidates.find(c => c.id === form.candidate_id);
+                    return (
+                      <div style={{position:"relative"}}>
+                        {/* Trigger */}
+                        <button type="button" ref={candTriggerRef}
+                          onClick={() => { setCandDropOpen(v => !v); setCandSearch(""); }}
+                          style={{
+                            ...inpSt, display:"flex", alignItems:"center", justifyContent:"space-between",
+                            cursor:"pointer", textAlign:"left", padding:"8px 12px",
+                          }}>
+                          <span style={{color: selectedCand ? C.text1 : C.text3, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                            {selectedCand ? selectedCand.name : "Search candidates…"}
+                          </span>
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                            style={{flexShrink:0, transform: candDropOpen ? "rotate(180deg)":"none", transition:"transform .15s"}}>
+                            <path d="M6 9l6 6 6-6"/>
+                          </svg>
+                        </button>
+
+                        {candDropOpen && ReactDOM.createPortal(
+                          <div onMouseDown={e=>e.stopPropagation()}>
+                            <div style={{position:"fixed",inset:0,zIndex:3999}} onClick={()=>setCandDropOpen(false)}/>
+                            <div style={{
+                              position:"fixed", zIndex:4000,
+                              top: (candTriggerRef.current?.getBoundingClientRect().bottom ?? 200) + 4,
+                              left: candTriggerRef.current?.getBoundingClientRect().left ?? 100,
+                              width: candTriggerRef.current?.getBoundingClientRect().width ?? 360,
+                              background:"white", borderRadius:12,
+                              border:`1.5px solid ${C.border}`,
+                              boxShadow:"0 8px 32px rgba(0,0,0,0.12)",
+                              overflow:"hidden", maxHeight:300, display:"flex", flexDirection:"column",
+                            }}>
+                              {/* Search */}
+                              <div style={{padding:"8px 10px", borderBottom:`1px solid ${C.border}`, flexShrink:0}}>
+                                <input autoFocus value={candSearch} onChange={e=>setCandSearch(e.target.value)}
+                                  placeholder="Search by name…"
+                                  style={{...inpSt, padding:"6px 10px", fontSize:12}}/>
+                              </div>
+                              {/* Options */}
+                              <div style={{overflowY:"auto", flex:1}}>
+                                {filteredCands.length === 0
+                                  ? <div style={{padding:"16px 14px",color:C.text3,fontSize:12,textAlign:"center"}}>No candidates found</div>
+                                  : filteredCands.map(c => {
+                                      const sel = form.candidate_id === c.id;
+                                      const initials = c.name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
+                                      return (
+                                        <div key={c.id}
+                                          onClick={()=>{ set("candidate_id",c.id); set("candidate_name",c.name); setCandDropOpen(false); setCandSearch(""); }}
+                                          style={{padding:"8px 14px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:10,
+                                            background:sel?C.accentLight:"transparent",
+                                            color:sel?C.accent:C.text1, fontWeight:sel?600:400}}
+                                          onMouseEnter={e=>{ if(!sel) e.currentTarget.style.background=C.surface2; }}
+                                          onMouseLeave={e=>{ if(!sel) e.currentTarget.style.background="transparent"; }}>
+                                          {/* Avatar */}
+                                          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+                                            background:sel?C.accent:`${C.accent}18`,
+                                            display:"flex",alignItems:"center",justifyContent:"center",
+                                            fontSize:10,fontWeight:700,color:sel?"white":C.accent}}>
+                                            {initials||"?"}
+                                          </div>
+                                          <span style={{flex:1}}>{c.name}</span>
+                                          {sel && <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>}
+                                        </div>
+                                      );
+                                    })
+                                }
+                              </div>
+                              {/* Count badge */}
+                              {candSearch && (
+                                <div style={{padding:"5px 12px",fontSize:10,color:C.text3,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                                  {filteredCands.length} of {candidates.length} candidates
+                                </div>
+                              )}
+                            </div>
+                          </div>,
+                          document.body
+                        )}
+                      </div>
+                    );
+                  })()
               }
             </div>
             <div style={{position:"relative"}}>
