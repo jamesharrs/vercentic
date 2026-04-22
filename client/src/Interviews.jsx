@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import api from './apiClient.js';
 import CalendarView from "./CalendarView";
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
@@ -851,6 +852,10 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
   const [bulkIdx, setBulkIdx] = useState(0); // which bulk candidate we're scheduling
   const [candidates, setCandidates] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [candidateLinkedJobIds, setCandidateLinkedJobIds] = useState(null); // null = no filter, [] = no links
+  const [jobDropOpen, setJobDropOpen] = useState(false);
+  const [jobSearch, setJobSearch] = useState("");
+  const jobTriggerRef = useRef(null);
   const [jobInterviewers, setJobInterviewers] = useState([]);
   const [availableAgents, setAvailableAgents] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -884,6 +889,21 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
       setAvailableAgents(filtered);
     }).catch(() => {});
   }, [envId]);
+
+  // When candidate changes, fetch their linked jobs to filter the dropdown
+  useEffect(() => {
+    if (!form.candidate_id || !envId) { setCandidateLinkedJobIds(null); return; }
+    // If linkedJobIds was passed as a prop, use that directly
+    if (linkedJobIds?.length) { setCandidateLinkedJobIds(linkedJobIds); return; }
+    // Otherwise fetch pipeline links for this person
+    api.get(`/records/people-links?person_id=${form.candidate_id}&environment_id=${envId}`)
+      .then(d => {
+        const links = Array.isArray(d) ? d : (d.links || []);
+        const jobIds = [...new Set(links.map(l => l.record_id).filter(Boolean))];
+        setCandidateLinkedJobIds(jobIds.length ? jobIds : null); // null = show all if no links found
+      })
+      .catch(() => setCandidateLinkedJobIds(null));
+  }, [form.candidate_id, envId, linkedJobIds]);
 
   // When job changes, load its interviewers and pre-check them
   useEffect(() => {
@@ -966,12 +986,104 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
                   </select>
               }
             </div>
-            <div>
+            <div style={{position:"relative"}}>
               <label style={labelSt}>Job (optional)</label>
-              <select value={form.job_id||""} onChange={e=>{ const j=jobs.find(j=>j.id===e.target.value); set("job_id",j?.id||null); set("job_name",j?.name||""); }} style={inpSt}>
-                <option value="">Select job…</option>
-                {(linkedJobIds?.length ? jobs.filter(j=>linkedJobIds.includes(j.id)) : jobs).map(j=><option key={j.id} value={j.id}>{j.name}</option>)}
-              </select>
+              {(() => {
+                // Filter jobs: prefer candidate's linked jobs, fall back to prop, then all
+                const activeFilter = candidateLinkedJobIds ?? (linkedJobIds?.length ? linkedJobIds : null);
+                const visibleJobs  = activeFilter ? jobs.filter(j => activeFilter.includes(j.id)) : jobs;
+                const filteredJobs = jobSearch
+                  ? visibleJobs.filter(j => j.name.toLowerCase().includes(jobSearch.toLowerCase()))
+                  : visibleJobs;
+                const selectedJob  = jobs.find(j => j.id === form.job_id);
+                return (
+                  <div style={{position:"relative"}}>
+                    {/* Trigger button */}
+                    <button type="button"
+                      ref={jobTriggerRef}
+                      onClick={() => { setJobDropOpen(v => !v); setJobSearch(""); }}
+                      style={{
+                        ...inpSt, display:"flex", alignItems:"center", justifyContent:"space-between",
+                        cursor:"pointer", textAlign:"left", padding:"8px 12px",
+                      }}>
+                      <span style={{color: selectedJob ? C.text1 : C.text3, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                        {selectedJob ? selectedJob.name : "Select job…"}
+                      </span>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                        style={{flexShrink:0, transform: jobDropOpen ? "rotate(180deg)":"none", transition:"transform .15s"}}>
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </button>
+
+                    {/* Dropdown panel */}
+                    {jobDropOpen && ReactDOM.createPortal(
+                      <div onMouseDown={e=>e.stopPropagation()}>
+                        {/* Backdrop */}
+                        <div style={{position:"fixed",inset:0,zIndex:3999}} onClick={()=>setJobDropOpen(false)}/>
+                        {/* Panel — positioned below trigger button */}
+                        <div style={{
+                          position:"fixed",
+                          zIndex:4000,
+                          top: (jobTriggerRef.current?.getBoundingClientRect().bottom ?? 200) + 4,
+                          left: jobTriggerRef.current?.getBoundingClientRect().left ?? 100,
+                          width: jobTriggerRef.current?.getBoundingClientRect().width ?? 360,
+                          background:"white", borderRadius:12,
+                          border:`1.5px solid ${C.border}`,
+                          boxShadow:"0 8px 32px rgba(0,0,0,0.12)",
+                          overflow:"hidden",
+                          maxHeight:280, display:"flex", flexDirection:"column",
+                        }}>
+                          {/* Search */}
+                          <div style={{padding:"8px 10px", borderBottom:`1px solid ${C.border}`, flexShrink:0}}>
+                            <input autoFocus
+                              value={jobSearch} onChange={e=>setJobSearch(e.target.value)}
+                              placeholder="Search jobs…"
+                              style={{...inpSt, padding:"6px 10px", fontSize:12, border:`1.5px solid ${C.border}`}}/>
+                          </div>
+                          {/* Options */}
+                          <div style={{overflowY:"auto", flex:1}}>
+                            {/* Clear option */}
+                            <div onClick={()=>{ set("job_id",null); set("job_name",""); setJobDropOpen(false); setJobSearch(""); }}
+                              style={{padding:"9px 14px", fontSize:13, color:C.text3, cursor:"pointer", display:"flex",alignItems:"center",gap:8,
+                                background: !form.job_id ? C.accentLight:"transparent"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                              onMouseLeave={e=>e.currentTarget.style.background=!form.job_id?C.accentLight:"transparent"}>
+                              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth={2}><path d="M20 6L9 17l-5-5"/></svg>
+                              <span>No job selected</span>
+                            </div>
+                            {filteredJobs.length === 0
+                              ? <div style={{padding:"16px 14px",color:C.text3,fontSize:12,textAlign:"center"}}>
+                                  {activeFilter ? "No linked jobs found for this candidate" : "No jobs available"}
+                                </div>
+                              : filteredJobs.map(j => {
+                                  const sel = form.job_id === j.id;
+                                  return (
+                                    <div key={j.id}
+                                      onClick={()=>{ set("job_id",j.id); set("job_name",j.name); setJobDropOpen(false); setJobSearch(""); }}
+                                      style={{padding:"9px 14px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8,
+                                        background:sel?C.accentLight:"transparent",color:sel?C.accent:C.text1,fontWeight:sel?600:400}}
+                                      onMouseEnter={e=>{ if(!sel) e.currentTarget.style.background=C.surface2; }}
+                                      onMouseLeave={e=>{ if(!sel) e.currentTarget.style.background="transparent"; }}>
+                                      {sel && <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>}
+                                      <span style={{flex:1}}>{j.name}</span>
+                                    </div>
+                                  );
+                                })
+                            }
+                          </div>
+                          {/* Footer badge when filtered */}
+                          {activeFilter && (
+                            <div style={{padding:"6px 12px",fontSize:10,color:C.accent,fontWeight:600,borderTop:`1px solid ${C.border}`,background:C.accentLight,flexShrink:0}}>
+                              Showing {filteredJobs.length} job{filteredJobs.length!==1?"s":""} linked to this candidate
+                            </div>
+                          )}
+                        </div>
+                      </div>,
+                      document.body
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div>
