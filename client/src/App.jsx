@@ -2172,14 +2172,20 @@ function App({ onEnvReady }) {
   useEffect(() => {
     const handler = (e) => {
       const { fieldKey, fieldLabel, fieldValue, fieldDisplay, objectSlug } = e.detail || {};
-      if (!fieldKey || fieldValue === undefined) return;
       const { activeNav: nav, navObjects: objs, setFilterPreset: sfp, setActiveNav: sna } = filterNavRef.current;
-      sfp({ fieldKey, fieldLabel, fieldValue, fieldDisplay });
+      // Navigate to an object list — with or without a filter
+      // fieldKey=="" means navigate only, no filter
+      if (fieldKey) {
+        sfp({ fieldKey, fieldLabel, fieldValue, fieldDisplay });
+      } else {
+        sfp(null); // clear any stale filter so the list shows all records
+      }
       // If objectSlug provided (e.g. from dashboard), navigate to that object
       if (objectSlug) {
         const obj = objs.find(o => o.slug === objectSlug);
         if (obj) { sna(`obj_${obj.id}`); return; }
       }
+      if (!fieldKey) return; // navigation already handled above if objectSlug was set
       if (nav.startsWith("record_")) {
         const objectId = nav.split("_")[2];
         sna(`obj_${objectId}`);

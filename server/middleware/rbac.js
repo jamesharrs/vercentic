@@ -181,18 +181,10 @@ function seedDefaultPermissions(store) {
   }
   if (patched > 0) console.log(`✅ Patched ${patched} missing record-level permissions`);
 
-  // Seed other roles only if they are missing record-level flags (check for newest flags)
-  const hasAllRecordFlags = store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_view_comms' && p.allowed)
-    && store.permissions.some(p => p.object_slug === '__global__' && p.action === 'record_create_offer' && p.allowed);
-  if (hasAllRecordFlags) return; // already fully seeded
-
-  // Clear non-super-admin global perms and re-seed
-  if (superAdminRole) {
-    store.permissions = store.permissions.filter(p => p.role_id === superAdminRole.id);
-  } else {
-    store.permissions = [];
-  }
-
+  // Idempotent full seed — add any entirely missing role×object×action combos.
+  // NEVER wipe existing permissions — only add what's absent.
+  // This is safe to run on every boot.
+  let seeded = 0;
   for (const role of (store.roles || [])) {
     if (role.slug === 'super_admin') continue; // already handled above
     const defaults = roleDefaults[role.slug];
@@ -200,14 +192,20 @@ function seedDefaultPermissions(store) {
     for (const [objSlug, allowed] of Object.entries(defaults)) {
       const allActions = objSlug === '__global__' ? GLOBAL_ACTIONS : Object.values(ACTIONS);
       for (const action of allActions) {
-        store.permissions.push({
-          id: uuidv4(), role_id: role.id, object_slug: objSlug,
-          action, allowed: allowed.includes(action) ? 1 : 0, created_at: now
-        });
+        const existing = store.permissions.find(p =>
+          p.role_id === role.id && p.object_slug === objSlug && p.action === action
+        );
+        if (!existing) {
+          store.permissions.push({
+            id: uuidv4(), role_id: role.id, object_slug: objSlug,
+            action, allowed: allowed.includes(action) ? 1 : 0, created_at: now
+          });
+          seeded++;
+        }
       }
     }
   }
-  console.log(`✅ Seeded ${store.permissions.length} permissions across ${(store.roles||[]).length} roles`);
+  if (seeded > 0) console.log(`✅ Seeded ${seeded} missing permissions for non-super-admin roles`);
 }
 
 /**

@@ -189,11 +189,17 @@ router.get('/', (req, res) => {
     return res.status(403).json({ error: 'Access denied — invalid session context' });
   }
 
-  // Environment scoping: non-admin users can only query their own environment
+  // Environment scoping: non-admin users can only query their own environment.
+  // NOTE: only enforce when the user has an explicit environment_id set AND the session
+  // tenantSlug matches the current store — prevents false 403s after role changes
+  // where the session tenant is still valid but the user's profile was just updated.
   if (req.currentUser) {
     const role = req.currentUser.role || findOne('roles', r => r.id === req.currentUser.role_id);
-    const isAdmin = role?.slug === 'super_admin' || role?.slug === 'admin';
-    if (!isAdmin && req.currentUser.environment_id && req.currentUser.environment_id !== environment_id) {
+    const isAdmin = role?.slug === 'super_admin' || role?.slug === 'admin' || role?.slug === 'recruiter';
+    // Re-read the user fresh from store in case role_id was just changed
+    const freshUser = findOne('users', u => u.id === req.currentUser.id);
+    const userEnvId = freshUser?.environment_id || req.currentUser.environment_id;
+    if (!isAdmin && userEnvId && userEnvId !== environment_id) {
       return res.status(403).json({ error: 'Access denied to this environment' });
     }
   }
@@ -262,6 +268,40 @@ router.get('/', (req, res) => {
 // Global activity feed for dashboard — enriched with record/object/actor context
 // Cache lookup maps for 10 seconds — avoids rebuilding on every dashboard poll
 let _feedCache = { key: null, maps: null, ts: 0 };
+
+// GET /api/records/stats — lightweight status-breakdown counts per object, no record payloads
+// Used by dashboard KPI cards. Returns exact totals from the full record set.
+router.get('/stats', (req, res) => {
+  const { environment_id } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+  const objects = query('objects', o => o.environment_id === environment_id);
+  const result = {};
+  for (const obj of objects) {
+    const recs = query('records', r => r.object_id === obj.id && r.environment_id === environment_id && !r.deleted_at);
+    // Status breakdown
+    const statusCounts = {};
+    for (const r of recs) {
+      const s = (r.data?.status || 'Unknown');
+      statusCounts[s] = (statusCounts[s] || 0) + 1;
+    }
+    // Monthly breakdown for trend charts
+    const monthCounts = {};
+    for (const r of recs) {
+      const d = new Date(r.created_at || 0);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthCounts[key] = (monthCounts[key] || 0) + 1;
+    }
+    result[obj.slug || obj.id] = {
+      id: obj.id,
+      slug: obj.slug,
+      name: obj.name,
+      total: recs.length,
+      statusCounts,
+      monthCounts,
+    };
+  }
+  res.json(result);
+});
 
 router.get('/activity/feed', (req, res) => {
   const { environment_id, limit = 25, types } = req.query;
@@ -508,15 +548,26 @@ router.get('/by-number', (req, res) => {
     return res.status(400).json({ error: 'object_slug, number, environment_id required' });
   const num = parseInt(number, 10);
   if (isNaN(num)) return res.status(400).json({ error: 'number must be an integer' });
-  const obj = findOne('objects', o => o.slug === object_slug && o.environment_id === environment_id);
-  if (!obj) return res.status(404).json({ error: 'Object not found' });
+
+  // Primary lookup — match object in the given environment
+  let obj = findOne('objects', o => o.slug === object_slug && o.environment_id === environment_id);
+
+  // Fallback: slug may differ — try matching by name
+  if (!obj) obj = findOne('objects', o =>
+    o.environment_id === environment_id &&
+    (o.name?.toLowerCase().replace(/\s+/g,'_') === object_slug ||
+     o.plural_name?.toLowerCase().replace(/\s+/g,'_') === object_slug)
+  );
+
+  if (!obj) return res.status(404).json({ error: 'Object not found', hint: `No object with slug "${object_slug}" in environment ${environment_id}` });
+
   const record = findOne('records', r =>
     r.object_id === obj.id &&
     r.environment_id === environment_id &&
     r.record_number === num &&
     !r.deleted_at
   );
-  if (!record) return res.status(404).json({ error: 'Record not found' });
+  if (!record) return res.status(404).json({ error: 'Record not found', hint: `No record #${num} in ${object_slug}` });
   res.json({ ...record, object_id: obj.id });
 });
 

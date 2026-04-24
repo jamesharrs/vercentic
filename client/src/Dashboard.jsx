@@ -431,19 +431,24 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
     if (!force && _cache && _cacheEnv === environment.id && Date.now() - _cacheTS < CACHE_TTL) { setData(_cache); setLoading(false); return; }
     setLoading(true);
     try {
-      const [objRes, actRes] = await Promise.all([
+      const [objRes, actRes, statsRes] = await Promise.all([
         api.get(`/objects?environment_id=${environment.id}`),
         api.get(`/records/activity/feed?environment_id=${environment.id}&limit=25`),
+        api.get(`/records/stats?environment_id=${environment.id}`),
       ]);
       const objects  = Array.isArray(objRes) ? objRes : [];
       const activity = Array.isArray(actRes) ? actRes : [];
+      const stats    = (statsRes && typeof statsRes === 'object' && !Array.isArray(statsRes)) ? statsRes : {};
 
+      // Fetch a sample of records (for charts/breakdowns) — stats endpoint gives exact totals
       const recordFetches  = objects.map(o => api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&page=1&limit=200`));
       const recordResults  = await Promise.all(recordFetches);
       const objectData     = objects.map((o, i) => {
         const res = recordResults[i];
         const records = Array.isArray(res?.records) ? res.records : [];
-        return { ...o, records, total: res?.pagination?.total ?? records.length };
+        // Use stats endpoint for accurate totals (not limited by fetch page size)
+        const objStats = stats[o.slug] || stats[o.id] || {};
+        return { ...o, records, total: objStats.total ?? res?.pagination?.total ?? records.length, stats: objStats };
       });
 
       const now    = new Date();
@@ -528,12 +533,30 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
   const goTo = (slug, key, val) => window.dispatchEvent(new CustomEvent("talentos:filter-navigate", { detail: { objectSlug: slug, fieldKey: key, fieldValue: val } }));
   const openRpt = (cfg) => { if (onReport) onReport(cfg); else window.dispatchEvent(new CustomEvent("talentos:open-report", { detail: cfg })); };
 
-  const activeCandidates = data?.people?.records.filter(r => !r.deleted_at && !["hired","rejected","withdrawn","placed"].includes((r.data?.status || "").toLowerCase())).length ?? (loading ? null : 0);
+  // ── Accurate stat counts from the /stats endpoint (not limited by 200-record fetch) ──
+  const pStats = data?.people?.stats?.statusCounts || {};
+  const jStats = data?.jobs?.stats?.statusCounts   || {};
+
+  // Total candidates = full count from server
   const totalCandidates  = data?.people?.total ?? (loading ? null : 0);
-  const openRoles        = data?.jobs?.records.filter(r => !r.deleted_at && !["filled","closed","cancelled"].includes((r.data?.status || "").toLowerCase())).length ?? (loading ? null : 0);
-  const totalJobs        = data?.jobs?.total ?? (loading ? null : 0);
-  const poolCount        = data?.pools?.total ?? (loading ? null : 0);
-  const totalPlacements  = data?.people?.records.filter(r => (r.data?.status || "").toLowerCase() === "hired").length ?? (loading ? null : 0);
+  // Active = not in terminal states — derived from server status breakdown
+  const TERMINAL_P = ["hired","rejected","withdrawn","placed","inactive"];
+  const activeCandidates = loading ? null
+    : Object.entries(pStats).reduce((sum, [s, c]) => TERMINAL_P.includes(s.toLowerCase()) ? sum : sum + c, 0)
+      || data?.people?.records.filter(r => !r.deleted_at && !TERMINAL_P.includes((r.data?.status||"").toLowerCase())).length || 0;
+
+  // Open roles — sum statuses that are NOT filled/closed/cancelled
+  const CLOSED_J = ["filled","closed","cancelled"];
+  const openRoles = loading ? null
+    : Object.entries(jStats).reduce((sum, [s, c]) => CLOSED_J.includes(s.toLowerCase()) ? sum : sum + c, 0)
+      || data?.jobs?.records.filter(r => !r.deleted_at && !CLOSED_J.includes((r.data?.status||"").toLowerCase())).length || 0;
+
+  const totalJobs       = data?.jobs?.total  ?? (loading ? null : 0);
+  const poolCount       = data?.pools?.total ?? (loading ? null : 0);
+  // Placed = people with status "hired" — from server status breakdown for accuracy
+  const totalPlacements = loading ? null
+    : (pStats["Hired"] || pStats["hired"] || 0)
+      || data?.people?.records.filter(r => (r.data?.status||"").toLowerCase() === "hired").length || 0;
 
   // Interviews today (from any interview data on records)
   const interviewsToday  = 0; // placeholder — wire to interviews API when available
@@ -601,7 +624,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           tag={momP !== null ? (momP >= 0 ? `+${momP}%` : `${momP}%`) : null} tagUp={momP >= 0}
           color={V.purple}
           iconPath={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>}
-          onClick={() => goTo("people", "status", "Active")}
+          onClick={() => goTo("people", "", "")}
           onReport={openRpt} reportHint={{ object: "people", title: "Candidates by status", groupBy: "status", chartType: "bar" }}
         />
         <KpiCard
