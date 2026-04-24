@@ -278,8 +278,10 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
     // Always fetch fresh records directly — avoids stale-closure loop with allRecords
     const recordMap = {};
     await Promise.all(objects.map(async obj => {
-      const r = await api.get(`/records?object_id=${obj.id}&environment_id=${environment?.id}&limit=500`);
-      recordMap[obj.id] = r.records || [];
+      try {
+        const r = await api.get(`/records?object_id=${obj.id}&environment_id=${environment?.id}&limit=500`);
+        recordMap[obj.id] = Array.isArray(r) ? r : (r?.records || []);
+      } catch { recordMap[obj.id] = []; }
     }));
 
     let combined = [];

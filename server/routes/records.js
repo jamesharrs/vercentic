@@ -136,7 +136,7 @@ router.get('/avatars', (req, res) => {
 
 router.get('/search', (req, res) => {
   const { q, environment_id, limit=6 } = req.query;
-  if (!q || !environment_id) return res.json([]);
+  if (!q || !environment_id || environment_id === 'undefined') return res.json([]);
   const term = q.toLowerCase();
   const lim  = parseInt(limit);
   const objects = query('objects', o => o.environment_id === environment_id);
@@ -324,6 +324,7 @@ router.get('/activity/feed', (req, res) => {
   }
   const { recordMap, objectMap, userMap } = _feedCache.maps;
 
+  // eslint-disable-next-line no-misleading-character-class
   const stripEmoji = s => (s || "").replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F300}-\u{1F9FF}]/gu, "").trim();
 
   // Helper: get display name for a record
@@ -355,11 +356,9 @@ router.get('/activity/feed', (req, res) => {
     const actor = resolveActor(a.actor);
 
     // Map raw action to a friendly type + label
-    let type = a.action;
-    let label = '';
+    const type = a.action;
+    let label, icon, color;
     let detail = '';
-    let icon = 'edit';
-    let color = '#4361EE';
 
     switch (a.action) {
       case 'created':
@@ -390,7 +389,7 @@ router.get('/activity/feed', (req, res) => {
         label = 'Applied'; icon = 'file-text'; color = '#7C3AED';
         detail = a.details?.job_title || ''; break;
       default:
-        label = a.action.replace(/_/g, ' '); icon = 'activity'; color = '#6B7280';
+        label = a.action.replace(/_/g, ' '); icon = 'activity'; color = '#6B7280'; break;
     }
 
     entries.push({
@@ -508,7 +507,7 @@ router.get('/people-links', (req, res) => {
 
 // Linked jobs for a person — used by Communications "Related to" picker
 router.get('/linked-jobs', (req, res) => {
-  const { person_id, environment_id } = req.query;
+  const { person_id, environment_id: _environment_id } = req.query;
   if (!person_id) return res.status(400).json({ error: 'person_id required' });
   const { getStore } = require('../db/init');
   const store = getStore();
