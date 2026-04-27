@@ -1486,8 +1486,9 @@ export const recordTitle = (record, fields) => {
 };
 
 const recordSubtitle = (record, fields) => {
+  if (!record?.data) return null;
   const sub = fields.find(f=>["current_title","department","category","email"].includes(f.api_key));
-  return sub ? record.data[sub.api_key] : null;
+  return sub ? (record.data[sub.api_key] ?? null) : null;
 };
 
 /* ─── Avatar ───────────────────────────────────────────────────────────────── */
@@ -5457,7 +5458,7 @@ const UserPanel = ({ record }) => {
   useEffect(() => {
     const email = record?.data?.email;
     if (!email) { setLoading(false); return; }
-    api.get(`/users/by-email?email=${encodeURIComponent(email)}`)
+    api.get(`/users/by-email/${encodeURIComponent(email)}`)
       .then(u => { setUser(u || null); })
       .catch(() => {})
       .finally(() => setLoading(false));
