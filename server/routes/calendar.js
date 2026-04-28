@@ -36,7 +36,9 @@ router.get('/tasks', (req, res) => {
 router.post('/tasks', (req, res) => {
   try {
     const { environment_id, title, description, due_date, due_time, priority, status, assignee_id,
-      record_id, object_id, record_name, checklist, tags, estimated_minutes } = req.body;
+      record_id, object_id, record_name, checklist, tags, estimated_minutes,
+      completion_type, completion_config, completion_data,
+      task_group_id, group_assignment_id } = req.body;
     if (!title) return res.status(400).json({ error: 'title required' });
     const task = insert('calendar_tasks', {
       id: uuidv4(),
@@ -52,6 +54,11 @@ router.post('/tasks', (req, res) => {
       tags: JSON.stringify(tags || []),
       estimated_minutes: estimated_minutes || null,
       completed_at: null,
+      completion_type: completion_type || 'checkbox',
+      completion_config: typeof completion_config === 'string' ? completion_config : JSON.stringify(completion_config || {}),
+      completion_data: typeof completion_data === 'string' ? completion_data : JSON.stringify(completion_data || null),
+      task_group_id: task_group_id || null,
+      group_assignment_id: group_assignment_id || null,
     });
     res.json(task);
     push('task_created', { record_id: task.record_id, task_id: task.id });
@@ -64,10 +71,13 @@ router.patch('/tasks/:id', (req, res) => {
     const task = (store.calendar_tasks || []).find(t => t.id === req.params.id && !t.deleted_at);
     if (!task) return res.status(404).json({ error: 'Not found' });
     const allowed = ['title','description','due_date','due_time','priority','status',
-      'assignee_id','record_id','object_id','record_name','checklist','tags','estimated_minutes','completed_at'];
+      'assignee_id','record_id','object_id','record_name','checklist','tags','estimated_minutes','completed_at',
+      'completion_type','completion_config','completion_data','task_group_id','group_assignment_id'];
     allowed.forEach(k => {
       if (req.body[k] !== undefined) {
         if (k === 'checklist' || k === 'tags') task[k] = JSON.stringify(req.body[k]);
+        else if (k === 'completion_config' || k === 'completion_data')
+          task[k] = typeof req.body[k] === 'string' ? req.body[k] : JSON.stringify(req.body[k]);
         else task[k] = req.body[k];
       }
     });
