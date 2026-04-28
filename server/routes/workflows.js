@@ -23,14 +23,14 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
     if (action.type !== 'ai_interview') continue;
 
     const questionSource = action.question_source || action.config?.question_source || 'job';
-    let qIds = [];
-    let sourceLabel = '';
+    const qIds = [];
+    let sourceLabel;
     let linkedJobId = null;  // hoisted so fallback block can access it
 
     if (questionSource === 'manual') {
-      qIds = action.question_ids || [];
-      sourceLabel = 'manually selected';
+      qIds.push(...(action.question_ids || []));
       if (!qIds.length) { logs.push({ step: '⚠ AI Interview skipped — no questions selected on agent', status: 'warning' }); continue; }
+      sourceLabel = 'manually selected';
     } else {
       const link = (s.people_links || []).find(l => l.person_record_id === record_id || l.person_id === record_id);
       linkedJobId = link?.target_record_id || link?.record_id || null;
@@ -38,13 +38,13 @@ async function executeAgentActions(agent, record_id, record, environment_id) {
       const jobRec = (s.records || []).find(r => r.id === linkedJobId);
       const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
       const jobAssignments = (s.job_questions || []).filter(a => a.job_id === linkedJobId);
-      qIds = jobAssignments.map(a => a.question_id);
+      qIds.push(...jobAssignments.map(a => a.question_id));
       if (!qIds.length) { logs.push({ step: `⚠ AI Interview skipped — "${jobName}" has no questions assigned. Add questions via Settings → Question Library`, status: 'warning' }); continue; }
       sourceLabel = `linked job "${jobName}"`;
     }
 
     const allQs = s.question_bank_v2 || [];
-    let scorecardQs = qIds.map(id => allQs.find(q => q.id === id)).filter(Boolean)
+    const scorecardQs = qIds.map(id => allQs.find(q => q.id === id)).filter(Boolean)
       .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
 
     // Fallback: include any job-only questions (stored inline on the assignment)
@@ -556,12 +556,47 @@ router.post('/:id/run', async (req, res) => {
             }
 
           } else if (action.type === 'webhook') {
-            await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record_id, environment_id: record.environment_id, timestamp: new Date().toISOString() }) }).catch(()=>{});
-            actionOutput = `POST → ${cfg.url}`;
+            if (!cfg.url) { actionOutput = '⚠ No webhook URL configured'; actionStatus = 'warning'; }
+            else {
+              const wHeaders = { 'Content-Type': 'application/json' };
+              if (cfg.auth_header && cfg.auth_value) wHeaders[cfg.auth_header] = cfg.auth_value;
+              try {
+                const wRes = await fetch(cfg.url, {
+                  method: 'POST',
+                  headers: wHeaders,
+                  body: JSON.stringify({ event: 'workflow.step_triggered', workflow_id: wf.id, workflow_name: wf.name, step_name: step.name, record_id, environment_id: record.environment_id, record_data: record.data, timestamp: new Date().toISOString() })
+                });
+                actionOutput = `POST → ${cfg.url} (${wRes.status})`;
+                if (!wRes.ok) actionStatus = 'warning';
+              } catch(e) { actionOutput = `⚠ Webhook failed: ${e.message}`; actionStatus = 'warning'; }
+            }
 
           } else if (action.type === 'schedule_interview') {
-            // Reuse existing schedule_interview logic
-            actionOutput = `Interview scheduled (${cfg.interview_type_name || 'no type'})`;
+            // Create a real interview record
+            const { scheduled_date, scheduled_time } = req.body;
+            const s = getStore();
+            if (!s.interviews) s.interviews = [];
+            const interviewId = uuidv4();
+            s.interviews.push({
+              id: interviewId,
+              environment_id: record.environment_id,
+              interview_type_id: cfg.interview_type_id || null,
+              interview_type_name: cfg.interview_type_name || 'Interview',
+              candidate_id: record_id,
+              candidate_name: [record.data?.first_name, record.data?.last_name].filter(Boolean).join(' ') || record_id.slice(0,8),
+              date: scheduled_date || cfg.default_date || null,
+              time: scheduled_time || cfg.default_time || null,
+              duration: cfg.interview_duration || 30,
+              format: cfg.interview_format || 'video',
+              status: 'scheduled',
+              notes: cfg.notes || '',
+              interviewers: [],
+              created_by: 'workflow',
+              created_at: new Date().toISOString(),
+            });
+            require('../db/init').saveStore();
+            const dateStr = (scheduled_date || cfg.default_date) ? ` on ${scheduled_date || cfg.default_date}${(scheduled_time || cfg.default_time) ? ' at ' + (scheduled_time || cfg.default_time) : ''}` : '';
+            actionOutput = `Interview scheduled: ${cfg.interview_type_name || 'Interview'}${dateStr}`;
 
           } else if (action.type === 'run_agent') {
             const agentId = cfg.agent_id;
@@ -605,7 +640,33 @@ router.post('/:id/run', async (req, res) => {
             }
 
           } else if (action.type === 'create_offer') {
-            actionOutput = `Offer creation queued`;
+            const { offer_salary, offer_currency, offer_bonus, offer_expiry, offer_notes } = req.body;
+            const s = getStore();
+            if (!s.offers) s.offers = [];
+            const link = (s.people_links || []).find(l => l.person_record_id === record_id || l.person_id === record_id);
+            const offerId = uuidv4();
+            const expiryDate = offer_expiry || (cfg.expiry_days ? new Date(Date.now() + cfg.expiry_days * 86400000).toISOString().slice(0,10) : null);
+            s.offers.push({
+              id: offerId,
+              environment_id: record.environment_id,
+              candidate_id: record_id,
+              candidate_name: [record.data?.first_name, record.data?.last_name].filter(Boolean).join(' ') || record_id.slice(0,8),
+              job_id: link?.target_record_id || null,
+              status: 'draft',
+              salary: offer_salary || cfg.default_salary || null,
+              currency: offer_currency || cfg.currency || 'USD',
+              bonus: offer_bonus || cfg.default_bonus || null,
+              expiry_date: expiryDate,
+              notes: offer_notes || cfg.notes || '',
+              approval_chain: [],
+              created_by: 'workflow',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+            require('../db/init').saveStore();
+            const sal = offer_salary || cfg.default_salary;
+            const cur = offer_currency || cfg.currency || 'USD';
+            actionOutput = `Offer created${sal ? ` (${cur} ${Number(sal).toLocaleString()})` : ''} — Draft`;
 
           } else {
             actionOutput = `Unknown action: ${action.type}`;
@@ -764,7 +825,7 @@ router.patch('/people-links/:id', async (req, res) => {
   console.log(`[stage-move] link=${req.params.id.slice(0,8)} person_id=${link.person_record_id?.slice(0,8)} person_found=${!!person} stage_id=${stage_id?.slice(0,8)} records_in_store=${getStore().records?.length || 0}`);
 
   // Auto-execute actions on the step they just moved into
-  let stepRunLog = [];
+  const stepRunLog = [];
   if (stage_id && person) {
     const s2 = getStore();
     const step = (s2.workflow_steps || []).find(s => s.id === stage_id);
@@ -898,8 +959,30 @@ router.post('/run-step', async (req, res) => {
   const log = [];
   for (const action of actions) {
     try {
-      const result = await executeAction(action, record, step, store, req);
-      log.push({ action_type: action.type, status: 'ok', output: result?.message || 'Done' });
+      const cfg2 = action.config || {};
+      let out2 = `Action: ${action.type}`;
+      if (action.type === 'run_agent') {
+        const ag2 = findOne('agents', a => a.id === cfg2.agent_id && !a.deleted_at);
+        if (!ag2) { out2 = '⚠ Agent not found'; }
+        else { const r2 = await executeAgentActions(ag2, record.id, record, record.environment_id); out2 = r2.map(r=>r.step).join(' | '); }
+      } else if (action.type === 'stage_change') {
+        update('records', r => r.id === record.id, { data: { ...record.data, [cfg2.field_key||'status']: cfg2.to_stage } });
+        out2 = `${cfg2.field_key||'status'} → ${cfg2.to_stage}`;
+      } else if (action.type === 'update_field') {
+        update('records', r => r.id === record.id, { data: { ...record.data, [cfg2.field_key||cfg2.field]: cfg2.field_value||cfg2.value } });
+        out2 = `${cfg2.field_key||cfg2.field} → ${cfg2.field_value||cfg2.value}`;
+      } else if (action.type === 'send_email') {
+        const s3 = getStore();
+        const resolved2 = resolveRecipient(cfg2, record, s3);
+        if (resolved2.error) { out2 = `⚠ ${resolved2.error}`; }
+        else {
+          const subj2 = (cfg2.subject||'').replace(/\{\{(\w+)\}\}/g, (_,k)=>record.data?.[k]??`{{${k}}}`);
+          const body2 = (cfg2.body   ||'').replace(/\{\{(\w+)\}\}/g, (_,k)=>record.data?.[k]??`{{${k}}}`);
+          try { const msg2 = require('../services/messaging'); for (const r of resolved2.emails) await msg2.sendEmail({ to: r.email, subject: subj2, text: body2, html: body2.replace(/\n/g,'<br>') }); out2 = `Email → ${resolved2.emails.map(r=>r.email).join(', ')}`; }
+          catch(e) { out2 = `[Sim] Email → ${resolved2.emails.map(r=>r.email).join(', ')}`; }
+        }
+      }
+      log.push({ action_type: action.type, status: 'ok', output: out2 });
     } catch (e) {
       log.push({ action_type: action.type, status: 'error', output: e.message });
     }

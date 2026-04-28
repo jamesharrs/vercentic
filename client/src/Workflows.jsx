@@ -1072,8 +1072,31 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
                 <div style={{ padding:"10px 12px" }}>
 
                   {action.type === "stage_change" && (
-                    <input value={cfg.to_stage||""} onChange={e=>setActionConfig(action.id,"to_stage",e.target.value)} placeholder="New stage value e.g. Interview, Offer, Rejected"
-                      style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:4 }}>Field to update</div>
+                        <select value={cfg.field_key||"status"} onChange={e=>setActionConfig(action.id,"field_key",e.target.value)}
+                          style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+                          <option value="status">Status (default)</option>
+                          {fields.filter(f=>f.field_type==="select"||f.field_type==="text").map(f=><option key={f.api_key} value={f.api_key}>{f.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:4 }}>New value</div>
+                        {(()=>{
+                          const fld = fields.find(ff=>ff.api_key===(cfg.field_key||"status"));
+                          if (fld?.field_type==="select" && fld.options?.length) return (
+                            <select value={cfg.to_stage||""} onChange={e=>setActionConfig(action.id,"to_stage",e.target.value)}
+                              style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
+                              <option value="">Select value…</option>
+                              {fld.options.map(o=><option key={o} value={o}>{o}</option>)}
+                            </select>
+                          );
+                          return <input value={cfg.to_stage||""} onChange={e=>setActionConfig(action.id,"to_stage",e.target.value)} placeholder="e.g. Interview, Offer, Rejected"
+                            style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>;
+                        })()}
+                      </div>
+                    </div>
                   )}
 
                   {action.type === "update_field" && (
