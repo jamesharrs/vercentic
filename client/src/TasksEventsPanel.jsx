@@ -504,12 +504,16 @@ function EventRow({ event, onDelete }) {
 }
 
 // ── Main panel export ─────────────────────────────────────────────────────────
-export function TasksEventsPanel({ record, environment }) {
+export function TasksEventsPanel({ record, environment, linkedJobRecords=[], jobFilter="all" }) {
   const [tasks,     setTasks]     = useState([]);
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [taskModal, setTaskModal] = useState(null);
   const [activeTab, setActiveTab] = useState("tasks");
+  const [activeJob, setActiveJob] = useState(jobFilter || "all");
+
+  // Sync when parent changes jobFilter (e.g. clicking a linked job)
+  useEffect(() => { setActiveJob(jobFilter || "all"); }, [jobFilter]);
 
   const envId   = environment?.id;
   const recId   = record?.id;
@@ -538,8 +542,15 @@ export function TasksEventsPanel({ record, environment }) {
 
   const handleDeleteEvent = async id => { await tFetch(`/api/calendar/events/${id}`,{method:"DELETE"}); load(); };
 
-  const tasksDue  = tasks.filter(t=>t.status!=="done");
-  const tasksDone = tasks.filter(t=>t.status==="done");
+  // Apply job filter — "all" = everything, "general" = no object_id, jobId = that specific job
+  const filteredTasks = tasks.filter(t => {
+    if (activeJob === "all")     return true;
+    if (activeJob === "general") return !t.object_id;
+    return t.object_id === activeJob;
+  });
+
+  const tasksDue  = filteredTasks.filter(t=>t.status!=="done");
+  const tasksDone = filteredTasks.filter(t=>t.status==="done");
 
   // Count tasks that need a specific action (non-checkbox)
   const actionableCount = tasksDue.filter(t=>(t.completion_type||'checkbox')!=='checkbox').length;
@@ -573,6 +584,21 @@ export function TasksEventsPanel({ record, environment }) {
           </button>
         )}
       </div>
+
+      {/* Job filter pills — only shown on Person records with linked jobs */}
+      {linkedJobRecords.length > 0 && activeTab === "tasks" && (
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>
+          {[{id:"all",label:`All (${tasks.length})`},{id:"general",label:"General"},...linkedJobRecords.map(j=>({id:j.id,label:j.title||j.data?.job_title||"Job"}))].map(opt=>(
+            <button key={opt.id} onClick={()=>setActiveJob(opt.id)}
+              style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:activeJob===opt.id?700:500,
+                border:`1.5px solid ${activeJob===opt.id?"#4361EE":"#e5e7eb"}`,
+                background:activeJob===opt.id?"#EEF2FF":"transparent",
+                color:activeJob===opt.id?"#4361EE":"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div style={{textAlign:"center",color:"#9ca3af",fontSize:13,padding:20}}>Loading…</div>

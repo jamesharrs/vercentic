@@ -6702,6 +6702,243 @@ const AgentsRecordPanel = ({ record, environment }) => {
   );
 };
 
+// ─── Job Tasks Panel ──────────────────────────────────────────────────────────
+// Shown on Job records. Lets admins attach task group templates and single tasks.
+// When a person is linked to the job, these can be assigned to them.
+// The tasks appear on the person's Tasks panel filtered by this job.
+const JobTasksPanel = ({ record, environment }) => {
+  const [groups,     setGroups]     = useState([]);   // attached group templates
+  const [singles,    setSingles]    = useState([]);   // standalone task defs
+  const [templates,  setTemplates]  = useState([]);   // all available templates
+  const [loading,    setLoading]    = useState(true);
+  const [showPicker, setShowPicker] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTask,    setNewTask]    = useState({ title:'', description:'', priority:'medium', completion_type:'checkbox', due_offset_days:'' });
+  const [saving,     setSaving]     = useState(false);
+
+  const load = useCallback(async () => {
+    if (!record?.id) return;
+    setLoading(true);
+    const [jobData, tpls] = await Promise.all([
+      api.get(`/task-groups/by-job/${record.id}`),
+      api.get(`/task-groups/templates${environment?.id ? `?environment_id=${environment.id}` : ''}`),
+    ]);
+    setGroups(Array.isArray(jobData?.groups) ? jobData.groups : []);
+    setSingles(Array.isArray(jobData?.singles) ? jobData.singles : []);
+    setTemplates(Array.isArray(tpls) ? tpls : []);
+    setLoading(false);
+  }, [record?.id, environment?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const attachGroup = async (templateId) => {
+    setSaving(true);
+    await api.post(`/task-groups/by-job/${record.id}/groups`, {
+      template_id: templateId, environment_id: environment?.id,
+    });
+    setSaving(false); setShowPicker(false); load();
+  };
+
+  const detachGroup = async (attachId) => {
+    if (!window.confirm('Remove this task group from the job? Tasks already assigned to people are not affected.')) return;
+    await api.delete(`/task-groups/by-job/${record.id}/groups/${attachId}`);
+    load();
+  };
+
+  const addSingleTask = async () => {
+    if (!newTask.title.trim()) return;
+    setSaving(true);
+    await api.post(`/task-groups/by-job/${record.id}/singles`, {
+      ...newTask,
+      due_offset_days: newTask.due_offset_days !== '' ? Number(newTask.due_offset_days) : null,
+      environment_id: environment?.id,
+    });
+    setSaving(false); setAddingTask(false);
+    setNewTask({ title:'', description:'', priority:'medium', completion_type:'checkbox', due_offset_days:'' });
+    load();
+  };
+
+  const deleteSingle = async (taskId) => {
+    if (!window.confirm('Remove this task from the job?')) return;
+    await api.delete(`/task-groups/by-job/${record.id}/singles/${taskId}`);
+    load();
+  };
+
+  const attachedIds = new Set(groups.map(g => g.template_id));
+  const unattached  = templates.filter(t => !attachedIds.has(t.id));
+
+  const CT_COLORS = { checkbox:'#6b7280', file_upload:'#3b82f6', form:'#7c3aed', document_read:'#0d9488', e_signature:'#4361EE', video_watch:'#ec4899', external_link:'#f59f00', approval:'#10b981' };
+  const CT_LABELS = { checkbox:'Checkbox', file_upload:'File Upload', form:'Fill Form', document_read:'Read & Accept', e_signature:'E-Signature', video_watch:'Watch Video', external_link:'External Link', approval:'Approval' };
+
+  const inputSt = { width:'100%', padding:'7px 10px', borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:12, fontFamily:F, outline:'none', color:C.text1, boxSizing:'border-box' };
+
+  return (
+    <div style={{ fontSize:13, color:C.text2, fontFamily:F }}>
+      {/* Info banner */}
+      <div style={{ padding:'10px 14px', borderRadius:10, background:'#f0f9ff', border:'1px solid #bae6fd', fontSize:12, color:'#0369a1', marginBottom:16, lineHeight:1.6 }}>
+        Tasks added here appear on linked candidates' <strong>Tasks & Reminders</strong> panel, filtered under this job. Use the <strong>"Assign to person"</strong> button to push them to a specific candidate.
+      </div>
+
+      {/* Task Groups section */}
+      <div style={{ marginBottom:20 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em' }}>Task Group Templates</div>
+          <button onClick={()=>setShowPicker(p=>!p)}
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:8, border:`1.5px solid ${C.accent}`, background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+            <Ic n="plus" s={11} c={C.accent}/> Attach group
+          </button>
+        </div>
+
+        {/* Template picker dropdown */}
+        {showPicker && (
+          <div style={{ marginBottom:10, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            {unattached.length === 0 ? (
+              <div style={{ padding:'14px 16px', fontSize:12, color:C.text3, textAlign:'center' }}>
+                {templates.length === 0 ? 'No task group templates yet. Create one in Settings → Task Groups.' : 'All templates are already attached.'}
+              </div>
+            ) : (
+              unattached.map(tpl => {
+                const taskCount = (tpl.task_definitions||[]).length;
+                return (
+                  <div key={tpl.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background .1s' }}
+                    onClick={()=>!saving && attachGroup(tpl.id)}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.bg}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <div style={{ width:4, height:32, borderRadius:2, background:tpl.color||C.accent, flexShrink:0 }}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{tpl.name}</div>
+                      <div style={{ fontSize:11, color:C.text3 }}>{taskCount} task{taskCount!==1?'s':''}{tpl.category?` · ${tpl.category}`:''}</div>
+                    </div>
+                    <Ic n="plus" s={14} c={C.accent}/>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Attached groups */}
+        {loading && <div style={{ color:C.text3, fontSize:12, padding:'8px 0' }}>Loading…</div>}
+        {!loading && groups.length === 0 && !showPicker && (
+          <div style={{ color:C.text3, fontSize:12, padding:'8px 0', fontStyle:'italic' }}>No task group templates attached yet</div>
+        )}
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {groups.map(g => {
+            const tpl = g.template;
+            const taskCount = (tpl?.task_definitions||[]).length;
+            return (
+              <div key={g.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12 }}>
+                <div style={{ width:4, height:40, borderRadius:2, background:g.template_color||C.accent, flexShrink:0 }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{g.template_name}</div>
+                  <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>
+                    {taskCount} task{taskCount!==1?'s':''}
+                    {tpl?.category ? ` · ${tpl.category}` : ''}
+                  </div>
+                  {/* Completion type badges */}
+                  <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>
+                    {Object.entries((tpl?.task_definitions||[]).reduce((acc,d)=>{const ct=d.completion_type||'checkbox';acc[ct]=(acc[ct]||0)+1;return acc;},{})).map(([ct,n])=>(
+                      <span key={ct} style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:99, background:`${CT_COLORS[ct]||'#6b7280'}12`, color:CT_COLORS[ct]||'#6b7280' }}>
+                        {n}× {CT_LABELS[ct]||ct}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={()=>detachGroup(g.id)}
+                  style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, padding:4, display:'flex', alignItems:'center' }} title="Remove">
+                  <Ic n="x" s={14} c={C.text3}/>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Individual Tasks section */}
+      <div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em' }}>Individual Tasks</div>
+          <button onClick={()=>setAddingTask(a=>!a)}
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:8, border:`1.5px solid ${C.accent}`, background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+            <Ic n="plus" s={11} c={C.accent}/> Add task
+          </button>
+        </div>
+
+        {/* Add task form */}
+        {addingTask && (
+          <div style={{ padding:14, background:C.surface, border:`1.5px solid ${C.accent}`, borderRadius:12, marginBottom:10 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <input value={newTask.title} onChange={e=>setNewTask(t=>({...t,title:e.target.value}))}
+                placeholder="Task title *" autoFocus style={inputSt}/>
+              <input value={newTask.description} onChange={e=>setNewTask(t=>({...t,description:e.target.value}))}
+                placeholder="Description (optional)" style={inputSt}/>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+                <select value={newTask.priority} onChange={e=>setNewTask(t=>({...t,priority:e.target.value}))}
+                  style={{...inputSt,background:'white'}}>
+                  <option value="low">Low priority</option>
+                  <option value="medium">Medium priority</option>
+                  <option value="high">High priority</option>
+                </select>
+                <select value={newTask.completion_type} onChange={e=>setNewTask(t=>({...t,completion_type:e.target.value}))}
+                  style={{...inputSt,background:'white'}}>
+                  {Object.entries(CT_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+                <input type="number" value={newTask.due_offset_days} onChange={e=>setNewTask(t=>({...t,due_offset_days:e.target.value}))}
+                  placeholder="Due +days (optional)" style={inputSt}/>
+              </div>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                <button onClick={()=>setAddingTask(false)} style={{ padding:'6px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>Cancel</button>
+                <button onClick={addSingleTask} disabled={saving||!newTask.title.trim()}
+                  style={{ padding:'6px 14px', borderRadius:8, border:'none', background:C.accent, color:'white', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F, opacity:saving||!newTask.title.trim()?0.5:1 }}>
+                  {saving?'Adding…':'Add Task'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && singles.length === 0 && !addingTask && (
+          <div style={{ color:C.text3, fontSize:12, fontStyle:'italic' }}>No individual tasks added yet</div>
+        )}
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {singles.map(task => (
+            <div key={task.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', background:C.surface, border:`1px solid ${C.border}`, borderRadius:10 }}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background:CT_COLORS[task.completion_type]||'#6b7280', flexShrink:0 }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:C.text1 }}>{task.title}</div>
+                {task.description && <div style={{ fontSize:11, color:C.text3, marginTop:1 }}>{task.description}</div>}
+                <div style={{ display:'flex', gap:6, marginTop:3, alignItems:'center' }}>
+                  <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:99, background:`${CT_COLORS[task.completion_type]||'#6b7280'}12`, color:CT_COLORS[task.completion_type]||'#6b7280' }}>
+                    {CT_LABELS[task.completion_type]||task.completion_type}
+                  </span>
+                  <span style={{ fontSize:10, color:C.text3, textTransform:'capitalize' }}>{task.priority}</span>
+                  {task.due_offset_days != null && <span style={{ fontSize:10, color:C.text3 }}>+{task.due_offset_days}d</span>}
+                </div>
+              </div>
+              <button onClick={()=>deleteSingle(task.id)}
+                style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, padding:4, display:'flex' }}>
+                <Ic n="x" s={13} c={C.text3}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Assign to person button — shown when there's something to assign */}
+      {(groups.length > 0 || singles.length > 0) && (
+        <div style={{ marginTop:20, padding:'12px 16px', borderRadius:12, background:'#f0fdf4', border:'1px solid #86efac' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:4 }}>
+            Ready to assign to a candidate?
+          </div>
+          <div style={{ fontSize:11, color:'#166534', lineHeight:1.5 }}>
+            These {groups.length + singles.length} task definition{(groups.length+singles.length)!==1?'s':''} can be pushed to any linked candidate from their <strong>Linked Records</strong> panel, or via a workflow step (<em>Assign Task Group</em>). When assigned, tasks appear on the candidate filtered under this job.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const PANEL_META = {
   fields:       { icon:"edit",          label:"Profile Fields",      defaultOpen:true  },
   tasks:        { icon:"checkSquare",   label:"Tasks & Reminders",   defaultOpen:true  },
@@ -6717,6 +6954,7 @@ export const PANEL_META = {
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true,  personOnly:true },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:false, hidden:true },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false, jobOnly:true },
+  job_tasks:    { icon:"checkSquare",   label:"Job Tasks",           defaultOpen:true,  jobOnly:true },
   assessments:  { icon:"clipboard",     label:"Assessments",         defaultOpen:true,  personOnly:true },
   questions:    { icon:"listChecks",    label:"Screening & Interview Questions", defaultOpen:false, jobOnly:true },
   interview_plan: { icon:"calendar",    label:"Interview Plan",      defaultOpen:true,  jobOnly:true  },
@@ -6730,7 +6968,7 @@ export const getDefaultPanelOrder = (objectName) => {
   if (["Person","Job"].includes(objectName)) base.push("match");
   if (objectName === "Person") base.push("assessments");
   if (objectName === "Person") base.push("engagement");
-  if (objectName === "Job") { base.unshift("interview_plan"); base.splice(base.indexOf("tasks") + 1, 0, "coordination"); base.push("questions"); }
+  if (objectName === "Job") { base.unshift("interview_plan"); base.splice(base.indexOf("tasks") + 1, 0, "coordination"); base.push("questions"); base.push("job_tasks"); }
   if (objectName === "Job" || objectName === "Jobs") base.unshift("insights");
 
   return base;
@@ -8350,6 +8588,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [linkedJobRecords, setLinkedJobRecords] = useState([]);
   const [attachmentJobFilter, setAttachmentJobFilter] = useState("all");
   const [formJobFilter, setFormJobFilter] = useState("all");
+  const [taskJobFilter, setTaskJobFilter] = useState("all");
   useEffect(() => {
     if (objectName !== "Person") return;
     if (!record?.id || !environment?.id) return;
@@ -8359,10 +8598,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       .catch(() => {});
   }, [record?.id, environment?.id, objectName]);
 
-  // Sync file + form filters when job context changes from Linked Records panel
+  // Sync file + form + task filters when job context changes from Linked Records panel
   useEffect(() => {
     setAttachmentJobFilter(activeJobContext || "all");
     setFormJobFilter(activeJobContext || "all");
+    setTaskJobFilter(activeJobContext || "all");
   }, [activeJobContext]);
   const [tab, setTab]           = useState("fields");
   const [editing, setEditing]   = useState({});
@@ -9514,7 +9754,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="activity") return <ActivityPanel record={record}/>;
 
     // Pipeline panel removed
-    if (id==="tasks")     return <TasksEventsPanel record={record} environment={environment}/>;
+    if (id==="tasks")     return <TasksEventsPanel record={record} environment={environment} linkedJobRecords={linkedJobRecords} jobFilter={taskJobFilter}/>;
     if (id==="agents")    return <AgentsRecordPanel record={record} environment={environment}/>;
     if (id==="forms")     return <div>
           {/* Job filter tabs — same pattern as Notes */}
@@ -9568,6 +9808,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
+    if (id==="job_tasks") return <JobTasksPanel record={record} environment={environment}/>;
     // interview_plan and scorecard are handled earlier with ff.interviews gate
 
     if (id==="match") {

@@ -3974,6 +3974,52 @@ function LinkedStageDropdown({ link, steps, onMove }) {
   );
 }
 
+// ─── AssignJobTasksBtn — small button that checks if a job has tasks and assigns them ──
+function AssignJobTasksBtn({ jobId, personRecord, environment }) {
+  const [hasItems, setHasItems] = useState(null); // null=loading, false=none, true=has items
+  const [assigning, setAssigning] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    if (!jobId) return;
+    api.get(`/task-groups/by-job/${jobId}`)
+      .then(d => {
+        const count = (d?.groups?.length||0) + (d?.singles?.length||0);
+        setHasItems(count > 0);
+      }).catch(() => setHasItems(false));
+  }, [jobId]);
+
+  if (!hasItems) return null; // Hide button if nothing to assign
+
+  const handleAssign = async () => {
+    if (done) return;
+    if (!(await window.__confirm?.({ title:'Assign tasks from this job?', body:'This will create tasks on the person record filtered under this job. Tasks already assigned will not be duplicated.' }))) return;
+    setAssigning(true);
+    const name = [personRecord?.data?.first_name, personRecord?.data?.last_name].filter(Boolean).join(' ') || personRecord?.id?.slice(0,8) || '';
+    await api.post(`/task-groups/by-job/${jobId}/assign-to-person`, {
+      record_id:      personRecord.id,
+      record_name:    name,
+      environment_id: environment?.id,
+      assigned_by:    'manual',
+    }).catch(()=>{});
+    setAssigning(false); setDone(true);
+    window.__toast?.success('Tasks assigned successfully');
+  };
+
+  return (
+    <button onClick={handleAssign} disabled={assigning || done}
+      title={done ? 'Tasks already assigned' : 'Assign job tasks to this person'}
+      style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px', borderRadius:7, flexShrink:0,
+        border:`1.5px solid ${done ? '#86efac' : '#7c3aed'}`,
+        background: done ? '#f0fdf4' : '#faf5ff',
+        color: done ? '#15803d' : '#7c3aed',
+        fontSize:10, fontWeight:700, cursor: done ? 'default' : 'pointer', fontFamily:'inherit',
+        opacity: assigning ? 0.6 : 1 }}>
+      {assigning ? '…' : done ? '✓ Assigned' : '+ Tasks'}
+    </button>
+  );
+}
+
 // ─── LinkedRecordsPanel ───────────────────────────────────────────────────────
 // Shown on a Person record. Shows all objects this person is linked to across
 // all pipelines, with stage dropdown and ability to link to new records.
@@ -4220,6 +4266,8 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
                   <Ic n="arrowRight" s={13} c={C.accent}/>
                 </button>
               )}
+              {/* Assign job tasks to this person */}
+              <AssignJobTasksBtn jobId={link.target_record_id} personRecord={record} environment={environment}/>
               {/* Remove */}
               <button onClick={() => removeLink(link.id)}
                 style={{ background:"none", border:"none", cursor:"pointer", padding:4, flexShrink:0, opacity:0.4 }}
