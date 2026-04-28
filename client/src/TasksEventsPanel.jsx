@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom";
 import { useRecordSync } from "./hooks/useRecordSync.js";
 import { COMPLETION_TYPES } from "./TaskModal.jsx";
+import TaskModal from "./TaskModal.jsx";
 
 const PRIORITY = {
   urgent: { label:"Urgent", color:"#ef4444", bg:"#fef2f2" },
@@ -338,7 +339,10 @@ function TaskRow({ task, onRefresh }) {
       {showAck && <AcknowledgeModal config={config} onConfirm={()=>{ setShowAck(false); complete({acknowledged_at:new Date().toISOString()}); }} onClose={()=>setShowAck(false)}/>}
 
       {/* Quick edit */}
-      {showEdit && <QuickTaskModal task={task} envId={task.environment_id} recId={task.record_id} recName={task.record_name} onDone={()=>{ setShowEdit(false); onRefresh(); }}/>}
+      {showEdit && <TaskModal task={task} environmentId={task.environment_id}
+        defaultValues={{ record_id:task.record_id, record_name:task.record_name, object_id:task.object_id, object_name:task.object_name }}
+        onSave={()=>{ setShowEdit(false); onRefresh(); }}
+        onClose={()=>setShowEdit(false)}/>}
     </>
   );
 }
@@ -473,10 +477,12 @@ export function TasksEventsPanel({ record, environment }) {
       )}
 
       {taskModal!==null&&(
-        <QuickTaskModal task={taskModal.task||null}
-          defaultDate={new Date().toISOString().slice(0,10)}
-          envId={envId} recId={recId} recName={recName}
-          onDone={()=>{ setTaskModal(null); load(); }}/>
+        <TaskModal
+          task={taskModal.task||null}
+          environmentId={envId}
+          defaultValues={{ record_id:recId, record_name:recName }}
+          onSave={()=>{ setTaskModal(null); load(); }}
+          onClose={()=>setTaskModal(null)}/>
       )}
     </div>
   );
