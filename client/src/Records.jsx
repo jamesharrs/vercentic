@@ -6890,44 +6890,77 @@ const JobTasksPanel = ({ record, environment }) => {
       <div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
           <div style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em' }}>Individual Tasks</div>
-          <button onClick={()=>setAddingTask(a=>!a)}
+          <button onClick={()=>setAddingTask(true)}
             style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:8, border:`1.5px solid ${C.accent}`, background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
             <Ic n="plus" s={11} c={C.accent}/> Add task
           </button>
         </div>
 
-        {/* Add task form */}
-        {addingTask && (
-          <div style={{ padding:14, background:C.surface, border:`1.5px solid ${C.accent}`, borderRadius:12, marginBottom:10 }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              <input value={newTask.title} onChange={e=>setNewTask(t=>({...t,title:e.target.value}))}
-                placeholder="Task title *" autoFocus style={inputSt}/>
-              <input value={newTask.description} onChange={e=>setNewTask(t=>({...t,description:e.target.value}))}
-                placeholder="Description (optional)" style={inputSt}/>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-                <select value={newTask.priority} onChange={e=>setNewTask(t=>({...t,priority:e.target.value}))}
-                  style={{...inputSt,background:'white'}}>
-                  <option value="low">Low priority</option>
-                  <option value="medium">Medium priority</option>
-                  <option value="high">High priority</option>
-                </select>
-                <select value={newTask.completion_type} onChange={e=>setNewTask(t=>({...t,completion_type:e.target.value}))}
-                  style={{...inputSt,background:'white'}}>
-                  {Object.entries(CT_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                </select>
-                <input type="number" value={newTask.due_offset_days} onChange={e=>setNewTask(t=>({...t,due_offset_days:e.target.value}))}
-                  placeholder="Due +days (optional)" style={inputSt}/>
+        {/* Add task form — portal modal to avoid overflow clipping */}
+        {addingTask && ReactDOM.createPortal(
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1400,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+            onMouseDown={e=>{ if(e.target===e.currentTarget) setAddingTask(false); }}>
+            <div style={{ background:'white', borderRadius:16, width:'100%', maxWidth:480,
+              boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:F }}
+              onMouseDown={e=>e.stopPropagation()}>
+              {/* Header */}
+              <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:30, height:30, borderRadius:8, background:C.accentLight, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <Ic n="checkSquare" s={15} c={C.accent}/>
+                </div>
+                <div style={{ flex:1, fontSize:14, fontWeight:700, color:C.text1 }}>Add task to job</div>
+                <button onClick={()=>setAddingTask(false)} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:20, padding:0, lineHeight:1 }}>×</button>
               </div>
-              <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                <button onClick={()=>setAddingTask(false)} style={{ padding:'6px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>Cancel</button>
+              {/* Body */}
+              <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:10 }}>
+                <input value={newTask.title} onChange={e=>setNewTask(t=>({...t,title:e.target.value}))}
+                  placeholder="Task title *" autoFocus style={inputSt}/>
+                <input value={newTask.description} onChange={e=>setNewTask(t=>({...t,description:e.target.value}))}
+                  placeholder="Description (optional)" style={inputSt}/>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  <select value={newTask.priority} onChange={e=>setNewTask(t=>({...t,priority:e.target.value}))}
+                    style={{...inputSt,background:'white'}}>
+                    <option value="low">Low priority</option>
+                    <option value="medium">Medium priority</option>
+                    <option value="high">High priority</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                  <input type="number" value={newTask.due_offset_days} onChange={e=>setNewTask(t=>({...t,due_offset_days:e.target.value}))}
+                    placeholder="Due +days from anchor" style={inputSt} min={0}/>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:6, textTransform:'uppercase', letterSpacing:'.05em' }}>Completion method</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                    {Object.entries(CT_LABELS).map(([v,l]) => {
+                      const col = CT_COLORS[v] || '#6b7280';
+                      const active = newTask.completion_type === v;
+                      return (
+                        <button key={v} onClick={()=>setNewTask(t=>({...t,completion_type:v}))}
+                          style={{ padding:'7px 10px', borderRadius:8, border:`1.5px solid ${active?col:C.border}`,
+                            background:active?`${col}0f`:'transparent', color:active?col:C.text3,
+                            fontSize:12, fontWeight:active?700:500, cursor:'pointer', fontFamily:F, textAlign:'left' }}>
+                          {l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              {/* Footer */}
+              <div style={{ padding:'12px 20px', borderTop:`1px solid ${C.border}`, display:'flex', gap:8, justifyContent:'flex-end' }}>
+                <button onClick={()=>{ setAddingTask(false); setNewTask({ title:'', description:'', priority:'medium', completion_type:'checkbox', due_offset_days:'' }); }}
+                  style={{ padding:'7px 16px', borderRadius:9, border:`1px solid ${C.border}`, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+                  Cancel
+                </button>
                 <button onClick={addSingleTask} disabled={saving||!newTask.title.trim()}
-                  style={{ padding:'6px 14px', borderRadius:8, border:'none', background:C.accent, color:'white', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F, opacity:saving||!newTask.title.trim()?0.5:1 }}>
-                  {saving?'Adding…':'Add Task'}
+                  style={{ padding:'7px 18px', borderRadius:9, border:'none', background:C.accent, color:'white', fontSize:13, fontWeight:700, cursor:saving||!newTask.title.trim()?'default':'pointer', fontFamily:F, opacity:saving||!newTask.title.trim()?0.5:1 }}>
+                  {saving ? 'Adding…' : 'Add Task'}
                 </button>
               </div>
             </div>
           </div>
-        )}
+        , document.body)}
 
         {!loading && singles.length === 0 && !addingTask && (
           <div style={{ color:C.text3, fontSize:12, fontStyle:'italic' }}>No individual tasks added yet</div>
