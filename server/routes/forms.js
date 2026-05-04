@@ -24,10 +24,11 @@ function ensure() {
 // ── List forms ────────────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   ensure();
-  const { environment_id, object_slug, record_id } = req.query;
+  const { environment_id, object_slug, record_id, category } = req.query;
   let forms = (getStore().forms || []).filter(f => !f.deleted_at);
   if (environment_id) forms = forms.filter(f => f.environment_id === environment_id);
   if (object_slug)    forms = forms.filter(f => !f.applies_to?.length || f.applies_to.includes(object_slug));
+  if (category)       forms = forms.filter(f => f.category === category);
   res.json(forms);
 });
 

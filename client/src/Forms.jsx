@@ -35,6 +35,7 @@ const CATEGORIES = [
   {id:'general',      label:'General',         color:C.accent},
   {id:'screening',    label:'Screening',       color:C.green},
   {id:'interview',    label:'Interview Notes', color:C.purple},
+  {id:'scorecard',    label:'Scorecard',       color:'#d97706', icon:'clipboard'},
   {id:'survey',       label:'Survey',          color:C.cyan},
   {id:'confidential', label:'Confidential',    color:C.red},
 ];

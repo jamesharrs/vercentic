@@ -56,7 +56,7 @@ function stageStatusForPerson(stage, personName, interviews) {
 }
 
 // Stage editor row
-function StageRow({stage,index,total,interviewTypes,onUpdate,onDelete,onMoveUp,onMoveDown}) {
+function StageRow({stage,index,total,interviewTypes,scorecardForms,onUpdate,onDelete,onMoveUp,onMoveDown}) {
   const [open,setOpen] = useState(false);
   const set = (k,v) => onUpdate({...stage,[k]:v});
   const typeDef = interviewTypes.find(t=>t.id===stage.interview_type_id);
@@ -106,6 +106,28 @@ function StageRow({stage,index,total,interviewTypes,onUpdate,onDelete,onMoveUp,o
             <input value={stage.pass_criteria||""} onChange={e=>set("pass_criteria",e.target.value)} placeholder="e.g. Score ≥ 70%"
               style={{width:"100%",boxSizing:"border-box",padding:"7px 9px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F,outline:"none"}}/>
           </label>
+          {/* Scorecard form picker */}
+          <label style={{gridColumn:"1/-1"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:600,color:C.text2}}>Scorecard form</div>
+              <span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:"#fef3c7",color:"#b45309",fontWeight:700}}>Optional</span>
+            </div>
+            <select value={stage.scorecard_form_id||""} onChange={e=>set("scorecard_form_id",e.target.value||null)}
+              style={{width:"100%",padding:"7px 9px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F,outline:"none",background:"white",color:C.text1}}>
+              <option value="">— no scorecard —</option>
+              {(scorecardForms||[]).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {stage.scorecard_form_id && (
+              <div style={{fontSize:11,color:"#b45309",marginTop:4}}>
+                Interviewers will be prompted to complete this scorecard after the interview.
+              </div>
+            )}
+            {!scorecardForms?.length && (
+              <div style={{fontSize:11,color:C.text3,marginTop:4}}>
+                No scorecard forms yet — create one in Settings → Forms with category "Scorecard".
+              </div>
+            )}
+          </label>
         </div>
       )}
     </div>
@@ -154,6 +176,7 @@ export function InterviewPlanPanel({record, environment, onNavigate}) {
   const [types,  setTypes]  = useState([]);
   const [links,  setLinks]  = useState([]);
   const [ivs,    setIvs]    = useState([]);
+  const [scorecardForms, setScorecardForms] = useState([]);
   const [loading,setLoading]= useState(true);
   const [saving, setSaving] = useState(false);
   const [view,   setView]   = useState("plan");
@@ -162,17 +185,19 @@ export function InterviewPlanPanel({record, environment, onNavigate}) {
     if (!record?.id||!environment?.id) return;
     setLoading(true);
     try {
-      const [plans,iTypes,peopleLinks,interviews] = await Promise.all([
+      const [plans,iTypes,peopleLinks,interviews,scForms] = await Promise.all([
         api.get(`/interview-plans?job_id=${record.id}&environment_id=${environment.id}`),
         api.get(`/interview-types?environment_id=${environment.id}`),
         api.get(`/workflows/people-links?target_record_id=${record.id}&environment_id=${environment.id}`),
         api.get(`/interviews?environment_id=${environment.id}`),
+        api.get(`/forms?environment_id=${environment.id}&category=scorecard`),
       ]);
       const p=Array.isArray(plans)?plans[0]:null;
       setPlan(p||null); setStages(p?.stages||[]);
       setTypes(Array.isArray(iTypes)?iTypes:[]);
       setLinks(Array.isArray(peopleLinks)?peopleLinks:[]);
       setIvs(Array.isArray(interviews)?interviews:[]);
+      setScorecardForms(Array.isArray(scForms)?scForms:[]);
     } catch(e){console.error("InterviewPlanPanel:",e);}
     setLoading(false);
   },[record?.id,environment?.id]);
@@ -238,7 +263,8 @@ export function InterviewPlanPanel({record, environment, onNavigate}) {
             <>
               <div style={{marginBottom:8}}>
                 {stages.map((st,i)=>(
-                  <StageRow key={st.id} stage={st} index={i} total={stages.length} interviewTypes={types}
+                  <StageRow key={st.id} stage={st} index={i} total={stages.length}
+                    interviewTypes={types} scorecardForms={scorecardForms}
                     onUpdate={u=>updateStage(i,u)} onDelete={()=>deleteStage(i)}
                     onMoveUp={()=>moveStage(i,-1)} onMoveDown={()=>moveStage(i,1)}/>
                 ))}

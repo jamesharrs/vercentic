@@ -1117,7 +1117,8 @@ Step 4: Output EXACTLY this format:
 </CREATE_FORM>
 
 FORM RULES:
-- category must be one of: general, screening, interview, survey, confidential
+- category must be one of: general, screening, interview, scorecard, survey, confidential
+- scorecard forms are used for interview feedback — always include rating fields for competencies and a recommendation field (Strong Yes / Yes / No / Strong No)
 - applies_to is an array of object slugs: "people", "jobs", "talent_pools"
 
 
