@@ -2,8 +2,20 @@ const { Pool } = require('pg');
 let pool = null;
 function getPool() {
   if (!pool && process.env.DATABASE_URL) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000 });
-    pool.on('error', (err) => console.error('[PG] pool error:', err.message));
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      max: 10,
+      idleTimeoutMillis: 600000,      // 10 min — Railway kills idle connections after ~5 min
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+    });
+    pool.on('error', (err) => {
+      console.error('[PG] pool error:', err.message);
+      // Reset pool so next getPool() call creates a fresh one
+      pool = null;
+    });
     console.log('[PG] Pool created');
   }
   return pool;
@@ -28,14 +40,27 @@ async function initSchema() {
 }
 async function loadTenant(slug) {
   const p = getPool(); if (!p) return null;
-  const { rows } = await p.query(`SELECT table_name, record_id, data FROM tenant_store WHERE tenant_slug = $1`, [slug]);
-  const store = {};
-  for (const row of rows) {
-    if (!store[row.table_name]) store[row.table_name] = [];
-    const record = { ...row.data }; if (!record.id) record.id = row.record_id;
-    store[row.table_name].push(record);
+  // Retry once on connection errors (handles Railway idle connection kills)
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const pool2 = getPool(); if (!pool2) return null;
+      const { rows } = await pool2.query(`SELECT table_name, record_id, data FROM tenant_store WHERE tenant_slug = $1`, [slug]);
+      const store = {};
+      for (const row of rows) {
+        if (!store[row.table_name]) store[row.table_name] = [];
+        const record = { ...row.data }; if (!record.id) record.id = row.record_id;
+        store[row.table_name].push(record);
+      }
+      return store;
+    } catch (e) {
+      lastErr = e;
+      console.error(`[PG] loadTenant attempt ${attempt + 1} failed:`, e.message);
+      pool = null; // force new pool on retry
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
-  return store;
+  throw lastErr;
 }
 async function saveTenant(slug, store) {
   const p = getPool(); if (!p) return;
@@ -100,9 +125,22 @@ async function migrateFromJson(dataDir) {
     console.log('[PG] Migrated master JSON to PostgreSQL:', counts);
   } catch(e) { console.error('[PG] Migration error:', e.message); }
 }
-module.exports = { getPool, isEnabled, bootstrap, initSchema, loadTenant, saveTenant, upsertRecord, deleteRecord, queryRecordsDirect, migrateFromJson,
-  // saveCollection: no-op stub — called by several routes but not yet implemented in PG adapter.
-  // When DATABASE_URL is not set, isEnabled() is false so this path is never reached.
-  // When it is set, silently skip rather than crashing — data is already persisted via saveTenant.
+
+// Keep-alive ping every 4 minutes to prevent Railway from killing idle connections
+// (Railway's PG idle timeout is ~5 min on hobby tier)
+let _pingTimer = null;
+function startKeepAlive() {
+  if (_pingTimer) return;
+  _pingTimer = setInterval(async () => {
+    const p = getPool();
+    if (!p) return;
+    try { await p.query('SELECT 1'); }
+    catch (e) { console.error('[PG] keep-alive ping failed:', e.message); pool = null; }
+  }, 4 * 60 * 1000); // 4 minutes
+  if (_pingTimer.unref) _pingTimer.unref(); // don't prevent process exit
+  console.log('[PG] Keep-alive started (4 min interval)');
+}
+
+module.exports = { getPool, isEnabled, bootstrap, initSchema, loadTenant, saveTenant, upsertRecord, deleteRecord, queryRecordsDirect, migrateFromJson, startKeepAlive,
   saveCollection: async () => {},
 };

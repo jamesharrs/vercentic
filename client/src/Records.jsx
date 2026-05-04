@@ -8138,6 +8138,21 @@ const PanelCard = ({ id, compact, openPanels, setOpenPanels, openPanelsKey, rend
           </div>
           <span style={{ flex:1, fontSize:13, fontWeight:700, color:C.text1 }}>{meta.label}</span>
           {badge > 0 && <span style={{ background:C.accentLight, color:C.accent, fontSize:11, fontWeight:700, borderRadius:20, padding:"1px 7px" }}>{badge}</span>}
+          {/* Expand / collapse all sections — only on Profile Fields panel */}
+          {id === "fields" && (
+            <div
+              onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("vercentic:fields-toggle-all")); }}
+              title="Expand / collapse all sections"
+              style={{ display:"flex", alignItems:"center", cursor:"pointer", borderRadius:5, padding:"2px 4px",
+                transition:"background .12s", color:C.text3 }}
+              onMouseEnter={e=>{ e.currentTarget.style.background=C.accentLight; e.currentTarget.style.color=C.accent; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.color=C.text3; }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 5l5-3 5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 9l5 3 5-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          )}
           <span style={{ display:"flex", transition:"transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
             <Ic n="chevD" s={14} c={C.text3}/>
           </span>
@@ -8773,6 +8788,24 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       return next;
     });
   };
+
+  // Expand / collapse ALL collapsible sections at once
+  useEffect(() => {
+    const handler = () => {
+      setCollapsedSections(prev => {
+        // Determine current state: if any section is expanded, collapse all; otherwise expand all
+        const collapsibleIds = fieldSections.filter(s => s.collapsible).map(s => s.separatorId);
+        const anyExpanded = collapsibleIds.some(id => !prev[id]);
+        const next = {};
+        collapsibleIds.forEach(id => { next[id] = anyExpanded; }); // true = collapsed
+        localStorage.setItem(`talentos_collapsed_${objectName}`, JSON.stringify(next));
+        return next;
+      });
+    };
+    window.addEventListener("vercentic:fields-toggle-all", handler);
+    return () => window.removeEventListener("vercentic:fields-toggle-all", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldSections, objectName]);
   // ── Record search ──────────────────────────────────────────────────────────
   const [recordSearch, setRecordSearch] = useState("");
   const [recordSearchOpen, setRecordSearchOpen] = useState(false);
