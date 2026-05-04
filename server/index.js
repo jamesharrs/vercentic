@@ -104,7 +104,7 @@ app.use(cookieParser());
 
 // ── Persistent session store ──────────────────────────────────────────────────
 // On Railway (DATABASE_URL present): sessions stored in PostgreSQL → survive restarts/redeploys
-// Locally (no DATABASE_URL): falls back to MemoryStore (sessions reset on restart, fine for dev)
+// Locally (no DATABASE_URL): session-file-store → sessions persist across server restarts
 let sessionStore;
 if (process.env.DATABASE_URL) {
   try {
@@ -118,7 +118,25 @@ if (process.env.DATABASE_URL) {
     });
     console.log('[session] Using PostgreSQL session store');
   } catch (e) {
-    console.warn('[session] connect-pg-simple failed, falling back to MemoryStore:', e.message);
+    console.warn('[session] connect-pg-simple failed, falling back to file store:', e.message);
+  }
+}
+
+// Local dev: use file-based session store so sessions survive server restarts
+if (!sessionStore) {
+  try {
+    const FileStore = require('session-file-store')(session);
+    const sessDir = require('path').join(__dirname, '../data/sessions');
+    if (!require('fs').existsSync(sessDir)) require('fs').mkdirSync(sessDir, { recursive: true });
+    sessionStore = new FileStore({
+      path:    sessDir,
+      ttl:     8 * 60 * 60,  // 8 hours (matches cookie maxAge)
+      retries: 0,
+      logFn:   () => {},      // suppress verbose file-store logs
+    });
+    console.log('[session] Using file session store (dev)');
+  } catch (e) {
+    console.warn('[session] File store unavailable, using MemoryStore:', e.message);
   }
 }
 
