@@ -8790,11 +8790,16 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   };
 
   // Expand / collapse ALL collapsible sections at once
+  // Ref kept in sync with fieldSections (declared later via useMemo) so the
+  // toggle-all handler can read the current value without a stale-closure issue.
+  const fieldSectionsRef = useRef([]);
+
   useEffect(() => {
     const handler = () => {
       setCollapsedSections(prev => {
-        // Determine current state: if any section is expanded, collapse all; otherwise expand all
-        const collapsibleIds = fieldSections.filter(s => s.collapsible).map(s => s.separatorId);
+        const collapsibleIds = fieldSectionsRef.current
+          .filter(s => s.collapsible)
+          .map(s => s.separatorId);
         const anyExpanded = collapsibleIds.some(id => !prev[id]);
         const next = {};
         collapsibleIds.forEach(id => { next[id] = anyExpanded; }); // true = collapsed
@@ -8805,7 +8810,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     window.addEventListener("vercentic:fields-toggle-all", handler);
     return () => window.removeEventListener("vercentic:fields-toggle-all", handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fieldSections, objectName]);
+  }, [objectName]);
   // ── Record search ──────────────────────────────────────────────────────────
   const [recordSearch, setRecordSearch] = useState("");
   const [recordSearchOpen, setRecordSearchOpen] = useState(false);
@@ -9520,6 +9525,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     }
     return { fieldSections: inline, panelSections: panels };
   }, [visibleFields]);
+
+  // Keep ref in sync so the toggle-all handler (registered before this useMemo)
+  // always reads the current fieldSections without a stale-closure / TDZ issue.
+  fieldSectionsRef.current = fieldSections;
 
   // Register as_panel sections as dynamic PANEL_META entries + ensure they're in layout
   // Panel ID = "section__<separatorId>" to avoid clashing with built-in panel IDs
