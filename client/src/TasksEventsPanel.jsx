@@ -423,46 +423,57 @@ function TaskRow({ task, onRefresh }) {
 
   return (
     <>
-      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderBottom:"1px solid #f3f4f6"}}>
-        {/* Completion control */}
-        <div style={{marginTop:2,flexShrink:0}}>
+      <div
+        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #f3f4f6",
+          cursor:"pointer"}}
+        className="task-row"
+        onMouseEnter={e=>{e.currentTarget.querySelector('.task-meta').style.opacity='1'; e.currentTarget.querySelector('.task-action').style.opacity='1';}}
+        onMouseLeave={e=>{e.currentTarget.querySelector('.task-meta').style.opacity='0'; e.currentTarget.querySelector('.task-action').style.opacity='0';}}
+        onClick={()=>!isDone&&setShowEdit(true)}>
+
+        {/* Checkbox / done indicator — always visible */}
+        <div style={{flexShrink:0}} onClick={e=>e.stopPropagation()}>
           {renderAction()}
         </div>
 
-        {/* Task body */}
-        <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>setShowEdit(true)}>
-          <div style={{fontSize:13,fontWeight:600,
+        {/* Task title */}
+        <div style={{flex:1,minWidth:0}}>
+          <span style={{fontSize:13,fontWeight:600,
             color:isDone?C.text3:"#111827",
-            textDecoration:isDone?"line-through":"none",
-            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            textDecoration:isDone?"line-through":"none"}}>
             {task.title}
-          </div>
-          <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center",flexWrap:"wrap"}}>
+          </span>
+          {/* Metadata row — visible on hover only */}
+          <div className="task-meta" style={{display:"flex",gap:6,marginTop:2,alignItems:"center",flexWrap:"wrap",
+            opacity:0,transition:"opacity .15s"}}>
             {task.due_date && (
-              <span style={{fontSize:11,color:overdue?C.red:C.text3}}>
+              <span style={{fontSize:10,color:overdue?C.red:C.text3}}>
                 {overdue?"⚠ ":""}{task.due_date}
               </span>
             )}
-            <Badge color={PRIORITY[task.priority]?.color} bg={PRIORITY[task.priority]?.bg}>
-              {PRIORITY[task.priority]?.label}
-            </Badge>
-            {/* Completion type badge (only if not checkbox) */}
+            {task.priority && task.priority !== 'medium' && (
+              <Badge color={PRIORITY[task.priority]?.color} bg={PRIORITY[task.priority]?.bg}>
+                {PRIORITY[task.priority]?.label}
+              </Badge>
+            )}
             {ct!=='checkbox'&&(
               <Badge color={ctMeta.color} bg={`${ctMeta.color}10`}>
-                <Ic n={ICON_PATHS[ct]?ct:'check'} s={9} c={ctMeta.color}/>&nbsp;{ctMeta.label}
+                {ctMeta.label}
               </Badge>
             )}
             {checklist.length>0&&(
-              <span style={{fontSize:11,color:C.text3}}>☑ {doneCount}/{checklist.length}</span>
+              <span style={{fontSize:10,color:C.text3}}>☑ {doneCount}/{checklist.length}</span>
             )}
           </div>
-          {/* Instructions preview */}
-          {!isDone && config.instructions && (
-            <div style={{fontSize:11,color:C.text3,marginTop:3,lineHeight:1.4,fontStyle:'italic'}}>
-              {config.instructions}
-            </div>
-          )}
         </div>
+
+        {/* Action button — right-aligned, hover only (hidden when done) */}
+        {!isDone && ct !== 'checkbox' && ct !== 'approval' && (
+          <div className="task-action" style={{flexShrink:0,opacity:0,transition:"opacity .15s"}}
+            onClick={e=>e.stopPropagation()}>
+            {renderAction()}
+          </div>
+        )}
       </div>
 
       {/* Hidden file input */}

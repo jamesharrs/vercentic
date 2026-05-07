@@ -678,28 +678,89 @@ export default function CommunicationsPanel({ record, environment, externalCompo
       {/* Detail drawer */}
       {detail && <CommDetail item={detail} onClose={()=>setDetail(null)} onDelete={id=>{ handleDelete(id); setDetail(null); }}/>}
 
-      {/* Context filter tabs — only shown when person has linked jobs */}
-      {linkedJobs.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
-          {[{ id: 'all', label: 'All' }, { id: 'general', label: 'General' }, ...linkedJobs.map(j => ({ id: j.id, label: j.title }))].map(tab => (
-            <button key={tab.id} onClick={() => { setActiveContext(tab.id); setPage(1); }}
-              style={{
-                padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${activeContext === tab.id ? C.accent : C.border}`,
-                background: activeContext === tab.id ? C.accentLight : 'transparent',
-                color: activeContext === tab.id ? C.accent : C.text3,
-                fontSize: 10, fontWeight: activeContext === tab.id ? 700 : 500,
-                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .12s',
-              }}>
-              {tab.id !== 'all' && tab.id !== 'general' && <span style={{ marginRight: 4 }}>💼</span>}
-              {tab.label}
-            </button>
-          ))}
+      {/* Single merged filter row: context pills (if any) + type icon strip + search */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+        {/* Context pills — only when linked jobs exist */}
+        {linkedJobs.length > 0 && (
+          <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+            {[{ id:'all', label:'All' }, { id:'general', label:'General' }, ...linkedJobs.map(j=>({ id:j.id, label:j.title }))].map(tab => (
+              <button key={tab.id} onClick={()=>{ setActiveContext(tab.id); setPage(1); }}
+                style={{
+                  padding:'3px 9px', borderRadius:20, border:`1.5px solid ${activeContext===tab.id?C.accent:C.border}`,
+                  background:activeContext===tab.id?C.accentLight:'transparent',
+                  color:activeContext===tab.id?C.accent:C.text3,
+                  fontSize:10, fontWeight:activeContext===tab.id?700:500,
+                  cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s',
+                }}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Slim separator */}
+        {linkedJobs.length > 0 && <div style={{ width:1, height:16, background:C.border, flexShrink:0 }}/>}
+        {/* Type icon strip — icons only, count badge when active */}
+        <div style={{ display:'flex', gap:1, flex:1 }}>
+          {["all","email","sms","whatsapp","call"].map(t => {
+            const count = t==="all" ? total : (counts[t]||0);
+            const meta = TYPE_META[t]||{};
+            const active = activeType===t;
+            return (
+              <button key={t} onClick={()=>{ setActiveType(t); setPage(1); }}
+                title={t==="all"?"All types":meta.label}
+                style={{
+                  display:"flex", alignItems:"center", gap:3,
+                  padding:"4px 8px", borderRadius:7, border:"none",
+                  background:active?(meta.bg||"#eef1ff"):"transparent",
+                  color:active?(meta.color||C.accent):C.text3,
+                  fontSize:11, fontWeight:active?700:500,
+                  cursor:"pointer", transition:"all .12s",
+                }}>
+                <TypeIcon type={t==="all"?"email":t} size={13} color={active?(meta.color||C.accent):C.text3}/>
+                {t==="all" && <span style={{fontSize:10}}>All</span>}
+                {count>0 && (
+                  <span style={{
+                    fontSize:10, fontWeight:700, minWidth:14, textAlign:"center",
+                    borderRadius:99, padding:"0 3px", lineHeight:"14px",
+                    background:active?(meta.color||C.accent):"transparent",
+                    color:active?"#fff":C.text3,
+                  }}>{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
-      )}
-
-      {/* Filter + search */}
-      <FilterBar activeType={activeType} setActiveType={t=>{setActiveType(t);setPage(1);}}
-        search={search} setSearch={setSearch} total={total} counts={counts}/>
+        {/* Search icon */}
+        {/* Search */}
+        <div style={{ display:"flex", alignItems:"center", position:"relative" }}>
+          {search ? (
+            <div style={{ display:"flex", alignItems:"center", gap:4, background:"#f8f9fc",
+              border:`1.5px solid ${C.border}`, borderRadius:8, padding:"3px 8px", minWidth:160 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round">
+                <path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+              </svg>
+              <input value={search} onChange={e=>setSearch(e.target.value)} autoFocus
+                onKeyDown={e=>{ if(e.key==="Escape") setSearch(""); }}
+                placeholder="Search…"
+                style={{ border:"none", outline:"none", fontSize:12, background:"transparent",
+                  color:C.text1, width:120, fontFamily:"inherit" }}/>
+              <button onClick={()=>setSearch("")}
+                style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:0, display:"flex" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          ) : (
+            <button onClick={()=>setSearch(" ")} title="Search communications"
+              style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                width:28, height:28, borderRadius:7, border:`1px solid ${C.border}`,
+                background:"transparent", cursor:"pointer", color:C.text3 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Timeline */}
       {loading && items.length===0
