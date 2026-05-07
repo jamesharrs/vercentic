@@ -11481,14 +11481,40 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
         {/* Active filter chip */}
         {filterChip && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px 5px 12px", borderRadius:20,
-            background:C.accentLight, border:`1.5px solid ${C.accent}`, fontSize:12, color:C.accent, fontWeight:600 }}>
+          <div
+            onClick={() => {
+              if (filterChip.fieldKey === '__ids__' || filterChip.fieldKey === '_linked_record_id') return;
+              const matchingField = fields.find(f => f.api_key === filterChip.fieldKey);
+              if (matchingField) {
+                setActiveFilters(prev => {
+                  const already = prev.some(f => f.fieldId === matchingField.id);
+                  if (already) return prev;
+                  return [...prev, {
+                    id: Date.now(),
+                    fieldId: matchingField.id,
+                    fieldKey: filterChip.fieldKey,
+                    fieldLabel: filterChip.fieldLabel || matchingField.label || filterChip.fieldKey,
+                    fieldType: matchingField.field_type || 'text',
+                    op: 'contains',
+                    value: filterChip.fieldValue,
+                  }];
+                });
+              }
+              setFilterChip(null);
+              setActiveListName(null);
+              setPage(1);
+              setShowFilterPanel(true);
+            }}
+            title={filterChip.fieldKey !== '__ids__' && filterChip.fieldKey !== '_linked_record_id' ? "Click to edit this filter" : undefined}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px 5px 12px", borderRadius:20,
+              background:C.accentLight, border:`1.5px solid ${C.accent}`, fontSize:12, color:C.accent, fontWeight:600,
+              cursor: filterChip.fieldKey !== '__ids__' && filterChip.fieldKey !== '_linked_record_id' ? "pointer" : "default" }}>
             <Ic n="filter" s={11} c={C.accent}/>
             {filterChip.fieldKey === '__ids__'
               ? filterChip.label || `${filterChip.fieldValue.split(',').length} people`
               : <>{filterChip.fieldLabel}: <span style={{fontStyle:"italic"}}>{filterChip.fieldDisplay ?? filterChip.fieldValue}</span></>
             }
-            <button onClick={()=>{setFilterChip(null);setActiveListName(null);setPage(1);}}
+            <button onClick={e=>{e.stopPropagation();setFilterChip(null);setActiveListName(null);setPage(1);}}
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
               <Ic n="x" s={12} c={C.accent}/>
