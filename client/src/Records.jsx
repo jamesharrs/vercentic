@@ -887,8 +887,27 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
           <RichTextEditor value={value||""} onChange={onChange} placeholder={field.placeholder||field.name} autoFocus={autoFocus} minHeight={140}/>
         </AITextEditor>
       );
-    case "select":
-      return <Sel value={value} onChange={onChange} options={(field.options||[]).map(o=>({value:o,label:o}))}/>;
+    case "select": {
+      const opts = (field.options||[]);
+      if (opts.length <= 6) {
+        // Pill buttons for short lists (matches multi_select style)
+        return (
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {opts.map(opt => {
+              const on = value === opt;
+              return (
+                <button key={opt} onClick={()=>onChange(on ? "" : opt)}
+                  style={{padding:"5px 12px",borderRadius:99,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accentLight:"transparent",color:on?C.accent:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        );
+      }
+      // Styled native select for longer lists
+      return <Sel value={value} onChange={onChange} options={opts.map(o=>({value:o,label:o}))}/>;
+    }
     case "multi_select": {
       const selected = Array.isArray(value)?value:(value?value.split(","):[]);
       return (
