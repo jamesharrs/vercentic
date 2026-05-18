@@ -504,6 +504,15 @@ const TableFieldEditor = ({ field, value, onChange }) => {
   const [sortDir, setSortDir] = React.useState('asc');
   const [filterText, setFilterText] = React.useState('');
 
+  // Sync rows when value changes externally (e.g. after CV parse populates the field)
+  const prevValueRef = React.useRef(value);
+  React.useEffect(() => {
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
+      if (Array.isArray(value)) setRows(value);
+    }
+  }, [value]);
+
   const _uid = () => Math.random().toString(36).slice(2,10);
 
   const updateRows = r => { setRows(r); onChange(r); };
@@ -1868,8 +1877,9 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     try {
       const fd = new FormData();
       fd.append("file", file);
+      if (environment?.id) fd.append("environment_id", environment.id);
       const tFetch = (url, opts) => fetch((import.meta.env.VITE_API_URL||"")+url, opts);
-      const res = await tFetch("/api/cv-parse", { method:"POST", body: fd });
+      const res = await tFetch("/api/cv-parse", { method:"POST", body: fd, credentials:"include" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Parse failed");
       applyParsedFields(json);
@@ -1886,7 +1896,8 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
       const res = await tFetch("/api/cv-parse", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ raw_text: importText })
+        credentials:"include",
+        body: JSON.stringify({ raw_text: importText, environment_id: environment?.id })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Extract failed");
@@ -1904,7 +1915,8 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
       const res = await tFetch("/api/cv-parse", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ url: importUrl })
+        credentials:"include",
+        body: JSON.stringify({ url: importUrl, environment_id: environment?.id })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Extract failed");
