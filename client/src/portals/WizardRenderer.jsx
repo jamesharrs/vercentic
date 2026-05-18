@@ -157,25 +157,54 @@ const EntryMethodBlock = ({ config={}, formData, set, onMethodChosen, parsing, c
 };
 
 // ── BLOCK: Profile Fields ─────────────────────────────────────────────────────
+// Known field definitions — used as a lookup for label/type/placeholder
 const PROFILE_FIELD_DEFS = [
-  {key:'first_name',  label:'First name',         type:'text',  required:true,  placeholder:'Jane'},
-  {key:'last_name',   label:'Last name',           type:'text',  required:false, placeholder:'Smith'},
-  {key:'email',       label:'Email address',       type:'email', required:true,  placeholder:'jane@example.com'},
-  {key:'phone',       label:'Phone number',        type:'tel',   required:false, placeholder:'+971 50 000 0000'},
-  {key:'location',    label:'Location',            type:'text',  required:false, placeholder:'Dubai, UAE'},
-  {key:'current_title',label:'Current job title',  type:'text',  required:false, placeholder:'Software Engineer'},
-  {key:'linkedin_url',label:'LinkedIn profile URL',type:'url',   required:false, placeholder:'linkedin.com/in/your-profile'},
-  {key:'cover_letter',label:'Cover letter / note', type:'textarea',required:false,placeholder:'Tell us why you\'re a great fit…',rows:4},
-  {key:'years_experience',label:'Years of experience',type:'number',required:false,placeholder:'5'},
-  {key:'salary_expectation',label:'Salary expectation',type:'text',required:false,placeholder:'AED 25,000/month'},
+  {key:'first_name',         label:'First name',              type:'text',     required:true,  placeholder:'Jane'},
+  {key:'last_name',          label:'Last name',               type:'text',     required:false, placeholder:'Smith'},
+  {key:'email',              label:'Email address',           type:'email',    required:true,  placeholder:'jane@example.com'},
+  {key:'phone',              label:'Phone number',            type:'tel',      required:false, placeholder:'+971 50 000 0000'},
+  {key:'location',           label:'Location',                type:'text',     required:false, placeholder:'Dubai, UAE'},
+  {key:'country',            label:'Country',                 type:'text',     required:false, placeholder:'UAE'},
+  {key:'current_title',      label:'Current job title',       type:'text',     required:false, placeholder:'Software Engineer'},
+  {key:'current_company',    label:'Current company',         type:'text',     required:false, placeholder:'Acme Corp'},
+  {key:'linkedin_url',       label:'LinkedIn profile URL',    type:'url',      required:false, placeholder:'linkedin.com/in/your-profile'},
+  {key:'cover_letter',       label:'Cover letter / note',     type:'textarea', required:false, placeholder:'Tell us why you\'re a great fit…', rows:4},
+  {key:'years_experience',   label:'Years of experience',     type:'number',   required:false, placeholder:'5'},
+  {key:'salary_expectation', label:'Salary expectation',      type:'text',     required:false, placeholder:'AED 25,000/month'},
+  {key:'summary',            label:'Summary / bio',           type:'textarea', required:false, placeholder:'A brief introduction…', rows:3},
+  {key:'skills',             label:'Skills',                  type:'text',     required:false, placeholder:'React, Node.js, Python'},
+  {key:'languages',          label:'Languages',               type:'text',     required:false, placeholder:'English, Arabic'},
+  {key:'notice_period',      label:'Notice period',           type:'text',     required:false, placeholder:'1 month'},
+  {key:'available_from',     label:'Available from',          type:'date',     required:false},
+  {key:'work_type_preference',label:'Work type preference',   type:'text',     required:false, placeholder:'Remote, Hybrid, On-site'},
+  {key:'work_authorisation', label:'Work authorisation',      type:'text',     required:false, placeholder:'UAE resident visa'},
+  {key:'nationality',        label:'Nationality',             type:'text',     required:false, placeholder:'British'},
+  {key:'gender',             label:'Gender',                  type:'text',     required:false, placeholder:''},
+  {key:'date_of_birth',      label:'Date of birth',           type:'date',     required:false},
+  {key:'work_history',       label:'Work history',            type:'textarea', required:false, placeholder:'Describe your work history…', rows:3},
+  {key:'education',          label:'Education',               type:'textarea', required:false, placeholder:'Describe your education…', rows:3},
+  {key:'source',             label:'How did you hear about us?', type:'text',  required:false, placeholder:'LinkedIn, referral…'},
+  {key:'status',             label:'Status',                  type:'text',     required:false, placeholder:''},
+  {key:'rating',             label:'Rating',                  type:'number',   required:false, placeholder:''},
+  {key:'gdpr_consent',       label:'GDPR Consent',            type:'text',     required:false, placeholder:''},
+  {key:'gdpr_consent_date',  label:'GDPR Consent Date',       type:'date',     required:false},
+  {key:'job_title',          label:'Job title',               type:'text',     required:false, placeholder:''},
+  {key:'department',         label:'Department',              type:'text',     required:false, placeholder:''},
+  {key:'employment_type',    label:'Employment type',         type:'text',     required:false, placeholder:'Full-time'},
+  {key:'start_date',         label:'Start date',              type:'date',     required:false},
+  {key:'end_date',           label:'End date',                type:'date',     required:false},
+  {key:'do_not_contact',     label:'Do not contact',          type:'text',     required:false, placeholder:''},
 ];
+const PROFILE_FIELD_MAP = Object.fromEntries(PROFILE_FIELD_DEFS.map(f=>[f.key, f]));
+
+// Convert a snake_case key to a display label
+const keyToLabel = k => k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 
 const ProfileFieldsBlock = ({ config={}, formData, set, onEmailBlur, emailCheck, checkingEmail,
   otpState, otpCode, setOtpCode, otpError, otpSimCode, onVerifyOtp, onSendOtp, color }) => {
   const visibleKeys = config.fields?.length ? config.fields : ['first_name','last_name','email','phone','location','current_title'];
-  const defs = PROFILE_FIELD_DEFS.filter(f=>visibleKeys.includes(f.key));
-  const pairs = [];
-  for (let i=0;i<defs.length;i+=2) pairs.push(defs.slice(i,i+2));
+  // Build defs: use known definitions where available, generate generic text input for custom fields
+  const defs = visibleKeys.map(k => PROFILE_FIELD_MAP[k] || { key:k, label:keyToLabel(k), type:'text', required:false });
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
       {defs.map(f=>(
