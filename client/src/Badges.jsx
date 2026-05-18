@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import apiClient from "./apiClient.js";
 
-const api = { get: (path) => apiClient(path) };
+const api = { get: (path) => apiClient.get(path) };
 
 const C = {
   bg:          "var(--t-bg, #f0f2ff)",
