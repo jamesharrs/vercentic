@@ -156,6 +156,28 @@ const BlockConfig = ({ block, onUpdate, onRemove, portal }) => {
   const set = (k,v) => onUpdate({ ...block, config:{ ...cfg, [k]:v } });
   const setField = (k,v) => onUpdate({ ...block, [k]:v });
 
+  // Load People object fields for profile_fields block
+  const [peopleFields, setPeopleFields] = useState([]);
+  useEffect(() => {
+    if (block.type !== 'profile_fields') return;
+    const envId = portal?.environment_id;
+    if (!envId) return;
+    import('./apiClient.js').then(({ default: apiClient }) => {
+      apiClient.get(`/objects?environment_id=${envId}`).then(objs => {
+        const peopleObj = (Array.isArray(objs) ? objs : objs.data || []).find(o =>
+          o.slug === 'people' || o.name?.toLowerCase() === 'people' || o.name?.toLowerCase() === 'persons'
+        );
+        if (!peopleObj) return;
+        apiClient.get(`/fields?object_id=${peopleObj.id}`).then(fields => {
+          const SYSTEM_SKIP = new Set(['id','created_at','updated_at','object_id','environment_id','deleted_at']);
+          const arr = (Array.isArray(fields) ? fields : fields.data || [])
+            .filter(f => !SYSTEM_SKIP.has(f.api_key) && f.field_type !== 'section_separator');
+          setPeopleFields(arr);
+        });
+      });
+    }).catch(() => {});
+  }, [block.type, portal?.environment_id]);
+
   // Load job object fields for candidate_job_fields block
   const [jobFields, setJobFields] = useState([]);
   useEffect(() => {
@@ -196,17 +218,35 @@ const BlockConfig = ({ block, onUpdate, onRemove, portal }) => {
       {(block.type==='profile_fields'||block.type==='job_fields')&&(
         <div>
           <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>Fields to show</div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-            {(block.type==='profile_fields'?PROFILE_FIELD_OPTIONS:JOB_FIELD_OPTIONS).map(f=>{
-              const selected = (cfg.fields||[]).includes(f.value);
-              return (
-                <button key={f.value} onClick={()=>{ const cur=cfg.fields||[]; set('fields',selected?cur.filter(x=>x!==f.value):[...cur,f.value]); }}
-                  style={{padding:'3px 8px',borderRadius:99,fontSize:10,fontWeight:600,border:`1px solid ${selected?C.accent:C.border}`,background:selected?C.accentLight:'white',color:selected?C.accent:C.text3,cursor:'pointer'}}>
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
+          {block.type==='profile_fields' ? (
+            peopleFields.length === 0 ? (
+              <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+            ) : (
+              <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                {peopleFields.map(f=>{
+                  const selected = (cfg.fields||[]).includes(f.api_key);
+                  return (
+                    <button key={f.api_key} onClick={()=>{ const cur=cfg.fields||[]; set('fields',selected?cur.filter(x=>x!==f.api_key):[...cur,f.api_key]); }}
+                      style={{padding:'3px 8px',borderRadius:99,fontSize:10,fontWeight:600,border:`1px solid ${selected?C.accent:C.border}`,background:selected?C.accentLight:'white',color:selected?C.accent:C.text3,cursor:'pointer'}}>
+                      {f.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+              {JOB_FIELD_OPTIONS.map(f=>{
+                const selected = (cfg.fields||[]).includes(f.value);
+                return (
+                  <button key={f.value} onClick={()=>{ const cur=cfg.fields||[]; set('fields',selected?cur.filter(x=>x!==f.value):[...cur,f.value]); }}
+                    style={{padding:'3px 8px',borderRadius:99,fontSize:10,fontWeight:600,border:`1px solid ${selected?C.accent:C.border}`,background:selected?C.accentLight:'white',color:selected?C.accent:C.text3,cursor:'pointer'}}>
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {block.type==='candidate_job_fields'&&(
