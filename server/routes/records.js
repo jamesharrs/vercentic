@@ -645,8 +645,9 @@ router.post('/', validate(createRecordSchema), (req, res) => {
   const _existingNums = query('records', r => r.object_id === object_id && r.environment_id === environment_id)
     .map(r => r.record_number || 0).filter(n => typeof n === 'number' && !isNaN(n));
   const record_number = _existingNums.length > 0 ? Math.max(..._existingNums) + 1 : 1;
-  const record = insert('records', {id:uuidv4(),record_number,object_id,environment_id,data:resolvedData,org_unit_id,created_by:created_by||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
-  insert('activity', {id:uuidv4(),environment_id,record_id:record.id,object_id,action:'created',actor:created_by||null,changes:resolvedData,created_at:new Date().toISOString()});
+  const effectiveCreator = created_by || req.headers['x-user-id'] || null;
+  const record = insert('records', {id:uuidv4(),record_number,object_id,environment_id,data:resolvedData,org_unit_id,created_by:effectiveCreator,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
+  insert('activity', {id:uuidv4(),environment_id,record_id:record.id,object_id,action:'created',actor:effectiveCreator,changes:resolvedData,created_at:new Date().toISOString()});
   // Fire agent triggers + workflow automation triggers
   getEngine().fireEventTrigger('record_created', record, null).catch(()=>{});
   fireTrigger('record_created', record, []);
