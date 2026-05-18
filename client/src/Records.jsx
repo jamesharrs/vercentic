@@ -11602,7 +11602,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   }, [records, isPeopleObj, showEngagement]);
 
   const handleCreate = async (data) => {
-    const created = await api.post("/records", { object_id:object.id, environment_id:environment.id, data, created_by:"Admin" });
+    const _session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const _userId = _session?.user?.id || null;
+    const created = await api.post("/records", { object_id:object.id, environment_id:environment.id, data, created_by:_userId });
     await load();
     setShowForm(false);
     // Open the newly created record immediately
@@ -11610,7 +11612,9 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   const handleUpdate = async (data) => {
-    await api.patch(`/records/${editRecord.id}`, { data, updated_by:"Admin" });
+    const _session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const _userId = _session?.user?.id || null;
+    await api.patch(`/records/${editRecord.id}`, { data, updated_by: _userId });
     await load();
     setEditRecord(null);
   };
