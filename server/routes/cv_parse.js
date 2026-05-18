@@ -7,39 +7,40 @@ const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middle
 
 // ── Extract text from file ────────────────────────────────────────────────────
 async function extractText(filePath, mimetype) {
-  // Detect type: prefer MIME (set by multer/file-type), then scan all extensions
-  // in the filename to handle double-extension files like "cv.docx.pdf"
+  // MIME type (set by file-type magic-byte detection) is the ground truth.
+  // Filename extensions are only used as a fallback when MIME is ambiguous.
   const basename = path.basename(filePath).toLowerCase();
   const allExts  = basename.split('.').slice(1).map(e => `.${e}`);
 
-  const isPdf  = mimetype === 'application/pdf'
-              || allExts.includes('.pdf');
-  const isDocx = mimetype?.includes('openxmlformats')
-              || mimetype === 'application/zip'  // file-type detects DOCX as zip
-              || allExts.includes('.docx');
-  const isDoc  = mimetype === 'application/msword'
-              || (allExts.includes('.doc') && !isDocx);
+  const mimeIsPdf  = mimetype === 'application/pdf';
+  const mimeIsDocx = mimetype?.includes('openxmlformats');
+  const mimeIsZip  = mimetype === 'application/zip';  // file-type sees DOCX as zip
+  const mimeIsDoc  = mimetype === 'application/msword';
+  const mimeIsText = mimetype?.startsWith('text/');
+  const mimeKnown  = mimeIsPdf || mimeIsDocx || mimeIsZip || mimeIsDoc || mimeIsText;
 
-  // For DOCX files that file-type detects as application/zip, read magic bytes
-  // to confirm it's actually a ZIP-based Office format, then use mammoth
-  let looksLikeDocx = isDocx;
-  if (!looksLikeDocx && !isPdf && !isDoc) {
+  // When MIME is zip or unknown, use magic bytes + extension to resolve DOCX
+  let resolvedIsDocx = mimeIsDocx;
+  if (!resolvedIsDocx && (mimeIsZip || !mimeKnown) && allExts.includes('.docx')) {
     try {
       const buf = fs.readFileSync(filePath);
-      // ZIP magic: PK\x03\x04
-      if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) {
-        looksLikeDocx = true;
-      }
+      // ZIP magic PK\x03\x04 — confirms it's an Office Open XML file
+      resolvedIsDocx = buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04;
     } catch { /* ignore */ }
   }
 
+  // Final type decision — MIME wins; extensions only fill gaps when MIME is unknown
+  const isPdf  = mimeIsPdf  || (!mimeKnown && allExts.includes('.pdf') && !allExts.includes('.docx'));
+  const isDocx = resolvedIsDocx;
+  const isDoc  = mimeIsDoc  || (!mimeKnown && allExts.includes('.doc') && !allExts.includes('.docx'));
+
   try {
-    if (isPdf && !looksLikeDocx) {
+    if (isPdf) {
       const pdfParse = require('pdf-parse');
       const data = await pdfParse(fs.readFileSync(filePath));
       return data.text || '';
     }
-    if (looksLikeDocx || isDocx) {
+    if (isDocx) {
       const mammoth = require('mammoth');
       const result = await mammoth.extractRawText({ path: filePath });
       return result.value || '';
@@ -53,14 +54,13 @@ async function extractText(filePath, mimetype) {
         return fs.readFileSync(filePath, 'latin1').replace(/[^\x20-\x7E\n\r\t]/g, ' ');
       }
     }
-    const ext = path.extname(filePath).toLowerCase();
-    if (['.txt', '.csv', '.md'].includes(ext)) {
+    if (mimeIsText || ['.txt', '.csv', '.md'].includes(path.extname(filePath).toLowerCase())) {
       return fs.readFileSync(filePath, 'utf8');
     }
-    // Fallback — strip non-printable chars
+    // Fallback
     return fs.readFileSync(filePath, 'utf8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s{3,}/g, ' ');
   } catch(e) {
-    console.error('Text extraction error:', e.message);
+    console.error('[cv-parse] Text extraction error:', e.message);
     return '';
   }
 }
