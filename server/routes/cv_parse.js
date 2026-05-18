@@ -204,13 +204,14 @@ JSON structure (return ALL fields, even if some are null):
   "years_experience": "number (integer) or null",
   "skills": ["array", "of", "skill", "strings"],
   "languages": ["array of spoken languages"],
-  "education": [{"institution": "", "degree": "", "field": "", "year": ""}],
-  "work_history": [{"company": "", "title": "", "start": "", "end": "", "description": ""}],
+  "education": [{"institution": "", "degree": "", "field": "", "start": "", "end": "", "grade": ""}],
+  "work_history": [{"company": "", "title": "", "start": "", "end": "", "current": false, "description": ""}],
   "certifications": ["array of certification strings"],
   "notice_period": "string or null",
   "nationality": "string or null"
 }
 
+DATES: Always use YYYY-MM format for dates (e.g. "2018-06"). If only a year is known, use "YYYY-01". Use "present" for current roles — also set current:true on that work_history entry.
 IMPORTANT: The skills array and work_history array should be populated even if education is missing. Always try to extract the person's name — it's usually at the top of the CV.`;
 
   try {
@@ -257,6 +258,49 @@ IMPORTANT: The skills array and work_history array should be populated even if e
     // ── Map Claude's named-key arrays into table column-ID format ─────────────
     // The table field renderer uses column IDs (e.g. "lcc54yyb") not named keys.
     // Look up the actual column IDs from the store for work_history and education.
+
+    // Normalise a date string from Claude into YYYY-MM-DD for date-type columns.
+    // Handles: "06/2018", "2018-06", "Jun 2018", "June 2018", "2018", "Present", null, ""
+    const normaliseDate = (raw) => {
+      if (!raw) return '';
+      const s = String(raw).trim();
+      if (!s || s.toLowerCase() === 'present' || s.toLowerCase() === 'current') return '';
+
+      const MONTHS = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+        january:1,february:2,march:3,april:4,may_:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12 };
+
+      // Already ISO: "2018-06-01" or "2018-06"
+      if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) {
+        return s.length === 7 ? `${s}-01` : s;
+      }
+      // "06/2018" or "6/2018"
+      let m = s.match(/^(\d{1,2})\/(\d{4})$/);
+      if (m) return `${m[2]}-${String(m[1]).padStart(2,'0')}-01`;
+
+      // "2018/06"
+      m = s.match(/^(\d{4})\/(\d{1,2})$/);
+      if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-01`;
+
+      // "Jun 2018" or "June 2018"
+      m = s.match(/^([A-Za-z]+)[\s\-,]+(\d{4})$/);
+      if (m) {
+        const mon = MONTHS[m[1].toLowerCase().slice(0,3)];
+        if (mon) return `${m[2]}-${String(mon).padStart(2,'0')}-01`;
+      }
+
+      // "2018 Jun" or "2018 June"
+      m = s.match(/^(\d{4})[\s\-,]+([A-Za-z]+)$/);
+      if (m) {
+        const mon = MONTHS[m[2].toLowerCase().slice(0,3)];
+        if (mon) return `${m[1]}-${String(mon).padStart(2,'0')}-01`;
+      }
+
+      // Just a year: "2018"
+      if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+
+      // Can't parse — return empty so the date input stays blank rather than showing invalid value
+      return '';
+    };
     try {
       const { getStore } = require('../db/init');
       const store = getStore();
@@ -287,9 +331,10 @@ IMPORTANT: The skills array and work_history array should be populated even if e
             const mapped = {};
             if (companyCol)  mapped[companyCol.id]  = row.company  || row.employer || '';
             if (titleCol)    mapped[titleCol.id]    = row.title    || row.position  || row.role || '';
-            if (fromCol)     mapped[fromCol.id]     = row.start    || row.from      || '';
-            if (toCol)       mapped[toCol.id]       = row.end      || row.to        || '';
-            if (currentCol)  mapped[currentCol.id]  = !!(row.current || row.is_current);
+            if (fromCol)     mapped[fromCol.id]     = normaliseDate(row.start || row.from);
+            if (toCol)       mapped[toCol.id]       = normaliseDate(row.end   || row.to);
+            if (currentCol)  mapped[currentCol.id]  = !!(row.current || row.is_current ||
+                                                         String(row.end||row.to||'').toLowerCase()==='present');
             if (descCol)     mapped[descCol.id]     = row.description || row.summary || '';
             return mapped;
           });
@@ -315,9 +360,10 @@ IMPORTANT: The skills array and work_history array should be populated even if e
             if (instCol)    mapped[instCol.id]    = row.institution || row.school || row.university || '';
             if (degreeCol)  mapped[degreeCol.id]  = row.degree      || row.qualification || '';
             if (subjectCol) mapped[subjectCol.id] = row.field       || row.subject || row.major || row.course || '';
-            if (fromCol)    mapped[fromCol.id]    = row.start       || row.from || '';
-            if (toCol)      mapped[toCol.id]      = row.end         || row.to   || row.year || '';
-            if (currentCol) mapped[currentCol.id] = !!(row.current  || row.is_current);
+            if (fromCol)    mapped[fromCol.id]    = normaliseDate(row.start || row.from);
+            if (toCol)      mapped[toCol.id]      = normaliseDate(row.end   || row.to   || row.year);
+            if (currentCol) mapped[currentCol.id] = !!(row.current  || row.is_current ||
+                                                       String(row.end||row.to||'').toLowerCase()==='present');
             if (gradeCol)   mapped[gradeCol.id]   = row.grade       || row.result || row.gpa || '';
             return mapped;
           });
