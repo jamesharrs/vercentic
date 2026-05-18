@@ -2148,17 +2148,13 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                   {section.label}
                 </span>
               </div>
-              {/* Two-column grid */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
+              {/* Single-column field list */}
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
                 {section.keys.map(key => {
                   const field = fields.find(f=>f.api_key===key);
                   if (!field) return null;
-                  // Full-width for: textarea, rich_text, multi_select with many options, boolean pills
-                  const isFullWidth = ["textarea","rich_text","text_area"].includes(field.field_type)
-                    || (field.field_type === "multi_select" && (field.options||[]).length > 4)
-                    || (field.field_type === "select" && (field.options||[]).length > 6);
                   return (
-                    <div key={key} style={{ gridColumn: isFullWidth ? "1 / -1" : "auto" }}>
+                    <div key={key}>
                       <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:6 }}>
                         {field.name}{!!field.is_required&&<span style={{color:"#ef4444",marginLeft:2}}>*</span>}
                       </label>
