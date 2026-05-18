@@ -7,22 +7,44 @@ const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middle
 
 // ── Extract text from file ────────────────────────────────────────────────────
 async function extractText(filePath, mimetype) {
-  const ext = path.extname(filePath).toLowerCase();
+  // Detect type: prefer MIME (set by multer/file-type), then scan all extensions
+  // in the filename to handle double-extension files like "cv.docx.pdf"
+  const basename = path.basename(filePath).toLowerCase();
+  const allExts  = basename.split('.').slice(1).map(e => `.${e}`);
+
+  const isPdf  = mimetype === 'application/pdf'
+              || allExts.includes('.pdf');
+  const isDocx = mimetype?.includes('openxmlformats')
+              || mimetype === 'application/zip'  // file-type detects DOCX as zip
+              || allExts.includes('.docx');
+  const isDoc  = mimetype === 'application/msword'
+              || (allExts.includes('.doc') && !isDocx);
+
+  // For DOCX files that file-type detects as application/zip, read magic bytes
+  // to confirm it's actually a ZIP-based Office format, then use mammoth
+  let looksLikeDocx = isDocx;
+  if (!looksLikeDocx && !isPdf && !isDoc) {
+    try {
+      const buf = fs.readFileSync(filePath);
+      // ZIP magic: PK\x03\x04
+      if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) {
+        looksLikeDocx = true;
+      }
+    } catch { /* ignore */ }
+  }
+
   try {
-    // PDF
-    if (ext === '.pdf' || mimetype === 'application/pdf') {
+    if (isPdf && !looksLikeDocx) {
       const pdfParse = require('pdf-parse');
       const data = await pdfParse(fs.readFileSync(filePath));
       return data.text || '';
     }
-    // DOCX
-    if (ext === '.docx' || mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    if (looksLikeDocx || isDocx) {
       const mammoth = require('mammoth');
       const result = await mammoth.extractRawText({ path: filePath });
       return result.value || '';
     }
-    // DOC (legacy) — best effort
-    if (ext === '.doc') {
+    if (isDoc) {
       const mammoth = require('mammoth');
       try {
         const result = await mammoth.extractRawText({ path: filePath });
@@ -31,7 +53,7 @@ async function extractText(filePath, mimetype) {
         return fs.readFileSync(filePath, 'latin1').replace(/[^\x20-\x7E\n\r\t]/g, ' ');
       }
     }
-    // Plain text
+    const ext = path.extname(filePath).toLowerCase();
     if (['.txt', '.csv', '.md'].includes(ext)) {
       return fs.readFileSync(filePath, 'utf8');
     }
@@ -58,7 +80,7 @@ router.post('/', (req, res, next) => {
   const attachment_id = req.body?.attachment_id;
 
   // Get text — either from uploaded file or from stored attachment
-  let cvText = '';
+  let cvText;
   let cleanupPath = null;
 
   if (req.file) {
@@ -103,7 +125,7 @@ router.post('/', (req, res, next) => {
     return res.status(400).json({ error: 'Provide file, attachment_id, raw_text, or url' });
   }
 
-  if (!cvText.trim()) {
+  if (!cvText?.trim()) {
     if (cleanupPath) fs.unlinkSync(cleanupPath);
     return res.status(422).json({ error: 'Could not extract text from file' });
   }
