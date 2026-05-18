@@ -1699,6 +1699,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("talentos:copilot-dock", { detail: { docked: open && docked } }));
+    // Notify tour when copilot is opened
+    if (open) window.dispatchEvent(new CustomEvent("vercentic:copilot-opened"));
   }, [open, docked]);
   useEffect(() => {
     const handler = (e) => {

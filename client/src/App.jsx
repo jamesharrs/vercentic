@@ -67,6 +67,7 @@ const PortalsPage     = lazyWithRetry(() => import("./Portals.jsx"));
 const ReportsPage     = lazyWithRetry(() => import("./Reports.jsx"));
 const Interviews      = lazyWithRetry(() => import("./Interviews.jsx"));
 const OffersModule    = lazyWithRetry(() => import("./Offers.jsx"));
+const BadgesModule    = lazyWithRetry(() => import("./Badges.jsx"));
 const CohortsModule   = lazyWithRetry(() => import("./Cohorts.jsx"));
 const SourcingHub     = lazyWithRetry(() => import("./SourcingHub.jsx"));
 const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
@@ -983,8 +984,9 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         )}
       </div>
 
-      {/* Search — capped width */}
-      <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
+      {/* Search + Create — wrapped together for tour spotlight */}
+      <div data-tour="search-and-create" style={{ display:"flex", alignItems:"center", gap:8, flex:1, maxWidth:480 }}>
+      <div data-tour="global-search" style={{ position: "relative", flex: 1, maxWidth: 400 }}>
         {/* Input */}
         <input
           value={query}
@@ -1129,6 +1131,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
           </div>
         )}
       </div>
+      </div>{/* end search-and-create wrapper */}
 
       {/* ── Right group: Calendar + Bell + History ── */}
       <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:"auto", flexShrink:0, borderLeft:"1px solid var(--t-border)", paddingLeft:10 }}>
@@ -1565,6 +1568,7 @@ function App({ onEnvReady }) {
   const featCopilot    = useFeature('ai_copilot');
   const featInterviews = useFeature('interviews');
   const featOffers     = useFeature('offers');
+  const featAchievements = useFeature('achievements');
   const featReports    = useFeature('reports');
   const featOrgChart   = useFeature('org_chart');
   const featWorkflows  = useFeature('workflows');
@@ -2088,6 +2092,7 @@ activeNavRef.current = activeNav;
         featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
         featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
         featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        featAchievements && { id: "badges",    icon: "award",        label: "Achievements" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
@@ -2107,6 +2112,7 @@ activeNavRef.current = activeNav;
       if (item.id === 'org_chart')    return canGlobal('access_org_chart')    && featOrgChart;
       if (item.id === 'interviews')   return canGlobal('access_interviews')   && featInterviews;
       if (item.id === 'offers')       return canGlobal('access_offers')       && featOffers;
+      if (item.id === 'badges')       return canGlobal('access_achievements') && featAchievements;
       if (item.id === 'reports')      return canGlobal('access_reports')      && featReports;
       if (item.id === 'search')       return canGlobal('access_search')       && featSearch;
       if (item.id === 'calendar')     return canGlobal('access_calendar')     && featCalendar;
@@ -2495,6 +2501,7 @@ activeNavRef.current = activeNav;
           {/* Logo icon — always visible, click to expand when collapsed */}
           <div
             onClick={navCollapsed ? toggleNav : () => switchNav("dashboard")}
+            data-tour="nav-logo"
             title={navCollapsed ? "Expand sidebar" : "Go to Dashboard"}
             style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, overflow: "hidden", cursor: "pointer" }}>
             <svg width="22" height="22" viewBox="0 0 80 80" fill="none" style={{ flexShrink: 0 }}>
@@ -2544,6 +2551,13 @@ activeNavRef.current = activeNav;
                     <button
                       onClick={() => switchNav(item.id)}
                       {...(item.id==="interviews" ? {"data-tour":"nav-interviews"} : {})}
+                      {...(item.id==="dashboard"  ? {"data-tour":"nav-dashboard"}  : {})}
+                      {...(item.id==="offers"      ? {"data-tour":"nav-offers"}     : {})}
+                      {...(item.id==="reports"     ? {"data-tour":"nav-reports"}    : {})}
+                      {...(item.id==="getting-started" ? {"data-tour":"nav-getting-started"} : {})}
+                      {...(item.object?.slug==="people"       ? {"data-tour":"nav-people"}  : {})}
+                      {...(item.object?.slug==="jobs"         ? {"data-tour":"nav-jobs"}    : {})}
+                      {...(item.object?.slug==="talent-pools" ? {"data-tour":"nav-pools"}   : {})}
                       title={!navExpanded ? item.label : undefined}
                       style={{
                         width: "100%", display: "flex", alignItems: "center", gap: navExpanded ? 9 : 0,
@@ -2613,9 +2627,9 @@ activeNavRef.current = activeNav;
       )}
 
       {/* Main content */}
-      <div style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
+      <div data-tour="main-content" style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
         {/* Top bar */}
-        <GlobalSearch data-tour="global-search" selectedEnv={selectedEnv} navObjects={navObjects}
+        <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects}
              activeDashTab={activeNav === "dashboard" ? "overview" : activeNav.startsWith("dashboard_") ? activeNav.replace("dashboard_","") : null}
              onDashboardNav={(tab) => {
                if (tab === "campaigns") { switchNav("campaigns"); return; }
@@ -2789,6 +2803,10 @@ activeNavRef.current = activeNav;
           featOffers
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><OffersModule environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Offers"/>
+        ) : activeNav === "badges" ? (
+          canGlobal('access_achievements') && featAchievements
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><BadgesModule environment={selectedEnv} session={session}/></Suspense>
+            : <AccessDenied feature="Achievements"/>
         ) : activeNav === "cohorts" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"auto" }}><CohortsModule environment={selectedEnv} /></div></Suspense>
         ) : activeNav === "campaigns" ? (
@@ -2837,7 +2855,6 @@ activeNavRef.current = activeNav;
         </div>
       </div>
       {canGlobal('access_copilot') && featCopilot && (
-        <div data-tour="copilot-button" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 800 }}>
         <AICopilot
           environment={selectedEnv}
           activeNav={activeNav}
@@ -2850,7 +2867,6 @@ activeNavRef.current = activeNav;
             if (!obj) return;
             openRecord(record.id, obj.id);
           }} />
-        </div>
       )}
 
       {/* Getting Started — welcome modal on first login */}
