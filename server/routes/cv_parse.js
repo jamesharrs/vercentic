@@ -209,6 +209,80 @@ IMPORTANT: The skills array and work_history array should be populated even if e
     const parsed = JSON.parse(clean);
     console.log(`[cv-parse] Parsed fields: first_name=${parsed.first_name}, email=${parsed.email}, title=${parsed.current_title}`);
 
+    // ── Map Claude's named-key arrays into table column-ID format ─────────────
+    // The table field renderer uses column IDs (e.g. "lcc54yyb") not named keys.
+    // Look up the actual column IDs from the store for work_history and education.
+    try {
+      const { getStore } = require('../db/init');
+      const store = getStore();
+      const envId = req.body?.environment_id;
+
+      // Find fields by api_key across all matching environments
+      const allFields = store.fields || [];
+      const findCols = (apiKey) => {
+        const f = allFields.find(f =>
+          f.api_key === apiKey && (!envId || f.environment_id === envId)
+        ) || allFields.find(f => f.api_key === apiKey);
+        return f?.table_columns || [];
+      };
+
+      // work_history: Claude returns [{company, title, start, end, description, current}]
+      if (Array.isArray(parsed.work_history) && parsed.work_history.length) {
+        const cols = findCols('work_history');
+        if (cols.length) {
+          const colByName = (names) => cols.find(c => names.some(n => c.name.toLowerCase() === n.toLowerCase()));
+          const companyCol  = colByName(['company','employer','organisation','organization']);
+          const titleCol    = colByName(['job title','title','position','role']);
+          const fromCol     = colByName(['from','start','start date']);
+          const toCol       = colByName(['to','end','end date']);
+          const currentCol  = colByName(['current','is current']);
+          const descCol     = colByName(['description','summary','notes','details']);
+
+          parsed.work_history = parsed.work_history.map(row => {
+            const mapped = {};
+            if (companyCol)  mapped[companyCol.id]  = row.company  || row.employer || '';
+            if (titleCol)    mapped[titleCol.id]    = row.title    || row.position  || row.role || '';
+            if (fromCol)     mapped[fromCol.id]     = row.start    || row.from      || '';
+            if (toCol)       mapped[toCol.id]       = row.end      || row.to        || '';
+            if (currentCol)  mapped[currentCol.id]  = !!(row.current || row.is_current);
+            if (descCol)     mapped[descCol.id]     = row.description || row.summary || '';
+            return mapped;
+          });
+          console.log(`[cv-parse] Mapped ${parsed.work_history.length} work history rows to column IDs`);
+        }
+      }
+
+      // education: Claude returns [{institution, degree, field, year, grade}]
+      if (Array.isArray(parsed.education) && parsed.education.length) {
+        const cols = findCols('education');
+        if (cols.length) {
+          const colByName = (names) => cols.find(c => names.some(n => c.name.toLowerCase() === n.toLowerCase()));
+          const instCol    = colByName(['institution','university','school','college']);
+          const degreeCol  = colByName(['degree','qualification']);
+          const subjectCol = colByName(['subject','field','course','major','area of study']);
+          const fromCol    = colByName(['from','start','start date']);
+          const toCol      = colByName(['to','end','end date','year']);
+          const currentCol = colByName(['current','is current']);
+          const gradeCol   = colByName(['grade','result','grade / result','classification','gpa']);
+
+          parsed.education = parsed.education.map(row => {
+            const mapped = {};
+            if (instCol)    mapped[instCol.id]    = row.institution || row.school || row.university || '';
+            if (degreeCol)  mapped[degreeCol.id]  = row.degree      || row.qualification || '';
+            if (subjectCol) mapped[subjectCol.id] = row.field       || row.subject || row.major || row.course || '';
+            if (fromCol)    mapped[fromCol.id]    = row.start       || row.from || '';
+            if (toCol)      mapped[toCol.id]      = row.end         || row.to   || row.year || '';
+            if (currentCol) mapped[currentCol.id] = !!(row.current  || row.is_current);
+            if (gradeCol)   mapped[gradeCol.id]   = row.grade       || row.result || row.gpa || '';
+            return mapped;
+          });
+          console.log(`[cv-parse] Mapped ${parsed.education.length} education rows to column IDs`);
+        }
+      }
+    } catch(mappingErr) {
+      console.warn('[cv-parse] Column mapping failed (non-fatal):', mappingErr.message);
+    }
+
     if (cleanupPath) fs.unlinkSync(cleanupPath);
 
     res.json({
