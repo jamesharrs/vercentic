@@ -481,7 +481,7 @@ module.exports = { getStore, saveStore, saveStoreNow, withBatch, query, findOne,
 // Migrations are expensive (scan every tenant's store, write to disk).
 // Only run them once: track a version stamp in the master store.
 // Bump MIGRATION_VERSION when you add a new migration.
-const MIGRATION_VERSION = 12;
+const MIGRATION_VERSION = 13;
 
 function runMigrationsIfNeeded() {
   const store = storeCache['master'];
@@ -507,6 +507,7 @@ function runMigrationsIfNeeded() {
   pruneOrphanedPeopleLinks();
   migrateCalendarIds();
   migrateAssignmentEnvIds();
+  migrateRolesSeed();
   store._migration_version = MIGRATION_VERSION;
   } finally { _batchMode = false; }
   saveStoreNow('master');
@@ -1002,3 +1003,82 @@ function migrateAssignmentEnvIds() {
   if (fixed > 0) console.log(`🔗 Backfilled environment_id on ${fixed} workflow assignment(s)`);
 }
 // migrateAssignmentEnvIds() — now called via runMigrationsIfNeeded()
+
+// ── Migration v13: ensure all environments have the 5 standard roles + permissions ─
+// Fixes environments provisioned with the old simplified role format that lacked
+// proper slugs and RBAC permission rows. Safe to run repeatedly (idempotent).
+function migrateRolesSeed() {
+  const { seedDefaultPermissions } = require('./middleware/rbac');
+  const SYSTEM_ROLES = [
+    { name: 'Super Admin',    slug: 'super_admin',    color: '#e03131', description: 'Full access to everything' },
+    { name: 'Admin',          slug: 'admin',          color: '#f59f00', description: 'Manage users, settings and all data' },
+    { name: 'Recruiter',      slug: 'recruiter',      color: '#3b5bdb', description: 'Manage candidates, jobs and talent pools' },
+    { name: 'Hiring Manager', slug: 'hiring_manager', color: '#0ca678', description: 'View and provide feedback on candidates' },
+    { name: 'Read Only',      slug: 'read_only',      color: '#868e96', description: 'View data only, no edits' },
+  ];
+
+  let totalRolesAdded = 0;
+  let totalStoresFixed = 0;
+
+  for (const [key, store] of Object.entries(storeCache)) {
+    if (!store) continue;
+    if (!store.roles) store.roles = [];
+    if (!store.permissions) store.permissions = [];
+
+    const now = new Date().toISOString();
+    let rolesAdded = 0;
+
+    for (const roleDef of SYSTEM_ROLES) {
+      // Check if this slug exists — fix wrong slugs from old provisioning
+      const existing = store.roles.find(r => r.slug === roleDef.slug);
+      if (!existing) {
+        // Also check by name to avoid duplicates with wrong slugs
+        const byName = store.roles.find(r => r.name === roleDef.name);
+        if (byName) {
+          // Fix the slug in place
+          byName.slug = roleDef.slug;
+          byName.color = byName.color || roleDef.color;
+          byName.description = byName.description || roleDef.description;
+          byName.is_system = 1;
+        } else {
+          // Add the missing role entirely
+          store.roles.push({
+            id: uuidv4(), name: roleDef.name, slug: roleDef.slug,
+            description: roleDef.description, color: roleDef.color,
+            is_system: 1, created_at: now, updated_at: now, deleted_at: null,
+          });
+          rolesAdded++;
+        }
+      } else {
+        // Ensure slug, color and is_system are correct even if role already exists
+        existing.slug = roleDef.slug;
+        existing.is_system = 1;
+      }
+    }
+
+    // Remove legacy "Viewer" role — replaced by "Read Only"
+    const viewerIdx = store.roles.findIndex(r => r.slug === 'viewer' || (r.name === 'Viewer' && r.slug !== 'read_only'));
+    if (viewerIdx !== -1) {
+      store.roles.splice(viewerIdx, 1);
+    }
+
+    // Now seed/repair permission rows using the master rbac logic
+    try {
+      seedDefaultPermissions(store);
+    } catch(e) {
+      console.warn(`[migrateRolesSeed] seedDefaultPermissions failed for ${key}:`, e.message);
+    }
+
+    if (rolesAdded > 0) {
+      totalRolesAdded += rolesAdded;
+      totalStoresFixed++;
+    }
+  }
+
+  if (totalRolesAdded > 0 || totalStoresFixed > 0) {
+    saveStoreNow('master');
+    console.log(`✅ migrateRolesSeed: fixed ${totalStoresFixed} stores, added ${totalRolesAdded} missing roles`);
+  } else {
+    console.log('✅ migrateRolesSeed: all stores already have correct roles');
+  }
+}

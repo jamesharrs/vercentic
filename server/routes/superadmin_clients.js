@@ -15,11 +15,13 @@ function ensureCollections() {
 }
 
 // ─── Shared default roles ─────────────────────────────────────────────────────
+// Slugs MUST match rbac.js roleDefaults keys so seedDefaultPermissions works.
 const DEFAULT_ROLES = [
-  { name: 'Super Admin',    permissions: { create:true,  read:true,  edit:true,  delete:true,  admin:true  }, color: '#7C3AED' },
-  { name: 'Recruiter',      permissions: { create:true,  read:true,  edit:true,  delete:false, admin:false }, color: '#4361EE' },
-  { name: 'Hiring Manager', permissions: { create:false, read:true,  edit:false, delete:false, admin:false }, color: '#F79009' },
-  { name: 'Viewer',         permissions: { create:false, read:true,  edit:false, delete:false, admin:false }, color: '#9DA8C7' },
+  { name: 'Super Admin',    slug: 'super_admin',    color: '#e03131', is_system: 1, description: 'Full access to everything' },
+  { name: 'Admin',          slug: 'admin',          color: '#f59f00', is_system: 1, description: 'Manage users, settings and all data' },
+  { name: 'Recruiter',      slug: 'recruiter',      color: '#4361EE', is_system: 1, description: 'Manage candidates, jobs and talent pools' },
+  { name: 'Hiring Manager', slug: 'hiring_manager', color: '#0ca678', is_system: 1, description: 'View and provide feedback on candidates' },
+  { name: 'Read Only',      slug: 'read_only',      color: '#868e96', is_system: 1, description: 'View data only, no edits' },
 ];
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -120,12 +122,7 @@ const TEMPLATES = {
     description: 'Adds Clients, Placements and Invoices on top of Core Recruitment',
     icon: 'briefcase',
     extends: 'core_recruitment',
-    default_roles: [
-      { name: 'Super Admin',     permissions: { create:true,  read:true,  edit:true,  delete:true,  admin:true  }, color: '#7C3AED' },
-      { name: 'Account Manager', permissions: { create:true,  read:true,  edit:true,  delete:false, admin:false }, color: '#EF4444' },
-      { name: 'Recruiter',       permissions: { create:true,  read:true,  edit:true,  delete:false, admin:false }, color: '#4361EE' },
-      { name: 'Viewer',          permissions: { create:false, read:true,  edit:false, delete:false, admin:false }, color: '#9DA8C7' },
-    ],
+    default_roles: DEFAULT_ROLES,
     extra_objects: [
       {
         slug: 'clients_co', name: 'Client Company', plural_name: 'Client Companies', icon: 'building', color: '#EF4444', is_system: false,
@@ -197,12 +194,7 @@ const TEMPLATES = {
     description: 'Full RPO template with Client Companies, SLA tracking and Placements',
     icon: 'briefcase',
     extends: 'core_recruitment',
-    default_roles: [
-      { name: 'Super Admin',     permissions: { create:true,  read:true,  edit:true,  delete:true,  admin:true  }, color: '#7C3AED' },
-      { name: 'Account Manager', permissions: { create:true,  read:true,  edit:true,  delete:false, admin:false }, color: '#EF4444' },
-      { name: 'Recruiter',       permissions: { create:true,  read:true,  edit:true,  delete:false, admin:false }, color: '#4361EE' },
-      { name: 'Viewer',          permissions: { create:false, read:true,  edit:false, delete:false, admin:false }, color: '#9DA8C7' },
-    ],
+    default_roles: DEFAULT_ROLES,
     extra_objects: [
       {
         slug: 'client_companies', name: 'Client Company', plural_name: 'Client Companies', icon: 'building', color: '#EF4444', is_system: false,
@@ -508,9 +500,11 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   const createdRoles = roles.map(roleDef => ({
     id: uuidv4(), environment_id: environment.id,
     name: roleDef.name,
-    slug: roleDef.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),
-    permissions: roleDef.permissions, color: roleDef.color||'#4361EE',
-    is_system: true, created_at: now, updated_at: now, deleted_at: null,
+    slug: roleDef.slug || roleDef.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),
+    description: roleDef.description || '',
+    color: roleDef.color || '#4361EE',
+    is_system: roleDef.is_system !== undefined ? roleDef.is_system : 1,
+    created_at: now, updated_at: now, deleted_at: null,
   }));
 
   if (!s.users) s.users = [];
@@ -542,6 +536,11 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   stdConfig.fileTypes     .forEach(f => s.file_types       .push(f));
   stdConfig.emailTemplates.forEach(e => s.email_templates  .push(e));
   stdConfig.interviewTypes.forEach(i => s.interview_types  .push(i));
+
+  // Seed proper RBAC permission rows for all 5 standard roles using the
+  // same logic as the master store — this is what canGlobal() reads at runtime.
+  const { seedDefaultPermissions } = require('../middleware/rbac');
+  seedDefaultPermissions(s);
 
   s.provision_log.push({
     id: uuidv4(), client_id: client.id, environment_id: environment.id,
