@@ -97,29 +97,74 @@ router.post('/', (req, res, next) => {
     // Plain text pasted by the user
     cvText = req.body.raw_text;
   } else if (req.body?.url) {
-    // Fetch text from a URL (LinkedIn profile, personal site, etc.)
+    // Fetch text from a URL (personal site, portfolio, etc.)
+    // Note: LinkedIn and similar platforms block automated access
+    const rawUrl = req.body.url.trim();
+
+    // Detect platforms that block scraping and return a helpful error
+    const BLOCKED_DOMAINS = ['linkedin.com', 'xing.com', 'glassdoor.com'];
+    const isBlocked = BLOCKED_DOMAINS.some(d => rawUrl.includes(d));
+    if (isBlocked) {
+      return res.status(422).json({
+        error: 'LinkedIn and similar platforms block automated access. Please copy and paste the profile text instead.',
+        suggestion: 'paste'
+      });
+    }
+
     try {
-      const https = require('https');
-      const http  = require('http');
-      const fetchUrl = (u) => new Promise((resolve, reject) => {
-        const mod = u.startsWith('https') ? https : http;
-        mod.get(u, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (r) => {
+      const { URL } = require('url');
+      const parsedUrl = new URL(rawUrl);
+      const protocol = parsedUrl.protocol === 'https:' ? require('https') : require('http');
+
+      const fetchUrl = (u, redirectCount = 0) => new Promise((resolve, reject) => {
+        if (redirectCount > 5) return reject(new Error('Too many redirects'));
+        const mod = u.startsWith('https') ? require('https') : require('http');
+        mod.get(u, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+          }
+        }, (r) => {
+          // Follow redirects
+          if ([301, 302, 303, 307, 308].includes(r.statusCode) && r.headers.location) {
+            return resolve(fetchUrl(r.headers.location, redirectCount + 1));
+          }
+          if (r.statusCode >= 400) {
+            return reject(new Error(`HTTP ${r.statusCode}`));
+          }
           let data = '';
           r.on('data', c => data += c);
           r.on('end', () => resolve(data));
         }).on('error', reject);
       });
-      const html = await fetchUrl(req.body.url);
-      // Strip HTML tags to get readable text
-      cvText = html
+
+      const html = await fetchUrl(rawUrl);
+      // Strip scripts, styles, nav, footer — keep meaningful content
+      const text = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+        .replace(/<header[\s\S]*?<\/header>/gi, '')
         .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
         .replace(/\s{2,}/g, ' ')
-        .trim()
-        .slice(0, 15000); // cap at 15k chars
+        .trim();
+
+      if (text.length < 100) {
+        return res.status(422).json({
+          error: 'Could not extract meaningful text from that URL. The page may require login or block automated access. Try copying and pasting the text instead.',
+          suggestion: 'paste'
+        });
+      }
+
+      cvText = text.slice(0, 15000);
     } catch (e) {
-      return res.status(422).json({ error: `Could not fetch URL: ${e.message}` });
+      return res.status(422).json({ error: `Could not fetch URL: ${e.message}. Try copying and pasting the text instead.` });
     }
   } else {
     return res.status(400).json({ error: 'Provide file, attachment_id, raw_text, or url' });

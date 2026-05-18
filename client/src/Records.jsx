@@ -1919,7 +1919,16 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
         body: JSON.stringify({ url: importUrl, environment_id: environment?.id })
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Extract failed");
+      if (!res.ok) {
+        // If server suggests switching to paste mode, do it automatically
+        if (json.suggestion === 'paste') {
+          setImportMode("paste");
+          setImportError(json.error || "Could not fetch URL. Paste the text instead.");
+        } else {
+          throw new Error(json.error || "Extract failed");
+        }
+        return;
+      }
       applyParsedFields(json);
     } catch(e) { setImportError(e.message); }
     finally { setImporting(false); }
@@ -2028,7 +2037,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                   <div style={{ marginTop:10 }}>
                     <div style={{ display:"flex", gap:8 }}>
                       <input value={importUrl} onChange={e=>setImportUrl(e.target.value)}
-                        placeholder="https://linkedin.com/in/… or any profile URL"
+                        placeholder="https://example.com/profile — (LinkedIn requires Copy &amp; Paste)"
                         autoFocus
                         style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px",
                           fontSize:12, fontFamily:"inherit", outline:"none", color:C.text1 }}
