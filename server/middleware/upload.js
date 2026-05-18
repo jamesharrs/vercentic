@@ -81,7 +81,10 @@ async function verifyMime(req, res, next) {
   // Plain text files (CSV, TXT) have no magic bytes — file-type returns undefined
   // For those, trust the extension check that already passed
   const isTextType = ['csv', 'txt'].includes(ext);
-  if (!detected && !isTextType) {
+  // DOCX/XLSX/PPTX are ZIP archives internally — file-type returns application/zip
+  // Trust the extension check for these Office Open XML formats
+  const isOfficeXml = ['docx', 'xlsx', 'pptx'].includes(ext);
+  if (!detected && !isTextType && !isOfficeXml) {
     fs.unlink(filePath, () => {});
     return res.status(400).json({
       error:  'Could not determine file type. The file may be corrupt.',
@@ -91,7 +94,10 @@ async function verifyMime(req, res, next) {
 
   if (detected) {
     const mime    = detected.mime;
-    const matches = allowed.some(prefix => mime.startsWith(prefix));
+    // Office Open XML (docx/xlsx/pptx) are ZIP-based — file-type detects them as application/zip
+    // Allow this for known Office XML extensions
+    const zipAsOffice = mime === 'application/zip' && isOfficeXml;
+    const matches = zipAsOffice || allowed.some(prefix => mime.startsWith(prefix));
     if (!matches) {
       fs.unlink(filePath, () => {});
       return res.status(400).json({
