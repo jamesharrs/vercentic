@@ -1833,17 +1833,27 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
   }, [showCopyPicker]);
 
   // ── Person import helpers ──────────────────────────────────────────────────
-  const applyParsedFields = (parsed) => {
+  const applyParsedFields = (json) => {
+    // Server returns { parsed: {...}, text_length, model }
+    // Accept either the full response envelope or the inner parsed object directly
+    const parsed = json?.parsed || json || {};
     const mapped = {};
-    if (parsed.first_name)    mapped.first_name    = parsed.first_name;
-    if (parsed.last_name)     mapped.last_name     = parsed.last_name;
-    if (parsed.email)         mapped.email         = parsed.email;
-    if (parsed.phone)         mapped.phone         = parsed.phone;
-    if (parsed.current_title) mapped.current_title = parsed.current_title;
-    if (parsed.location)      mapped.location      = parsed.location;
-    if (parsed.linkedin_url)  mapped.linkedin_url  = parsed.linkedin_url;
-    if (parsed.skills?.length) mapped.skills       = parsed.skills;
+    if (parsed.first_name)       mapped.first_name       = parsed.first_name;
+    if (parsed.last_name)        mapped.last_name        = parsed.last_name;
+    if (parsed.email)            mapped.email            = parsed.email;
+    if (parsed.phone)            mapped.phone            = parsed.phone;
+    if (parsed.current_title)    mapped.current_title    = parsed.current_title;
+    if (parsed.location)         mapped.location         = parsed.location;
+    if (parsed.linkedin_url)     mapped.linkedin_url     = parsed.linkedin_url;
+    if (parsed.skills?.length)   mapped.skills           = parsed.skills;
     if (parsed.years_experience) mapped.years_experience = parsed.years_experience;
+    if (parsed.summary)          mapped.summary          = parsed.summary;
+    if (parsed.nationality)      mapped.nationality      = parsed.nationality;
+    if (parsed.notice_period)    mapped.notice_period    = parsed.notice_period;
+    if (Array.isArray(parsed.work_history) && parsed.work_history.length)
+                                 mapped.work_history     = parsed.work_history;
+    if (Array.isArray(parsed.education) && parsed.education.length)
+                                 mapped.education        = parsed.education;
     setData(d => ({ ...d, ...mapped }));
     setImportMode(null);
     setImportText("");
