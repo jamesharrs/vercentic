@@ -1008,7 +1008,6 @@ function migrateAssignmentEnvIds() {
 // Fixes environments provisioned with the old simplified role format that lacked
 // proper slugs and RBAC permission rows. Safe to run repeatedly (idempotent).
 function migrateRolesSeed() {
-  const { seedDefaultPermissions } = require('./middleware/rbac');
   const SYSTEM_ROLES = [
     { name: 'Super Admin',    slug: 'super_admin',    color: '#e03131', description: 'Full access to everything' },
     { name: 'Admin',          slug: 'admin',          color: '#f59f00', description: 'Manage users, settings and all data' },
@@ -1062,9 +1061,13 @@ function migrateRolesSeed() {
       store.roles.splice(viewerIdx, 1);
     }
 
-    // Now seed/repair permission rows using the master rbac logic
+    // Now seed/repair permission rows — use deferred require to avoid circular dep
+    // (rbac.js requires db/init.js, so we must require it lazily here)
     try {
-      seedDefaultPermissions(store);
+      const rbac = require('../middleware/rbac');
+      if (typeof rbac.seedDefaultPermissions === 'function') {
+        rbac.seedDefaultPermissions(store);
+      }
     } catch(e) {
       console.warn(`[migrateRolesSeed] seedDefaultPermissions failed for ${key}:`, e.message);
     }
