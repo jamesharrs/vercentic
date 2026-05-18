@@ -11634,8 +11634,18 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       const linkedIds = new Set((Array.isArray(links) ? links : []).map(l => l.person_record_id));
       filtered = (allRecs.records || []).filter(rec => linkedIds.has(rec.id));
     } else if (filterChip?.fieldKey === '__ids__') {
+      // Fetch ALL records for this object, then filter to the specific IDs.
+      // Can't rely on the paginated `loaded` because the target IDs may be on different pages.
       const ids = filterChip.fieldValue.split(',').map(s => s.trim()).filter(Boolean);
-      filtered = loaded.filter(rec => ids.includes(rec.id));
+      if (ids.length > 0) {
+        const allRecs = await api.get(`/records?object_id=${object.id}&environment_id=${environment.id}&limit=1000`);
+        filtered = (allRecs.records || []).filter(rec => ids.includes(rec.id));
+        // Preserve the order from the ids array (pipeline stage order)
+        const idxMap = Object.fromEntries(ids.map((id, i) => [id, i]));
+        filtered.sort((a, b) => (idxMap[a.id] ?? 999) - (idxMap[b.id] ?? 999));
+      } else {
+        filtered = [];
+      }
     } else if (filterChip) {
       filtered = loaded.filter(rec => {
         const v = rec.data?.[filterChip.fieldKey];
