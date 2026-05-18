@@ -170,8 +170,10 @@ const BlockConfig = ({ block, onUpdate, onRemove, portal }) => {
         if (!peopleObj) return;
         apiClient.get(`/fields?object_id=${peopleObj.id}`).then(fields => {
           const SYSTEM_SKIP = new Set(['id','created_at','updated_at','object_id','environment_id','deleted_at']);
+          // Exclude structured array fields — they're populated by CV parse only, not free-text inputs
+          const STRUCTURED_SKIP = new Set(['work_history','education','work_experience','skills_array','certifications']);
           const arr = (Array.isArray(fields) ? fields : fields.data || [])
-            .filter(f => !SYSTEM_SKIP.has(f.api_key) && f.field_type !== 'section_separator');
+            .filter(f => !SYSTEM_SKIP.has(f.api_key) && !STRUCTURED_SKIP.has(f.api_key) && f.field_type !== 'section_separator');
           setPeopleFields(arr);
         });
       });

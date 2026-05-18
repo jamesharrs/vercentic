@@ -181,8 +181,8 @@ const PROFILE_FIELD_DEFS = [
   {key:'nationality',        label:'Nationality',             type:'text',     required:false, placeholder:'British'},
   {key:'gender',             label:'Gender',                  type:'text',     required:false, placeholder:''},
   {key:'date_of_birth',      label:'Date of birth',           type:'date',     required:false},
-  {key:'work_history',       label:'Work history',            type:'textarea', required:false, placeholder:'Describe your work history…', rows:3},
-  {key:'education',          label:'Education',               type:'textarea', required:false, placeholder:'Describe your education…', rows:3},
+  // NOTE: work_history and education are structured array fields — they are populated by CV
+  // parse automatically and are NOT rendered as form inputs in the portal wizard.
   {key:'source',             label:'How did you hear about us?', type:'text',  required:false, placeholder:'LinkedIn, referral…'},
   {key:'status',             label:'Status',                  type:'text',     required:false, placeholder:''},
   {key:'rating',             label:'Rating',                  type:'number',   required:false, placeholder:''},
@@ -200,11 +200,17 @@ const PROFILE_FIELD_MAP = Object.fromEntries(PROFILE_FIELD_DEFS.map(f=>[f.key, f
 // Convert a snake_case key to a display label
 const keyToLabel = k => k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 
+// Fields that are structured arrays — populated by CV parse, never shown as text inputs
+const STRUCTURED_FIELDS = new Set(['work_history','education','work_experience','certifications']);
+
 const ProfileFieldsBlock = ({ config={}, formData, set, onEmailBlur, emailCheck, checkingEmail,
   otpState, otpCode, setOtpCode, otpError, otpSimCode, onVerifyOtp, onSendOtp, color }) => {
   const visibleKeys = config.fields?.length ? config.fields : ['first_name','last_name','email','phone','location','current_title'];
-  // Build defs: use known definitions where available, generate generic text input for custom fields
-  const defs = visibleKeys.map(k => PROFILE_FIELD_MAP[k] || { key:k, label:keyToLabel(k), type:'text', required:false });
+  // Build defs: use known definitions where available, skip structured array fields,
+  // and generate a generic text input for any unknown custom field
+  const defs = visibleKeys
+    .filter(k => !STRUCTURED_FIELDS.has(k))
+    .map(k => PROFILE_FIELD_MAP[k] || { key:k, label:keyToLabel(k), type:'text', required:false });
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
       {defs.map(f=>(
@@ -702,11 +708,9 @@ export default function WizardRenderer({ portal, wizard, job, api, onBack, onSuc
   // ── CV upload handler ─────────────────────────────────────────────────────
   const handleCvFile = async (file) => {
     setParsing(true);
+    // Store the raw File under a double-underscore key so it gets picked up
+    // by the CV upload block in handleSubmit (not leaked into cleanFormData)
     set('__cv_file', file);
-    // Pre-populate the cv_file field (whichever field is typed 'file' or named cv/resume)
-    set('cv', file);
-    set('resume', file);
-    set('cv_file', file);
     try {
       const fd = new FormData(); fd.append('file', file);
       let r;
@@ -719,8 +723,14 @@ export default function WizardRenderer({ portal, wizard, job, api, onBack, onSuc
       const data = r?.result || r;
       const result = data?.parsed || data?.result?.parsed || data?.result || data;
       if (result && typeof result === 'object') {
+        // Simple scalar fields — populate directly into formData
         ['first_name','last_name','email','phone','location','current_title','linkedin_url',
-         'years_experience','skills','summary'].forEach(k => { if (result[k]) set(k, result[k]); });
+         'years_experience','skills','summary','nationality','notice_period'].forEach(k => { if (result[k]) set(k, result[k]); });
+        // Structured array fields — store as JSON so the server can save them properly
+        if (Array.isArray(result.work_history) && result.work_history.length)
+          set('work_history', result.work_history);
+        if (Array.isArray(result.education) && result.education.length)
+          set('education', result.education);
       }
     } catch(e) { console.warn('CV parse error:', e); }
     setParsing(false);
