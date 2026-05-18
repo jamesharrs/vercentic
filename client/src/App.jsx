@@ -67,6 +67,7 @@ const PortalsPage     = lazyWithRetry(() => import("./Portals.jsx"));
 const ReportsPage     = lazyWithRetry(() => import("./Reports.jsx"));
 const Interviews      = lazyWithRetry(() => import("./Interviews.jsx"));
 const OffersModule    = lazyWithRetry(() => import("./Offers.jsx"));
+const BadgesModule    = lazyWithRetry(() => import("./Badges.jsx"));
 const CohortsModule   = lazyWithRetry(() => import("./Cohorts.jsx"));
 const SourcingHub     = lazyWithRetry(() => import("./SourcingHub.jsx"));
 const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
@@ -1567,6 +1568,7 @@ function App({ onEnvReady }) {
   const featCopilot    = useFeature('ai_copilot');
   const featInterviews = useFeature('interviews');
   const featOffers     = useFeature('offers');
+  const featAchievements = useFeature('achievements');
   const featReports    = useFeature('reports');
   const featOrgChart   = useFeature('org_chart');
   const featWorkflows  = useFeature('workflows');
@@ -2090,6 +2092,7 @@ activeNavRef.current = activeNav;
         featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
         featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
         featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        featAchievements && { id: "badges",    icon: "award",        label: "Achievements" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
@@ -2109,6 +2112,7 @@ activeNavRef.current = activeNav;
       if (item.id === 'org_chart')    return canGlobal('access_org_chart')    && featOrgChart;
       if (item.id === 'interviews')   return canGlobal('access_interviews')   && featInterviews;
       if (item.id === 'offers')       return canGlobal('access_offers')       && featOffers;
+      if (item.id === 'badges')       return canGlobal('access_achievements') && featAchievements;
       if (item.id === 'reports')      return canGlobal('access_reports')      && featReports;
       if (item.id === 'search')       return canGlobal('access_search')       && featSearch;
       if (item.id === 'calendar')     return canGlobal('access_calendar')     && featCalendar;
@@ -2799,6 +2803,10 @@ activeNavRef.current = activeNav;
           featOffers
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><OffersModule environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Offers"/>
+        ) : activeNav === "badges" ? (
+          canGlobal('access_achievements') && featAchievements
+            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><BadgesModule environment={selectedEnv} session={session}/></Suspense>
+            : <AccessDenied feature="Achievements"/>
         ) : activeNav === "cohorts" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"auto" }}><CohortsModule environment={selectedEnv} /></div></Suspense>
         ) : activeNav === "campaigns" ? (
