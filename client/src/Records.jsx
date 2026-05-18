@@ -1909,16 +1909,26 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     setSaving(false);
   };
 
-  const sections = [
-    { label:"Core Details",  keys: fields.filter((_,i)=>i<6).map(f=>f.api_key) },
-    { label:"Additional",    keys: fields.filter((_,i)=>i>=6).map(f=>f.api_key) },
-  ].filter(s=>s.keys.length);
+  const sections = (() => {
+    const result = [];
+    let current = { label: "Core Details", keys: [] };
+    for (const f of fields) {
+      if (f.field_type === "section_separator") {
+        if (current.keys.length) result.push(current);
+        current = { label: f.section_label || f.name || "Details", keys: [] };
+      } else {
+        current.keys.push(f.api_key);
+      }
+    }
+    if (current.keys.length) result.push(current);
+    return result.filter(s => s.keys.length);
+  })();
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{ width:600, maxWidth:"94vw", maxHeight:"90vh", background:C.surface, display:"flex", flexDirection:"column", borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,.2)", animation:"modalIn .2s ease", overflow:"hidden" }}>
+      <div style={{ width:860, maxWidth:"96vw", maxHeight:"92vh", background:C.surface, display:"flex", flexDirection:"column", borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,.2)", animation:"modalIn .2s ease", overflow:"hidden" }}>
         <style>{`@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}`}</style>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"20px 24px", borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"20px 28px", borderBottom:`1px solid ${C.border}` }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:C.text1 }}>{record?"Edit":"New"} {objectName}</h2>
           <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, display:"flex" }}><Ic n="x" s={20}/></button>
         </div>
@@ -2124,16 +2134,31 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
           </div>
         )}
 
-        <div style={{ flex:1, overflow:"auto", padding:"24px" }}>
+        <div style={{ flex:1, overflow:"auto", padding:"24px 28px" }}>
           {sections.map(section => (
             <div key={section.label} style={{ marginBottom:28 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>{section.label}</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              {/* Section header — matches record detail style */}
+              <div style={{
+                display:"flex", alignItems:"center", gap:10,
+                background:`${C.accent}08`, border:`1.5px solid ${C.accent}22`,
+                borderRadius:10, padding:"10px 14px", marginBottom:14,
+              }}>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:C.accent, flexShrink:0 }}/>
+                <span style={{ fontSize:11, fontWeight:700, color:C.accent, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                  {section.label}
+                </span>
+              </div>
+              {/* Two-column grid */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
                 {section.keys.map(key => {
                   const field = fields.find(f=>f.api_key===key);
                   if (!field) return null;
+                  // Full-width for: textarea, rich_text, multi_select with many options, boolean pills
+                  const isFullWidth = ["textarea","rich_text","text_area"].includes(field.field_type)
+                    || (field.field_type === "multi_select" && (field.options||[]).length > 4)
+                    || (field.field_type === "select" && (field.options||[]).length > 6);
                   return (
-                    <div key={key}>
+                    <div key={key} style={{ gridColumn: isFullWidth ? "1 / -1" : "auto" }}>
                       <label style={{ fontSize:12, fontWeight:600, color:C.text2, display:"block", marginBottom:6 }}>
                         {field.name}{!!field.is_required&&<span style={{color:"#ef4444",marginLeft:2}}>*</span>}
                       </label>
@@ -2145,7 +2170,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
             </div>
           ))}
         </div>
-        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", padding:"16px 24px", borderTop:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", padding:"16px 28px", borderTop:`1px solid ${C.border}` }}>
           <Btn v="secondary" onClick={onClose}>Cancel</Btn>
           <Btn onClick={handleSave} disabled={saving}>{saving?"Saving…":record?"Save Changes":"Create Record"}</Btn>
         </div>
