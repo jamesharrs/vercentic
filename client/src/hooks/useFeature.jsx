@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 // All stable features on by default — prevents flash of missing nav items on load
 const DEFAULT_FEATURES = new Set([
   'core','ai_copilot','ai_matching','communications_panel','workflows',
-  'portals','reports','org_chart','interviews','offers','forms',
+  'portals','reports','org_chart','interviews','offers','forms','achievements',
   'bulk_actions','cv_parsing','duplicate_detection',
   // Nav sections
   'access_calendar','access_search','access_chat','access_documents',
