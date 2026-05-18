@@ -1957,7 +1957,44 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{ width:860, maxWidth:"96vw", maxHeight:"92vh", background:C.surface, display:"flex", flexDirection:"column", borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,.2)", animation:"modalIn .2s ease", overflow:"hidden" }}>
+      <div style={{ width:860, maxWidth:"96vw", maxHeight:"92vh", background:C.surface, display:"flex", flexDirection:"column", borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,.2)", animation:"modalIn .2s ease", overflow:"hidden", position:"relative" }}>
+
+        {/* ── Full-modal parse overlay ── */}
+        {importing && !importMode && (
+          <div style={{
+            position:"absolute", inset:0, zIndex:50,
+            background:"rgba(255,255,255,0.88)",
+            backdropFilter:"blur(3px)",
+            display:"flex", flexDirection:"column",
+            alignItems:"center", justifyContent:"center", gap:16,
+            borderRadius:16,
+          }}>
+            {/* Spinning ring */}
+            <div style={{ position:"relative", width:56, height:56 }}>
+              <div style={{
+                position:"absolute", inset:0, borderRadius:"50%",
+                border:`4px solid ${C.accentLight||"#EEF1FF"}`,
+              }}/>
+              <div style={{
+                position:"absolute", inset:0, borderRadius:"50%",
+                border:`4px solid transparent`,
+                borderTopColor: C.accent,
+                animation:"spinRing .8s linear infinite",
+              }}/>
+              <div style={{
+                position:"absolute", inset:0, display:"flex",
+                alignItems:"center", justifyContent:"center",
+              }}>
+                <Ic n="file-text" s={20} c={C.accent}/>
+              </div>
+            </div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginBottom:4 }}>Parsing CV…</div>
+              <div style={{ fontSize:12, color:C.text3 }}>Extracting fields with AI — this takes a few seconds</div>
+            </div>
+            <style>{`@keyframes spinRing { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
         <style>{`@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}`}</style>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"20px 28px", borderBottom:`1px solid ${C.border}` }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:C.text1 }}>{record?"Edit":"New"} {objectName}</h2>
@@ -2055,12 +2092,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
                   </div>
                 )}
 
-                {/* Loading overlay */}
-                {importing && !importMode && (
-                  <div style={{ marginTop:8, fontSize:12, color:C.text3, display:"flex", alignItems:"center", gap:6 }}>
-                    <Ic n="loader" s={13} c={C.accent}/> Parsing file…
-                  </div>
-                )}
+                {/* importError shown below all import controls */}
               </>
             ) : (
               /* ── Other objects: copy / AI / template ── */
