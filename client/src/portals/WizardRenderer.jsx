@@ -105,9 +105,9 @@ const WzSelect = ({ label, value, onChange, options, placeholder='Select…' }) 
 const WizardProgress = ({ pages, currentIndex, color }) => (
   <div style={{display:'flex',alignItems:'flex-start',marginBottom:28,width:'100%'}}>
     {pages.map((p,i)=>(
-      <React.Fragment key={p.id}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',minWidth:0,flex:'0 0 auto'}}>
-          <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0,
+      <div key={p.id} style={{display:'contents'}}>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+          <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,
             background:i<=currentIndex?color:'#E8ECF8',color:i<=currentIndex?'white':'#9DA8C7',transition:'all .2s'}}>
             {i<currentIndex ? <WzIc n="check" s={12} c="white"/> : i+1}
           </div>
@@ -115,8 +115,8 @@ const WizardProgress = ({ pages, currentIndex, color }) => (
             {p.title||`Step ${i+1}`}
           </div>
         </div>
-        {i<pages.length-1&&<div style={{flex:1,height:2,background:i<currentIndex?color:'#E8ECF8',margin:'14px 8px 0',transition:'background .3s',minWidth:16}}/>}
-      </React.Fragment>
+        {i<pages.length-1&&<div style={{flex:1,height:2,background:i<currentIndex?color:'#E8ECF8',margin:'14px 8px 0',transition:'background .3s',minWidth:16,alignSelf:'flex-start'}}/>}
+      </div>
     ))}
   </div>
 );
