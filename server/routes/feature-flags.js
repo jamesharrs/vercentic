@@ -12,12 +12,12 @@ const DEFAULT_FLAGS = {
   // Stable — on by default
   ai_copilot: true, ai_matching: true, communications_panel: true,
   workflows: true, portals: true, reports: true, org_chart: true,
-  interviews: true, offers: true, forms: true,
+  interviews: true, offers: true, forms: true, achievements: true,
   bulk_actions: true, cv_parsing: true, duplicate_detection: true,
   // Nav section flags
   access_calendar: true, access_search: true,
   access_chat: true, access_documents: true,
-  access_sourcing: true, access_campaigns: true,
+  access_sourcing: true, access_campaigns: true, access_achievements: true,
   // Record panels — on by default
   panel_notes: true, panel_files: true, panel_activity: true,
   panel_forms: true, panel_recommendations: true,
@@ -119,7 +119,7 @@ router.delete('/:key', (req, res) => {
   const { key } = req.params;
   const { environment_id } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === flagKey);
+  const existing = findOne('feature_flags', f => f.environment_id === environment_id && f.flag_key === key);
   if (existing) { const { remove } = require('../db/init'); remove('feature_flags', f => f.id === existing.id); }
   res.json({ key, environment_id, enabled: DEFAULT_FLAGS[key], reset: true });
 });
