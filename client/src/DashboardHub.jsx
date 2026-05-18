@@ -2,6 +2,7 @@ import { Suspense, lazy, useState, useEffect } from "react";
 import DashboardViewer  from "./DashboardViewer.jsx";
 import DashboardBuilder from "./DashboardBuilder.jsx";
 import api from "./apiClient.js";
+const BadgesModule = lazy(() => import("./Badges.jsx"));
 
 const Dashboard           = lazy(() => import("./Dashboard.jsx"));
 const InterviewDashboard  = lazy(() => import("./InterviewDashboard.jsx"));
@@ -136,6 +137,9 @@ export default function DashboardHub({ tab = "overview", onTabChange, environmen
           initialEditId={editDashId}
           onView={(dashId) => { setViewDashId(dashId); setBuilderMode(false); }}
           onBack={() => { setBuilderMode(false); setEditDashId(null); }}/>
+      )}
+      {tab === "achievements" && (
+        <BadgesModule environment={environment} session={session}/>
       )}
     </Suspense>
   );

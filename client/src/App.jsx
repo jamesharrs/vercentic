@@ -774,7 +774,7 @@ if (typeof document !== 'undefined' && !document.getElementById('rn-rich-styles'
 }
 
 // ─── Global Search Bar ────────────────────────────────────────────────────────
-const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateToRecord, onCreateRecord, onNavigateToCalendar, historySlot, activeDashTab, onDashboardNav }) => {
+const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateToRecord, onCreateRecord, onNavigateToCalendar, historySlot, activeDashTab, onDashboardNav, showAchievements }) => {
   // userId must be read locally — GlobalSearch is module-level, not inside App()
   const userId = getSession()?.user?.id || null;
   const [query,       setQuery]       = useState("");
@@ -962,6 +962,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
               { id: "insights",    label: "Insights",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z"/></svg>, desc: "Predictive analytics" },
               { id: "admin",       label: "Admin Stats", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, desc: "Platform stats" },
               { id: "custom",      label: "My Dashboards", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="4"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="10" width="7" height="7"/></svg>, desc: "Custom dashboards" },
+              ...(showAchievements ? [{ id: "achievements", label: "Achievements", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM8.21 13.89L7 23l5-3 5 3-1.21-9.12"/></svg>, desc: "Badges & leaderboard" }] : []),
             ].map(item => {
               const active = activeDashTab === item.id || (!activeDashTab && item.id === "overview");
               return (
@@ -1752,7 +1753,7 @@ function App({ onEnvReady }) {
     const named = [
       'dashboard','dashboard_interviews','dashboard_offers','dashboard_agents',
       'dashboard_screening','dashboard_onboarding','dashboard_admin','dashboard_custom',
-      'dashboard_insights','dashboard_campaigns',
+      'dashboard_insights','dashboard_campaigns','dashboard_achievements',
       'search','interviews','offers','reports','calendar',
       'org-chart','org_chart','settings','workflows','portals',
       'inbox','admin_stats','admin-stats','client-hub','client_hub',
@@ -2092,7 +2093,6 @@ activeNavRef.current = activeNav;
         featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
         featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
         featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
-        featAchievements && { id: "badges",    icon: "award",        label: "Achievements" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
@@ -2107,12 +2107,11 @@ activeNavRef.current = activeNav;
   const filteredNavSections = navSections.map(section => ({
     ...section,
     items: section.items.filter(item => {
-      if (['dashboard','dashboard_interviews','dashboard_offers','dashboard_agents','dashboard_admin','dashboard_screening','dashboard_onboarding','dashboard_custom','dashboard_insights','dashboard_campaigns'].includes(item.id))
+      if (['dashboard','dashboard_interviews','dashboard_offers','dashboard_agents','dashboard_admin','dashboard_screening','dashboard_onboarding','dashboard_custom','dashboard_insights','dashboard_campaigns','dashboard_achievements'].includes(item.id))
         return canGlobal('access_dashboard');
       if (item.id === 'org_chart')    return canGlobal('access_org_chart')    && featOrgChart;
       if (item.id === 'interviews')   return canGlobal('access_interviews')   && featInterviews;
       if (item.id === 'offers')       return canGlobal('access_offers')       && featOffers;
-      if (item.id === 'badges')       return canGlobal('access_achievements') && featAchievements;
       if (item.id === 'reports')      return canGlobal('access_reports')      && featReports;
       if (item.id === 'search')       return canGlobal('access_search')       && featSearch;
       if (item.id === 'calendar')     return canGlobal('access_calendar')     && featCalendar;
@@ -2140,7 +2139,8 @@ activeNavRef.current = activeNav;
       dashboard_interviews: { label: "Interviews",  objectName: "Dashboard",  objectColor: "#0891b2" },
       dashboard_offers:     { label: "Offers",      objectName: "Dashboard",  objectColor: "#059669" },
       dashboard_agents:     { label: "Agents",      objectName: "Dashboard",  objectColor: "#7c3aed" },
-      dashboard_custom:     { label: "Dashboards",  objectName: "Dashboard",  objectColor: "#4f46e5" },
+      dashboard_custom:     { label: "Dashboards",     objectName: "Dashboard",     objectColor: "#4f46e5" },
+      dashboard_achievements:{ label: "Achievements",   objectName: "Dashboard",     objectColor: "#7c3aed" },
       dashboard_insights:   { label: "Insights",    objectName: "Dashboard",  objectColor: "#7F77DD" },
       search:               { label: "Search",      objectName: "Search",     objectColor: "#7c3aed" },
       interviews:           { label: "Interviews",  objectName: "Scheduling", objectColor: "#0891b2" },
@@ -2544,7 +2544,7 @@ activeNavRef.current = activeNav;
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 4, height: navExpanded ? undefined : 0, overflow: "hidden", opacity: navExpanded ? 1 : 0, transition: "opacity 0.15s, height 0.15s" }}>{section.label}</div>
               {section.items.map(item => {
                 const isDashboard = item.id === "dashboard";
-                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" || activeNav === "dashboard_campaigns";
+                const dashActive = activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" || activeNav === "dashboard_campaigns" || activeNav === "dashboard_achievements";
                 const isActive = isDashboard ? dashActive : (activeNav === item.id || (activeObjectId && item.id === `obj_${activeObjectId}`));
                 return (
                   <div key={item.id}>
@@ -2630,6 +2630,7 @@ activeNavRef.current = activeNav;
       <div data-tour="main-content" style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
         {/* Top bar */}
         <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects}
+             showAchievements={!!(featAchievements && canGlobal('access_achievements'))}
              activeDashTab={activeNav === "dashboard" ? "overview" : activeNav.startsWith("dashboard_") ? activeNav.replace("dashboard_","") : null}
              onDashboardNav={(tab) => {
                if (tab === "campaigns") { switchNav("campaigns"); return; }
@@ -2680,7 +2681,7 @@ activeNavRef.current = activeNav;
           <GettingStarted environment={selectedEnv} navObjects={navObjects} onNavigate={switchNav} />
         ) : activeNav === "inbox" ? (
           <InboxModule environment={selectedEnv} session={session} onNavigate={openRecord} />
-        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" || activeNav === "dashboard_campaigns" ? (
+        ) : activeNav === "dashboard" || activeNav === "dashboard_interviews" || activeNav === "dashboard_offers" || activeNav === "dashboard_admin" || activeNav === "dashboard_agents" || activeNav === "dashboard_screening" || activeNav === "dashboard_onboarding" || activeNav === "dashboard_custom" || activeNav === "dashboard_insights" || activeNav === "dashboard_campaigns" || activeNav === "dashboard_achievements" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
             <DashboardHub
               tab={activeNav === "dashboard" ? "overview" : activeNav.replace("dashboard_", "")}
@@ -2803,10 +2804,6 @@ activeNavRef.current = activeNav;
           featOffers
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><OffersModule environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Offers"/>
-        ) : activeNav === "badges" ? (
-          canGlobal('access_achievements') && featAchievements
-            ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><BadgesModule environment={selectedEnv} session={session}/></Suspense>
-            : <AccessDenied feature="Achievements"/>
         ) : activeNav === "cohorts" ? (
           <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"auto" }}><CohortsModule environment={selectedEnv} /></div></Suspense>
         ) : activeNav === "campaigns" ? (
@@ -3171,7 +3168,7 @@ export default function AppRoot() {
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
   if (portalSlug) return <PortalApp slug={portalSlug}/>;
 
-  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
+  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|dashboard_achievements|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
   if (_path !== '/' && !_appRoutes.test(_path)) {
     const segments = _path.replace(/^\//, '').split('/');
     const cleanSlug = segments[0];
