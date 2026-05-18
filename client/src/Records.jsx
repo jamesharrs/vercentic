@@ -1896,9 +1896,9 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
   ].filter(s=>s.keys.length);
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"flex-end" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{ width:560, height:"100%", background:C.surface, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,.12)", animation:"slideIn .2s ease" }}>
-        <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ width:600, maxWidth:"94vw", maxHeight:"90vh", background:C.surface, display:"flex", flexDirection:"column", borderRadius:16, boxShadow:"0 24px 64px rgba(0,0,0,.2)", animation:"modalIn .2s ease", overflow:"hidden" }}>
+        <style>{`@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}`}</style>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"20px 24px", borderBottom:`1px solid ${C.border}` }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:C.text1 }}>{record?"Edit":"New"} {objectName}</h2>
           <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, display:"flex" }}><Ic n="x" s={20}/></button>
