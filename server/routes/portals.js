@@ -571,7 +571,8 @@ router.post('/:id/wizard/submit', async (req, res) => {
     let hub_credentials = null;
     if (target_object === 'people' && form_data.email) {
       const email = form_data.email.toLowerCase().trim();
-      const hashPw = (pw) => crypto.createHash('sha256').update(pw + 'vrc_portal_2026').digest('hex');
+      const bcrypt = require('bcryptjs');
+      const hashPw = (pw) => bcrypt.hashSync(pw, 12);
       if (!store.portal_users) store.portal_users = [];
       const existing_hub = store.portal_users.find(u => u.email === email);
       if (!existing_hub) {
@@ -678,9 +679,10 @@ router.post('/:id/feedback', (req, res) => {
 
     // Save as a note on the record
     if (note || rating) {
+      const { v4: uuidv4HM } = require('uuid');
       store.record_notes = store.record_notes || [];
       store.record_notes.push({
-        id: uuidv4(),
+        id: uuidv4HM(),
         record_id: person_id,
         content: `[HM Feedback${job_title ? ` — ${job_title}` : ''}] Stage: ${stage || 'Unknown'}. Rating: ${rating ? `${rating}/5` : 'Not rated'}. ${note || ''}`.trim(),
         created_by: 'hiring_manager',
@@ -688,7 +690,7 @@ router.post('/:id/feedback', (req, res) => {
       });
     }
 
-    saveStoreNow();
+    saveStore();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -736,11 +738,17 @@ router.post('/:id/session', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   const bcrypt = require('bcryptjs');
-  const user = findOne('users', u => u.email.toLowerCase() === email.toLowerCase());
+  const { findOne: findOneLocal } = require('../db/init');
+  const user = findOneLocal('users', u => u.email.toLowerCase() === email.toLowerCase());
   if (!user || !user.password_hash) return res.status(401).json({ error: 'Invalid credentials' });
-  const valid = bcrypt.compareSync(password, user.password_hash);
+  const isLegacy = !user.password_hash.startsWith('$2') && !user.password_hash.includes(':');
+  const valid = user.password_hash.startsWith('$2')
+    ? bcrypt.compareSync(password, user.password_hash)
+    : isLegacy
+      ? require('crypto').createHash('sha256').update(password + 'talentos_salt').digest('hex') === user.password_hash
+      : (() => { const [s,h] = user.password_hash.split(':'); return require('crypto').createHash('sha256').update(password+s).digest('hex') === h; })();
   if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-  const portal = findOne('portals', p => p.id === req.params.id);
+  const portal = findOneLocal('portals', p => p.id === req.params.id);
   if (!portal) return res.status(404).json({ error: 'Portal not found' });
   // Issue a signed session token (simple JWT-style, no extra library needed)
   const token = require('crypto').randomBytes(32).toString('hex');

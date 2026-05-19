@@ -30,21 +30,31 @@ function checkGlobal(req, res, action) {
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+const bcrypt = require('bcryptjs');
+const BCRYPT_ROUNDS = 12;
 
-// Verify password against either hash format:
-//   new format: "randomSalt:hash"  (created by signup.js)
-//   old format: plain hex sha256   (created by hashPassword above)
+// Hash a password with bcrypt (async-safe wrapper used synchronously via bcryptjs sync API)
+const hashPassword = (pw) => bcrypt.hashSync(pw, BCRYPT_ROUNDS);
+
+// Verify password — supports three formats for backward compat during migration:
+//   1. bcrypt hash   ($2a$ or $2b$ prefix) — new standard
+//   2. "salt:sha256" — intermediate format created by signup.js
+//   3. plain sha256  — legacy fixed-salt format
 function verifyPassword(plaintext, storedHash) {
   if (!storedHash) return false;
+  // bcrypt
+  if (storedHash.startsWith('$2')) {
+    return bcrypt.compareSync(plaintext, storedHash);
+  }
+  // intermediate salted sha256 ("salt:hash")
   if (storedHash.includes(':')) {
-    // new format — split salt from hash
     const [salt, hash] = storedHash.split(':');
     const candidate = crypto.createHash('sha256').update(plaintext + salt).digest('hex');
     return candidate === hash;
   }
-  // old fixed-salt format
-  return storedHash === hashPassword(plaintext);
+  // legacy fixed-salt sha256 — verify then silently upgrade to bcrypt on next save
+  const legacyHash = crypto.createHash('sha256').update(plaintext + 'talentos_salt').digest('hex');
+  return storedHash === legacyHash;
 }
 
 // GET all users
@@ -174,6 +184,12 @@ function completeLogin(req, res, user, tenantSlug, password) {
   if (!verifyPassword(password, user.password_hash)) {
     insert('audit_log', { id:uuidv4(), action:'auth.login_failed', actor:user.email, target_id:user.id, target_type:'user', details:{ reason:'bad_password' }, created_at:new Date().toISOString() });
     return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  // Silent hash upgrade: if stored as legacy SHA-256, re-hash with bcrypt now
+  if (user.password_hash && !user.password_hash.startsWith('$2')) {
+    try {
+      update('users', u => u.id === user.id, { password_hash: hashPassword(password) });
+    } catch(e) { /* non-fatal */ }
   }
   const token = uuidv4() + '-' + uuidv4();
   insert('sessions', { id:uuidv4(), user_id:user.id, token, tenant_slug: tenantSlug, created_at:new Date().toISOString(), expires_at: new Date(Date.now() + 8*60*60*1000).toISOString(), ip: req.ip });

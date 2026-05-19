@@ -17,7 +17,8 @@ const { getStore, saveStore } = require('./db/init');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 
-const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+const bcrypt = require('bcryptjs');
+const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
 const now = new Date().toISOString();
 
 async function main() {

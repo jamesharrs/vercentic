@@ -411,7 +411,8 @@ async function seedUsersAndRoles(tenantKey) {
   const existingSlugs = new Set((store.roles || []).map(r => r.slug));
   if (SYSTEM_SLUGS.every(s => existingSlugs.has(s))) return;
   const crypto = require('crypto');
-  const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+  const bcrypt = require('bcryptjs');
+  const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
   const roles = [
     { id:uuidv4(), name:'Super Admin', slug:'super_admin', description:'Full access', is_system:1, color:'#e03131' },
     { id:uuidv4(), name:'Admin', slug:'admin', description:'Manage users and all data', is_system:1, color:'#f59f00' },

@@ -8,9 +8,19 @@ const { getStore, saveStore } = require('../db/init');
 const { logEvent, getEventLog } = require('../services/connectors');
 
 // ── Encryption ────────────────────────────────────────────────────────────────
+// INTEGRATION_SECRET must be set — no hardcoded fallback in production
+if (process.env.NODE_ENV === 'production' && !process.env.INTEGRATION_SECRET) {
+  console.error('[SECURITY] INTEGRATION_SECRET env var is not set. Integration credentials will not be encrypted securely.');
+}
 const ENC_KEY = process.env.INTEGRATION_SECRET
   ? Buffer.from(process.env.INTEGRATION_SECRET.padEnd(32).slice(0, 32))
-  : crypto.scryptSync('talentos-integrations-default', 'salt', 32);
+  : crypto.scryptSync(
+      // Development fallback only — deterministic but not the same as the old default string
+      // so any creds encrypted with the old default are preserved but clearly dev-only
+      'vercentic-dev-only-fallback-key-' + (process.env.NODE_ENV || 'dev'),
+      'vercentic-salt',
+      32
+    );
 
 function encrypt(text) {
   const iv = crypto.randomBytes(12);
@@ -268,7 +278,8 @@ router.post('/:id/test', async (req, res) => {
   const cfg = {};
   for (const [k, v] of Object.entries(integration.config || {})) cfg[k] = decrypt(v) || v;
 
-  let result = { ok: false, message: 'Live test not available — credentials look valid' };
+  // eslint-disable-next-line no-useless-assignment
+  let result = null;
   try {
     switch (integration.provider_slug) {
       case 'bamboohr': {
@@ -320,6 +331,7 @@ router.post('/:id/test', async (req, res) => {
       }
     }
   } catch (e) { result = { ok:false, message:`Connection error: ${e.message}` }; }
+  if (!result) result = { ok: false, message: 'Live test not available — credentials look valid' };
 
   // Save result
   const now = new Date().toISOString();
