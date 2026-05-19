@@ -157,27 +157,14 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
-  // 1. Try the current tenant store (set by middleware via X-Tenant-Slug or ?tenant= or subdomain)
-  let user = findOne('users', u => u.email === email.toLowerCase());
-  let resolvedSlug = getCurrentTenant();
+  // Tenant is already resolved by middleware from the subdomain / X-Tenant-Slug header.
+  // We ONLY search the current tenant store — no cross-store lookup.
+  // Each environment is fully isolated: john@company.com in tenant A is a
+  // completely separate account from john@company.com in tenant B.
+  const resolvedSlug = getCurrentTenant();
+  const user = findOne('users', u => u.email === email.toLowerCase() && u.status !== 'deactivated');
 
-  // 2. If not found in current tenant, search all tenant stores.
-  // Each environment is fully isolated — users only exist in their own tenant store.
-  if (!user || user.status === 'deactivated') {
-    const tenants = listTenants ? listTenants() : [];
-    for (const slug of tenants) {
-      if (slug === 'master' || slug === resolvedSlug) continue;
-      const ts = loadTenantStore(slug);
-      const found = (ts.users || []).find(u => u.email === email.toLowerCase() && u.status !== 'deactivated');
-      if (found) {
-        user = found;
-        resolvedSlug = slug;
-        return tenantStorage.run(slug, () => completeLogin(req, res, user, resolvedSlug, password));
-      }
-    }
-  }
-
-  if (!user || user.status === 'deactivated') return res.status(401).json({ error: 'Invalid credentials' });
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   completeLogin(req, res, user, resolvedSlug, password);
 });
 
