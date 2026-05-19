@@ -116,10 +116,11 @@ router.post('/', validate(createUserSchema), (req, res) => {
 // PATCH update user
 router.patch('/:id', validate(patchUserSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_users') === false) return;
-  const { first_name, last_name, role_id, status, mfa_enabled, org_unit_id, environment_id, password } = req.body;
+  const { first_name, last_name, email, role_id, status, mfa_enabled, org_unit_id, environment_id, password } = req.body;
   const updates = {};
   if (first_name      !== undefined) updates.first_name      = first_name;
   if (last_name       !== undefined) updates.last_name       = last_name;
+  if (email           !== undefined) updates.email           = email.toLowerCase().trim();
   if (role_id         !== undefined) updates.role_id         = role_id;
   if (status          !== undefined) updates.status          = status;
   if (mfa_enabled     !== undefined) updates.mfa_enabled     = mfa_enabled;

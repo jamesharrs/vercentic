@@ -36,6 +36,7 @@ const createUserSchema = z.object({
 const patchUserSchema = z.object({
   first_name:  strOpt(100),
   last_name:   strOpt(100),
+  email:       z.string().email().optional(),
   role_id:     uuidOpt(),
   status:      z.enum(['active','invited','deactivated']).optional(),
   mfa_enabled: boolInt(),
