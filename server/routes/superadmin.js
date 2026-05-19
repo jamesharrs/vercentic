@@ -208,10 +208,8 @@ router.post('/reset-password', (req, res) => {
   if (!tenant_slug || !email || !password) return res.status(400).json({ error: 'tenant_slug, email, password required' });
   try {
     const { loadTenantStore, saveStoreNow, tenantStorage } = require('../db/init');
-    const crypto = require('crypto');
-    // Support both hash formats
-    // Must match verifyPassword() format in users.js
-    const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+    const bcrypt = require('bcryptjs');
+    const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
     const store = loadTenantStore(tenant_slug);
     const user = (store.users || []).find(u => u.email === email);
     if (!user) return res.status(404).json({ error: `User ${email} not found in ${tenant_slug}` });

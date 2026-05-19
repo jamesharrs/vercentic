@@ -47,14 +47,34 @@ router.post('/upload', upload.single('file'), verifyMime, (req, res) => {
 
 // ── Serve file ────────────────────────────────────────────────────────────────
 router.get('/file/:filename', (req, res) => {
-  const filePath = path.join(UPLOAD_DIR, req.params.filename);
+  // Prevent path traversal — filename must not contain directory separators
+  const filename = req.params.filename;
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  // Require authentication — files contain sensitive candidate/employee data
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+  const filePath = path.join(UPLOAD_DIR, filename);
+  // Ensure the resolved path is still inside UPLOAD_DIR (belt-and-suspenders)
+  if (!filePath.startsWith(UPLOAD_DIR + path.sep) && filePath !== UPLOAD_DIR) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
   res.sendFile(filePath);
 });
 
 // ── DOCX → HTML preview ───────────────────────────────────────────────────────
 router.get('/preview/:filename', async (req, res) => {
-  const filePath = path.join(UPLOAD_DIR, req.params.filename);
+  const filename = req.params.filename;
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const filePath = path.join(UPLOAD_DIR, filename);
+  if (!filePath.startsWith(UPLOAD_DIR + path.sep)) return res.status(400).json({ error: 'Invalid path' });
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
   const ext = path.extname(req.params.filename).toLowerCase();
   if (!['.docx','.doc'].includes(ext)) return res.status(400).json({ error: 'Only DOCX/DOC preview supported' });

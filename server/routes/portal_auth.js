@@ -8,10 +8,19 @@ const { query, insert, getStore, saveStore } = require('../db/init');
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 
+const bcrypt = require('bcryptjs');
+
 function hashPw(pw) {
-  return crypto.createHash('sha256').update(pw + 'vrc_portal_2026').digest('hex');
+  return bcrypt.hashSync(pw, 12);
 }
-function genToken() { return crypto.randomBytes(32).toString('hex'); }
+function verifyPw(plain, hash) {
+  if (!hash) return false;
+  if (hash.startsWith('$2')) return bcrypt.compareSync(plain, hash);
+  // legacy portal sha256 fallback
+  const legacy = require('crypto').createHash('sha256').update(plain + 'vrc_portal_2026').digest('hex');
+  return hash === legacy;
+}
+function genToken() { return require('crypto').randomBytes(32).toString('hex'); }
 
 function ensureCollections() {
   const s = getStore();
@@ -41,7 +50,7 @@ router.post('/login', (req, res) => {
   const user = (s.portal_users || []).find(
     u => u.email.toLowerCase() === email.trim().toLowerCase() && u.status === 'active'
   );
-  if (!user || user.password_hash !== hashPw(password)) {
+  if (!user || !verifyPw(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
   const token = genToken();
@@ -129,7 +138,7 @@ router.get('/tasks', (req, res) => {
 });
 
 // PATCH /api/portal-auth/tasks/:id — complete a task from the portal
-router.patch('/tasks/:id', async (req, res) => { try {
+router.patch('/tasks/:id', async (req, res, next) => { try {
   ensureCollections();
   const user = getPortalUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthenticated' });

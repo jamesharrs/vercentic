@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
     "@sendgrid/mail": "^8.1.6",
+    "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",

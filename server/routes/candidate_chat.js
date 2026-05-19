@@ -209,7 +209,27 @@ router.post('/:id/ai-suggest', express.json(), async (req, res) => {
 });
 
 // ─── POST /chats/inbound — receive from Twilio/email webhook ─────────────────
+// Validates Twilio request signature when TWILIO_AUTH_TOKEN is set
+function validateTwilioSignature(req) {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) return true; // skip validation if not configured
+  const signature = req.headers['x-twilio-signature'];
+  if (!signature) return false;
+  const crypto = require('crypto');
+  const url = (process.env.WEBHOOK_BASE_URL || '') + req.originalUrl;
+  const params = req.body || {};
+  // Twilio HMAC-SHA1 validation
+  const sortedKeys = Object.keys(params).sort();
+  const data = url + sortedKeys.map(k => k + params[k]).join('');
+  const expected = crypto.createHmac('sha1', authToken).update(data).digest('base64');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
 router.post('/inbound', express.json(), (req, res) => {
+  // Validate Twilio signature for inbound messages
+  if (req.headers['x-twilio-signature'] && !validateTwilioSignature(req)) {
+    return res.status(403).json({ error: 'Invalid webhook signature' });
+  }
   ensureCollections();
   const { environment_id, channel, from_name, from_email, from_phone, body, subject } = req.body;
   let chat = from_email

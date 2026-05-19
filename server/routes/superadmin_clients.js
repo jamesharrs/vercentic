@@ -5,7 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
 const { getStore, saveStore, tenantStorage, provisionTenant, loadTenantStore } = require('../db/init');
 
-const hashPassword = (pw) => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
+const bcrypt = require('bcryptjs');
+const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
 
 function ensureCollections() {
   const s = getStore();

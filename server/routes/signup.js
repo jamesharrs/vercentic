@@ -24,10 +24,10 @@ function slugify(str) {
   return (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'client';
 }
 
+const bcrypt = require('bcryptjs');
+
 function hashPwd(pwd) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.createHash('sha256').update(pwd + salt).digest('hex');
-  return `${salt}:${hash}`;
+  return bcrypt.hashSync(pwd, 12);
 }
 
 router.post('/', async (req, res) => {

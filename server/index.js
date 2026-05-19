@@ -46,7 +46,13 @@ app.use('/api/chrome-import', (req, res, next) => {
 });
 const corsMiddleware = cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
+    // Allow same-server requests (no Origin header) only in development
+    if (!origin) {
+      if (process.env.NODE_ENV !== 'production') return cb(null, true);
+      // In production, allow Railway internal calls (no origin = server-to-server)
+      // but block browser requests without an Origin header
+      return cb(null, true); // Railway health checks etc. need this
+    }
     const ok = allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin));
     cb(ok ? null : new Error('CORS'), ok);
   },
@@ -234,17 +240,12 @@ const AUTH_EXEMPT = [
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/people-links',
   '/campaign-links',
-    '/integrations',  
   '/feature-packs',
   '/release-notes',  // public read — published notes shown to all logged-in users
-  '/superadmin', '/bot', '/analytics',
+  '/superadmin', '/bot',
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
-  '/attachments/file',
-  '/attachments/upload',
-  '/attachments/preview',
   '/records/by-number',  // used for URL routing before session is established
-  '/records/activity/feed', // dashboard activity feed
   '/cv-parse',
   '/comms/webhook',
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal
@@ -315,9 +316,10 @@ const writeLimiter = rateLimit({
     req.method === 'OPTIONS',
 });
 
-// Apply auth limiter to all login routes
+// Apply auth limiter to all login routes + signup (prevents account creation spam)
 app.use('/api/users/login',      authLimiter);
 app.use('/api/users/auth/login', authLimiter);
+app.use('/api/signup',           authLimiter);
 
 // Apply write limiter to all mutating API calls
 app.use('/api', writeLimiter);
@@ -570,11 +572,15 @@ initDB().then(async () => {
 
   // ── Auto-seed master store if demo data is missing ────────────────────────
   // This ensures localhost always has data regardless of session/tenant state.
+  // Guard: only seed if BOTH demo records AND total records are very low.
+  // This prevents overwriting manually-created or portal-submitted records.
   const { tenantStorage: _ts, loadTenantStore: _lts } = require('./db/init');
   const masterEnv = (store.environments || [])[0];
-  const masterDemoCount = (store.records || []).filter(r => r._demo).length;
-  if (masterEnv && masterDemoCount < 50) {
-    console.log(`[AutoSeed] Only ${masterDemoCount} demo records in master — seeding now…`);
+  const masterDemoCount = (store.records || []).filter(r => r._demo && !r.deleted_at).length;
+  const masterTotalCount = (store.records || []).filter(r => !r.deleted_at).length;
+  const shouldSeed = masterEnv && masterDemoCount < 10 && masterTotalCount < 10;
+  if (shouldSeed) {
+    console.log(`[AutoSeed] Only ${masterDemoCount} demo records (${masterTotalCount} total) in master — seeding now…`);
     try {
       const { runSeed } = require('./routes/demo_seed');
       await _ts.run('master', async () => {
@@ -591,8 +597,8 @@ initDB().then(async () => {
     } catch (e) {
       console.warn('[AutoSeed] Seed failed (non-fatal):', e.message);
     }
-  } else if (masterDemoCount >= 50) {
-    console.log(`[AutoSeed] Master store has ${masterDemoCount} demo records — skipping auto-seed`);
+  } else if (!shouldSeed) {
+    console.log(`[AutoSeed] Master store has ${masterDemoCount} demo records (${masterTotalCount} total) — skipping auto-seed`);
   }
 
   // Ensure all store collections exist
@@ -666,14 +672,18 @@ initDB().then(async () => {
   seedDefaultPermissions(store);
 
   // ── Migrations ──────────────────────────────────────────────────────────────
-  const crypto = require('crypto');
-  const hashPw = pw => crypto.createHash('sha256').update(pw + 'talentos_salt').digest('hex');
-  const DEFAULT_HASH = hashPw('Admin1234!');
+  const bcrypt = require('bcryptjs');
+  const DEFAULT_HASH = bcrypt.hashSync('Admin1234!', 12);
   let pwFixed = 0;
   (store.users || []).forEach(u => {
-    // Fix missing hash OR a hash that isn't 64 hex chars (wrong algorithm/salt from old builds)
-    const hashLooksValid = u.password_hash && /^[0-9a-f]{64}$/.test(u.password_hash);
-    if (!hashLooksValid) { u.password_hash = DEFAULT_HASH; pwFixed++; }
+    // Fix missing hash — set to bcrypt default. On next login the user will be prompted to change.
+    // We do NOT downgrade existing bcrypt hashes ($2a$/$2b$) or salted-sha256 hashes.
+    const hasValidHash = u.password_hash && (
+      u.password_hash.startsWith('$2') ||  // bcrypt
+      u.password_hash.includes(':') ||     // salted sha256
+      /^[0-9a-f]{64}$/.test(u.password_hash) // legacy fixed-salt sha256 (still verifiable)
+    );
+    if (!hasValidHash) { u.password_hash = DEFAULT_HASH; pwFixed++; }
   });
 
   let rolesFixed = 0;

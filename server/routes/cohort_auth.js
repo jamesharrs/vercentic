@@ -7,8 +7,15 @@ const { getStore, saveStore } = require('../db/init');
 
 const now = () => new Date().toISOString();
 const MAGIC_LINK_TTL_MINS = 30;
-const hashPassword = (pw) => crypto.createHash('sha256').update(`vercentic_salt_${pw}`).digest('hex');
-const checkPassword = (pw, hash) => hashPassword(pw) === hash;
+const bcrypt = require('bcryptjs');
+const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
+const checkPassword = (pw, hash) => {
+  if (!hash) return false;
+  if (hash.startsWith('$2')) return bcrypt.compareSync(pw, hash);
+  // legacy sha256 fallback
+  const legacy = crypto.createHash('sha256').update(`vercentic_salt_${pw}`).digest('hex');
+  return hash === legacy;
+};
 const getCohort = (id) => (getStore().cohorts || []).find(c => c.id === id && !c.deleted_at);
 const getMemberById = (id) => (getStore().cohort_members || []).find(m => m.id === id && !m.removed_at);
 const getPersonRecord = (id) => (getStore().records || []).find(r => r.id === id);
