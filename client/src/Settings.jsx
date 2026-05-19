@@ -5,6 +5,18 @@ import ReactDOM from "react-dom";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import { useI18n, LANGUAGES } from "./i18n/I18nContext.jsx";
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 // ── Heavy modules — lazy loaded so Settings chunk stays small ─────────────────
 const WorkflowsPage      = lazy(() => import("./Workflows.jsx"));
 const PortalsPage        = lazy(() => import("./Portals.jsx").then(m => ({ default: m.default || m.PortalsPage })));
@@ -46,7 +58,7 @@ const LazyTab = ({ children }) => (
 function getAuthHeaders(extra = {}) {
   const h = { 'Content-Type': 'application/json', ...extra };
   try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
     if (sess?.user?.id) h['X-User-Id'] = sess.user.id;
     if (sess?.tenant_slug && sess.tenant_slug !== 'master') h['X-Tenant-Slug'] = sess.tenant_slug;
   } catch {}
@@ -1068,7 +1080,7 @@ const AuditLogSection = () => {
 
   const exportCsv = async () => {
     try {
-      const res = await fetch("/api/security-audit/export", { credentials: "include", headers: (() => { const s=JSON.parse(localStorage.getItem("talentos_session")||"null"); const m=document.cookie.match(/vercentic_csrf=([^;]+)/); return { "X-User-Id": s?.user?.id||"", "X-CSRF-Token": m ? decodeURIComponent(m[1]) : "" }; })() });
+      const res = await fetch("/api/security-audit/export", { credentials: "include", headers: (() => { const s=JSON.parse(localStorage.getItem(_sessionKey())||"null"); const m=document.cookie.match(/vercentic_csrf=([^;]+)/); return { "X-User-Id": s?.user?.id||"", "X-CSRF-Token": m ? decodeURIComponent(m[1]) : "" }; })() });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = `security-audit-${new Date().toISOString().slice(0,10)}.csv`; a.click();

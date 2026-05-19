@@ -1,6 +1,18 @@
 // client/src/ErrorBoundary.jsx
 import { Component } from 'react';
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 const F = "'DM Sans', -apple-system, sans-serif";
 
 function generateCode() {
@@ -12,7 +24,7 @@ function generateCode() {
 async function reportError({ code, message, stack, component, severity = 'error', extra = {} }) {
   try {
     const session = (() => {
-      try { return JSON.parse(localStorage.getItem('talentos_session') || '{}'); }
+      try { return JSON.parse(localStorage.getItem(_sessionKey()) || '{}'); }
       catch { return {}; }
     })();
     // Read CSRF cookie — bail silently if missing (e.g. post sign-out)

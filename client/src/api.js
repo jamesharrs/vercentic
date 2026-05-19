@@ -1,17 +1,29 @@
 // client/src/api.js
+
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
 // Centralised API client — calls Railway directly in production (no Vercel edge proxy).
 
 const API_ORIGIN = import.meta.env.VITE_API_URL || '';
 const BASE = `${API_ORIGIN}/api`;
 
 function getSession() {
-  try { return JSON.parse(localStorage.getItem('talentos_session') || '{}'); }
+  try { return JSON.parse(localStorage.getItem(_sessionKey()) || '{}'); }
   catch { return {}; }
 }
 
 function getTenantSlug() {
   try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
     if (sess?.tenant_slug && sess.tenant_slug !== 'master') return sess.tenant_slug;
   } catch {}
   try {

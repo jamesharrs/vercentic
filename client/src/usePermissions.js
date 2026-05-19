@@ -7,17 +7,29 @@
 
 const SESSION_KEY = "talentos_session";
 
+// Scope session key to subdomain so each tenant environment is isolated
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `${SESSION_KEY}_${parts[0]}` : `${SESSION_KEY}_default`;
+  } catch { return `${SESSION_KEY}_default`; }
+}
+
 export function getSession() {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
+  try { return JSON.parse(localStorage.getItem(_sessionKey()) || "null"); }
   catch { return null; }
 }
 
 export function setSession(data) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  localStorage.setItem(_sessionKey(), JSON.stringify(data));
 }
 
 export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(_sessionKey());
 }
 
 export default function usePermissions() {
