@@ -93,6 +93,28 @@ function _sessionKey() {
   } catch { return 'talentos_session_default'; }
 }
 
+// One-time migration: move legacy 'talentos_session' key to the new scoped key.
+// Runs once on load — clears the shared key so sessions don't bleed across subdomains.
+(function migrateSession() {
+  try {
+    const newKey = _sessionKey();
+    if (!localStorage.getItem(newKey)) {
+      const legacy = localStorage.getItem('talentos_session');
+      if (legacy) {
+        // Only migrate if the legacy session belongs to this subdomain's tenant
+        const parsed = JSON.parse(legacy);
+        const tenantSlug = window.location.hostname.split('.')[0];
+        const sessionTenant = parsed?.tenant_slug || parsed?.user?.tenant_slug;
+        if (!sessionTenant || sessionTenant === 'master' || sessionTenant === tenantSlug) {
+          localStorage.setItem(newKey, legacy);
+        }
+      }
+    }
+    // Always remove the old shared key so it can't bleed into other subdomains
+    localStorage.removeItem('talentos_session');
+  } catch {}
+})();
+
 const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
 const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
 const useIsMobile       = () => typeof window !== 'undefined' && window.innerWidth < 768;
