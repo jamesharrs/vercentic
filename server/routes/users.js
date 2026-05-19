@@ -161,7 +161,9 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
   let user = findOne('users', u => u.email === email.toLowerCase());
   let resolvedSlug = getCurrentTenant();
 
-  // 2. If not found (e.g. login from www with no tenant context), search all tenant stores
+  // 2. If not found, search all tenant stores then master as final fallback.
+  // This handles client users stored in master (e.g. master-template environments)
+  // who log in via a subdomain that maps to their tenant slug.
   if (!user || user.status === 'deactivated') {
     const tenants = listTenants ? listTenants() : [];
     for (const slug of tenants) {
@@ -171,8 +173,16 @@ router.post('/auth/login', validate(loginSchema), (req, res) => {
       if (found) {
         user = found;
         resolvedSlug = slug;
-        // Switch execution context to this tenant store for the rest of the request
         return tenantStorage.run(slug, () => completeLogin(req, res, user, resolvedSlug, password));
+      }
+    }
+    // Final fallback: check master store (covers template env users, platform admins)
+    if (resolvedSlug !== 'master') {
+      const masterStore = loadTenantStore(null);
+      const masterUser = (masterStore.users || []).find(u => u.email === email.toLowerCase() && u.status !== 'deactivated');
+      if (masterUser) {
+        user = masterUser;
+        resolvedSlug = 'master';
       }
     }
   }
