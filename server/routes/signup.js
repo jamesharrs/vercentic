@@ -9,7 +9,7 @@ const crypto   = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore, saveStoreNow, tenantStorage, storeCache, loadTenantStore, provisionTenant } = require('../db/init');
 const { applyStarterConfig } = require('../data/starter_config');
-const { buildTemplate }    = require('./superadmin_clients');
+const { getDefaultTemplateKey, resolveTemplate, buildStandardConfig } = require('../data/templates');
 const { runSeed, findTenantForEnv } = require('./demo_seed');
 
 const PLAN_LIMITS = {
@@ -96,11 +96,11 @@ router.post('/', async (req, res) => {
 
       ts.environments = [{ id: envId, name: 'Production', slug: 'production', is_default: 1, color: '#6941C6', setup_complete: false, created_at: now, updated_at: now }];
 
-      // Seed objects + fields using the full core_recruitment template (same as SA provisioning)
-      const tplData = buildTemplate('core_recruitment');
+      // Seed objects + fields using the default template (recruitment_starter for web signups)
+      const { objects: tplObjects, tier: tplTier } = resolveTemplate(getDefaultTemplateKey());
       ts.objects = []; ts.fields = [];
-      for (let i = 0; i < tplData.objects.length; i++) {
-        const obj   = tplData.objects[i];
+      for (let i = 0; i < tplObjects.length; i++) {
+        const obj   = tplObjects[i];
         const objId = uuidv4();
         const OBJ_META = {
           people:       { name:'Person',      plural:'People',       icon:'users',     color:'#3b5bdb' },
