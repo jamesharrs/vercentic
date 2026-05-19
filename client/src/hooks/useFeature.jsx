@@ -1,6 +1,18 @@
 // client/src/hooks/useFeature.js
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 // All stable features on by default — prevents flash of missing nav items on load
 const DEFAULT_FEATURES = new Set([
   'core','ai_copilot','ai_matching','communications_panel','workflows',
@@ -27,7 +39,7 @@ export function FeatureProvider({ environmentId, children }) {
   const load = useCallback(async () => {
     if (!environmentId) { setLoading(false); return; }
     try {
-      const sess = (() => { try { return JSON.parse(localStorage.getItem('talentos_session')||'null'); } catch { return null; } })();
+      const sess = (() => { try { return JSON.parse(localStorage.getItem(_sessionKey())||'null'); } catch { return null; } })();
       const headers = {};
       if (sess?.tenant_slug) headers['X-Tenant-Slug'] = sess.tenant_slug;
       if (sess?.user?.id)    headers['X-User-Id']     = sess.user.id;

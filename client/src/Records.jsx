@@ -29,6 +29,18 @@ import { sanitizeHtml, sanitizeCopilot, sanitizeInline } from './sanitize.js';
 import TalentCardModal from './TalentCard.jsx';
 import ScreeningRulesPanel from './ScreeningRulesPanel.jsx'; // kept for ScreeningTab inside JobQuestionsPanel
 import LinkedInFinderButton from './LinkedInFinder.jsx';
+
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
 const InterviewPlanPanelLazy = lazy(() => import('./InterviewPlanPanel.jsx').then(m => ({ default: m.InterviewPlanPanel })));
 const ScheduleModalLazy = lazy(() => import('./Interviews.jsx').then(m => ({ default: m.ScheduleModal })));
 
@@ -2794,7 +2806,7 @@ let _mePersonResolved = false;
 async function resolveMyPersonId() {
   if (_mePersonResolved) return _mePersonRecordId;
   try {
-    const session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const email = session.user?.email;
     if (!email || !_currentEnvId) return null;
     const res = await api.get(`/records/search?q=${encodeURIComponent(email)}&environment_id=${_currentEnvId}&limit=5`);
@@ -2809,7 +2821,7 @@ window.addEventListener("storage", e => { if (e.key === "talentos_session") { _m
 
 function getMeContext() {
   try {
-    const session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const u = session.user;
     if (!u) return null;
     return { userId: u.id, email: (u.email || "").toLowerCase(), fullName: [u.first_name, u.last_name].filter(Boolean).join(" "), personRecordId: _mePersonRecordId };
@@ -11696,7 +11708,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   }, [records, isPeopleObj, showEngagement]);
 
   const handleCreate = async (data) => {
-    const _session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const _session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const _userId = _session?.user?.id || null;
     const created = await api.post("/records", { object_id:object.id, environment_id:environment.id, data, created_by:_userId });
     await load();
@@ -11706,7 +11718,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   };
 
   const handleUpdate = async (data) => {
-    const _session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const _session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const _userId = _session?.user?.id || null;
     await api.patch(`/records/${editRecord.id}`, { data, updated_by: _userId });
     await load();
@@ -11747,7 +11759,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   const getBulkThreshold = () => {
     // Try role-specific threshold first (set in Settings → Roles)
-    const session = JSON.parse(localStorage.getItem("talentos_session") || "{}");
+    const session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const roleSlug = session?.user?.role?.slug;
     if (roleSlug) {
       const v = localStorage.getItem(`talentos_bulk_threshold_${roleSlug}`);

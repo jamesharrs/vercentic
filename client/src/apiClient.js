@@ -9,8 +9,21 @@
 
 const API_ORIGIN = import.meta.env.VITE_API_URL || '';
 
+// Session key is scoped to the current subdomain so each tenant has its own
+// isolated session — prevents a login on starter-template.vercentic.com from
+// bleeding into standard-template.vercentic.com via shared localStorage.
+function sessionKey() {
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  const reserved = ['www','app','api','admin','localhost','client','portal'];
+  const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+    !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+  const slug = isSubdomain ? parts[0] : 'default';
+  return `talentos_session_${slug}`;
+}
+
 function getSession() {
-  try { return JSON.parse(localStorage.getItem('talentos_session') || 'null'); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(sessionKey()) || 'null'); } catch { return null; }
 }
 
 function getTenantSlug() {

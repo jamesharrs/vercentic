@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import _apiClient from "./apiClient.js";
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 // ─── Vercentic Brand Palette ──────────────────────────────────────────────────
 const V = {
   gradientBg: "radial-gradient(ellipse at 10% 20%, #D8D4F0 0%, transparent 55%), radial-gradient(ellipse at 90% 15%, #F0C8C8 0%, transparent 55%), radial-gradient(ellipse at 50% 80%, #F7F4F0 0%, transparent 60%), #F5F2EE",
@@ -25,7 +37,7 @@ const FD = "'Geist', 'DM Sans', -apple-system, sans-serif";
 // Auth-aware API client — attaches session headers so CSRF/auth middleware passes
 function getAuthHeaders(extra = {}) {
   try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
     const slug = sess?.tenant_slug || window.location.hostname.split('.')[0] || null;
     const userId = sess?.user?.id || null;
     const csrf = (document.cookie.match(/vercentic_csrf=([^;]+)/)||[])[1] || '';

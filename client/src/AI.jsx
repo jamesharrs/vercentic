@@ -17,6 +17,18 @@ import api from './apiClient.js';
 import { sanitizeCopilot } from './sanitize.js';
 import { tFetch } from './apiClient.js';
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const P = {
@@ -1666,7 +1678,7 @@ const SuggestedActions = ({ activeNav, settingsSection, currentObject, onSend, i
 // Auth headers for fetch calls — reads session from localStorage (same as apiClient)
 function aiHeaders() {
   try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
     const h = { 'Content-Type': 'application/json' };
     if (sess?.user?.id)     h['X-User-Id']     = sess.user.id;
     if (sess?.tenant_slug)  h['X-Tenant-Slug']  = sess.tenant_slug;
@@ -1758,7 +1770,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   // Read current user + org from session (available immediately, no API call needed)
   const _session = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem('talentos_session') || 'null') || {}; }
+    try { return JSON.parse(localStorage.getItem(_sessionKey()) || 'null') || {}; }
     catch { return {}; }
   }, []); // stable reference — session doesn't change mid-conversation
   const _sessionUser = _session?.user || {};

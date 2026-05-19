@@ -81,6 +81,18 @@ const CompanySetupWizard = lazyWithRetry(() => import("./CompanySetupWizard.jsx"
 import GettingStarted, { WelcomeModal } from "./GettingStarted";
 import { ComposeModal } from "./Communications.jsx";
 import { ReleaseNotesLoginModal } from "./ReleaseNotes.jsx";
+
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
 const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
 const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
 const useIsMobile       = () => typeof window !== 'undefined' && window.innerWidth < 768;
@@ -1617,7 +1629,7 @@ function App({ onEnvReady }) {
     if (sess && subdomainSlug) {
       const sessionTenant = sess.tenant_slug || null;
       if (sessionTenant !== subdomainSlug) {
-        try { localStorage.removeItem('talentos_session'); } catch {}
+        try { localStorage.removeItem(_sessionKey()); } catch {}
         return null;
       }
     }
@@ -1691,7 +1703,7 @@ function App({ onEnvReady }) {
           permissions: data.permissions || [],
           tenant_slug: data.tenant_slug,
         };
-        try { localStorage.setItem('talentos_session', JSON.stringify(sessionData)); } catch {}
+        try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
         setSession(sessionData);
       })
       .catch(err => console.error('Impersonation exchange error:', err));
@@ -1877,7 +1889,7 @@ activeNavRef.current = activeNav;
           permissions: data.permissions || [],
           tenant_slug: data.user.tenant_slug || 'production',
         };
-        try { localStorage.setItem('talentos_session', JSON.stringify(sessionData)); } catch {}
+        try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
         startTransition(() => setSession(sessionData));
       })
       .catch(() => {});
@@ -1897,7 +1909,7 @@ activeNavRef.current = activeNav;
       // Only auto-logout on 401 in production. In dev, server restarts can cause
       // transient 401s — don't wipe localStorage and force re-login every time.
       if (!import.meta.env.PROD) return;
-      try { localStorage.removeItem('talentos_session'); } catch {}
+      try { localStorage.removeItem(_sessionKey()); } catch {}
       startTransition(() => setSession(null));
     };
     window.addEventListener('talentos:unauthenticated', handler);
@@ -1918,7 +1930,7 @@ activeNavRef.current = activeNav;
       // and lose the cookie session, but X-User-Id header auth still works.
       // We tolerate 401 in dev and let the user stay logged in.
       if (r.status === 401 && import.meta.env.PROD) {
-        try { localStorage.removeItem('talentos_session'); } catch {}
+        try { localStorage.removeItem(_sessionKey()); } catch {}
         startTransition(() => setSession(null));
       }
     }).catch(() => {});
@@ -1945,12 +1957,12 @@ activeNavRef.current = activeNav;
         // update localStorage so all subsequent API calls use the correct ID.
         if (def && userEnvId && def.id !== userEnvId) {
           try {
-            const raw = localStorage.getItem('talentos_session');
+            const raw = localStorage.getItem(_sessionKey());
             if (raw) {
               const stored = JSON.parse(raw);
               if (stored?.user) {
                 stored.user.environment_id = def.id;
-                localStorage.setItem('talentos_session', JSON.stringify(stored));
+                localStorage.setItem(_sessionKey(), JSON.stringify(stored));
                 setSession(stored); // sync React state
               }
             }
@@ -2951,7 +2963,7 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
           permissions: data.permissions || [],
           tenant_slug: data.tenant_slug || null,
         };
-        try { localStorage.setItem("talentos_session", JSON.stringify(sessionData)); } catch {}
+        try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
         setSession(sessionData);
         setOpen(false);
         window.location.reload();

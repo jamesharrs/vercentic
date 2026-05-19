@@ -1,13 +1,25 @@
 // client/src/InboxLiveChat.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 const C = { bg:'#F8FAFF', surface:'#FFFFFF', border:'#E8EDF5', accent:'#4361EE', accentLight:'#EEF1FF', text1:'#0D0D0F', text2:'#4B5563', text3:'#9CA3AF', green:'#0CA678', amber:'#F59F00', red:'#E03131' };
 const F = "'DM Sans', -apple-system, sans-serif";
 
 // Get auth headers from session — same pattern as apiClient.js
 function authHeaders(userId) {
   try {
-    const sess = JSON.parse(localStorage.getItem('talentos_session') || 'null');
+    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
     const uid = userId || sess?.user?.id || null;
     const h = { 'Content-Type': 'application/json' };
     if (uid) h['X-User-Id'] = uid;

@@ -4,6 +4,18 @@ import api from "./apiClient.js";
 import { useState, useEffect, useCallback, useRef } from "react";
 import InboxLiveChat from "./InboxLiveChat";
 
+function _sessionKey() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+  } catch { return 'talentos_session_default'; }
+}
+
+
 const C = {
   bg: "var(--t-bg, #EEF2FF)", card: "var(--t-card, #ffffff)",
   accent: "var(--t-accent, #4361EE)", accentLight: "var(--t-accent-light, #EEF2FF)",
@@ -497,7 +509,7 @@ export function useInboxUnreadCount(environmentId) {
     if (!environmentId) return;
     // Confirm a session exists before polling — avoids 401s before login
     let sess = null;
-    try { sess = JSON.parse(localStorage.getItem('talentos_session') || 'null'); } catch {}
+    try { sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null'); } catch {}
     if (!sess?.user?.id) return;
     const poll = async () => {
       try { const d = await tFetch(`/api/inbox/unread-count?environment_id=${environmentId}`); setCount(d.count || 0); } catch {}
