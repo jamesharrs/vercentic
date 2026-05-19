@@ -245,9 +245,6 @@ const AUTH_EXEMPT = [
   '/superadmin', '/bot',
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
-  '/attachments/file',
-  '/attachments/upload',
-  '/attachments/preview',
   '/records/by-number',  // used for URL routing before session is established
   '/cv-parse',
   '/comms/webhook',
@@ -319,9 +316,10 @@ const writeLimiter = rateLimit({
     req.method === 'OPTIONS',
 });
 
-// Apply auth limiter to all login routes
+// Apply auth limiter to all login routes + signup (prevents account creation spam)
 app.use('/api/users/login',      authLimiter);
 app.use('/api/users/auth/login', authLimiter);
+app.use('/api/signup',           authLimiter);
 
 // Apply write limiter to all mutating API calls
 app.use('/api', writeLimiter);
