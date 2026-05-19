@@ -9,7 +9,7 @@ const { cacheResponse, invalidatePath } = require('../utils/cache');
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 
-router.get('/', cacheResponse(120_000), (req, res) => {
+router.get('/', cacheResponse(30_000), (req, res) => {
   // x-user-id header is sent by the React app; fall back to session for server-side / curl calls
   const userId = req.headers['x-user-id'] || req.session?.userId;
   const user = userId ? require('../db/init').findOne('users', u => u.id === userId) : null;
@@ -40,8 +40,26 @@ router.get('/', cacheResponse(120_000), (req, res) => {
     return res.json(env ? [env] : []);
   }
 
-  // Super admins in master context see all environments
+  // Super admins in master context:
+  // - If they belong to a specific client (client_id set), scope to that client's environments only
+  // - If they are a true platform admin (no client_id), they see everything
   if (isSuperAdmin) {
+    if (user?.client_id) {
+      // Client super admin in master store — only see their own environment
+      const clientEnvs = query('environments', e =>
+        (e.client_id === user.client_id || e.id === user.environment_id) && !e.deleted_at
+      );
+      // Also check client_environments table
+      const s = getStore();
+      const clientEnvIds = new Set(clientEnvs.map(e => e.id));
+      const fromClientEnvs = (s.client_environments || []).filter(e =>
+        e.client_id === user.client_id && !e.deleted_at && !clientEnvIds.has(e.id)
+      );
+      return res.json([...clientEnvs, ...fromClientEnvs].sort((a, b) =>
+        b.is_default - a.is_default || (a.name || '').localeCompare(b.name || '')
+      ));
+    }
+    // True platform admin — see all environments
     const envs = query('environments', () => true)
       .sort((a, b) => {
         if (b.is_default && !a.is_default) return 1;
