@@ -3,7 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
-const { getStore, saveStore, tenantStorage, provisionTenant, loadTenantStore } = require('../db/init');
+const { getStore, saveStore, saveStoreNow, tenantStorage, provisionTenant, loadTenantStore } = require('../db/init');
 
 const bcrypt = require('bcryptjs');
 const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
@@ -23,11 +23,13 @@ const TEMPLATES = require('../data/templates').TEMPLATES;
 
 // ─── Main provision function ──────────────────────────────────────────────────
 async function provisionClient(clientData, envData, adminUser, templateKey) {
-  const s = getStore(); ensureCollections();
+  const s   = getStore(); ensureCollections();
   const now = new Date().toISOString();
 
-  const tenantSlug = clientData.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,30);
+  const tenantSlug = clientData.name
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 30);
 
+  // ── 1. Master store: client record + environment reference only ─────────────
   const client = {
     id: uuidv4(), name: clientData.name, industry: clientData.industry||'',
     region: clientData.region||'', plan: clientData.plan||'starter', size: clientData.size||'',
@@ -36,7 +38,8 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     primary_contact_email: clientData.contact_email||'',
     primary_contact_phone: clientData.contact_phone||'',
     website: clientData.website||'', notes: clientData.notes||'',
-    trial_ends_at: clientData.plan==='trial' ? new Date(Date.now()+30*24*60*60*1000).toISOString() : null,
+    trial_ends_at: clientData.plan==='trial'
+      ? new Date(Date.now()+30*24*60*60*1000).toISOString() : null,
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.clients.push(client);
@@ -45,11 +48,19 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     id: uuidv4(), client_id: client.id,
     name: envData.name||`${clientData.name} Production`,
     type: envData.type||'production', locale: envData.locale||'en',
-    timezone: envData.timezone||'UTC', is_default: 0, status: 'active',
+    timezone: envData.timezone||'UTC', is_default: 1, status: 'active',
     created_at: now, updated_at: now, deleted_at: null,
   };
   s.client_environments.push(environment);
+  saveStore(); // persist master changes before touching tenant store
 
+  // ── 2. Tenant store: everything else lives here ─────────────────────────────
+  const ts = provisionTenant(tenantSlug);
+
+  // Environment also needs to be in the tenant store so /api/environments works
+  ts.environments = [{ ...environment }];
+
+  // Resolve template
   const { objects, roles, tier } = resolveTemplate(templateKey || getDefaultTemplateKey());
   const createdObjects = [];
   const createdFields  = [];
@@ -64,13 +75,14 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     };
     createdObjects.push(obj);
     objectMap[obj.slug] = obj.id;
-    (objDef.fields||[]).forEach((fDef,i) => {
+
+    (objDef.fields||[]).forEach((fDef, i) => {
       createdFields.push({
         id: uuidv4(), environment_id: environment.id, object_id: obj.id,
         name: fDef.name, api_key: fDef.api_key, field_type: fDef.field_type,
         is_required: fDef.is_required||false, show_in_list: fDef.show_in_list!==false,
         options: fDef.options||null, related_object_slug: fDef.related_object_slug||null,
-        people_multi: fDef.people_multi!==undefined ? fDef.people_multi : null,
+        people_multi: fDef.people_multi !== undefined ? fDef.people_multi : null,
         condition_field: fDef.condition_field||null, condition_value: fDef.condition_value||null,
         placeholder: '', help_text: '', is_system: true,
         sort_order: i, created_at: now, updated_at: now, deleted_at: null,
@@ -88,53 +100,60 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     created_at: now, updated_at: now, deleted_at: null,
   }));
 
-  if (!s.users) s.users = [];
-  const superAdminRole = createdRoles.find(r=>r.name==='Super Admin')||createdRoles[0];
-  const plainPassword  = adminUser.password||'Admin1234!';
+  const superAdminRole = createdRoles.find(r => r.name === 'Super Admin') || createdRoles[0];
+  const plainPassword  = adminUser.password || 'Admin1234!';
   const adminUserRecord = {
     id: uuidv4(), environment_id: environment.id, client_id: client.id,
-    email: adminUser.email||`admin@${tenantSlug}.com`,
-    first_name: adminUser.first_name||'Admin', last_name: adminUser.last_name||'User',
-    role_id: superAdminRole?.id||null, role_name: 'super_admin',
+    email: adminUser.email || `admin@${tenantSlug}.com`,
+    first_name: adminUser.first_name || 'Admin',
+    last_name:  adminUser.last_name  || 'User',
+    role_id: superAdminRole?.id || null, role_name: 'super_admin',
     password_hash: hashPassword(plainPassword),
     status: 'active', auth_provider: 'local', mfa_enabled: false,
     must_change_password: false, login_count: 0, last_login: null,
     created_at: now, updated_at: now, deleted_at: null,
   };
-  s.users.push(adminUserRecord);
 
   const stdConfig = buildStandardConfig(tier, environment.id, objectMap, now, uuidv4);
 
-  ['objects','fields','roles','workflows','portals','forms','file_types','email_templates','interview_types']
-    .forEach(col => { if (!s[col]) s[col] = []; });
+  // Write everything into the isolated tenant store
+  ['objects','fields','roles','users','workflows','portals','forms',
+   'file_types','email_templates','interview_types']
+    .forEach(col => { if (!ts[col]) ts[col] = []; });
 
-  createdObjects          .forEach(o => s.objects          .push(o));
-  createdFields           .forEach(f => s.fields           .push(f));
-  createdRoles            .forEach(r => s.roles            .push(r));
-  stdConfig.workflows     .forEach(w => s.workflows        .push(w));
-  stdConfig.portals       .forEach(p => s.portals          .push(p));
-  stdConfig.forms         .forEach(f => s.forms            .push(f));
-  stdConfig.fileTypes     .forEach(f => s.file_types       .push(f));
-  stdConfig.emailTemplates.forEach(e => s.email_templates  .push(e));
-  stdConfig.interviewTypes.forEach(i => s.interview_types  .push(i));
+  createdObjects          .forEach(o => ts.objects          .push(o));
+  createdFields           .forEach(f => ts.fields           .push(f));
+  createdRoles            .forEach(r => ts.roles            .push(r));
+  ts.users                .push(adminUserRecord);
+  stdConfig.workflows     .forEach(w => ts.workflows        .push(w));
+  stdConfig.portals       .forEach(p => ts.portals          .push(p));
+  stdConfig.forms         .forEach(f => ts.forms            .push(f));
+  stdConfig.fileTypes     .forEach(f => ts.file_types       .push(f));
+  stdConfig.emailTemplates.forEach(e => ts.email_templates  .push(e));
+  stdConfig.interviewTypes.forEach(i => ts.interview_types  .push(i));
 
-  // Seed proper RBAC permission rows for all 5 standard roles using the
-  // same logic as the master store — this is what canGlobal() reads at runtime.
+  // Seed RBAC permissions into the tenant store
   const { seedDefaultPermissions } = require('../middleware/rbac');
-  seedDefaultPermissions(s);
+  seedDefaultPermissions(ts);
 
+  // Persist the tenant store
+  saveStoreNow(tenantSlug);
+
+  // Provision log goes in master
   s.provision_log.push({
     id: uuidv4(), client_id: client.id, environment_id: environment.id,
-    template: templateKey||'core_recruitment', admin_email: adminUserRecord.email,
-    objects_seeded: createdObjects.length, fields_seeded: createdFields.length,
-    roles_seeded: createdRoles.length, workflows_seeded: stdConfig.workflows.length,
-    portals_seeded: stdConfig.portals.length, forms_seeded: stdConfig.forms.length,
-    file_types_seeded: stdConfig.fileTypes.length,
+    template: templateKey||'recruitment_starter', admin_email: adminUserRecord.email,
+    objects_seeded:         createdObjects.length,
+    fields_seeded:          createdFields.length,
+    roles_seeded:           createdRoles.length,
+    workflows_seeded:       stdConfig.workflows.length,
+    portals_seeded:         stdConfig.portals.length,
+    forms_seeded:           stdConfig.forms.length,
+    file_types_seeded:      stdConfig.fileTypes.length,
     email_templates_seeded: stdConfig.emailTemplates.length,
     interview_types_seeded: stdConfig.interviewTypes.length,
     provisioned_at: now,
   });
-
   saveStore();
 
   return {
@@ -152,7 +171,6 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     interview_types_seeded: stdConfig.interviewTypes.length,
   };
 }
-
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 router.get('/', (req, res) => {
