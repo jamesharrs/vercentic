@@ -1950,28 +1950,33 @@ activeNavRef.current = activeNav;
     return () => { window.removeEventListener('talentos:unauthenticated', handler); clearTimeout(debounceTimer); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When server returns 503 (still starting up), retry loading after 2s
+  // Dev auto-session sync — on every page load in dev, verify server session and sync localStorage.
+  // This fixes the blank state after server restarts without requiring manual re-login.
   useEffect(() => {
-    if (import.meta.env.PROD) return; // prod handles this differently
-    let retryTimer = null;
-    let attempts   = 0;
-    const poll = () => {
+    if (import.meta.env.PROD) return;
+    let attempts = 0;
+    const sync = () => {
       fetch('/api/dev/session', { credentials: 'include' })
         .then(r => r.json())
         .then(d => {
-          if (d.authenticated) {
-            // Session is established — reload environments
-            startTransition(() => setLoading(true));
-          } else if (attempts < 10) {
+          if (d.authenticated && d.user) {
+            // Update localStorage with fresh session data from server
+            const sessionData = { user: d.user, role: d.role, permissions: d.permissions || [], tenant_slug: d.tenant_slug };
+            try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
+            // If React session state is null/stale, update it
+            setSession(prev => {
+              if (prev?.user?.id === d.user.id) return prev; // already in sync
+              return sessionData;
+            });
+          } else if (!d.authenticated && attempts < 8) {
+            // Server not ready yet — retry
             attempts++;
-            retryTimer = setTimeout(poll, 1500);
+            setTimeout(sync, 1500);
           }
         })
-        .catch(() => { if (attempts < 10) { attempts++; retryTimer = setTimeout(poll, 1500); } });
+        .catch(() => { if (attempts < 8) { attempts++; setTimeout(sync, 1500); } });
     };
-    const handler = () => { clearTimeout(retryTimer); attempts = 0; retryTimer = setTimeout(poll, 1000); };
-    window.addEventListener('talentos:server-starting', handler);
-    return () => { window.removeEventListener('talentos:server-starting', handler); clearTimeout(retryTimer); };
+    sync(); // Run immediately on mount
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On startup: validate the stored session against the server.

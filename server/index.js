@@ -206,14 +206,29 @@ if (process.env.NODE_ENV !== 'production') {
     next();
   });
 
-  // Dev convenience: GET /api/dev/session — returns session status without CSRF
-  // Client polls this on 503/blank state to check if session is established
+  // Dev convenience: GET /api/dev/session — returns full session status
+  // Client uses this to sync localStorage after server restart
   app.get('/api/dev/session', (req, res) => {
     const uid = req.session?.userId;
     if (!uid) return res.json({ authenticated: false });
-    const store = getStore();
-    const user  = (store.users || []).find(u => u.id === uid);
-    res.json({ authenticated: !!user, userId: uid, email: user?.email });
+    try {
+      const store = getStore();
+      const user  = (store.users || []).find(u => u.id === uid && !u.deleted_at);
+      if (!user) return res.json({ authenticated: false });
+      const role  = (store.roles || []).find(r => r.id === user.role_id);
+      const perms = (store.role_permissions || []).filter(p => p.role_id === user.role_id);
+      // Return full session data so client can sync localStorage
+      res.json({
+        authenticated: true,
+        user: { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name,
+                environment_id: user.environment_id, role_id: user.role_id },
+        role,
+        permissions: perms,
+        tenant_slug: req.session.tenantSlug || 'master',
+      });
+    } catch(e) {
+      res.json({ authenticated: false, error: e.message });
+    }
   });
 }
 
