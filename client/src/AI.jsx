@@ -2433,6 +2433,26 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  // Parse CREATE_OBJECT / CREATE_FIELD blocks — alternative format the model sometimes uses
+  const parseCreateObjectBlocks = (text) => {
+    const results = [];
+    const re = /<CREATE_OBJECT>([\s\S]*?)<\/CREATE_OBJECT>/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try { results.push(JSON.parse(m[1].trim())); } catch {}
+    }
+    return results;
+  };
+  const parseCreateFieldBlocks = (text) => {
+    const results = [];
+    const re = /<CREATE_FIELD>([\s\S]*?)<\/CREATE_FIELD>/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try { results.push(JSON.parse(m[1].trim())); } catch {}
+    }
+    return results;
+  };
+
   const parseFileSearch = (text) => {
     const m = text.match(/<FILE_SEARCH>([\s\S]*?)<\/FILE_SEARCH>/);
     if (!m) return null;
@@ -2556,6 +2576,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<APPLY_ID_FILTER>[\s\S]*?<\/APPLY_ID_FILTER>/g,"")
     .replace(/<FILE_SEARCH>[\s\S]*?<\/FILE_SEARCH>/g,"")
+    .replace(/<CREATE_OBJECT>[\s\S]*?<\/CREATE_OBJECT>/g,"")
+    .replace(/<CREATE_FIELD>[\s\S]*?<\/CREATE_FIELD>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DB_QUERY>[\s\S]*?<\/DB_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
@@ -3070,6 +3092,64 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const applyIdFilter = parseApplyIdFilter(reply);
       if(applyFilter)   window.dispatchEvent(new CustomEvent("talentos:apply-filter",    { detail: applyFilter }));
       if(applyIdFilter) window.dispatchEvent(new CustomEvent("talentos:apply-id-filter", { detail: applyIdFilter }));
+
+      // Execute CREATE_OBJECT / CREATE_FIELD blocks directly (model sometimes uses these instead of PROPOSE_ACTION)
+      const createObjBlocks = parseCreateObjectBlocks(reply);
+      const createFldBlocks = parseCreateFieldBlocks(reply);
+      if (createObjBlocks.length || createFldBlocks.length) {
+        const envId = environment?.id;
+        let createdObjId = null;
+        let statusLines = [];
+        for (const obj of createObjBlocks) {
+          const resolvedEnv = obj.environment_id === 'Production' ? envId : (obj.environment_id || envId);
+          try {
+            const res = await tFetch('/api/objects', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                environment_id: resolvedEnv,
+                name:        obj.name,
+                plural_name: obj.plural_name || obj.name + 's',
+                slug:        obj.slug || obj.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+                description: obj.description || '',
+                icon:        obj.icon || 'circle',
+                color:       obj.color || '#6366f1',
+              }),
+            });
+            createdObjId = res?.id;
+            statusLines.push(`✅ Object **${obj.name}** created`);
+          } catch(e) { statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`); }
+        }
+        for (const fld of createFldBlocks) {
+          // Resolve object_id — may be a slug like "events" or an actual UUID
+          let objId = fld.object_id;
+          if (objId && !objId.includes('-')) {
+            // It's a slug — find the real object ID
+            const objs = await tFetch(`/api/objects?environment_id=${envId}`).then(r => Array.isArray(r) ? r : []).catch(() => []);
+            const match = objs.find(o => o.slug === objId || o.name.toLowerCase() === objId.toLowerCase());
+            objId = match?.id || createdObjId || objId;
+          }
+          if (!objId) { statusLines.push(`❌ Field **${fld.name}** — no object ID`); continue; }
+          try {
+            await tFetch('/api/fields', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                object_id:    objId,
+                name:         fld.name,
+                api_key:      fld.api_key || fld.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+                field_type:   fld.field_type || 'text',
+                is_required:  fld.is_required || false,
+                show_in_list: fld.show_in_list || false,
+                description:  fld.description || '',
+                options:      fld.options || [],
+              }),
+            });
+            statusLines.push(`✅ Field **${fld.name}** added`);
+          } catch(e) { statusLines.push(`❌ Field **${fld.name}** failed: ${e.message}`); }
+        }
+        if (statusLines.length) {
+          setMessages(m => [...m, { role: 'assistant', content: statusLines.join('\n'), ts: new Date() }]);
+        }
+      }
 
       // FILE_SEARCH — search indexed file content, inject results, re-ask Claude to summarise
       const fileSearch = parseFileSearch(reply);
