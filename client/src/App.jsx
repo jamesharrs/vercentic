@@ -1898,7 +1898,7 @@ activeNavRef.current = activeNav;
     fetch('/api/users/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@talentos.io', password: 'Admin1234!', tenant_slug: 'production' }),
+      body: JSON.stringify({ email: 'admin@talentos.io', password: 'Admin1234!', tenant_slug: 'master' }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -1909,7 +1909,7 @@ activeNavRef.current = activeNav;
                   environment_id: data.user.environment_id, role_id: data.user.role_id },
           role: data.user.role,
           permissions: data.permissions || [],
-          tenant_slug: data.user.tenant_slug || 'production',
+          tenant_slug: data.tenant_slug || data.user.tenant_slug || null,
         };
         try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
         startTransition(() => setSession(sessionData));

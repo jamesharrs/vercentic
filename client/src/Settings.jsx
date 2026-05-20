@@ -1528,6 +1528,7 @@ const FIELD_TYPES_DM = [
   {value:"people",       label:"People",       icon:"👤", group:"Reference"},
   {value:"lookup",       label:"Lookup",       icon:"⤷",  group:"Reference"},
   {value:"rollup",       label:"Rollup",       icon:"∑",  group:"Reference"},
+  {value:"file_preview", label:"File Preview", icon:"📎", group:"Reference"},
   // System
   {value:"auto_number",  label:"Auto Number",  icon:"№",  group:"System"},
   {value:"unique_id",    label:"Unique ID",    icon:"⌗",  group:"System"},

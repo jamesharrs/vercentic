@@ -382,11 +382,171 @@ const TableModal = ({ field, value, onSave, onClose }) => {
   );
 };
 
+// ─── File Preview Widget ──────────────────────────────────────────────────────
+// Fetches attachments for the current record and renders a mini preview.
+// No value is stored in the field — it reads live from the attachments store.
+const FilePreviewWidget = ({ field, recordId, compact = false }) => {
+  const [atts, setAtts]       = useState(null);
+  const [modalOpen, setModal] = useState(false);
+  const [carouselIdx, setIdx] = useState(0);
+
+  const cfg = {
+    fileTypeName : field.fp_file_type_name || "",
+    selection    : field.fp_selection      || "latest",
+    size         : field.fp_size           || "compact",
+    click        : field.fp_click          || "modal",
+    showName     : field.fp_show_name      !== false,
+    showDate     : !!field.fp_show_date,
+  };
+
+  useEffect(() => {
+    if (!recordId) return;
+    api.get(`/attachments?record_id=${recordId}`)
+      .then(data => {
+        let list = Array.isArray(data) ? data : (data?.attachments || []);
+        if (cfg.fileTypeName) {
+          list = list.filter(a => a.file_type_name?.toLowerCase() === cfg.fileTypeName.toLowerCase());
+        }
+        // Sort by created_at
+        list = [...list].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+        if (cfg.selection === "latest") list = list.slice(-1);
+        if (cfg.selection === "oldest") list = list.slice(0,1);
+        setAtts(list);
+      })
+      .catch(() => setAtts([]));
+  }, [recordId, cfg.fileTypeName, cfg.selection]);
+
+  if (atts === null) return <span style={{fontSize:11,color:C.text3}}>Loading…</span>;
+  if (!atts.length)  return <span style={{fontSize:11,color:C.text3}}>No {cfg.fileTypeName||"file"} attached</span>;
+
+  const displayed = cfg.selection === "all" ? atts : atts.slice(0,1);
+  const current   = displayed[carouselIdx] || displayed[0];
+  const isPdf     = current?.mimetype === "application/pdf" || current?.filename?.endsWith(".pdf");
+  const fileUrl   = current?.url || `/api/attachments/file/${current?.filename}`;
+  const label     = current?.name || current?.filename || "File";
+  const dateStr   = current?.created_at ? new Date(current.created_at).toLocaleDateString() : "";
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (cfg.click === "download") { const a=document.createElement("a"); a.href=fileUrl; a.download=label; a.click(); return; }
+    if (cfg.click === "tab")      { window.open(fileUrl,"_blank","noopener"); return; }
+    setModal(true);
+  };
+
+  // ── Compact (icon + name) — used in lists and small fields ──
+  if (cfg.size === "compact" || compact) {
+    return (
+      <div style={{display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",padding:"3px 8px 3px 5px",borderRadius:8,border:"1px solid #e8eaed",background:"#f9fafb",maxWidth:220}} onClick={handleClick}>
+        <div style={{width:22,height:26,borderRadius:4,background:isPdf?"#ef444420":"#3b5bdb20",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <Ic n={isPdf?"file-text":"paperclip"} s={13} c={isPdf?"#ef4444":"#3b5bdb"}/>
+        </div>
+        <div style={{minWidth:0}}>
+          {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>{label}</div>}
+          {cfg.showDate && dateStr && <div style={{fontSize:10,color:C.text3}}>{dateStr}</div>}
+        </div>
+        {displayed.length > 1 && <span style={{fontSize:10,color:C.text3,flexShrink:0}}>+{displayed.length-1}</span>}
+        {modalOpen && <FilePreviewModal url={fileUrl} name={label} onClose={()=>setModal(false)}/>}
+      </div>
+    );
+  }
+
+  // ── Thumbnail — small PDF first-page render ──
+  if (cfg.size === "thumbnail") {
+    return (
+      <div style={{display:"inline-flex",flexDirection:"column",gap:4,cursor:"pointer"}} onClick={handleClick}>
+        <div style={{width:80,height:104,borderRadius:6,border:"1.5px solid #e8eaed",overflow:"hidden",background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+          {isPdf
+            ? <FilePageThumb url={fileUrl}/>
+            : <Ic n="paperclip" s={28} c={C.text3}/>}
+          <div style={{position:"absolute",inset:0,background:"transparent"}}/>
+        </div>
+        {cfg.showName && <div style={{fontSize:10,fontWeight:600,color:"#1a1a2e",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>}
+        {cfg.showDate && <div style={{fontSize:9,color:C.text3}}>{dateStr}</div>}
+        {/* Carousel nav for "all" selection */}
+        {cfg.selection==="all" && displayed.length>1 && (
+          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+            <button onClick={e=>{e.stopPropagation();setIdx(i=>Math.max(0,i-1));}} disabled={carouselIdx===0} style={{padding:"1px 5px",borderRadius:4,border:"1px solid #e8eaed",background:"white",cursor:"pointer",fontSize:10}}>‹</button>
+            <span style={{fontSize:9,color:C.text3}}>{carouselIdx+1}/{displayed.length}</span>
+            <button onClick={e=>{e.stopPropagation();setIdx(i=>Math.min(displayed.length-1,i+1));}} disabled={carouselIdx===displayed.length-1} style={{padding:"1px 5px",borderRadius:4,border:"1px solid #e8eaed",background:"white",cursor:"pointer",fontSize:10}}>›</button>
+          </div>
+        )}
+        {modalOpen && <FilePreviewModal url={fileUrl} name={label} onClose={()=>setModal(false)}/>}
+      </div>
+    );
+  }
+
+  // ── Inline — scrollable mini PDF viewer ──
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{border:"1.5px solid #e8eaed",borderRadius:8,overflow:"hidden",background:"#f9fafb",cursor:"pointer"}} onClick={handleClick}>
+        {isPdf
+          ? <object data={fileUrl} type="application/pdf" width="100%" height="360" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
+          : <div style={{padding:16,textAlign:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
+      </div>
+      {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e"}}>{label}</div>}
+      {cfg.showDate && <div style={{fontSize:10,color:C.text3}}>{dateStr}</div>}
+      {modalOpen && <FilePreviewModal url={fileUrl} name={label} onClose={()=>setModal(false)}/>}
+    </div>
+  );
+};
+
+// Renders the first page of a PDF as a tiny image using pdf.js canvas
+const FilePageThumb = ({ url }) => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!url || !canvasRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+        const pdf  = await pdfjsLib.getDocument(url).promise;
+        const page = await pdf.getPage(1);
+        if (cancelled || !canvasRef.current) return;
+        const vp     = page.getViewport({ scale: 0.3 });
+        const canvas = canvasRef.current;
+        canvas.width  = vp.width;
+        canvas.height = vp.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+      } catch { /* silent — show icon fallback */ }
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+  return <canvas ref={canvasRef} style={{width:"100%",height:"100%",objectFit:"contain"}}/>;
+};
+
+// Full-screen modal preview
+const FilePreviewModal = ({ url, name, onClose }) => {
+  useEffect(() => {
+    const handler = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+  const isPdf = url?.endsWith(".pdf") || name?.endsWith(".pdf");
+  return ReactDOM.createPortal(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:9999,display:"flex",flexDirection:"column"}} onClick={onClose}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(0,0,0,0.5)"}}>
+        <span style={{fontSize:13,fontWeight:600,color:"white"}}>{name}</span>
+        <div style={{display:"flex",gap:8}}>
+          <a href={url} download={name} onClick={e=>e.stopPropagation()} style={{padding:"4px 10px",borderRadius:6,background:"white",color:"#1a1a2e",fontSize:11,fontWeight:600,textDecoration:"none"}}>Download</a>
+          <a href={url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{padding:"4px 10px",borderRadius:6,background:"#3b5bdb",color:"white",fontSize:11,fontWeight:600,textDecoration:"none"}}>Open in tab</a>
+          <button onClick={onClose} style={{padding:"4px 8px",borderRadius:6,background:"rgba(255,255,255,0.15)",border:"none",color:"white",cursor:"pointer",fontSize:16}}>✕</button>
+        </div>
+      </div>
+      <div style={{flex:1,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        {isPdf
+          ? <object data={url} type="application/pdf" width="100%" height="100%" style={{display:"block",border:"none"}}><iframe src={url} width="100%" height="100%" style={{border:"none"}} title={name}/></object>
+          : <img src={url} alt={name} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",margin:"auto",display:"block",paddingTop:16}}/>}
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 // ─── Table field components ───────────────────────────────────────────────────
 const TABLE_COL_INPUT_TYPES = ["text","number","date","select","boolean","url"];
 
-const TableFieldValue = ({ field, value }) => {
-  const cols = field.table_columns || [];
+const TableFieldValue = ({ field, value }) => {  const cols = field.table_columns || [];
   const rows = Array.isArray(value) ? value : [];
   if (!rows.length || !cols.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
 
@@ -799,7 +959,8 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
         })}
       </div>;
     }
-    case "table":     return <TableFieldValue field={field} value={value}/>;
+    case "table":        return <TableFieldValue field={field} value={value}/>;
+    case "file_preview": return <FilePreviewWidget field={field} recordId={allFieldValues?.__record_id} compact={false}/>;
     default:        return <span style={{fontSize:13,color:C.text1,lineHeight:1.5}}>{String(value)}</span>;
   }
 };
@@ -4806,7 +4967,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                         ? <span style={{ fontWeight:700, color:"#4361EE" }}
                             onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
                             onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
-                            {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={record?.data}/>}
+                            {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
                           </span>
                         : f.apiKey === '_linked_job'
                           ? (() => {
@@ -4880,7 +5041,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             })()
                           : f.isSystem
                             ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
-                            : <FieldValue field={f} value={val} allFieldValues={record?.data}/>
+                            : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
                       }
                     </td>
                   );
@@ -5233,7 +5394,7 @@ const RecordWorkflows = ({ record, objectId, environment, objectName, onNavigate
 
 
 /* ─── File Preview Modal ────────────────────────────────────────────────────── */
-const FilePreviewModal = ({ att, onClose }) => {
+const AttachmentPreviewModal = ({ att, onClose }) => {
   const ext = (att.ext || att.name?.split('.').pop() || '').toLowerCase();
   const isImage = ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
   const isPdf   = ext === 'pdf';
@@ -10217,7 +10378,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                             </div>
                           )
                           : <div onClick={()=>!isReadonly&&setEditing(e=>({...e,[field.api_key]:originalVal}))} style={{ cursor:isReadonly?"default":"text", minHeight:22 }}>
-                              <FieldValue field={field} value={val} allFieldValues={record?.data}/>
+                              <FieldValue field={field} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
                             </div>
                         }
                       </div>
@@ -10298,7 +10459,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                         onSave={()=>handleSaveField(field.api_key, originalVal)}
                         onCancel={()=>setEditing(p=>{const n={...p};delete n[field.api_key];return n;})}/>
                     ) : (
-                      <FieldValue field={field} value={val} allFieldValues={record.data || {}}/>
+                      <FieldValue field={field} value={val} allFieldValues={{...(record.data||{}), __record_id: record?.id}}/>
                     )}
                   </div>
                   {!isReadonly && !isEditing && (
@@ -10450,7 +10611,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
         {/* File Preview Modal */}
         {previewAtt && ReactDOM.createPortal(
-          <FilePreviewModal att={previewAtt} onClose={()=>setPreviewAtt(null)}/>,
+          <AttachmentPreviewModal att={previewAtt} onClose={()=>setPreviewAtt(null)}/>,
           document.body
         )}
 
