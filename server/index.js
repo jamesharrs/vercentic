@@ -189,23 +189,31 @@ app.use((req, res, next) => {
 // ── Dev auto-login — creates a session for admin when none exists in local dev ──
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
-    // Skip if already authenticated, or if this is a login/auth/portal/health route
     if (req.session?.userId) return next();
     const skip = ['/api/portals', '/api/health', '/api/superadmin', '/__vite'];
     if (skip.some(p => req.path.startsWith(p))) return next();
-    // Also skip the login POST itself to avoid infinite loop
     if (req.method === 'POST' && req.path === '/api/auth/login') return next();
-    // Find the admin user in the store and auto-create a session
+    if (!storeReady) return next(); // don't attempt auto-login before store is ready
     try {
       const store = getStore();
       const admin = (store.users || []).find(u => u.email === 'admin@talentos.io' && !u.deleted_at);
       if (admin) {
         req.session.userId     = admin.id;
-        req.session.tenantSlug = store.tenant?.slug || (process.env.NODE_ENV === 'production' ? 'production' : 'master');
-        return req.session.save((err) => next()); // wait for save before continuing
+        req.session.tenantSlug = store.tenant?.slug || 'master';
+        return req.session.save((err) => next());
       }
     } catch (e) { /* silent */ }
     next();
+  });
+
+  // Dev convenience: GET /api/dev/session — returns session status without CSRF
+  // Client polls this on 503/blank state to check if session is established
+  app.get('/api/dev/session', (req, res) => {
+    const uid = req.session?.userId;
+    if (!uid) return res.json({ authenticated: false });
+    const store = getStore();
+    const user  = (store.users || []).find(u => u.id === uid);
+    res.json({ authenticated: !!user, userId: uid, email: user?.email });
   });
 }
 

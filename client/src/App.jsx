@@ -1952,14 +1952,24 @@ activeNavRef.current = activeNav;
 
   // When server returns 503 (still starting up), retry loading after 2s
   useEffect(() => {
+    if (import.meta.env.PROD) return; // prod handles this differently
     let retryTimer = null;
-    const handler = () => {
-      clearTimeout(retryTimer);
-      retryTimer = setTimeout(() => {
-        // Re-trigger environment fetch by toggling a counter
-        setLoading(true);
-      }, 2000);
+    let attempts   = 0;
+    const poll = () => {
+      fetch('/api/dev/session', { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => {
+          if (d.authenticated) {
+            // Session is established — reload environments
+            startTransition(() => setLoading(true));
+          } else if (attempts < 10) {
+            attempts++;
+            retryTimer = setTimeout(poll, 1500);
+          }
+        })
+        .catch(() => { if (attempts < 10) { attempts++; retryTimer = setTimeout(poll, 1500); } });
     };
+    const handler = () => { clearTimeout(retryTimer); attempts = 0; retryTimer = setTimeout(poll, 1000); };
     window.addEventListener('talentos:server-starting', handler);
     return () => { window.removeEventListener('talentos:server-starting', handler); clearTimeout(retryTimer); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
