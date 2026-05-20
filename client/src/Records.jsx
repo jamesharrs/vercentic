@@ -8,6 +8,11 @@ import CommunicationsPanel from "./Communications.jsx";
 import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
+
+// Set PDF.js worker once at module load — prevents CDN fallback
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import * as _pdfjsInit from 'pdfjs-dist';
+_pdfjsInit.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
@@ -499,7 +504,7 @@ const FilePageThumb = ({ url }) => {
     (async () => {
       try {
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+        // workerSrc already set at module load — no need to set again
         const pdf  = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         if (cancelled || !canvasRef.current) return;
@@ -5538,9 +5543,7 @@ const PdfViewer = ({ data }) => {
     (async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        // Vite-compatible worker URL — use ?url suffix to get the resolved path
-        const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        // workerSrc already set at module load via top-level import
         const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
         const pdf = await loadingTask.promise;
         if (cancelled) return;
