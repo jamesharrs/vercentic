@@ -89,10 +89,11 @@ const FIELD_TYPE_GROUPS = [
     {value:"address",    label:"Address",       icon:"mapPin",  desc:"Structured address with country"},
   ]},
   { key:"reference", label:"References", types:[
-    {value:"people",  label:"People",  icon:"users",   desc:"Link to person records with search"},
-    {value:"lookup",  label:"Lookup",  icon:"link2",   desc:"Pull a value from a related record"},
-    {value:"rollup",  label:"Rollup",  icon:"sigma",   desc:"Aggregate data across related records"},
-    {value:"country", label:"Country", icon:"flag",    desc:"Country picker with flag display"},
+    {value:"people",       label:"People",       icon:"users",      desc:"Link to person records with search"},
+    {value:"lookup",       label:"Lookup",       icon:"link2",      desc:"Pull a value from a related record"},
+    {value:"rollup",       label:"Rollup",       icon:"sigma",      desc:"Aggregate data across related records"},
+    {value:"country",      label:"Country",      icon:"flag",       desc:"Country picker with flag display"},
+    {value:"file_preview", label:"File Preview", icon:"paperclip",  desc:"Inline preview of an attached file or PDF — reads from the Files panel"},
   ]},
   { key:"advanced", label:"Advanced", types:[
     {value:"table",       label:"Table",       icon:"table",       desc:"Multi-row table with configurable columns — work history, education, languages"},
