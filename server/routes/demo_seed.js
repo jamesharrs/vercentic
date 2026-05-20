@@ -900,27 +900,38 @@ function pdfWrap(text, max) {
 function pdfEsc(s) { return String(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)'); }
 
 function pdfBuild(items) {
-  let n = 1; const objs = []; const add = (c) => { objs.push({ id: n++, content: c }); return n-1; };
-  let s = 'q\n1 1 1 rg\n0 0 595 842 re\nf\nQ\n';
+  // Build content stream
+  let stream = 'q\n1 1 1 rg\n0 0 595 842 re\nf\nQ\n';
   for (const it of items) {
-    if (it.line) { s += `q\n0.75 0.75 0.75 RG\n0.5 w\n${it.x1} ${it.y1} m\n${it.x2} ${it.y2} l\nS\nQ\n`; continue; }
+    if (it.line) { stream += `q\n0.75 0.75 0.75 RG\n0.5 w\n${it.x1} ${it.y1} m\n${it.x2} ${it.y2} l\nS\nQ\n`; continue; }
     const { text='', x=50, y=700, size=10, bold, color } = it;
-    s += `BT\n/${bold?'F2':'F1'} ${size} Tf\n${color||'0 0 0'} rg\n${x} ${y} Td\n(${pdfEsc(text)}) Tj\nET\n`;
+    stream += `BT\n/${bold?'F2':'F1'} ${size} Tf\n${color||'0 0 0'} rg\n${x} ${y} Td\n(${pdfEsc(text)}) Tj\nET\n`;
   }
-  const cId = add(`<< /Length ${Buffer.byteLength(s,'latin1')} >>\nstream\n${s}\nendstream`);
-  const f1  = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
-  const f2  = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
-  const rId = add(`<< /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >>`);
-  const pg  = add(`<< /Type /Page /Parent 6 0 R /MediaBox [0 0 595 842] /Contents ${cId} 0 R /Resources ${rId} 0 R >>`);
-  const cat = add(`<< /Type /Catalog /Pages 6 0 R >>`);
-  let pdf = '%PDF-1.4\n'; const off = [];
-  for (const o of objs) { if (o.id===6) continue; off[o.id]=pdf.length; pdf+=`${o.id} 0 obj\n${o.content}\nendobj\n`; }
-  off[6]=pdf.length; pdf+=`6 0 obj\n<< /Type /Pages /Kids [${pg} 0 R] /Count 1 >>\nendobj\n`;
-  const xp = pdf.length;
-  pdf += `xref\n0 ${n+1}\n0000000000 65535 f \n`;
-  for (let i=1;i<=n;i++) pdf+=`${String(off[i]||0).padStart(10,'0')} 00000 n \n`;
-  pdf += `trailer\n<< /Size ${n+1} /Root ${cat} 0 R >>\nstartxref\n${xp}\n%%EOF\n`;
-  return Buffer.from(pdf,'latin1');
+
+  // Sequential object IDs — no reserved slots
+  const streamLen = Buffer.byteLength(stream, 'latin1');
+  const defs = [
+    `<< /Length ${streamLen} >>\nstream\n${stream}\nendstream`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>`,
+    `<< /Font << /F1 2 0 R /F2 3 0 R >> >>`,
+    `<< /Type /Pages /Kids [6 0 R] /Count 1 >>`,
+    `<< /Type /Page /Parent 5 0 R /MediaBox [0 0 595 842] /Contents 1 0 R /Resources 4 0 R >>`,
+    `<< /Type /Catalog /Pages 5 0 R >>`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let i = 0; i < defs.length; i++) {
+    offsets.push(pdf.length);
+    pdf += `${i+1} 0 obj\n${defs[i]}\nendobj\n`;
+  }
+  const xrefPos = pdf.length;
+  const total = defs.length + 1;
+  pdf += `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for (let i = 1; i < total; i++) pdf += `${String(offsets[i]).padStart(10,'0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${total} /Root 7 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+  return Buffer.from(pdf, 'latin1');
 }
 
 module.exports = router;
