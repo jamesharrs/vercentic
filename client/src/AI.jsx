@@ -3458,21 +3458,29 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         resultMsg = `**Done** — Field **${payload.name}** added to **${payload.object_name || 'object'}**`;
 
       // ── Create a new object ─────────────────────────────────────────────────
-      } else if (action_type === 'create_object' && payload?.name && payload?.environment_id) {
-        await tFetch('/api/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            environment_id: payload.environment_id,
-            name:           payload.name,
-            plural_name:    payload.plural_name || payload.name + 's',
-            slug:           payload.slug || payload.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
-            description:    payload.description || '',
-            icon:           payload.icon || 'circle',
-            color:          payload.color || '#6366f1',
-          }),
-        });
-        resultMsg = `**Done** — Object **${payload.name}** created`;
+      } else if (action_type === 'create_object') {
+        // Fall back to environment from context if not in payload
+        const envId = payload?.environment_id || environment?.id;
+        const objName = payload?.name;
+        if (!objName || !envId) {
+          console.warn('[Copilot] create_object missing name or environment_id', { payload, envId });
+          resultMsg = `**Error** — Could not create object: missing name or environment ID`;
+        } else {
+          await tFetch('/api/objects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              environment_id: envId,
+              name:           objName,
+              plural_name:    payload.plural_name || objName + 's',
+              slug:           payload.slug || objName.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+              description:    payload.description || '',
+              icon:           payload.icon || 'circle',
+              color:          payload.color || '#6366f1',
+            }),
+          });
+          resultMsg = `**Done** — Object **${objName}** created`;
+        }
 
       } else {
         // Unknown action type — log it
