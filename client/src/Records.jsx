@@ -394,50 +394,10 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
     fileTypeName : field.fp_file_type_name || "",
     selection    : field.fp_selection      || "latest",
     size         : field.fp_size           || "compact",
-    adminHeight  : field.fp_height         || null,   // admin-set default (px)
     click        : field.fp_click          || "modal",
     showName     : field.fp_show_name      !== false,
     showDate     : !!field.fp_show_date,
   };
-
-  // Per-user resize stored in localStorage — key is field id so each field remembers independently
-  const storageKey = `fp_height_${field.id}`;
-  const defaultH   = cfg.adminHeight || (cfg.size === "thumbnail" ? 200 : 400);
-  const [height, setHeight]   = useState(() => {
-    try { const v = parseInt(localStorage.getItem(storageKey),10); return v > 0 ? v : defaultH; } catch { return defaultH; }
-  });
-  const dragRef = useRef(null);
-
-  // Drag-to-resize handler
-  const onDragStart = (e) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = height;
-    const onMove = (ev) => {
-      const newH = Math.max(80, Math.min(1200, startH + ev.clientY - startY));
-      setHeight(newH);
-    };
-    const onUp = (ev) => {
-      const finalH = Math.max(80, Math.min(1200, startH + ev.clientY - startY));
-      setHeight(finalH);
-      try { localStorage.setItem(storageKey, String(finalH)); } catch {}
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-
-  // Drag handle component
-  const DragHandle = () => (
-    <div
-      onMouseDown={onDragStart}
-      title="Drag to resize"
-      style={{ height:6, cursor:"ns-resize", display:"flex", alignItems:"center", justifyContent:"center",
-        borderRadius:"0 0 6px 6px", background:"#f0f0f5", userSelect:"none", flexShrink:0 }}>
-      <div style={{ width:32, height:3, borderRadius:99, background:"#d1d5db" }}/>
-    </div>
-  );
 
   useEffect(() => {
     if (!recordId) return;
@@ -492,17 +452,15 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
 
   // ── Thumbnail — small PDF first-page render ──
   if (cfg.size === "thumbnail") {
-    const thumbW = Math.round(height * 0.77); // maintain A4-ish ratio
     return (
-      <div style={{display:"inline-flex",flexDirection:"column",gap:4}}>
-        <div style={{width:thumbW,borderRadius:"6px 6px 0 0",border:"1.5px solid #e8eaed",borderBottom:"none",overflow:"hidden",background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",cursor:"pointer",height:height}} onClick={handleClick}>
+      <div style={{display:"inline-flex",flexDirection:"column",gap:4,cursor:"pointer"}} onClick={handleClick}>
+        <div style={{width:80,height:104,borderRadius:6,border:"1.5px solid #e8eaed",overflow:"hidden",background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
           {isPdf
             ? <FilePageThumb url={fileUrl}/>
             : <Ic n="paperclip" s={28} c={C.text3}/>}
           <div style={{position:"absolute",inset:0,background:"transparent"}}/>
         </div>
-        <DragHandle/>
-        {cfg.showName && <div style={{fontSize:10,fontWeight:600,color:"#1a1a2e",maxWidth:thumbW,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>}
+        {cfg.showName && <div style={{fontSize:10,fontWeight:600,color:"#1a1a2e",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>}
         {cfg.showDate && <div style={{fontSize:9,color:C.text3}}>{dateStr}</div>}
         {/* Carousel nav for "all" selection */}
         {cfg.selection==="all" && displayed.length>1 && (
@@ -517,25 +475,22 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
     );
   }
 
-  // ── Inline — scrollable PDF viewer ──
+  // ── Inline — scrollable mini PDF viewer ──
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:0,width:"100%"}}>
-      <div style={{border:"1.5px solid #e8eaed",borderRadius:"8px 8px 0 0",borderBottom:"none",overflow:"hidden",background:"#f9fafb",cursor:"pointer",height:height}} onClick={handleClick}>
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{border:"1.5px solid #e8eaed",borderRadius:8,overflow:"hidden",background:"#f9fafb",cursor:"pointer"}} onClick={handleClick}>
         {isPdf
-          ? <object data={fileUrl} type="application/pdf" width="100%" height="100%" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
-          : <div style={{padding:16,textAlign:"center",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
+          ? <object data={fileUrl} type="application/pdf" width="100%" height="360" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
+          : <div style={{padding:16,textAlign:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
       </div>
-      <DragHandle/>
-      {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e",marginTop:4}}>{label}</div>}
+      {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e"}}>{label}</div>}
       {cfg.showDate && <div style={{fontSize:10,color:C.text3}}>{dateStr}</div>}
       {modalOpen && <FilePreviewModal url={fileUrl} name={label} onClose={()=>setModal(false)}/>}
     </div>
   );
 };
 
-// Renders the first page of a PDF as a sharp image using pdf.js canvas.
-// Renders at the container's actual CSS pixel size × devicePixelRatio so
-// the output is always native resolution — no blur from upscaling.
+// Renders the first page of a PDF as a tiny image using pdf.js canvas
 const FilePageThumb = ({ url }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -544,38 +499,20 @@ const FilePageThumb = ({ url }) => {
     (async () => {
       try {
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
         const pdf  = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         if (cancelled || !canvasRef.current) return;
-
-        const canvas    = canvasRef.current;
-        const container = canvas.parentElement;
-        // Use the container's rendered CSS size — if not mounted yet fall back to 400px
-        const cssW = container?.clientWidth  || 400;
-        const cssH = container?.clientHeight || 600;
-        const dpr  = window.devicePixelRatio || 1;
-
-        // Scale so the PDF page fills the container width at native resolution
-        const baseVp   = page.getViewport({ scale: 1 });
-        const scaleToFitW = (cssW * dpr) / baseVp.width;
-        const scaleToFitH = (cssH * dpr) / baseVp.height;
-        const scale    = Math.min(scaleToFitW, scaleToFitH);   // fit inside both dims
-        const vp       = page.getViewport({ scale });
-
-        // Physical canvas pixels = CSS size × dpr (sharp on retina)
+        const vp     = page.getViewport({ scale: 0.3 });
+        const canvas = canvasRef.current;
         canvas.width  = vp.width;
         canvas.height = vp.height;
-        // CSS size stays at container dims so layout is unchanged
-        canvas.style.width  = `${cssW}px`;
-        canvas.style.height = `${cssH}px`;
-
         await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
       } catch { /* silent — show icon fallback */ }
     })();
     return () => { cancelled = true; };
   }, [url]);
-  return <canvas ref={canvasRef} style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }}/>;
+  return <canvas ref={canvasRef} style={{width:"100%",height:"100%",objectFit:"contain"}}/>;
 };
 
 // Full-screen modal preview
@@ -11679,7 +11616,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [engagementScores,  setEngagementScores]  = useState({});
   const [loadingEngagement, setLoadingEngagement] = useState(false);
   const [activeFilters, setActiveFilters]     = useState([]);
-  const [aiFilter,      setAiFilter]          = useState(null);
   const [filterLogic, setFilterLogic]         = useState("AND");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const filterBtnRef = useRef(null);
@@ -11716,36 +11652,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Copilot filter events
-  useEffect(() => {
-    const handleApplyFilter = (e) => {
-      const { fieldKey, op, value } = e.detail || {};
-      if (!fieldKey) return;
-      const field = fields.find(f => f.api_key === fieldKey);
-      if (!field) {
-        setAiFilter({ type: 'pending', fieldKey, op: op || 'contains', value: value || '' });
-        return;
-      }
-      setActiveFilters(prev => {
-        if (prev.some(f => f.fieldId === field.id && f.value === value)) return prev;
-        return [...prev, { id: 'ai_' + Date.now(), fieldId: field.id, op: op || 'contains', value: value || '', ai: true }];
-      });
-      setPage(1);
-    };
-    const handleApplyIdFilter = (e) => {
-      const { ids, label, reason } = e.detail || {};
-      if (!ids?.length) return;
-      setAiFilter({ type: 'ids', ids, label: label || `AI Selection · ${ids.length} records`, reason });
-      setPage(1);
-    };
-    window.addEventListener('talentos:apply-filter',    handleApplyFilter);
-    window.addEventListener('talentos:apply-id-filter', handleApplyIdFilter);
-    return () => {
-      window.removeEventListener('talentos:apply-filter',    handleApplyFilter);
-      window.removeEventListener('talentos:apply-id-filter', handleApplyIdFilter);
-    };
-  }, [fields]);
-
   // Permission helper — prefers PermissionContext (server-side), falls back to session
   const _permCtx = usePermCtx(); // safe — returns defaults if outside PermissionProvider
   const can = (action) => {
@@ -11772,7 +11678,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Clear selection when object/page/search/filters change
   useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
-  useEffect(() => { setAiFilter(null); setActiveFilters([]); }, [object?.id]);
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
 
@@ -11933,18 +11838,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
     lastLoadedObjectRef.current = object.id; // mark successful load
     setLoading(false);
-    // Resolve pending aiFilter (arrived before fields loaded)
-    setAiFilter(prev => {
-      if (!prev || prev.type !== 'pending') return prev;
-      const field = loadedFields.find(f => f.api_key === prev.fieldKey);
-      if (!field) return prev;
-      setActiveFilters(cur => {
-        if (cur.some(f => f.fieldId === field.id && f.value === prev.value)) return cur;
-        return [...cur, { id: 'ai_' + Date.now(), fieldId: field.id, op: prev.op, value: prev.value, ai: true }];
-      });
-      return null;
-    });
-
     // Broadcast list summary to copilot so it can answer list questions
     window.dispatchEvent(new CustomEvent("talentos:list-context", {
       detail: buildListContext(object, filtered, filterChip ? filtered.length : (r.pagination?.total||0), fields)
@@ -12197,13 +12090,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
-    // Apply AI ID filter (Tool 2 — semantic selection)
-    if (aiFilter?.type === 'ids' && aiFilter.ids?.length) {
-      const idSet = new Set(aiFilter.ids);
-      recs = recs.filter(r => idSet.has(r.id));
-    }
     return recs;
-  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter]);
+  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores]);
 
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
@@ -12432,21 +12320,6 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
               <Ic n="x" s={12} c={C.accent}/>
-            </button>
-          </div>
-        )}
-
-        {/* AI Selection chip — shown when Copilot used ID filter (Tool 2) */}
-        {aiFilter?.type === 'ids' && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 10px 4px 8px",
-            borderRadius:20, background:"#f5f3ff", border:"1.5px solid #7c3aed", fontSize:12, color:"#5b21b6", fontWeight:600, whiteSpace:"nowrap" }}>
-            <span style={{ fontSize:11, opacity:0.8 }}>✦</span>
-            <span>{aiFilter.label}</span>
-            {aiFilter.reason && <span style={{ fontWeight:400, color:"#7c3aed", opacity:0.75, fontSize:11 }}>· {aiFilter.reason}</span>}
-            <button onClick={() => setAiFilter(null)} title="Clear AI selection"
-              style={{ background:"none", border:"none", cursor:"pointer", display:"flex", padding:"0 0 0 2px", color:"#7c3aed", opacity:0.6 }}
-              onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
-              <Ic n="x" s={11} c="#7c3aed"/>
             </button>
           </div>
         )}
