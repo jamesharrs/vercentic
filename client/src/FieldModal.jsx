@@ -1424,8 +1424,8 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
         conditions: form.conditions || null,
       };
       const result = isEdit
-        ? await tFetch(`/api/fields/${field.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }).then(r=>r.json())
-        : await tFetch(`/api/fields`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }).then(r=>r.json());
+        ? await tFetch(`/api/fields/${field.id}`, { method:"PATCH", body: payload })
+        : await tFetch(`/api/fields`, { method:"POST", body: payload });
       if (result?.error) { alert(`Could not save field: ${result.error}`); setSaving(false); return; }
 
       // Save role visibility — use saved field id (new field = result.id, edit = field.id)
@@ -1433,11 +1433,11 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
       if (savedFieldId && selObj?.id && roles.length > 0) {
         const _visRules = roles.map(r => ({ field_id: savedFieldId, hidden: !!roleVisibility[r.id] }));
         await Promise.all(roles.map(r =>
-          tFetch('/api/field-visibility', { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+          tFetch('/api/field-visibility', { method:"PUT", body:{
             role_id: r.id,
             object_id: selObj.id,
             rules: [{ field_id: savedFieldId, hidden: !!roleVisibility[r.id] }],
-          })})
+          }})
         ));
       }
 
