@@ -6,6 +6,8 @@
 
 const express = require('express');
 const router  = express.Router();
+const path    = require('path');
+const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore, saveStoreNow, storeCache, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
 
@@ -762,6 +764,175 @@ router.delete('/clear', (req, res) => {
   if (tenantSlug) saveStore(tenantSlug); else saveStoreNow();
   res.json({ removed });
 });
+
+// ── POST /seed-cvs — generate CV PDFs for all People in an environment ────────
+router.post('/seed-cvs', async (req, res) => {
+  const { environment_id } = req.body;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+
+  const tenantSlug = findTenantForEnv(environment_id);
+  const s = tenantSlug ? loadTenantStore(tenantSlug) : getStore();
+
+  const allObjects = s.objects || [];
+  const peopleObj  = allObjects.find(o => o.slug === 'people' && o.environment_id === environment_id);
+  if (!peopleObj) return res.status(404).json({ error: 'People object not found for this environment' });
+
+  const people = (s.records || []).filter(r => r.object_id === peopleObj.id && !r.deleted_at);
+  if (!people.length) return res.status(404).json({ error: 'No people records found' });
+
+  // Find or create CV file type
+  if (!s.file_types) s.file_types = [];
+  let cvFT = s.file_types.find(t => t.name?.toLowerCase().includes('cv') || t.name?.toLowerCase().includes('resume'));
+  if (!cvFT) {
+    cvFT = { id: uuidv4(), name: 'CV / Resume', slug: 'cv_resume', color: '#5B5BD6',
+      icon: 'file-text', allowed_formats: ['pdf','doc','docx'],
+      parse_cv: true, extract_enabled: false, mappings: [], created_at: isoNow() };
+    s.file_types.push(cvFT);
+  }
+
+  if (!s.attachments) s.attachments = [];
+
+  const UPLOAD_DIR = path.join(__dirname, '../uploads');
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+  let created = 0, skipped = 0;
+  for (const person of people) {
+    const alreadyHasCV = s.attachments.some(a =>
+      a.record_id === person.id &&
+      (a.file_type_id === cvFT.id || a.file_type_name?.toLowerCase().includes('cv'))
+    );
+    if (alreadyHasCV) { skipped++; continue; }
+
+    const d = person.data || {};
+    const displayName = [d.first_name, d.last_name].filter(Boolean).join(' ') || 'Candidate';
+    const safeName    = displayName.replace(/[^a-zA-Z0-9]/g, '_');
+
+    try {
+      const pdfBuffer = generateCVPdf(person);
+      const filename  = `cv_${Date.now()}_${uuidv4().slice(0,8)}_${safeName}.pdf`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), pdfBuffer);
+      s.attachments.push({
+        id: uuidv4(), record_id: person.id, environment_id,
+        name: `CV - ${displayName}.pdf`, filename, size: pdfBuffer.length,
+        mimetype: 'application/pdf', ext: 'pdf',
+        file_type_id: cvFT.id, file_type_name: 'CV / Resume',
+        url: `/api/attachments/file/${filename}`,
+        uploaded_by: 'Demo Seed',
+        created_at: new Date(Date.now() - Math.random()*14*86400000).toISOString(),
+        _demo: true,
+      });
+      created++;
+    } catch(e) {
+      console.warn(`[seed-cvs] Failed for ${displayName}: ${e.message}`);
+    }
+  }
+
+  if (tenantSlug) saveStore(tenantSlug); else saveStoreNow();
+  res.json({ ok: true, created, skipped, total: people.length });
+});
+
+// ── CV PDF helpers (pure Node, no deps) ───────────────────────────────────────
+function generateCVPdf(person) {
+  const d      = person.data || {};
+  const name   = [d.first_name, d.last_name].filter(Boolean).join(' ') || 'Candidate';
+  const email  = d.email    || `${(d.first_name||'candidate').toLowerCase()}@email.com`;
+  const phone  = d.phone    || '+971 50 000 0000';
+  const loc    = d.location || 'Dubai, UAE';
+  const title  = d.current_title || d.job_title || 'Professional';
+  const years  = d.years_experience || 5;
+  const skills = Array.isArray(d.skills) ? d.skills.slice(0,8).join(', ') : (d.skills || 'Leadership, Communication');
+  const summary = `Experienced ${title} with ${years} years of expertise. ${name} delivers results through a collaborative approach and a strong track record in their field.`;
+
+  const COS = ['GlobalCorp','TechVentures','Accenture','Deloitte','PwC','IBM'];
+  const companies = [
+    [title, `${COS[Math.floor(Math.random()*COS.length)]} ${loc.split(',')[0]}`, '2022 – Present', `Lead key initiatives and manage cross-functional teams.`],
+    ['Senior Manager', 'Advisory Group MENA', '2019 – 2022', 'Delivered strategic recommendations and managed client engagements across the region.'],
+    ['Analyst', 'Consulting Partners', '2016 – 2019', 'Provided analysis and insights to support executive decision-making.'],
+  ].slice(0, years > 6 ? 3 : 2);
+
+  const DEGS = ['Bachelor of Business Administration','Master of Science','Bachelor of Engineering','MBA'];
+  const UNIS = ['University of Dubai','American University of Sharjah','INSEAD','London Business School'];
+  const degree = DEGS[Math.floor(Math.random()*DEGS.length)];
+  const uni    = UNIS[Math.floor(Math.random()*UNIS.length)];
+  const gradYr = 2024 - years - 2;
+
+  const items = [
+    { text:name,  x:50, y:760, size:22, bold:true },
+    { text:title, x:50, y:737, size:13, color:'0.35 0.35 0.84' },
+    { text:`${email}  |  ${phone}  |  ${loc}`, x:50, y:719, size:10 },
+    { line:true, x1:50, y1:709, x2:545, y2:709 },
+    { text:'PROFESSIONAL SUMMARY', x:50, y:697, size:10, bold:true },
+    ...pdfWrap(summary,90).map((l,i)=>({ text:l, x:50, y:683-i*13, size:10 })),
+    { line:true, x1:50, y1:648, x2:545, y2:648 },
+    { text:'CORE SKILLS', x:50, y:636, size:10, bold:true },
+    { text:skills, x:50, y:622, size:10 },
+    { line:true, x1:50, y1:611, x2:545, y2:611 },
+    { text:'PROFESSIONAL EXPERIENCE', x:50, y:599, size:10, bold:true },
+    ...companies.flatMap(([r,co,dt,desc],i)=>{
+      const y = 583 - i*72;
+      return [
+        { text:r,  x:50,  y:y,    size:11, bold:true },
+        { text:co, x:50,  y:y-14, size:10, color:'0.35 0.35 0.84' },
+        { text:dt, x:390, y:y,    size:9,  color:'0.5 0.5 0.5' },
+        ...pdfWrap(desc,85).map((l,j)=>({ text:l, x:50, y:y-28-j*12, size:9.5 })),
+      ];
+    }),
+    { line:true, x1:50, y1:358, x2:545, y2:358 },
+    { text:'EDUCATION', x:50, y:346, size:10, bold:true },
+    { text:degree, x:50, y:330, size:11, bold:true },
+    { text:uni,    x:50, y:316, size:10, color:'0.35 0.35 0.84' },
+    { text:`Graduated ${gradYr}`, x:390, y:330, size:9, color:'0.5 0.5 0.5' },
+    { text:`References available on request  ·  ${years} years professional experience`, x:50, y:40, size:8, color:'0.6 0.6 0.6' },
+  ];
+  return pdfBuild(items);
+}
+
+function pdfWrap(text, max) {
+  const words = text.split(' '); const lines = []; let cur = '';
+  for (const w of words) {
+    if ((cur+' '+w).trim().length > max) { if (cur) lines.push(cur.trim()); cur = w; }
+    else cur = (cur+' '+w).trim();
+  }
+  if (cur) lines.push(cur.trim());
+  return lines;
+}
+
+function pdfEsc(s) { return String(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)'); }
+
+function pdfBuild(items) {
+  // Build content stream
+  let stream = 'q\n1 1 1 rg\n0 0 595 842 re\nf\nQ\n';
+  for (const it of items) {
+    if (it.line) { stream += `q\n0.75 0.75 0.75 RG\n0.5 w\n${it.x1} ${it.y1} m\n${it.x2} ${it.y2} l\nS\nQ\n`; continue; }
+    const { text='', x=50, y=700, size=10, bold, color } = it;
+    stream += `BT\n/${bold?'F2':'F1'} ${size} Tf\n${color||'0 0 0'} rg\n${x} ${y} Td\n(${pdfEsc(text)}) Tj\nET\n`;
+  }
+
+  // Sequential object IDs — no reserved slots
+  const streamLen = Buffer.byteLength(stream, 'latin1');
+  const defs = [
+    `<< /Length ${streamLen} >>\nstream\n${stream}\nendstream`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>`,
+    `<< /Font << /F1 2 0 R /F2 3 0 R >> >>`,
+    `<< /Type /Pages /Kids [6 0 R] /Count 1 >>`,
+    `<< /Type /Page /Parent 5 0 R /MediaBox [0 0 595 842] /Contents 1 0 R /Resources 4 0 R >>`,
+    `<< /Type /Catalog /Pages 5 0 R >>`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let i = 0; i < defs.length; i++) {
+    offsets.push(pdf.length);
+    pdf += `${i+1} 0 obj\n${defs[i]}\nendobj\n`;
+  }
+  const xrefPos = pdf.length;
+  const total = defs.length + 1;
+  pdf += `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for (let i = 1; i < total; i++) pdf += `${String(offsets[i]).padStart(10,'0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${total} /Root 7 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+  return Buffer.from(pdf, 'latin1');
+}
 
 module.exports = router;
 module.exports.runSeed          = runSeed;
