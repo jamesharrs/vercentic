@@ -11679,6 +11679,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [engagementScores,  setEngagementScores]  = useState({});
   const [loadingEngagement, setLoadingEngagement] = useState(false);
   const [activeFilters, setActiveFilters]     = useState([]);
+  const [aiFilter,      setAiFilter]          = useState(null);
   const [filterLogic, setFilterLogic]         = useState("AND");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const filterBtnRef = useRef(null);
@@ -11715,6 +11716,36 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Copilot filter events
+  useEffect(() => {
+    const handleApplyFilter = (e) => {
+      const { fieldKey, op, value } = e.detail || {};
+      if (!fieldKey) return;
+      const field = fields.find(f => f.api_key === fieldKey);
+      if (!field) {
+        setAiFilter({ type: 'pending', fieldKey, op: op || 'contains', value: value || '' });
+        return;
+      }
+      setActiveFilters(prev => {
+        if (prev.some(f => f.fieldId === field.id && f.value === value)) return prev;
+        return [...prev, { id: 'ai_' + Date.now(), fieldId: field.id, op: op || 'contains', value: value || '', ai: true }];
+      });
+      setPage(1);
+    };
+    const handleApplyIdFilter = (e) => {
+      const { ids, label, reason } = e.detail || {};
+      if (!ids?.length) return;
+      setAiFilter({ type: 'ids', ids, label: label || `AI Selection · ${ids.length} records`, reason });
+      setPage(1);
+    };
+    window.addEventListener('talentos:apply-filter',    handleApplyFilter);
+    window.addEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+    return () => {
+      window.removeEventListener('talentos:apply-filter',    handleApplyFilter);
+      window.removeEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+    };
+  }, [fields]);
+
   // Permission helper — prefers PermissionContext (server-side), falls back to session
   const _permCtx = usePermCtx(); // safe — returns defaults if outside PermissionProvider
   const can = (action) => {
@@ -11741,6 +11772,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Clear selection when object/page/search/filters change
   useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
+  useEffect(() => { setAiFilter(null); setActiveFilters([]); }, [object?.id]);
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
 
@@ -11901,6 +11933,18 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     setTotal(filterChip ? filtered.length : (r.pagination?.total||0));
     lastLoadedObjectRef.current = object.id; // mark successful load
     setLoading(false);
+    // Resolve pending aiFilter (arrived before fields loaded)
+    setAiFilter(prev => {
+      if (!prev || prev.type !== 'pending') return prev;
+      const field = loadedFields.find(f => f.api_key === prev.fieldKey);
+      if (!field) return prev;
+      setActiveFilters(cur => {
+        if (cur.some(f => f.fieldId === field.id && f.value === prev.value)) return cur;
+        return [...cur, { id: 'ai_' + Date.now(), fieldId: field.id, op: prev.op, value: prev.value, ai: true }];
+      });
+      return null;
+    });
+
     // Broadcast list summary to copilot so it can answer list questions
     window.dispatchEvent(new CustomEvent("talentos:list-context", {
       detail: buildListContext(object, filtered, filterChip ? filtered.length : (r.pagination?.total||0), fields)
@@ -12153,8 +12197,13 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
+    // Apply AI ID filter (Tool 2 — semantic selection)
+    if (aiFilter?.type === 'ids' && aiFilter.ids?.length) {
+      const idSet = new Set(aiFilter.ids);
+      recs = recs.filter(r => idSet.has(r.id));
+    }
     return recs;
-  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores]);
+  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter]);
 
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
@@ -12383,6 +12432,21 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
               style={{ background:"none", border:"none", cursor:"pointer", padding:"0 0 0 4px", display:"flex", color:C.accent, opacity:0.7 }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
               <Ic n="x" s={12} c={C.accent}/>
+            </button>
+          </div>
+        )}
+
+        {/* AI Selection chip — shown when Copilot used ID filter (Tool 2) */}
+        {aiFilter?.type === 'ids' && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 10px 4px 8px",
+            borderRadius:20, background:"#f5f3ff", border:"1.5px solid #7c3aed", fontSize:12, color:"#5b21b6", fontWeight:600, whiteSpace:"nowrap" }}>
+            <span style={{ fontSize:11, opacity:0.8 }}>✦</span>
+            <span>{aiFilter.label}</span>
+            {aiFilter.reason && <span style={{ fontWeight:400, color:"#7c3aed", opacity:0.75, fontSize:11 }}>· {aiFilter.reason}</span>}
+            <button onClick={() => setAiFilter(null)} title="Clear AI selection"
+              style={{ background:"none", border:"none", cursor:"pointer", display:"flex", padding:"0 0 0 2px", color:"#7c3aed", opacity:0.6 }}
+              onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
+              <Ic n="x" s={11} c="#7c3aed"/>
             </button>
           </div>
         )}
