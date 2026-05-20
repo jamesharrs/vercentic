@@ -1746,6 +1746,8 @@ function App({ onEnvReady }) {
   const [environments, setEnvironments] = useState([]);
   // Seed selectedEnv from sessionStorage so Vite HMR doesn't reset it to null.
   // sessionStorage persists across hot reloads (same tab) but not page refreshes.
+  // NOTE: this is just an optimistic seed — fetchEnvs() will correct it if the ID
+  // is stale (e.g. after switching between local and Railway contexts).
   const [selectedEnv, setSelectedEnv] = useState(() => {
     try {
       const cached = sessionStorage.getItem('vercentic_selected_env');
@@ -1995,6 +1997,10 @@ activeNavRef.current = activeNav;
         if (def) {
           setSelectedEnv(prev => {
             if (prev?.id === def.id) return prev; // same env — keep reference stable
+            // Stale env in sessionStorage — clear it so next HMR reload starts fresh
+            if (prev?.id && prev.id !== def.id) {
+              try { sessionStorage.removeItem('vercentic_selected_env'); } catch {}
+            }
             return def;
           });
           // Call onEnvReady outside the updater to avoid setState-during-render
