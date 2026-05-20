@@ -86,6 +86,11 @@ function handleResponse(r, path = '') {
     return Promise.resolve(null);
   }
   if (r.status === 401) {
+    // In dev: try to re-sync session before logging out
+    if (!import.meta.env.PROD) {
+      window.dispatchEvent(new CustomEvent('talentos:session-lost'));
+      return Promise.resolve(null); // return null instead of the error JSON
+    }
     window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
   }
   return r.json();

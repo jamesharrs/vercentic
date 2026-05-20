@@ -1955,28 +1955,39 @@ activeNavRef.current = activeNav;
   useEffect(() => {
     if (import.meta.env.PROD) return;
     let attempts = 0;
+    let syncing = false;
     const sync = () => {
+      if (syncing) return;
+      syncing = true;
       fetch('/api/dev/session', { credentials: 'include' })
         .then(r => r.json())
         .then(d => {
+          syncing = false;
           if (d.authenticated && d.user) {
-            // Update localStorage with fresh session data from server
             const sessionData = { user: d.user, role: d.role, permissions: d.permissions || [], tenant_slug: d.tenant_slug };
             try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
-            // If React session state is null/stale, update it
             setSession(prev => {
-              if (prev?.user?.id === d.user.id) return prev; // already in sync
+              if (prev?.user?.id === d.user.id) return prev;
               return sessionData;
             });
+            attempts = 0; // reset on success
           } else if (!d.authenticated && attempts < 8) {
-            // Server not ready yet — retry
             attempts++;
             setTimeout(sync, 1500);
           }
         })
-        .catch(() => { if (attempts < 8) { attempts++; setTimeout(sync, 1500); } });
+        .catch(() => { syncing = false; if (attempts < 8) { attempts++; setTimeout(sync, 1500); } });
     };
-    sync(); // Run immediately on mount
+    sync(); // Run on mount
+
+    // Also re-sync whenever any API call gets a 401 in dev
+    const onSessionLost = () => { attempts = 0; sync(); };
+    window.addEventListener('talentos:session-lost', onSessionLost);
+    window.addEventListener('talentos:server-starting', onSessionLost);
+    return () => {
+      window.removeEventListener('talentos:session-lost', onSessionLost);
+      window.removeEventListener('talentos:server-starting', onSessionLost);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On startup: validate the stored session against the server.
