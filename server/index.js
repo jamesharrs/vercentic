@@ -159,11 +159,12 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    httpOnly: true,                                           // not accessible via JS — XSS safe
-    secure:   process.env.NODE_ENV === 'production',          // HTTPS only in prod
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // cross-origin for Vercel↔Railway
-    domain:   process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || '.vercentic.com') : undefined,
-    maxAge:   process.env.NODE_ENV === 'production' ? 8 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000, // 8h prod / 30d dev
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    // Do NOT set domain when Vercel and Railway are on different root domains —
+    // the browser will reject cross-domain cookies. Let it default to the Railway origin.
+    maxAge:   process.env.NODE_ENV === 'production' ? 8 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
   },
 }));
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
