@@ -258,6 +258,7 @@ const AUTH_EXEMPT = [
   '/hub/request-link', '/hub/verify', '/hub/portal-branding',
   '/reschedule',
   '/cohort-auth', // candidate portal auth — no main app session
+  '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
 ];
 app.use('/api', (req, res, next) => {
   if (AUTH_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
