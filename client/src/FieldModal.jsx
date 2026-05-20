@@ -89,10 +89,11 @@ const FIELD_TYPE_GROUPS = [
     {value:"address",    label:"Address",       icon:"mapPin",  desc:"Structured address with country"},
   ]},
   { key:"reference", label:"References", types:[
-    {value:"people",  label:"People",  icon:"users",   desc:"Link to person records with search"},
-    {value:"lookup",  label:"Lookup",  icon:"link2",   desc:"Pull a value from a related record"},
-    {value:"rollup",  label:"Rollup",  icon:"sigma",   desc:"Aggregate data across related records"},
-    {value:"country", label:"Country", icon:"flag",    desc:"Country picker with flag display"},
+    {value:"people",       label:"People",       icon:"users",      desc:"Link to person records with search"},
+    {value:"lookup",       label:"Lookup",       icon:"link2",      desc:"Pull a value from a related record"},
+    {value:"rollup",       label:"Rollup",       icon:"sigma",      desc:"Aggregate data across related records"},
+    {value:"country",      label:"Country",      icon:"flag",       desc:"Country picker with flag display"},
+    {value:"file_preview", label:"File Preview", icon:"paperclip",  desc:"Inline preview of an attached file or PDF — reads from the Files panel"},
   ]},
   { key:"advanced", label:"Advanced", types:[
     {value:"table",       label:"Table",       icon:"table",       desc:"Multi-row table with configurable columns — work history, education, languages"},
@@ -876,6 +877,98 @@ function SectionConfig({ form, set }) {
 }
 
 // ── Config panel router ───────────────────────────────────────────────────────
+// ── FilePreviewConfig ─────────────────────────────────────────────────────────
+function FilePreviewConfig({ form, set, selEnv }) {
+  const [fileTypes, setFileTypes] = useState([]);
+  useEffect(() => {
+    fetch(`/api/file-types`, { headers:{ 'X-Tenant-Slug': selEnv?.tenant_slug||'' } })
+      .then(r=>r.ok?r.json():[]).then(d=>setFileTypes(Array.isArray(d)?d:[])).catch(()=>{});
+  }, [selEnv]);
+
+  const inputStyle = { width:"100%", padding:"6px 8px", borderRadius:8, border:"1px solid #e8eaed",
+    fontSize:12, fontFamily:"inherit", background:"white", color:"#1a1a2e", outline:"none" };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <HelpBox>
+        Displays a live mini-preview of a file attached to this record.
+        The file is fetched from the <strong>Files panel</strong> — no data is stored in this field itself.
+      </HelpBox>
+
+      {/* File type filter */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:700, color:"#6b7280", marginBottom:5, textTransform:"uppercase", letterSpacing:"0.04em" }}>File Type</div>
+        <select value={form.fp_file_type_name||""} onChange={e=>set("fp_file_type_name",e.target.value)} style={inputStyle}>
+          <option value="">Any file type</option>
+          {fileTypes.map(ft=>(
+            <option key={ft.id} value={ft.name}>{ft.name}</option>
+          ))}
+        </select>
+        <div style={{ fontSize:10, color:"#9ca3af", marginTop:3 }}>Only attachments matching this type will be shown.</div>
+      </div>
+
+      {/* Selection strategy */}
+      <Sel label="When multiple files exist, show"
+        value={form.fp_selection||"latest"}
+        onChange={v=>set("fp_selection",v)}
+        options={[
+          { value:"latest",   label:"Most recent upload" },
+          { value:"oldest",   label:"Oldest upload" },
+          { value:"all",      label:"All files (carousel)" },
+          { value:"manual",   label:"Pinned file (set per record)" },
+        ]}/>
+
+      {/* Preview size */}
+      <Sel label="Preview size"
+        value={form.fp_size||"compact"}
+        onChange={v=>set("fp_size",v)}
+        options={[
+          { value:"compact",  label:"Compact — icon + filename (lists & fields)" },
+          { value:"thumbnail",label:"Thumbnail — small PDF page preview" },
+          { value:"inline",   label:"Inline — 3-page scrollable viewer" },
+        ]}/>
+
+      {/* Click action */}
+      <Sel label="On click"
+        value={form.fp_click||"modal"}
+        onChange={v=>set("fp_click",v)}
+        options={[
+          { value:"modal",    label:"Open full-screen preview" },
+          { value:"download", label:"Download the file" },
+          { value:"tab",      label:"Open in new browser tab" },
+        ]}/>
+
+      {/* Show filename toggle */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:600, color:"#1a1a2e" }}>Show filename</div>
+          <div style={{ fontSize:10, color:"#9ca3af" }}>Display the file name below the preview</div>
+        </div>
+        <button onClick={()=>set("fp_show_name",!form.fp_show_name)}
+          style={{ width:36, height:20, borderRadius:99, border:"none", cursor:"pointer", padding:2,
+            background:form.fp_show_name?"#3b5bdb":"#e5e7eb", transition:"background 0.15s",
+            display:"flex", alignItems:"center", justifyContent:form.fp_show_name?"flex-end":"flex-start" }}>
+          <div style={{ width:16, height:16, borderRadius:"50%", background:"white", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
+        </button>
+      </div>
+
+      {/* Show upload date toggle */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:600, color:"#1a1a2e" }}>Show upload date</div>
+          <div style={{ fontSize:10, color:"#9ca3af" }}>Display when the file was uploaded</div>
+        </div>
+        <button onClick={()=>set("fp_show_date",!form.fp_show_date)}
+          style={{ width:36, height:20, borderRadius:99, border:"none", cursor:"pointer", padding:2,
+            background:form.fp_show_date?"#3b5bdb":"#e5e7eb", transition:"background 0.15s",
+            display:"flex", alignItems:"center", justifyContent:form.fp_show_date?"flex-end":"flex-start" }}>
+          <div style={{ width:16, height:16, borderRadius:"50%", background:"white", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TypeConfig({ fieldType, form, set, objectFields, objects, datasets, selEnv }) {
   const p = { form, set, objectFields, objects, datasets, selEnv };
   switch (fieldType) {
@@ -905,6 +998,7 @@ function TypeConfig({ fieldType, form, set, objectFields, objects, datasets, sel
     case "people":           return <PeopleConfig {...p}/>;
     case "lookup":           return <LookupConfig {...p}/>;
     case "rollup":           return <RollupConfig {...p}/>;
+    case "file_preview":     return <FilePreviewConfig {...p}/>;
     case "country":          return <CountryConfig {...p}/>;
     case "auto_number":      return <AutoNumberConfig {...p}/>;
     case "unique_id":        return <UniqueIdConfig {...p}/>;
@@ -1320,25 +1414,30 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
         as_panel:      form.field_type==="section_separator" ? (!!form.as_panel) : undefined,
         table_columns: form.field_type==="table" ? (form.table_columns || []) : undefined,
         table_template: form.field_type==="table" ? (form.table_template||null) : undefined,
+        // File Preview
+        fp_file_type_name: form.field_type==="file_preview" ? (form.fp_file_type_name||"") : undefined,
+        fp_selection:      form.field_type==="file_preview" ? (form.fp_selection||"latest") : undefined,
+        fp_size:           form.field_type==="file_preview" ? (form.fp_size||"compact") : undefined,
+        fp_click:          form.field_type==="file_preview" ? (form.fp_click||"modal") : undefined,
+        fp_show_name:      form.field_type==="file_preview" ? (!!form.fp_show_name) : undefined,
+        fp_show_date:      form.field_type==="file_preview" ? (!!form.fp_show_date) : undefined,
         conditions: form.conditions || null,
       };
       const result = isEdit
-        ? await api.patch(`/fields/${field.id}`, payload)
-        : await api.post("/fields", payload);
+        ? await tFetch(`/api/fields/${field.id}`, { method:"PATCH", body: payload })
+        : await tFetch(`/api/fields`, { method:"POST", body: payload });
       if (result?.error) { alert(`Could not save field: ${result.error}`); setSaving(false); return; }
 
       // Save role visibility — use saved field id (new field = result.id, edit = field.id)
       const savedFieldId = result?.id || field?.id;
       if (savedFieldId && selObj?.id && roles.length > 0) {
-        // Build rules array: hidden only for roles where roleVisibility[role_id] is true
-        const visRules = roles.map(r => ({ field_id: savedFieldId, hidden: !!roleVisibility[r.id] }));
-        // Group by role and save each role's rule
+        const _visRules = roles.map(r => ({ field_id: savedFieldId, hidden: !!roleVisibility[r.id] }));
         await Promise.all(roles.map(r =>
-          api.put('/field-visibility', {
+          tFetch('/api/field-visibility', { method:"PUT", body:{
             role_id: r.id,
             object_id: selObj.id,
             rules: [{ field_id: savedFieldId, hidden: !!roleVisibility[r.id] }],
-          })
+          }})
         ));
       }
 

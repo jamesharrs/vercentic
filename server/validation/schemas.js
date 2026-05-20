@@ -54,7 +54,7 @@ const VALID_FIELD_TYPES = [
   'rich_text','currency','rating','people','formula','progress','address','phone_intl',
   'section_separator','skills','dataset','auto_number','unique_id','status',
   'date_range','datetime_range','duration','percent','rollup','social',
-  'country','table','multi_text','color','slider',
+  'country','table','multi_text','color','slider','file_preview',
 ];
 const createFieldSchema = z.object({
   object_id:        uuid(),

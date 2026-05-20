@@ -109,13 +109,16 @@ router.patch('/env', (req, res) => {
 // ── System info ───────────────────────────────────────────────────────────────
 router.get('/system', (req, res) => {
   const mem = process.memoryUsage();
+  const dataPath = process.env.DATA_PATH || '(not set — using default)';
   res.json({
-    node:    process.version,
-    uptime:  Math.floor(process.uptime()),
-    memory:  { rss: mem.rss, heap: mem.heapUsed, heapTotal: mem.heapTotal },
-    env:     process.env.NODE_ENV || 'development',
-    pid:     process.pid,
+    node:     process.version,
+    uptime:   Math.floor(process.uptime()),
+    memory:   { rss: mem.rss, heap: mem.heapUsed, heapTotal: mem.heapTotal },
+    env:      process.env.NODE_ENV || 'development',
+    pid:      process.pid,
     platform: process.platform,
+    data_path: dataPath,
+    volume_active: process.env.DATA_PATH ? true : false,
   });
 });
 
