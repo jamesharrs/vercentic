@@ -67,6 +67,16 @@ router.get('/', (req, res) => {
   res.json(users);
 });
 
+// GET /api/users/me — session check (used by client to verify session is still valid)
+router.get('/me', (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const u = findOne('users', u => u.id === userId);
+  if (!u) return res.status(401).json({ error: 'User not found' });
+  const role = findOne('roles', r => r.id === u.role_id);
+  res.json({ ...u, password_hash: undefined, role });
+});
+
 // GET /api/users/me/:id — refresh user session data (MUST be before /:id wildcard)
 router.get('/me/:id', (req, res) => {
   const u = findOne('users', u => u.id === req.params.id);
