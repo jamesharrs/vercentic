@@ -24,7 +24,7 @@ const VALID = [
   // Reference
   'people','lookup','multi_lookup','rollup',
   // File / Other
-  'file','image',
+  'file','image','file_preview',
   // System / Special
   'section_separator','unique_id','dataset','skills',
   // Structured
