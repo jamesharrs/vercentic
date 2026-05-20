@@ -1980,6 +1980,11 @@ activeNavRef.current = activeNav;
     };
     sync(); // Run on mount
 
+    // Also re-sync on Vite hot-reload (HMR doesn't remount root, so useEffect[] doesn't re-run)
+    if (import.meta.hot) {
+      import.meta.hot.on('vite:afterUpdate', () => { attempts = 0; setTimeout(sync, 300); });
+    }
+
     // Also re-sync whenever any API call gets a 401 in dev
     const onSessionLost = () => { attempts = 0; sync(); };
     window.addEventListener('talentos:session-lost', onSessionLost);
