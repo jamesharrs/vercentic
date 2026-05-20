@@ -394,10 +394,50 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
     fileTypeName : field.fp_file_type_name || "",
     selection    : field.fp_selection      || "latest",
     size         : field.fp_size           || "compact",
+    adminHeight  : field.fp_height         || null,   // admin-set default (px)
     click        : field.fp_click          || "modal",
     showName     : field.fp_show_name      !== false,
     showDate     : !!field.fp_show_date,
   };
+
+  // Per-user resize stored in localStorage — key is field id so each field remembers independently
+  const storageKey = `fp_height_${field.id}`;
+  const defaultH   = cfg.adminHeight || (cfg.size === "thumbnail" ? 200 : 400);
+  const [height, setHeight]   = useState(() => {
+    try { const v = parseInt(localStorage.getItem(storageKey),10); return v > 0 ? v : defaultH; } catch { return defaultH; }
+  });
+  const dragRef = useRef(null);
+
+  // Drag-to-resize handler
+  const onDragStart = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = height;
+    const onMove = (ev) => {
+      const newH = Math.max(80, Math.min(1200, startH + ev.clientY - startY));
+      setHeight(newH);
+    };
+    const onUp = (ev) => {
+      const finalH = Math.max(80, Math.min(1200, startH + ev.clientY - startY));
+      setHeight(finalH);
+      try { localStorage.setItem(storageKey, String(finalH)); } catch {}
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  // Drag handle component
+  const DragHandle = () => (
+    <div
+      onMouseDown={onDragStart}
+      title="Drag to resize"
+      style={{ height:6, cursor:"ns-resize", display:"flex", alignItems:"center", justifyContent:"center",
+        borderRadius:"0 0 6px 6px", background:"#f0f0f5", userSelect:"none", flexShrink:0 }}>
+      <div style={{ width:32, height:3, borderRadius:99, background:"#d1d5db" }}/>
+    </div>
+  );
 
   useEffect(() => {
     if (!recordId) return;
@@ -452,15 +492,17 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
 
   // ── Thumbnail — small PDF first-page render ──
   if (cfg.size === "thumbnail") {
+    const thumbW = Math.round(height * 0.77); // maintain A4-ish ratio
     return (
-      <div style={{display:"inline-flex",flexDirection:"column",gap:4,cursor:"pointer"}} onClick={handleClick}>
-        <div style={{width:80,height:104,borderRadius:6,border:"1.5px solid #e8eaed",overflow:"hidden",background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+      <div style={{display:"inline-flex",flexDirection:"column",gap:4}}>
+        <div style={{width:thumbW,borderRadius:"6px 6px 0 0",border:"1.5px solid #e8eaed",borderBottom:"none",overflow:"hidden",background:"#f9fafb",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",cursor:"pointer",height:height}} onClick={handleClick}>
           {isPdf
             ? <FilePageThumb url={fileUrl}/>
             : <Ic n="paperclip" s={28} c={C.text3}/>}
           <div style={{position:"absolute",inset:0,background:"transparent"}}/>
         </div>
-        {cfg.showName && <div style={{fontSize:10,fontWeight:600,color:"#1a1a2e",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>}
+        <DragHandle/>
+        {cfg.showName && <div style={{fontSize:10,fontWeight:600,color:"#1a1a2e",maxWidth:thumbW,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>}
         {cfg.showDate && <div style={{fontSize:9,color:C.text3}}>{dateStr}</div>}
         {/* Carousel nav for "all" selection */}
         {cfg.selection==="all" && displayed.length>1 && (
@@ -475,15 +517,16 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
     );
   }
 
-  // ── Inline — scrollable mini PDF viewer ──
+  // ── Inline — scrollable PDF viewer ──
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:6}}>
-      <div style={{border:"1.5px solid #e8eaed",borderRadius:8,overflow:"hidden",background:"#f9fafb",cursor:"pointer"}} onClick={handleClick}>
+    <div style={{display:"flex",flexDirection:"column",gap:0,width:"100%"}}>
+      <div style={{border:"1.5px solid #e8eaed",borderRadius:"8px 8px 0 0",borderBottom:"none",overflow:"hidden",background:"#f9fafb",cursor:"pointer",height:height}} onClick={handleClick}>
         {isPdf
-          ? <object data={fileUrl} type="application/pdf" width="100%" height="360" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
-          : <div style={{padding:16,textAlign:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
+          ? <object data={fileUrl} type="application/pdf" width="100%" height="100%" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
+          : <div style={{padding:16,textAlign:"center",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
       </div>
-      {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e"}}>{label}</div>}
+      <DragHandle/>
+      {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e",marginTop:4}}>{label}</div>}
       {cfg.showDate && <div style={{fontSize:10,color:C.text3}}>{dateStr}</div>}
       {modalOpen && <FilePreviewModal url={fileUrl} name={label} onClose={()=>setModal(false)}/>}
     </div>

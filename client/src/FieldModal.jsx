@@ -925,10 +925,22 @@ function FilePreviewConfig({ form, set, selEnv }) {
         options={[
           { value:"compact",  label:"Compact — icon + filename (lists & fields)" },
           { value:"thumbnail",label:"Thumbnail — small PDF page preview" },
-          { value:"inline",   label:"Inline — 3-page scrollable viewer" },
+          { value:"inline",   label:"Inline — scrollable viewer" },
         ]}/>
 
-      {/* Click action */}
+      {/* Height — only relevant for thumbnail and inline */}
+      {(form.fp_size === "thumbnail" || form.fp_size === "inline") && (
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#6b7280", marginBottom:5, textTransform:"uppercase", letterSpacing:"0.04em" }}>Default height (px)</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <input type="number" min={80} max={1200} step={10}
+              value={form.fp_height || (form.fp_size==="thumbnail" ? 200 : 400)}
+              onChange={e=>set("fp_height", parseInt(e.target.value,10)||200)}
+              style={{...inputStyle, width:100}}/>
+            <span style={{ fontSize:11, color:"#9ca3af" }}>Users can drag to resize per their preference</span>
+          </div>
+        </div>
+      )}
       <Sel label="On click"
         value={form.fp_click||"modal"}
         onChange={v=>set("fp_click",v)}
@@ -1418,6 +1430,7 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
         fp_file_type_name: form.field_type==="file_preview" ? (form.fp_file_type_name||"") : undefined,
         fp_selection:      form.field_type==="file_preview" ? (form.fp_selection||"latest") : undefined,
         fp_size:           form.field_type==="file_preview" ? (form.fp_size||"compact") : undefined,
+        fp_height:         form.field_type==="file_preview" ? (form.fp_height||null) : undefined,
         fp_click:          form.field_type==="file_preview" ? (form.fp_click||"modal") : undefined,
         fp_show_name:      form.field_type==="file_preview" ? (!!form.fp_show_name) : undefined,
         fp_show_date:      form.field_type==="file_preview" ? (!!form.fp_show_date) : undefined,
