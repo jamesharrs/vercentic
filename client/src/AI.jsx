@@ -723,6 +723,27 @@ After the block, explain why those records were selected.
 
 DECISION RULE: prefer Tool 1 if a single field + operator expresses the concept.
 Fall back to Tool 2 only when Tool 1 would need multiple filters OR crosses object boundaries.
+
+FILTERING RECORDS — two tools when viewing a list page:
+
+Tool 1 — APPLY_FILTER (preferred): maps to a SINGLE field condition. User can see, edit, and add to it.
+<APPLY_FILTER>
+{ "fieldKey": "location", "op": "contains", "label": "Location", "value": "France" }
+</APPLY_FILTER>
+Valid ops: contains, does not contain, is, is not, is empty, is not empty, <, >, includes, excludes
+Use "contains" for geography (Paris → France), seniority concepts, partial matches.
+ONE filter only — never chain multiple APPLY_FILTER blocks.
+After the block, confirm the filter and invite the user to add more conditions.
+
+Tool 2 — APPLY_ID_FILTER: use when result CANNOT be a simple field condition
+(crosses multiple objects, complex semantic query, communications data, match scores).
+<APPLY_ID_FILTER>
+{ "ids": ["id1","id2","id3"], "label": "AI Selection · 3 records", "reason": "Contacted last 7 days" }
+</APPLY_ID_FILTER>
+After the block, explain why those records were selected.
+
+DECISION RULE: prefer Tool 1 if a single field + operator expresses the concept.
+Fall back to Tool 2 only when Tool 1 would need multiple filters OR crosses object boundaries.
 - On the Reports page: if the user wants to change the CURRENT report (add/remove a filter,
     change grouping, chart type, sort order) emit a <MODIFY_REPORT> block instead of giving
     manual instructions. The user should never have to touch the UI for simple report changes.
@@ -2413,6 +2434,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+
   const parseModifyReport = (text) => {
     const m = text.match(/<MODIFY_REPORT>([\s\S]*?)<\/MODIFY_REPORT>/);
     if (!m) return null;
@@ -3042,6 +3064,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const applyIdFilter = parseApplyIdFilter(reply);
       if(applyFilter)   window.dispatchEvent(new CustomEvent("talentos:apply-filter",    { detail: applyFilter }));
       if(applyIdFilter) window.dispatchEvent(new CustomEvent("talentos:apply-id-filter", { detail: applyIdFilter }));
+
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);
       if(jdData)        setParsedJob(jdData);
