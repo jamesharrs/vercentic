@@ -1929,15 +1929,25 @@ activeNavRef.current = activeNav;
 
   // When any API call returns 401, clear the local session and show the login screen
   useEffect(() => {
+    let debounceTimer = null;
     const handler = () => {
-      // Only auto-logout on 401 in production. In dev, server restarts can cause
-      // transient 401s — don't wipe localStorage and force re-login every time.
-      if (!import.meta.env.PROD) return;
+      // In dev: debounce 401s — a server restart causes a brief 401 storm.
+      // If we still get a 401 after 2s, the session is genuinely gone → show login.
+      // In prod: redirect immediately.
+      if (!import.meta.env.PROD) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          fetch('/api/users/me', { credentials: 'include' })
+            .then(r => { if (r.status === 401) { try { localStorage.removeItem(_sessionKey()); } catch {} startTransition(() => setSession(null)); } })
+            .catch(() => {});
+        }, 2000);
+        return;
+      }
       try { localStorage.removeItem(_sessionKey()); } catch {}
       startTransition(() => setSession(null));
     };
     window.addEventListener('talentos:unauthenticated', handler);
-    return () => window.removeEventListener('talentos:unauthenticated', handler);
+    return () => { window.removeEventListener('talentos:unauthenticated', handler); clearTimeout(debounceTimer); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On startup: validate the stored session against the server.
