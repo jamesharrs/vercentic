@@ -533,7 +533,9 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
   );
 };
 
-// Renders the first page of a PDF as a tiny image using pdf.js canvas
+// Renders the first page of a PDF as a sharp image using pdf.js canvas.
+// Renders at the container's actual CSS pixel size × devicePixelRatio so
+// the output is always native resolution — no blur from upscaling.
 const FilePageThumb = ({ url }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -542,21 +544,38 @@ const FilePageThumb = ({ url }) => {
     (async () => {
       try {
         const pdfjsLib = await import("pdfjs-dist");
-        // Use bundled worker — CDN version string won't match pdfjs-dist v5
         pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
         const pdf  = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         if (cancelled || !canvasRef.current) return;
-        const vp     = page.getViewport({ scale: 0.3 });
-        const canvas = canvasRef.current;
+
+        const canvas    = canvasRef.current;
+        const container = canvas.parentElement;
+        // Use the container's rendered CSS size — if not mounted yet fall back to 400px
+        const cssW = container?.clientWidth  || 400;
+        const cssH = container?.clientHeight || 600;
+        const dpr  = window.devicePixelRatio || 1;
+
+        // Scale so the PDF page fills the container width at native resolution
+        const baseVp   = page.getViewport({ scale: 1 });
+        const scaleToFitW = (cssW * dpr) / baseVp.width;
+        const scaleToFitH = (cssH * dpr) / baseVp.height;
+        const scale    = Math.min(scaleToFitW, scaleToFitH);   // fit inside both dims
+        const vp       = page.getViewport({ scale });
+
+        // Physical canvas pixels = CSS size × dpr (sharp on retina)
         canvas.width  = vp.width;
         canvas.height = vp.height;
+        // CSS size stays at container dims so layout is unchanged
+        canvas.style.width  = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+
         await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
       } catch { /* silent — show icon fallback */ }
     })();
     return () => { cancelled = true; };
   }, [url]);
-  return <canvas ref={canvasRef} style={{width:"100%",height:"100%",objectFit:"contain"}}/>;
+  return <canvas ref={canvasRef} style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }}/>;
 };
 
 // Full-screen modal preview
