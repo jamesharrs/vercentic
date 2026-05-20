@@ -3,8 +3,9 @@ const router    = express.Router();
 const path      = require('path');
 const fs        = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { query, insert, remove, getStore, saveStore } = require('../db/init');
+const { query, insert, remove, getStore } = require('../db/init');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
+const { indexAttachment } = require('../services/fileIndex');
 
 // Ensure persistent-volume upload dir exists (Railway: /data/uploads)
 const ATTACH_DIR = process.env.DATA_PATH
@@ -43,6 +44,8 @@ router.post('/upload', upload.single('file'), verifyMime, (req, res) => {
     created_at:     new Date().toISOString(),
   });
   res.status(201).json(att);
+  // Index in background — don't block the response
+  process.nextTick(() => indexAttachment(att).catch(e => console.warn('[fileIndex] upload index error:', e.message)));
 });
 
 // ── Serve file ────────────────────────────────────────────────────────────────

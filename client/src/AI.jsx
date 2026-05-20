@@ -913,6 +913,14 @@ SEMANTIC ID FILTER — use when APPLY_FILTER would return 0 results due to data 
 </APPLY_ID_FILTER>
 Use this when: geography mismatch (cities stored, country searched), complex cross-field logic, or communications/relationship data.
 
+FILE CONTENT SEARCH — two-tier search combining field data with document content:
+Use FILE_SEARCH when: user asks about skills, languages, experience, qualifications that may be in CVs/files but not in profile fields. Always do the field search first (APPLY_FILTER), then also emit FILE_SEARCH to find additional matches in documents.
+<FILE_SEARCH>
+{ "term": "Arabic", "categories": ["cv","cover_letter"], "reason": "searching for Arabic language skills in uploaded documents" }
+</FILE_SEARCH>
+Valid categories: "cv", "cover_letter", "portfolio", "right_to_work", "id_document", "contract", "reference", "other". Omit categories to search all files.
+After results are returned, present as: "X people have [term] in their profile fields. I also found Y additional people who mention it in their [CV/documents]." Then offer to combine both into a selection using APPLY_ID_FILTER.
+
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
 
@@ -2407,6 +2415,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  const parseFileSearch = (text) => {
+    const m = text.match(/<FILE_SEARCH>([\s\S]*?)<\/FILE_SEARCH>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
 
   const parseModifyReport = (text) => {
     const m = text.match(/<MODIFY_REPORT>([\s\S]*?)<\/MODIFY_REPORT>/);
@@ -2523,6 +2537,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<PROPOSE_ACTION>[\s\S]*?<\/PROPOSE_ACTION>/g,"")
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<APPLY_ID_FILTER>[\s\S]*?<\/APPLY_ID_FILTER>/g,"")
+    .replace(/<FILE_SEARCH>[\s\S]*?<\/FILE_SEARCH>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DB_QUERY>[\s\S]*?<\/DB_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
@@ -3037,6 +3052,54 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const applyIdFilter = parseApplyIdFilter(reply);
       if(applyFilter)   window.dispatchEvent(new CustomEvent("talentos:apply-filter",    { detail: applyFilter }));
       if(applyIdFilter) window.dispatchEvent(new CustomEvent("talentos:apply-id-filter", { detail: applyIdFilter }));
+
+      // FILE_SEARCH — search indexed file content, inject results, re-ask Claude to summarise
+      const fileSearch = parseFileSearch(reply);
+      if (fileSearch?.term) {
+        try {
+          const fsRes = await fetch('/api/file-index/search', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              term: fileSearch.term,
+              categories: fileSearch.categories || null,
+              environment_id: environment?.id,
+            }),
+          }).then(r => r.json());
+
+          if (fsRes.results?.length) {
+            const fileResultsText = fsRes.results.map(r =>
+              `- ${r.filename} (${r.category}): "${r.snippet}"`
+            ).join('\n');
+            // Re-call Claude with file search results injected
+            const followUp = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514', max_tokens: 600,
+                system: `You previously searched file documents for "${fileSearch.term}". Here are the matching files found:\n${fileResultsText}\n\nNow present these results clearly to the user, combining with any field-level results already shown. Format: "I found X people who mention [term] in their uploaded documents: [names/files]. [Optional: combine with field results if relevant]"`,
+                messages: [{ role: 'user', content: `Summarise the file search results for "${fileSearch.term}"` }],
+              }),
+            }).then(r => r.json());
+
+            const fileReply = followUp.content?.[0]?.text || '';
+            if (fileReply) {
+              setMessages(m => [...m, { role: 'assistant', content: fileReply }]);
+            }
+          } else {
+            // No file results — append a note
+            setMessages(m => {
+              const last = m[m.length - 1];
+              if (last?.role === 'assistant') {
+                return [...m.slice(0,-1), { ...last, content: last.content + `\n\nI also searched uploaded CVs and documents for "${fileSearch.term}" but found no additional matches.` }];
+              }
+              return m;
+            });
+          }
+        } catch(e) {
+          console.warn('[fileSearch] error:', e.message);
+        }
+      }
 
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);

@@ -341,6 +341,7 @@ app.use('/api/relationships',     require('./routes/relationships'));
 app.use('/api/notes',             require('./routes/notes'));
 app.use('/api/attachments',       require('./routes/attachments'));
 app.use('/api/file-types',        require('./routes/file_types'));
+app.use('/api/file-index',        require('./routes/file_index'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
 app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));
 app.use('/api/groups',            require('./routes/groups'));
@@ -602,6 +603,12 @@ if (process.env.NODE_ENV !== 'test') {
 
 initDB().then(async () => {
   storeReady = true;
+
+  // ── File index backfill — runs silently in background on startup ─────────
+  setTimeout(() => {
+    require('./services/fileIndex').backfillAll()
+      .catch(e => console.error('[fileIndex] startup backfill error:', e.message));
+  }, 5000); // wait 5s for store to fully settle
   const store = getStore();
   const fs   = require('fs');
   const path = require('path');
