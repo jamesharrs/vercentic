@@ -11673,18 +11673,52 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // Copilot filter events
   useEffect(() => {
     const handleApplyFilter = (e) => {
-      const { fieldKey, op, value } = e.detail || {};
-      if (!fieldKey) return;
-      const field = fields.find(f => f.api_key === fieldKey);
-      if (!field) {
-        setAiFilter({ type: 'pending', fieldKey, op: op || 'contains', value: value || '' });
+      const detail = e.detail || {};
+
+      // Handle both formats:
+      // Format A (new): { filters: [{field, op, value}], search? }  ← what AI actually emits
+      // Format B (old): { fieldKey, op, value }                     ← legacy single-filter format
+      const filtersArr = detail.filters || (detail.fieldKey ? [{ field: detail.fieldKey, op: detail.op, value: detail.value }] : null);
+
+      if (detail.clearFilters) {
+        setActiveFilters([]);
+        setAiFilter(null);
+        setPage(1);
         return;
       }
-      setActiveFilters(prev => {
-        if (prev.some(f => f.fieldId === field.id && f.value === value)) return prev;
-        return [...prev, { id: 'ai_' + Date.now(), fieldId: field.id, op: op || 'contains', value: value || '', ai: true }];
-      });
-      setPage(1);
+      if (detail.search !== undefined) {
+        setSearch(detail.search || '');
+        setPage(1);
+        return;
+      }
+      if (!filtersArr?.length) return;
+
+      // Map each filter to a field ID
+      const newFilters = [];
+      for (const f of filtersArr) {
+        const fieldKey = f.field || f.fieldKey;
+        if (!fieldKey) continue;
+        const field = fields.find(fd => fd.api_key === fieldKey);
+        if (!field) {
+          // Field not loaded yet — store as pending
+          setAiFilter({ type: 'pending', fieldKey, op: f.op || 'contains', value: f.value || '' });
+          continue;
+        }
+        if (!newFilters.some(nf => nf.fieldId === field.id && nf.value === f.value)) {
+          newFilters.push({ id: 'ai_' + Date.now() + Math.random(), fieldId: field.id, op: f.op || 'contains', value: f.value || '', ai: true });
+        }
+      }
+      if (newFilters.length) {
+        setActiveFilters(prev => {
+          const merged = [...prev];
+          for (const nf of newFilters) {
+            if (!merged.some(f => f.fieldId === nf.fieldId && f.value === nf.value)) merged.push(nf);
+          }
+          return merged;
+        });
+        setShowFilterPanel(true);
+        setPage(1);
+      }
     };
     const handleApplyIdFilter = (e) => {
       const { ids, label, reason } = e.detail || {};
