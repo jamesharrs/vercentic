@@ -200,7 +200,7 @@ if (process.env.NODE_ENV !== 'production') {
       const admin = (store.users || []).find(u => u.email === 'admin@talentos.io' && !u.deleted_at);
       if (admin) {
         req.session.userId     = admin.id;
-        req.session.tenantSlug = store.tenant?.slug || 'production';
+        req.session.tenantSlug = store.tenant?.slug || (process.env.NODE_ENV === 'production' ? 'production' : 'master');
         return req.session.save((err) => next()); // wait for save before continuing
       }
     } catch (e) { /* silent */ }
