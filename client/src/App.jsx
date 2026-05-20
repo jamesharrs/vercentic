@@ -2278,6 +2278,9 @@ activeNavRef.current = activeNav;
   useEffect(() => {
     if (!activeNav?.startsWith('resolve_')) return;
     if (!selectedEnv || !navObjects?.length) return;
+    // Don't resolve until environments have been confirmed by the server (loading===false)
+    // This prevents using a stale sessionStorage env ID before fetchEnvs corrects it
+    if (loading) return;
     const [, slug, number] = activeNav.split('_');
     if (!slug || !number) { setActiveNav('dashboard'); return; }
     // Clear resolve_ immediately so HMR remounts don't re-fire this effect
@@ -2289,7 +2292,7 @@ activeNavRef.current = activeNav;
       })
       .catch(() => setActiveNav('dashboard'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNav, selectedEnv?.id, navObjects?.length]);
+  }, [activeNav, selectedEnv?.id, navObjects?.length, loading]);
 
 
 
