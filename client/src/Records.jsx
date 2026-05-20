@@ -11418,6 +11418,20 @@ function buildListContext(object, records, total, fields) {
     lines.push("sample_names: " + names.join(", ") +
       (records.length > 10 ? " ... +" + (records.length - 10) + " more" : ""));
 
+  // Location-to-ID map — lets Copilot resolve geography mismatches (Paris→France) using APPLY_ID_FILTER
+  const locationIds = {};
+  records.forEach(r => {
+    const loc = r.data?.location;
+    if (loc && r.id) {
+      if (!locationIds[loc]) locationIds[loc] = [];
+      locationIds[loc].push(r.id);
+    }
+  });
+  if (Object.keys(locationIds).length > 0) {
+    lines.push("location_ids: " + Object.entries(locationIds)
+      .map(([loc, ids]) => `${loc}=[${ids.join(",")}]`).join("; "));
+  }
+
   return lines.join("\n");
 }
 

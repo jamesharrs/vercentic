@@ -916,6 +916,12 @@ Use this when: geography mismatch (cities stored, country searched), complex cro
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
 
+⚠️ PRIORITY RULE: If the user's request can be expressed as a field filter (location, status, department, person type etc.), ALWAYS use APPLY_FILTER or APPLY_ID_FILTER instead of SEARCH_QUERY. Only use SEARCH_QUERY for finding a specific named person/job (e.g. "find Ahmed", "search for Sarah Jones").
+
+GEOGRAPHY RULE: "candidates in France" / "people in Dubai" / "jobs in London" → NEVER use SEARCH_QUERY. Always:
+1. First try APPLY_FILTER with location contains [country/city]
+2. If you can see in the LIST STATE that locations are stored as cities (Paris, Lyon) when country (France) was asked, use the location_ids data from CURRENT LIST STATE to build APPLY_ID_FILTER directly — the location_ids line shows exactly which record IDs have each city. Example: if LIST STATE shows "location_ids: Paris=[id1,id2]; Lyon=[id3]" and user asks for France, immediately output APPLY_ID_FILTER with ids:[id1,id2,id3]. Do NOT do a DB search.
+
 IMPORTANT MATCHING RULES — CRITICAL:
 
 When the user asks which jobs a person IS ALREADY BEING CONSIDERED FOR, IS LINKED TO, IS APPLYING FOR, or IS IN A PIPELINE FOR:
