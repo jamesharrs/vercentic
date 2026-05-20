@@ -539,6 +539,8 @@ app.get('/api/health', (req, res) => {
   if (!storeReady) return res.status(503).json({ status: 'starting' });
   const { stats } = require('./utils/cache');
   res.set('Cache-Control', 'no-store');
+  const pg = require('./db/postgres');
+  const mem = process.memoryUsage();
   res.json({
     status:  'ok',
     version: '1.5.3',
@@ -546,6 +548,8 @@ app.get('/api/health', (req, res) => {
     cache:   stats(),
     region:  process.env.RAILWAY_REGION || 'local',
     env:     process.env.NODE_ENV || 'development',
+    db:      pg.isEnabled() ? 'postgresql' : 'json-file',
+    memory:  { rss_mb: Math.round(mem.rss/1024/1024), heap_mb: Math.round(mem.heapUsed/1024/1024) },
   });
 });
 
