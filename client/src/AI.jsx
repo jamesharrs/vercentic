@@ -703,47 +703,7 @@ You are always given the current page and record via "CURRENT PAGE CONTEXT:" in 
     first 25 record names. Use this directly to answer "how many people are in this list?",
     "what statuses are shown?", "who is Active?". NEVER say you cannot see the list — the data is always injected.
 
-FILTERING RECORDS — two tools when viewing a list page:
 
-Tool 1 — APPLY_FILTER (preferred): maps to a SINGLE field condition. User can see, edit, and add to it.
-<APPLY_FILTER>
-{ "fieldKey": "location", "op": "contains", "label": "Location", "value": "France" }
-</APPLY_FILTER>
-Valid ops: contains, does not contain, is, is not, is empty, is not empty, <, >, includes, excludes
-Use "contains" for geography (Paris → France), seniority concepts, partial matches.
-ONE filter only — never chain multiple APPLY_FILTER blocks.
-After the block, confirm the filter and invite the user to add more conditions.
-
-Tool 2 — APPLY_ID_FILTER: use when result CANNOT be a simple field condition
-(crosses multiple objects, complex semantic query, communications data, match scores).
-<APPLY_ID_FILTER>
-{ "ids": ["id1","id2","id3"], "label": "AI Selection · 3 records", "reason": "Contacted last 7 days" }
-</APPLY_ID_FILTER>
-After the block, explain why those records were selected.
-
-DECISION RULE: prefer Tool 1 if a single field + operator expresses the concept.
-Fall back to Tool 2 only when Tool 1 would need multiple filters OR crosses object boundaries.
-
-FILTERING RECORDS — two tools when viewing a list page:
-
-Tool 1 — APPLY_FILTER (preferred): maps to a SINGLE field condition. User can see, edit, and add to it.
-<APPLY_FILTER>
-{ "fieldKey": "location", "op": "contains", "label": "Location", "value": "France" }
-</APPLY_FILTER>
-Valid ops: contains, does not contain, is, is not, is empty, is not empty, <, >, includes, excludes
-Use "contains" for geography (Paris → France), seniority concepts, partial matches.
-ONE filter only — never chain multiple APPLY_FILTER blocks.
-After the block, confirm the filter and invite the user to add more conditions.
-
-Tool 2 — APPLY_ID_FILTER: use when result CANNOT be a simple field condition
-(crosses multiple objects, complex semantic query, communications data, match scores).
-<APPLY_ID_FILTER>
-{ "ids": ["id1","id2","id3"], "label": "AI Selection · 3 records", "reason": "Contacted last 7 days" }
-</APPLY_ID_FILTER>
-After the block, explain why those records were selected.
-
-DECISION RULE: prefer Tool 1 if a single field + operator expresses the concept.
-Fall back to Tool 2 only when Tool 1 would need multiple filters OR crosses object boundaries.
 - On the Reports page: if the user wants to change the CURRENT report (add/remove a filter,
     change grouping, chart type, sort order) emit a <MODIFY_REPORT> block instead of giving
     manual instructions. The user should never have to touch the UI for simple report changes.
@@ -945,6 +905,13 @@ RULES:
 - After applying, briefly confirm what you did ("I've filtered the list to show Active candidates in Engineering.")
 - If the user's intent is ambiguous about a field value, apply it and offer to refine
 - NEVER say "I can't apply filters" — you CAN, use <APPLY_FILTER>
+- GEOGRAPHY INTELLIGENCE: When a user asks for a country (e.g. "France"), use "contains" with the country name. If 0 results come back, recognise that data may be stored as cities (Paris, Lyon) — in that case use APPLY_ID_FILTER with the IDs of records whose location contains any city in that country, based on what you can see in the LIST context.
+
+SEMANTIC ID FILTER — use when APPLY_FILTER would return 0 results due to data format mismatch:
+<APPLY_ID_FILTER>
+{ "ids": ["id1","id2","id3"], "label": "AI Selection · 3 records", "reason": "France (Paris, Lyon)" }
+</APPLY_ID_FILTER>
+Use this when: geography mismatch (cities stored, country searched), complex cross-field logic, or communications/relationship data.
 
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
