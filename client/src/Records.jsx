@@ -5538,9 +5538,9 @@ const PdfViewer = ({ data }) => {
     (async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        // Use the bundled worker — CDN version won't match pdfjs-dist v5
-        const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url);
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl.toString();
+        // Vite-compatible worker URL — use ?url suffix to get the resolved path
+        const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
         const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
         const pdf = await loadingTask.promise;
         if (cancelled) return;
