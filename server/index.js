@@ -214,6 +214,17 @@ app.use(attachCsrfCookie);        // set vercentic_csrf cookie when user is auth
 app.use(verifyCsrf);              // enforce CSRF token on state-changing requests
 app.use(auditResponseMiddleware); // log 403 responses to security audit log
 
+// ── Store-ready guard — return 503 until DB is initialised ───────────────────
+// Prevents auth failures during the brief startup window before initDB() completes.
+// Client apiClient.js treats 503 as a retryable error, not a logout trigger.
+app.use((req, res, next) => {
+  if (storeReady) return next();
+  // Allow health check and auth routes through immediately
+  const alwaysAllow = ['/api/health', '/api/users/login', '/api/users/auth/login'];
+  if (alwaysAllow.some(p => req.path.startsWith(p))) return next();
+  res.status(503).json({ status: 'starting', message: 'Server initialising — please retry in a moment' });
+});
+
 // ── Portal session middleware — resolves x-portal-token to req.portalUser ────
 app.use((req, res, next) => {
   const token = req.headers['x-portal-token'];

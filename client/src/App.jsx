@@ -1950,6 +1950,20 @@ activeNavRef.current = activeNav;
     return () => { window.removeEventListener('talentos:unauthenticated', handler); clearTimeout(debounceTimer); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When server returns 503 (still starting up), retry loading after 2s
+  useEffect(() => {
+    let retryTimer = null;
+    const handler = () => {
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        // Re-trigger environment fetch by toggling a counter
+        setLoading(true);
+      }, 2000);
+    };
+    window.addEventListener('talentos:server-starting', handler);
+    return () => { window.removeEventListener('talentos:server-starting', handler); clearTimeout(retryTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // On startup: validate the stored session against the server.
   // If the server rejects it (stale after restart), clear and show login.
   // Uses a fire-and-forget fetch — no state gating, just cleans up if needed.

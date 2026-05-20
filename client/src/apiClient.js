@@ -80,8 +80,12 @@ const SILENT_404_PATTERNS = [
 
 function handleResponse(r, path = '') {
   if (r.status === 404 && SILENT_404_PATTERNS.some(p => path.includes(p))) return null;
+  if (r.status === 503) {
+    // Server still starting up — NOT a logout trigger. Retry after 2s.
+    window.dispatchEvent(new CustomEvent('talentos:server-starting'));
+    return Promise.resolve(null);
+  }
   if (r.status === 401) {
-    // Dispatch a global event so App can redirect to login without a hard reload
     window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
   }
   return r.json();
