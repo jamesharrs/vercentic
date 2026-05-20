@@ -561,6 +561,37 @@ if (process.env.NODE_ENV !== 'test') {
   try { const { createWss } = require('./ws'); createWss(httpServer); } catch(e) { console.warn('[ws] WebSocket unavailable:', e.message); }
   httpServer.listen(PORT, () => {
     console.log(`Vercentic API → http://localhost:${PORT}`);
+
+    // ── Keep-alive: prevent Railway from idling the container ────────────────
+    // Ping ourselves every 4 minutes so the process stays warm
+    if (process.env.NODE_ENV === 'production') {
+      const https = require('https');
+      const selfUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/health`
+        : null;
+
+      if (selfUrl) {
+        setInterval(() => {
+          https.get(selfUrl, res => {
+            console.log(`[keepalive] ping ${res.statusCode}`);
+          }).on('error', e => {
+            console.warn('[keepalive] ping failed:', e.message);
+          });
+        }, 4 * 60 * 1000); // every 4 minutes
+        console.log(`[keepalive] self-ping active → ${selfUrl}`);
+      }
+
+      // ── Memory watchdog: log heap usage every 10 minutes ─────────────────
+      setInterval(() => {
+        const mem = process.memoryUsage();
+        const heapMB  = Math.round(mem.heapUsed  / 1024 / 1024);
+        const rssMB   = Math.round(mem.rss        / 1024 / 1024);
+        const limitMB = 512; // Railway Hobby limit
+        const pct = Math.round(rssMB / limitMB * 100);
+        console.log(`[memory] RSS ${rssMB}MB / ${limitMB}MB (${pct}%) | heap ${heapMB}MB`);
+        if (pct > 85) console.warn('[memory] ⚠️  High memory — approaching Railway limit');
+      }, 10 * 60 * 1000);
+    }
   });
 }
 
