@@ -10320,6 +10320,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   const aiMeta = record.data?.[field.api_key + '__ai_meta'];
                   const READONLY_KEYS = ["id","created_at","updated_at"];
                   const isReadonly = READONLY_KEYS.includes(field.api_key);
+                  const isFilePreview = field.field_type === "file_preview";
                   const isPickerField = ["multi_lookup","lookup","people"].includes(field.field_type);
                   const isClickSave = CLICK_SAVE_TYPES.includes(field.field_type);
                   return (
@@ -10330,7 +10331,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                         background:isEditing?"#fafbff":"transparent", transition:"background .1s",
                         cursor: field.field_type==="table" && !isReadonly ? "pointer" : "default" }}
                       onClick={field.field_type==="table" && !isReadonly ? ()=>setTableModalField({field,value:originalVal}) : undefined}
-                      onMouseEnter={e=>{ if(!isEditing&&!isReadonly){e.currentTarget.style.background="#f0f4ff";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=1;}}}
+                      onMouseEnter={e=>{ if(!isEditing&&!isReadonly&&!isFilePreview){e.currentTarget.style.background="#f0f4ff";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=1;}}}
                       onMouseLeave={e=>{ e.currentTarget.style.background=isEditing?"#fafbff":"transparent";const btn=e.currentTarget.querySelector(".edit-hint");if(btn)btn.style.opacity=0;}}>
                       <div style={{ width:130, fontSize:12, fontWeight:600, color:C.text3, flexShrink:0 }}>{field.name}</div>
                       <div style={{ flex:1, minWidth:0 }}
@@ -10341,6 +10342,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                               onClick={()=>!isReadonly&&setTableModalField({field,value:originalVal})}>
                               <TableFieldValue field={field} value={originalVal}/>
                             </div>
+                          : isFilePreview
+                          ? <FilePreviewWidget field={field} recordId={record?.id}/>
                           : isPickerField
                           ? <PeoplePicker field={field} value={originalVal} onChange={v=>handleFieldEdit(field.api_key, v, field.field_type)}/>
                           : isEditing
@@ -10433,9 +10436,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               const val = isEditing ? editing[field.api_key] : originalVal;
               const READONLY_KEYS = ["id","created_at","updated_at"];
               const isReadonly = READONLY_KEYS.includes(field.api_key);
+              const isFilePreview = field.field_type === "file_preview";
               const isClickSave = CLICK_SAVE_TYPES.includes(field.field_type);
               const handleRowClick = () => {
-                if (isReadonly) return;
+                if (isReadonly || isFilePreview) return;
                 if (isTable) { setTableModalField({ field, value: originalVal }); return; }
                 if (!isEditing && !isClickSave) setEditing(prev=>({...prev,[field.api_key]:originalVal??null}));
               };
@@ -10453,6 +10457,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                   <div style={{ flex:1, minWidth:0 }}>
                     {isTable ? (
                       <TableFieldValue field={field} value={originalVal}/>
+                    ) : isFilePreview ? (
+                      <FilePreviewWidget field={field} recordId={record?.id}/>
                     ) : isEditing ? (
                       <FieldEditor field={field} value={val} env={environment?.id}
                         onChange={v=>{ if(isClickSave){ setEditing(p=>({...p,[field.api_key]:v})); handleSaveFieldValue(field.api_key, originalVal, v); } else setEditing(p=>({...p,[field.api_key]:v})); }}
@@ -10462,7 +10468,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                       <FieldValue field={field} value={val} allFieldValues={{...(record.data||{}), __record_id: record?.id}}/>
                     )}
                   </div>
-                  {!isReadonly && !isEditing && (
+                  {!isReadonly && !isEditing && !isFilePreview && (
                     <button className="edit-hint" onClick={e=>{ e.stopPropagation(); handleRowClick(); }}
                       style={{ background:"none", border:"none", cursor:"pointer", color:C.accent, opacity:0,
                         padding:"3px 6px", display:"flex", alignItems:"center", gap:4, fontSize:11,
