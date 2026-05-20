@@ -21,7 +21,9 @@ const EMPTY_STORE = () => ({
 });
 
 function tenantDbPath(slug) {
+  // In local dev, 'production' slug must never create a separate file — treat as master
   if (!slug || slug === 'master') return path.join(DATA_DIR, 'talentos.json');
+  if (slug === 'production' && process.env.NODE_ENV !== 'production') return path.join(DATA_DIR, 'talentos.json');
   return path.join(DATA_DIR, `tenant-${slug}.json`);
 }
 
