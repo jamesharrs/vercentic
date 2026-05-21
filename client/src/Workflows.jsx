@@ -2747,6 +2747,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [categories, setCategories]       = useState([]);
   const [expandedCat, setExpandedCat]     = useState(null);
 
+  // Defined here (before first use) to avoid temporal dead zone error
+  const PEOPLE_LINK_TYPES = ["people_link", "linked_person"];
+
   const peopleLinkWf = assignments.find(a =>
     PEOPLE_LINK_TYPES.includes(a.type) ||
     PEOPLE_LINK_TYPES.includes(a.assignment_type)
@@ -2966,8 +2969,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     return [d.first_name, d.last_name, d.email].filter(Boolean).join(" ").toLowerCase().includes(personSearch.toLowerCase());
   });
 
-  // Match both "people_link" (old) and "linked_person" (current) type names
-  const PEOPLE_LINK_TYPES = ["people_link", "linked_person"];
+  // Match both "people_link" (old) and "linked_person" (current) type names — declared earlier in component
   const peopleLinkOptions = allWorkflows.filter(w =>
     PEOPLE_LINK_TYPES.includes(w.workflow_type) && w.object_id === objectId && !w.deleted_at
   );
