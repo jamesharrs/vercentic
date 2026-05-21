@@ -1,10 +1,9 @@
 // client/src/EnterpriseSettings.jsx
 import React, { useState, useEffect, useCallback } from "react";
-import apiClient from './apiClient.js';
+import api from "./apiClient";
 
 const F = "'Geist', -apple-system, sans-serif";
 const C = { accent:'#4361EE', accentLight:'#EEF2FF', bg:'#F7F8FA', text1:'#111827', text2:'#374151', text3:'#6B7280', text4:'#9CA3AF', border:'#E5E7EB', green:'#0CAF77', amber:'#F59F00', red:'#EF4444', purple:'#7C3AED' };
-const api = apiClient;
 
 const PATHS = {
   plus:'M12 5v14M5 12h14', trash:'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',

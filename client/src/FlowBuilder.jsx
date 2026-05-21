@@ -1,6 +1,6 @@
 // client/src/FlowBuilder.jsx — Vercentic Flow Builder
 import { useState, useEffect, useCallback } from "react";
-import apiClient from "./apiClient.js";
+import api from "./apiClient";
 
 const F = "'DM Sans',-apple-system,sans-serif";
 const C = {
@@ -8,7 +8,6 @@ const C = {
   warning:"#F59E0B", text1:"#111827", text2:"#374151",
   text3:"#9CA3AF", border:"#E5E7EB", surface:"#ffffff",
 };
-const api = apiClient;
 
 const PATHS = {
   play:"M5 3l14 9-14 9V3z", clock:"M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-14v4l3 3",

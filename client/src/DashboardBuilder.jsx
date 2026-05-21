@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import apiClient from "./apiClient";
+import api from "./apiClient";
 
 const V = { bg:"var(--t-bg,#f5f5f7)", card:"var(--t-card,#fff)", accent:"var(--t-accent,#4f46e5)", text1:"var(--t-text1,#111827)", text2:"var(--t-text2,#374151)", text3:"var(--t-text3,#9ca3af)", border:"var(--t-border,#e5e7eb)", red:"#ef4444" };
 const F = "'DM Sans',-apple-system,sans-serif";

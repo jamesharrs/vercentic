@@ -1,7 +1,7 @@
 // Phase 2 additions — imported and re-exported by Campaigns.jsx
 // Channel templates, Automation rules, Calendar view
 import { useState, useEffect, useCallback } from "react";
-import apiClient from "./apiClient.js";
+import api from "./apiClient";
 const F = "'Space Grotesk','DM Sans',system-ui,sans-serif";
 const C = {
   bg:"var(--t-bg,#F0F2FF)", surface:"var(--t-surface,#fff)", s2:"var(--t-surface2,#F8F9FF)",
