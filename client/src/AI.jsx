@@ -4212,7 +4212,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         },
       }]);
       setPendingDashboard(null);
-      // Navigate to My Dashboards so user can see it immediately
+      // Navigate to My Dashboards and auto-select the newly created one
+      if (dash?.id) sessionStorage.setItem('vercentic_open_dashboard', dash.id);
       window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: "dashboard_custom" }));
     } catch (err) {
       setMessages(m => [...m, {
