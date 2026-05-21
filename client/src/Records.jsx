@@ -1208,9 +1208,23 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
 // Module-level environment ref — set by RecordsView on mount
 let _currentEnvId = null;
 
-// Module-level cache so PeoplePicker doesn't re-fetch on every open
-const _pickerCache = {};
+// Module-level pending filter — set by talentos:apply-filter when RecordsView isn't mounted yet.
+// RecordsView picks this up on mount and applies it immediately.
+// Keyed by object slug so the filter only applies to the intended list.
+let _pendingFilter = null; // { objectSlug: string, detail: object }
+
+// Global listener set up once — stores the filter so whichever RecordsView next mounts can pick it up.
+// This fires before RecordsView is even mounted when the Copilot emits NAVIGATE + APPLY_FILTER together.
+window.addEventListener('talentos:apply-filter', (e) => {
+  // Only store if no RecordsView is currently listening (i.e. we're navigating away from a list)
+  // RecordsView sets _pendingFilter = null when it claims it on mount, and null again when unmounted.
+  // We store unconditionally here; RecordsView will either pick it up on mount or handle it live.
+  if (e.detail && !_pendingFilter) {
+    _pendingFilter = { detail: e.detail, ts: Date.now() };
+  }
+});
 // Called by Settings after a field is saved so the picker re-fetches with new config
+const _pickerCache = {};
 export const clearPickerCache = () => { Object.keys(_pickerCache).forEach(k => delete _pickerCache[k]); };
 // Module-level cache for dataset options and skills
 const _datasetCache = {};
@@ -11765,7 +11779,21 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [activeTab, setActiveTab] = useState("records");
 
   // Listen for copilot filter commands — talentos:apply-filter
+  // Also check _pendingFilter on mount: when the Copilot fires NAVIGATE + APPLY_FILTER together,
+  // the filter event fires before RecordsView is mounted. The module-level listener stores it,
+  // and we consume it here once fields are loaded.
   useEffect(() => {
+    // Consume any pending filter that arrived before this component mounted.
+    // Only apply if it's fresh (< 10s old) to avoid stale filters on unrelated navigation.
+    if (_pendingFilter && (Date.now() - _pendingFilter.ts) < 10000) {
+      const pending = _pendingFilter;
+      _pendingFilter = null; // claim it
+      // Delay one tick so fields have populated from the load() call
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('talentos:apply-filter', { detail: pending.detail }));
+      }, 150);
+    }
+
     const handler = (e) => {
       const { search: q, filters, clearFilters, field, op, value } = e.detail || {};
 
