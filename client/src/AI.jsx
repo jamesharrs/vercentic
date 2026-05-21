@@ -911,7 +911,7 @@ RULES:
   * Rule: if you cannot point to a SPECIFIC field in the FIELDS list AND a SPECIFIC value that exactly matches what the user wants, use FILE_SEARCH instead.
   * BAD example: user asks "candidates with technical skills" → WRONG to filter by person_type=Candidate. RIGHT: FILE_SEARCH for "technical skills" in CVs + search skills field.
   * GOOD example: user asks "show candidates" → filter person_type is Candidate. Clear direct match.
-- GEOGRAPHY INTELLIGENCE: When a user asks for a country (e.g. "France"), use "contains" with the country name. If 0 results come back, recognise that data may be stored as cities (Paris, Lyon) — in that case use APPLY_ID_FILTER with the IDs of records whose location contains any city in that country, based on what you can see in the LIST context.
+- GEOGRAPHY INTELLIGENCE: When a user asks for a country/region (e.g. "UAE", "France"), use "contains" with the country name IMMEDIATELY — no questions. If 0 results come back after filtering, THEN automatically try city-level using APPLY_ID_FILTER. NEVER ask the user how their location data is stored upfront — just act.
 
 SEMANTIC ID FILTER — use when APPLY_FILTER would return 0 results due to data format mismatch:
 <APPLY_ID_FILTER>

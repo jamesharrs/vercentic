@@ -2449,8 +2449,28 @@ activeNavRef.current = activeNav;
   }, []);
 
   // talentos:navigate — generic nav event (e.g. "← Dashboard" back button)
+  // detail can be a string ("people", "obj_xxx") or an object ({ slug: "people", record_id: "..." })
   useEffect(() => {
-    const handler = (e) => { if (e.detail) switchNavRef.current(e.detail); };
+    const handler = (e) => {
+      if (!e.detail) return;
+      // Normalise to a string nav id
+      const raw = e.detail;
+      if (typeof raw === 'string') {
+        switchNavRef.current(raw);
+        return;
+      }
+      // Object form: { slug, destination, record_id }
+      const dest = raw.slug || raw.destination;
+      if (raw.record_id) {
+        window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: raw.record_id } }));
+        return;
+      }
+      if (!dest) return;
+      // Map slug to the right nav id
+      const { navObjects: objs } = filterNavRef.current || {};
+      const obj = objs?.find(o => o.slug === dest);
+      switchNavRef.current(obj ? `obj_${obj.id}` : dest);
+    };
     window.addEventListener("talentos:navigate", handler);
     return () => window.removeEventListener("talentos:navigate", handler);
   }, []);
