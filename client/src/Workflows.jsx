@@ -2747,7 +2747,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [categories, setCategories]       = useState([]);
   const [expandedCat, setExpandedCat]     = useState(null);
 
-  const peopleLinkWf = assignments.find(a => a.type === "people_link" || a.assignment_type === "people_link" || a.assignment_type === "linked_person")?.workflow;
+  const peopleLinkWf = assignments.find(a =>
+    PEOPLE_LINK_TYPES.includes(a.type) ||
+    PEOPLE_LINK_TYPES.includes(a.assignment_type)
+  )?.workflow;
   const plSteps      = peopleLinkWf?.steps || [];
   const hasStages    = plSteps.length > 0;
 
@@ -2963,7 +2966,11 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     return [d.first_name, d.last_name, d.email].filter(Boolean).join(" ").toLowerCase().includes(personSearch.toLowerCase());
   });
 
-  const peopleLinkOptions = allWorkflows.filter(w => w.workflow_type === "people_link" && w.object_id === objectId && !w.deleted_at);
+  // Match both "people_link" (old) and "linked_person" (current) type names
+  const PEOPLE_LINK_TYPES = ["people_link", "linked_person"];
+  const peopleLinkOptions = allWorkflows.filter(w =>
+    PEOPLE_LINK_TYPES.includes(w.workflow_type) && w.object_id === objectId && !w.deleted_at
+  );
 
   // Don't render anything if no Linked Person workflows exist for this object type
   if (!loading && peopleLinkOptions.length === 0) return null;
