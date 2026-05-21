@@ -48,6 +48,7 @@ const PATHS = {
   mapPin:     "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0zM12 7a3 3 0 110 6 3 3 0 010-6z",
   briefcase:  "M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2",
   settings:   "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
+  search:     "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
 };
 const Ic = ({ n, s=16, c="currentColor" }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -3027,7 +3028,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
           </select>
         )}
         <button
-          onClick={() => setAddingPerson(true)}
+          onClick={openAddPerson}
           disabled={!peopleLinkWf || plSteps.length === 0}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8,
             border:"none", background: (!peopleLinkWf||plSteps.length===0) ? "#e5e7eb" : "#7c3aed",
