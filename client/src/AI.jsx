@@ -3182,6 +3182,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         let statusLines = [];
         for (const obj of createObjBlocks) {
           const resolvedEnv = obj.environment_id === 'Production' ? envId : (obj.environment_id || envId);
+          const slug = obj.slug || obj.name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
           try {
             const res = await tFetch('/api/objects', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3189,15 +3190,43 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 environment_id: resolvedEnv,
                 name:        obj.name,
                 plural_name: obj.plural_name || obj.name + 's',
-                slug:        obj.slug || obj.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+                slug,
                 description: obj.description || '',
                 icon:        obj.icon || 'circle',
                 color:       obj.color || '#6366f1',
               }),
             });
-            createdObjId = res?.id;
-            statusLines.push(`✅ Object **${obj.name}** created`);
-          } catch(e) { statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`); }
+            if (res?.id) {
+              createdObjId = res.id;
+              statusLines.push(`✅ Object **${obj.name}** created`);
+            } else if (res?.error?.includes('already exists') || res?.error?.includes('slug')) {
+              // Object already exists — fetch its ID so fields can still be created
+              const existing = await tFetch(`/api/objects?environment_id=${resolvedEnv}`)
+                .then(r => (Array.isArray(r) ? r : []).find(o => o.slug === slug || o.name === obj.name))
+                .catch(() => null);
+              if (existing?.id) {
+                createdObjId = existing.id;
+                statusLines.push(`ℹ️ Object **${obj.name}** already exists — adding fields to it`);
+              } else {
+                statusLines.push(`❌ Object **${obj.name}** already exists and could not be found`);
+              }
+            } else {
+              statusLines.push(`❌ Object **${obj.name}** failed: ${res?.error || 'unknown error'}`);
+            }
+          } catch(e) {
+            // tFetch throws on non-2xx — try to recover by looking up existing object
+            try {
+              const existing = await tFetch(`/api/objects?environment_id=${resolvedEnv}`)
+                .then(r => (Array.isArray(r) ? r : []).find(o => o.slug === slug || o.name === obj.name))
+                .catch(() => null);
+              if (existing?.id) {
+                createdObjId = existing.id;
+                statusLines.push(`ℹ️ Object **${obj.name}** already exists — adding fields to it`);
+              } else {
+                statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`);
+              }
+            } catch { statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`); }
+          }
         }
         for (const fld of createFldBlocks) {
           // Resolve object_id — may be a slug like "events" or an actual UUID
@@ -3216,35 +3245,62 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           if (!objId || objId === fld.object_id) objId = createdObjId || objId;
           if (!objId) { statusLines.push(`❌ Field **${fld.name}** — no object ID`); continue; }
           try {
-            await tFetch('/api/fields', {
+            const fieldRes = await tFetch('/api/fields', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                object_id:    objId,
-                name:         fld.name,
-                api_key:      fld.api_key || fld.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
-                field_type:   fld.field_type || 'text',
-                is_required:  fld.is_required || false,
-                show_in_list: fld.show_in_list || false,
-                description:  fld.description || '',
-                options:      fld.options || [],
+                object_id:      objId,
+                environment_id: envId,
+                name:           fld.name,
+                api_key:        fld.api_key || fld.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),
+                field_type:     fld.field_type || 'text',
+                is_required:    fld.is_required || false,
+                show_in_list:   fld.show_in_list !== undefined ? fld.show_in_list : false,
+                description:    fld.description || '',
+                options:        Array.isArray(fld.options) ? fld.options : [],
               }),
             });
-            statusLines.push(`✅ Field **${fld.name}** added`);
-          } catch(e) { statusLines.push(`❌ Field **${fld.name}** failed: ${e.message}`); }
+            if (fieldRes?.id) {
+              statusLines.push(`✅ Field **${fld.name}** added`);
+            } else if (fieldRes?.error?.includes('already exists') || fieldRes?.error?.includes('api_key')) {
+              statusLines.push(`ℹ️ Field **${fld.name}** already exists — skipped`);
+            } else {
+              statusLines.push(`❌ Field **${fld.name}** failed: ${fieldRes?.error || 'unknown'}`);
+            }
+          } catch(e) {
+            // 409 = already exists, treat as success
+            if (e.message?.includes('409') || e.message?.includes('already exists')) {
+              statusLines.push(`ℹ️ Field **${fld.name}** already exists — skipped`);
+            } else {
+              statusLines.push(`❌ Field **${fld.name}** failed: ${e.message}`);
+            }
+          }
         }
         if (statusLines.length) {
-          const errors = statusLines.filter(l => l.startsWith('❌'));
+          const errors    = statusLines.filter(l => l.startsWith('❌'));
           const successes = statusLines.filter(l => l.startsWith('✅'));
-          const objCreated = successes.find(l => l.includes('Object'));
-          const fieldCount = successes.filter(l => l.includes('Field')).length;
+          const skipped   = statusLines.filter(l => l.startsWith('ℹ️'));
+          const objLine   = [...successes, ...skipped].find(l => l.includes('Object') || l.includes('already exists — adding'));
+          const fieldSucc = successes.filter(l => l.includes('Field')).length;
+          const fieldSkip = skipped.filter(l => l.includes('Field')).length;
+          const fieldCount = fieldSucc + fieldSkip;
           let summary = '';
-          if (objCreated && fieldCount > 0) {
-            const objName = objCreated.match(/\*\*([^*]+)\*\*/)?.[1] || 'object';
-            summary = `✅ **${objName}** created with **${fieldCount} field${fieldCount !== 1 ? 's' : ''}**. You can now find it in the Data Model and start adding records.`;
+          if (objLine && fieldCount > 0) {
+            const objName = objLine.match(/\*\*([^*]+)\*\*/)?.[1] || 'object';
+            const alreadyExisted = objLine.startsWith('ℹ️');
+            const fieldNote = fieldSkip > 0 && fieldSucc === 0
+              ? `${fieldSkip} field${fieldSkip !== 1 ? 's' : ''} already existed`
+              : fieldSucc > 0 && fieldSkip > 0
+                ? `${fieldSucc} field${fieldSucc !== 1 ? 's' : ''} added, ${fieldSkip} already existed`
+                : `${fieldSucc} field${fieldSucc !== 1 ? 's' : ''} added`;
+            summary = alreadyExisted
+              ? `ℹ️ **${objName}** already existed — ${fieldNote}. Find it in the Data Model.`
+              : `✅ **${objName}** created with ${fieldNote}. You can now find it in the Data Model and start adding records.`;
           } else if (fieldCount > 0) {
             summary = `✅ **${fieldCount} field${fieldCount !== 1 ? 's' : ''}** added successfully.`;
-          } else {
+          } else if (successes.length > 0) {
             summary = successes.join('\n');
+          } else {
+            summary = skipped.join('\n') || 'Nothing to do.';
           }
           if (errors.length) summary += '\n\n' + errors.join('\n');
           setMessages(m => [...m, { role: 'assistant', content: summary, ts: new Date() }]);
