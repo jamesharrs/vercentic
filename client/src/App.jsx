@@ -1744,23 +1744,21 @@ function App({ onEnvReady }) {
     return _sessionPerms.some(p => p.object_slug === objectSlug && p.action === action && p.allowed);
   };
   const [environments, setEnvironments] = useState([]);
-  // Seed selectedEnv from sessionStorage so Vite HMR doesn't reset it to null.
-  // sessionStorage persists across hot reloads (same tab) but not page refreshes.
-  // NOTE: this is just an optimistic seed — fetchEnvs() will correct it if the ID
-  // is stale (e.g. after switching between local and Railway contexts).
+  // Seed selectedEnv from localStorage so it survives page refreshes.
+  // fetchEnvs() will correct it if the ID is stale.
   const [selectedEnv, setSelectedEnv] = useState(() => {
     try {
-      const cached = sessionStorage.getItem('vercentic_selected_env');
+      const cached = localStorage.getItem('vercentic_selected_env');
       return cached ? JSON.parse(cached) : null;
     } catch { return null; }
   });
   const [selectedObject, setSelectedObject] = useState(null);
   const [allObjects, setAllObjects] = useState([]);
 
-  // Persist selectedEnv to sessionStorage so HMR remounts start with the right env
+  // Persist selectedEnv to localStorage so it survives page refreshes
   useEffect(() => {
     if (!selectedEnv) return;
-    try { sessionStorage.setItem('vercentic_selected_env', JSON.stringify(selectedEnv)); } catch {}
+    try { localStorage.setItem('vercentic_selected_env', JSON.stringify(selectedEnv)); } catch {}
   }, [selectedEnv?.id]);
   // ── URL-based routing helpers ──────────────────────────────────────────────
   // Convert a URL path to an activeNav value (called on mount + popstate)
