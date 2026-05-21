@@ -36,11 +36,52 @@ function Inp({ val, onChange, placeholder, type="text", style={} }) {
   return <input value={val??""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
     style={{ width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${V.border}`,fontSize:13,fontFamily:F,color:V.text1,background:V.card,outline:"none",...style }}/>;
 }
-function Sel({ val, onChange, opts, placeholder="" }) {
-  return <select value={val??""} onChange={e=>onChange(e.target.value)} style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${V.border}`,fontSize:13,fontFamily:F,color:V.text1,background:V.card,outline:"none" }}>
-    {placeholder&&<option value="">{placeholder}</option>}
-    {opts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>;
+
+// Styled searchable dropdown — matches the app's existing Select/dropdown component style
+function Sel({ val, onChange, opts=[], placeholder="" }) {
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const ref = React.useRef(null);
+  const label = opts.find(o=>String(o.value)===String(val))?.label || placeholder || "Select…";
+  const filtered = q ? opts.filter(o=>o.label?.toLowerCase().includes(q.toLowerCase())) : opts;
+  React.useEffect(()=>{
+    if(!open){setQ(""); return;}
+    const handler=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[open]);
+  return (
+    <div ref={ref} style={{ position:"relative",width:"100%" }}>
+      <button onClick={()=>setOpen(o=>!o)} style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${open?V.accent:V.border}`,background:V.card,fontSize:13,fontFamily:F,color:val?V.text1:V.text3,cursor:"pointer",textAlign:"left",outline:"none",boxSizing:"border-box",transition:"border-color 0.12s" }}>
+        <span style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1 }}>{label}</span>
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink:0,marginLeft:4,opacity:0.5,transform:open?"rotate(180deg)":"none",transition:"transform 0.15s" }}><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {open&&(
+        <div style={{ position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:999,background:V.card,border:`1.5px solid ${V.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",overflow:"hidden",maxHeight:240,display:"flex",flexDirection:"column" }}>
+          {opts.length>5&&(
+            <div style={{ padding:"8px 8px 4px" }}>
+              <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search…"
+                style={{ width:"100%",boxSizing:"border-box",padding:"6px 10px",borderRadius:6,border:`1.5px solid ${V.border}`,fontSize:12,fontFamily:F,outline:"none",background:V.bg,color:V.text1 }}/>
+            </div>
+          )}
+          <div style={{ overflowY:"auto",flex:1 }}>
+            {filtered.length===0&&<div style={{ padding:"10px 12px",fontSize:12,color:V.text3 }}>No results</div>}
+            {filtered.map(o=>{
+              const active=String(o.value)===String(val);
+              return <button key={o.value} onClick={()=>{ onChange(o.value); setOpen(false); }}
+                style={{ width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",border:"none",background:active?V.accentLight||"#eef2ff":"transparent",color:active?V.accent:V.text1,fontSize:13,fontFamily:F,cursor:"pointer",textAlign:"left",transition:"background 0.1s" }}
+                onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="#f5f5f7"; }}
+                onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}>
+                {active&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={V.accent} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>}
+                {!active&&<span style={{ width:12 }}/>}
+                {o.label}
+              </button>;
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 function Pill({ label, active, onClick, color }) {
   const c = color || V.accent;
@@ -65,8 +106,12 @@ function PanelPreview({ panel, liveData }) {
     const { chartData=[], chartType="bar" } = liveData;
     return <div style={wrap}>{titleEl}<div style={{ flex:1,minHeight:0 }}>
       <ResponsiveContainer width="100%" height="100%">
-        {chartType==="pie"?<PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%">{chartData.map((_,i)=><Cell key={i} fill={CHART_PALETTES[i%CHART_PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:11,fontFamily:F }}/></PieChart>
-        :<BarChart data={chartData} margin={{ top:4,right:4,bottom:0,left:-20 }}><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F }}/><YAxis tick={{ fontSize:10,fontFamily:F }}/><Tooltip contentStyle={{ fontSize:11,fontFamily:F }}/><Bar dataKey="value" fill={V.accent} radius={[4,4,0,0]}/></BarChart>}
+        {chartType==="pie"
+          ? <PieChart><Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%">{chartData.map((_,i)=><Cell key={i} fill={CHART_PALETTES[i%CHART_PALETTES.length]}/>)}</Pie><Tooltip contentStyle={{ fontSize:11,fontFamily:F }}/></PieChart>
+          : chartType==="line"
+            ? <LineChart data={chartData} margin={{ top:4,right:4,bottom:0,left:-20 }}><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F }}/><YAxis tick={{ fontSize:10,fontFamily:F }}/><Tooltip contentStyle={{ fontSize:11,fontFamily:F }}/><Line type="monotone" dataKey="value" stroke={V.accent} strokeWidth={2} dot={{ fill:V.accent,r:3 }} activeDot={{ r:5 }}/></LineChart>
+            : <BarChart data={chartData} margin={{ top:4,right:4,bottom:0,left:-20 }}><XAxis dataKey="name" tick={{ fontSize:10,fontFamily:F }}/><YAxis tick={{ fontSize:10,fontFamily:F }}/><Tooltip contentStyle={{ fontSize:11,fontFamily:F }}/><Bar dataKey="value" fill={V.accent} radius={[4,4,0,0]}/></BarChart>
+        }
       </ResponsiveContainer>
     </div></div>;
   }
@@ -142,7 +187,7 @@ function FilterBuilder({ config, fields, set }) {
   const needsValue = !NO_VALUE_OPS.includes(op);
   return <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
     <label style={{ fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:"0.05em" }}>Filter</label>
-    <Sel val={config.filter_field||""} onChange={v=>set("filter_field",v)} placeholder="No filter" opts={[{value:"",label:"No filter"},...fields.map(f=>({value:f.api_key,label:f.name}))]} />
+    <Sel val={config.filter_field||""} onChange={v=>set("filter_field",v)} placeholder="No filter" opts={fields.map(f=>({value:f.api_key,label:f.name}))} />
     {config.filter_field&&<>
       <Sel val={op} onChange={v=>set("filter_op",v)} opts={FILTER_OPS}/>
       {needsValue&&(selOpts
