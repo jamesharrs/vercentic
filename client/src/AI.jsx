@@ -2204,7 +2204,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           if(sec==='datamodel'){
             const objList = (navObjects||[]).map(o=>`• ${o.name} (id: ${o.id})`).join('\n');
             const envId = environment?.id || '';
-            return `You're in **Data Model**. Environment ID: ${envId}\n\nAvailable objects:\n${objList||'(none yet)'}\n\nI can help you:\n• Create new objects or custom fields\n• Explain field types and when to use them\n• Suggest a field structure for your use case\n\nTo create a field use PROPOSE_ACTION with action_type "create_field" and include the object_id from the list above.\nTo create an object use action_type "create_object" with environment_id: "${envId}".\n\nWhat would you like to configure?`;
+            return `You're in **Data Model**. Environment ID: ${envId}\n\nAvailable objects:\n${objList||'(none yet)'}\n\nI can help you:\n• Create new objects or custom fields\n• Explain field types and when to use them\n• Suggest a field structure for your use case\n\nTo create an object AND its fields in one step, output a CREATE_OBJECT block immediately followed by CREATE_FIELD blocks (using the new object's slug as object_id — the system resolves slugs automatically):\n\n<CREATE_OBJECT>\n{"name":"Events","plural_name":"Events","slug":"events","environment_id":"${envId}","icon":"calendar","color":"#6366f1"}\n</CREATE_OBJECT>\n<CREATE_FIELD>\n{"object_id":"events","name":"Event Name","api_key":"event_name","field_type":"text","is_required":true,"show_in_list":true}\n</CREATE_FIELD>\n<CREATE_FIELD>\n{"object_id":"events","name":"Status","api_key":"status","field_type":"select","options":["Draft","Active","Completed"]}\n</CREATE_FIELD>\n\nIMPORTANT: Output ALL blocks (object + all fields) in a SINGLE response — do NOT stop after the object and wait. Use the object's slug (lowercase_with_underscores) as the object_id in CREATE_FIELD blocks.\n\nTo create ONLY a field on an EXISTING object, use PROPOSE_ACTION with action_type "create_field" and include the object_id UUID from the list above.\nTo create ONLY an object with no fields, use action_type "create_object".\n\nWhat would you like to configure?`;
           }
           if(sec==='users')       return `You're in **Users**.\n\nI can help you:\n• Invite a new user and set their role\n• Explain the difference between roles\n• Suggest the right permissions for a use case\n\nWhat would you like to do?`;
           if(sec==='roles')       return `You're in **Roles & Permissions**.\n\nI can help you:\n• Create a new role\n• Explain what each permission controls\n• Suggest role configurations for your team structure\n\nWhat would you like to configure?`;
@@ -3203,11 +3203,17 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           // Resolve object_id — may be a slug like "events" or an actual UUID
           let objId = fld.object_id;
           if (objId && !objId.includes('-')) {
-            // It's a slug — find the real object ID
+            // It's a slug — fetch fresh objects (includes the one just created)
             const objs = await tFetch(`/api/objects?environment_id=${envId}`).then(r => Array.isArray(r) ? r : []).catch(() => []);
-            const match = objs.find(o => o.slug === objId || o.name.toLowerCase() === objId.toLowerCase());
+            const match = objs.find(o =>
+              o.slug === objId ||
+              o.slug === objId.toLowerCase().replace(/[^a-z0-9]+/g,'_') ||
+              o.name.toLowerCase() === objId.toLowerCase()
+            );
             objId = match?.id || createdObjId || objId;
           }
+          // Also try using createdObjId if object_id was empty or unresolvable
+          if (!objId || objId === fld.object_id) objId = createdObjId || objId;
           if (!objId) { statusLines.push(`❌ Field **${fld.name}** — no object ID`); continue; }
           try {
             await tFetch('/api/fields', {
@@ -3227,7 +3233,23 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           } catch(e) { statusLines.push(`❌ Field **${fld.name}** failed: ${e.message}`); }
         }
         if (statusLines.length) {
-          setMessages(m => [...m, { role: 'assistant', content: statusLines.join('\n'), ts: new Date() }]);
+          const errors = statusLines.filter(l => l.startsWith('❌'));
+          const successes = statusLines.filter(l => l.startsWith('✅'));
+          const objCreated = successes.find(l => l.includes('Object'));
+          const fieldCount = successes.filter(l => l.includes('Field')).length;
+          let summary = '';
+          if (objCreated && fieldCount > 0) {
+            const objName = objCreated.match(/\*\*([^*]+)\*\*/)?.[1] || 'object';
+            summary = `✅ **${objName}** created with **${fieldCount} field${fieldCount !== 1 ? 's' : ''}**. You can now find it in the Data Model and start adding records.`;
+          } else if (fieldCount > 0) {
+            summary = `✅ **${fieldCount} field${fieldCount !== 1 ? 's' : ''}** added successfully.`;
+          } else {
+            summary = successes.join('\n');
+          }
+          if (errors.length) summary += '\n\n' + errors.join('\n');
+          setMessages(m => [...m, { role: 'assistant', content: summary, ts: new Date() }]);
+          // Refresh the objects list so the new object appears in the nav
+          window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
         }
       }
 
