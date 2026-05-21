@@ -299,7 +299,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const user = req.currentUser;
   if (!user) return res.status(401).json({ error: 'Unauthenticated' });
-  const { name, description, icon, color, environment_id, access, is_default } = req.body;
+  const { name, description, icon, color, environment_id, access, is_default, panels } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const store = getStore();
   if (!store.dashboards) store.dashboards = [];
@@ -307,8 +307,29 @@ router.post('/', (req, res) => {
   const now = new Date().toISOString();
   const dash = { id: uuidv4(), name, description: description||'', icon: icon||'layout', color: color||'#4f46e5', environment_id: environment_id||'', is_default: Boolean(is_default), created_by: user.id, access: access || { type: 'everyone', role_ids: [], editor_role_ids: [] }, created_at: now, updated_at: now };
   store.dashboards.push(dash);
+
+  // ── Insert panels if provided (e.g. from Copilot CREATE_DASHBOARD) ──────────
+  if (Array.isArray(panels) && panels.length > 0) {
+    if (!store.dashboard_panels) store.dashboard_panels = [];
+    panels.forEach((p, i) => {
+      const panel = {
+        id:           p.id || uuidv4(),
+        dashboard_id: dash.id,
+        type:         p.type || 'stat',
+        title:        p.title || '',
+        config:       p.config || {},
+        position:     p.position || { x: 0, y: i, w: 6, h: 4 },
+        created_at:   now,
+        updated_at:   now,
+      };
+      store.dashboard_panels.push(panel);
+    });
+  }
+
   saveStore();
-  res.status(201).json(dash);
+  // Return dashboard with its panels so the client can show them immediately
+  const savedPanels = (store.dashboard_panels || []).filter(p => p.dashboard_id === dash.id && !p.deleted_at);
+  res.status(201).json({ ...dash, panels: savedPanels });
 });
 
 router.patch('/:id', (req, res) => {
