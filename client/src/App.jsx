@@ -1930,22 +1930,36 @@ activeNavRef.current = activeNav;
     let debounceTimer = null;
     const handler = () => {
       // In dev: debounce 401s — a server restart causes a brief 401 storm.
-      // If we still get a 401 after 2s, the session is genuinely gone → show login.
+      // If we still get a 401 after 5s, the session is genuinely gone → show login.
+      // 5s gives nodemon/manual restarts enough headroom to come back online before
+      // we nuke the user's session.
       // In prod: redirect immediately.
       if (!import.meta.env.PROD) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           fetch('/api/users/me', { credentials: 'include' })
-            .then(r => { if (r.status === 401) { try { localStorage.removeItem(_sessionKey()); } catch {} startTransition(() => setSession(null)); } })
+            .then(r => {
+              if (r.status === 401) {
+                try { localStorage.removeItem(_sessionKey()); } catch {}
+                startTransition(() => setSession(null));
+                try { window.__toast?.alert('Your session expired — please log in again.'); } catch {}
+              }
+            })
             .catch(() => {});
-        }, 2000);
+        }, 5000);
         return;
       }
       try { localStorage.removeItem(_sessionKey()); } catch {}
       startTransition(() => setSession(null));
+      try { window.__toast?.alert('Your session expired — please log in again.'); } catch {}
     };
     window.addEventListener('talentos:unauthenticated', handler);
-    return () => { window.removeEventListener('talentos:unauthenticated', handler); clearTimeout(debounceTimer); };
+    window.addEventListener('talentos:session-lost', handler);
+    return () => {
+      window.removeEventListener('talentos:unauthenticated', handler);
+      window.removeEventListener('talentos:session-lost', handler);
+      clearTimeout(debounceTimer);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dev auto-session sync — on every page load in dev, verify server session and sync localStorage.

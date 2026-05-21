@@ -137,9 +137,33 @@ if (!sessionStore) {
     const FileStore = require('session-file-store')(session);
     const sessDir = require('path').join(__dirname, '../data/sessions');
     if (!require('fs').existsSync(sessDir)) require('fs').mkdirSync(sessDir, { recursive: true });
+
+    // ── Startup cleanup: prune session files older than the TTL ──────────────
+    // file-store doesn't prune on read — old files accumulate forever.
+    // Sweep once on boot so the directory stays tidy.
+    try {
+      const fsMod = require('fs');
+      const pathMod = require('path');
+      const ttlMs = (process.env.NODE_ENV === 'production' ? 24 * 60 * 60 : 30 * 24 * 60 * 60) * 1000;
+      const cutoff = Date.now() - ttlMs;
+      const files = fsMod.readdirSync(sessDir);
+      let pruned = 0;
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        const fp = pathMod.join(sessDir, f);
+        try {
+          const stat = fsMod.statSync(fp);
+          if (stat.mtimeMs < cutoff) { fsMod.unlinkSync(fp); pruned++; }
+        } catch {/* ignore individual file errors */}
+      }
+      if (pruned > 0) console.log(`[session] Pruned ${pruned} expired session file(s)`);
+    } catch (e) {
+      console.warn('[session] Cleanup pass failed:', e.message);
+    }
+
     sessionStore = new FileStore({
       path:    sessDir,
-      ttl:     process.env.NODE_ENV === 'production' ? 8 * 60 * 60 : 30 * 24 * 60 * 60, // 8h prod / 30d dev
+      ttl:     process.env.NODE_ENV === 'production' ? 24 * 60 * 60 : 30 * 24 * 60 * 60, // 24h prod / 30d dev
       retries: 0,
       logFn:   () => {},      // suppress verbose file-store logs
     });
@@ -158,13 +182,16 @@ app.use(session({
   })(),
   resave: false,
   saveUninitialized: false,
+  rolling: true,                  // ← Sliding window: every authed request resets the cookie expiry,
+                                  //   so an active user never gets logged out mid-session.
   cookie: {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     // Do NOT set domain when Vercel and Railway are on different root domains —
     // the browser will reject cross-domain cookies. Let it default to the Railway origin.
-    maxAge:   process.env.NODE_ENV === 'production' ? 8 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+    maxAge:   process.env.NODE_ENV === 'production' ? 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+                                  // 24h prod / 30d dev (with rolling: true, idle window not total session)
   },
 }));
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
