@@ -2974,8 +2974,33 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     PEOPLE_LINK_TYPES.includes(w.workflow_type) && w.object_id === objectId && !w.deleted_at
   );
 
-  // Don't render anything if no Linked Person workflows exist for this object type
-  if (!loading && peopleLinkOptions.length === 0) return null;
+  // If still loading, render nothing to avoid flash
+  if (loading) return null;
+
+  // No linked-person workflows for this object type — show a compact "set up" prompt
+  // rather than silently hiding the widget (which confuses users on Talent Pools, Events etc.)
+  if (peopleLinkOptions.length === 0) {
+    if (toolbarMode) {
+      // In toolbar mode just show a quiet indicator — no inline setup prompt
+      return null;
+    }
+    return (
+      <div style={{ padding:"14px 18px", borderRadius:10, border:`1.5px dashed ${C.border}`,
+        background:"#fafafe", display:"flex", alignItems:"center", gap:10, color:C.text3 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span style={{ fontSize:12 }}>
+          No linked-person workflow for this object.{" "}
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:"workflows"}))}
+            style={{ background:"none",border:"none",color:"#7c3aed",cursor:"pointer",fontSize:12,fontWeight:600,padding:0,textDecoration:"underline" }}>
+            Create one in Workflows
+          </button>
+        </span>
+      </div>
+    );
+  }
 
   // ── Toolbar (compact) mode — just the workflow name + gear + add button ──
   if (toolbarMode) {

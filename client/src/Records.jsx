@@ -1850,13 +1850,18 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
 
 
 export const recordTitle = (record, fields) => {
-  const nameField = fields.find(f=>["first_name","name","job_title","pool_name","title"].includes(f.api_key));
-  const lastField = fields.find(f=>f.api_key==="last_name");
+  // Ordered priority list — first match wins
+  const NAME_KEYS = ["first_name","name","job_title","pool_name","title","event_name","full_name","label","subject"];
+  const nameField = fields.find(f => NAME_KEYS.includes(f.api_key));
+  const lastField = fields.find(f => f.api_key === "last_name");
   if (!record?.data) return "Untitled";
   const first = nameField ? record.data[nameField.api_key] : null;
   const last  = lastField ? record.data[lastField.api_key]  : null;
   if (first && last) return `${first} ${last}`;
-  return first || record.id?.slice(0,8) || "Untitled";
+  if (first) return first;
+  // Fallback: first non-empty string value in the record data
+  const fallback = Object.values(record.data || {}).find(v => typeof v === "string" && v.trim());
+  return fallback || record.id?.slice(0,8) || "Untitled";
 };
 
 const recordSubtitle = (record, fields) => {
