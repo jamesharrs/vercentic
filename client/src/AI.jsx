@@ -1023,7 +1023,9 @@ RULES:
 - Valid Job status: Draft, Open, On Hold, Filled, Cancelled (default Open)
 - Valid work_type: On-site, Remote, Hybrid
 - Valid employment_type: Full-time, Part-time, Contract, Internship, Freelance
-- Always include <CREATE_RECORD> when you have at least the mandatory fields- Be conversational and efficient
+- For custom objects (not people/jobs/talent-pools), use the object_slug shown in CURRENT OBJECT context (e.g. "tests", "events"). The object_slug is ALWAYS provided in context when on a custom object list page.
+- Always include <CREATE_RECORD> when you have at least the mandatory fields — NEVER use PROPOSE_ACTION with action_type "create_record"
+- Be conversational and efficient
 
 ADMIN ACTIONS — USER & ROLE MANAGEMENT:
 You can also help admins create users and roles. Use the same conversational collect-then-confirm pattern.
@@ -1951,6 +1953,14 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         :activeNav?.startsWith('record_')?'Record detail view'
         :activeNav;
       parts.push('USER IS CURRENTLY ON: '+lbl);
+      // Inject object slug when on a custom object list — so the model can use CREATE_RECORD with the right slug
+      if(activeNav?.startsWith('obj_')){
+        const o=(navObjects||[]).find(o=>'obj_'+o.id===activeNav);
+        if(o){
+          parts.push(`CURRENT OBJECT: ${o.plural_name||o.name} | slug: "${o.slug}" | id: ${o.id}`);
+          parts.push(`To create a new ${o.name}, use: <CREATE_RECORD>{"object_slug":"${o.slug}","data":{...fields...}}</CREATE_RECORD>`);
+        }
+      }
     }
     if(currentRecord&&currentObject){
       const d=currentRecord.data||{};
@@ -3724,10 +3734,35 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           resultMsg = `**Done** — Object **${objName}** created`;
         }
 
+      } else if (action_type === 'create_record') {
+        // Fallback handler — model used PROPOSE_ACTION instead of CREATE_RECORD block.
+        // Route through the standard record creation path.
+        const slug = payload?.object_slug || payload?.object_type;
+        const obj = slug ? objects.find(o => o.slug === slug) : null;
+        if (!obj) {
+          resultMsg = `**Error** — Could not find object "${slug}". Please try again.`;
+        } else {
+          const data = payload?.data || {};
+          const created = await api.post('/records', {
+            object_id: obj.id,
+            environment_id: environment?.id,
+            data,
+            created_by: 'Copilot',
+          });
+          if (!created?.id) throw new Error(created?.error || 'Record creation failed');
+          const d = data;
+          const name = [d.first_name, d.last_name].filter(Boolean).join(' ')
+            || d.job_title || d.pool_name || d.name || d.title
+            || Object.values(d).find(v => typeof v === 'string' && v.trim()) || 'Record';
+          resultMsg = `**Done** — **${name}** created in ${obj.plural_name || obj.name}`;
+          // Fire live-update event so the list refreshes
+          window.dispatchEvent(new CustomEvent('talentos:recordCreated', { detail: { objectId: obj.id, objectSlug: obj.slug, recordId: created.id } }));
+        }
+
       } else {
         // Unknown action type — log it
         console.warn('[Copilot] Unknown action_type:', action_type, payload);
-        resultMsg = `**Done** — Done — action completed successfully.`;
+        resultMsg = `**Done** — action completed.`;
       }
 
       setMessages(m => [...m, { role: 'assistant', content: resultMsg, ts: new Date() }]);
