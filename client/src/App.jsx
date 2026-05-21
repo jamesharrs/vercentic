@@ -2192,7 +2192,7 @@ activeNavRef.current = activeNav;
     },
     {
       label: t("nav.recruit"),
-      items: navObjects.map(o => ({ id: `obj_${o.id}`, icon: OBJECT_ICONS[o.slug] || "database", label: o.plural_name, object: o }))
+      items: navObjects.map(o => ({ id: `obj_${o.id}`, icon: o.icon || OBJECT_ICONS[o.slug] || "database", label: o.plural_name, object: o }))
     },
     {
       label: t("nav.tools"),
