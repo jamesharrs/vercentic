@@ -359,8 +359,15 @@ router.get('/activity/feed', (req, res) => {
   const getRecordName = (rec) => {
     if (!rec) return 'Unknown record';
     const d = rec.data || {};
-    return [d.first_name, d.last_name].filter(Boolean).join(' ')
-      || d.job_title || d.pool_name || d.name || d.title || rec.id.slice(0, 8);
+    // Try standard name patterns first
+    const std = [d.first_name, d.last_name].filter(Boolean).join(' ')
+      || d.job_title || d.pool_name || d.name || d.title || d.full_name || d.label;
+    if (std) return std;
+    // Fall back to the first non-empty string field value in the data
+    const firstText = Object.values(d).find(v => typeof v === 'string' && v.trim().length > 0);
+    if (firstText) return firstText;
+    // Last resort — short ID
+    return rec.id ? `#${rec.id.slice(0, 8)}` : 'Unknown record';
   };
   // Helper: resolve actor
   const resolveActor = (actorId) => {

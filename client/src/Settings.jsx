@@ -1752,6 +1752,15 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
 
 
 // ─── EditObjectModal ───────────────────────────────────────────────────────────
+// Icons available for object selection — a curated subset of PATHS
+const OBJECT_ICONS = [
+  "users","user","briefcase","layers","building","database","star","target",
+  "grid","list","calendar","mail","clipboard","form","flag","globe",
+  "zap","shield","key","bar-chart-2","filter","activity","monitor","cpu",
+  "paperclip","file-text","link","send","home","palette","bot","sparkles",
+  "git-branch","webhook","dollar","search","settings","help-circle",
+];
+
 function EditObjectModal({ obj, onSave, onClose }) {
   const [form, setForm] = useState({
     name:        obj.name        || "",
@@ -1773,19 +1782,19 @@ function EditObjectModal({ obj, onSave, onClose }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:460,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
-        {/* Header */}
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:500,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)",maxHeight:"90vh",overflowY:"auto"}}>
+        {/* Header — live preview */}
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-          <div style={{width:36,height:36,borderRadius:9,background:form.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <span style={{color:"white",fontSize:15,fontWeight:700}}>{form.name.charAt(0)||"?"}</span>
+          <div style={{width:40,height:40,borderRadius:10,background:form.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n={form.icon||"circle"} s={20} c="white"/>
           </div>
           <div>
             <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>Edit Object</div>
-            <div style={{fontSize:11,color:C.text3}}>Update name, appearance and description</div>
+            <div style={{fontSize:11,color:C.text3}}>Update name, icon, colour and description</div>
           </div>
         </div>
 
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <Inp label="Name" value={form.name} onChange={v=>set("name",v)} required/>
             <Inp label="Plural Name" value={form.plural_name} onChange={v=>set("plural_name",v)}/>
@@ -1800,6 +1809,21 @@ function EditObjectModal({ obj, onSave, onClose }) {
                 <button key={c} onClick={()=>set("color",c)}
                   style={{width:28,height:28,borderRadius:"50%",background:c,border:"none",cursor:"pointer",
                     outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2,transition:"transform .1s",transform:form.color===c?"scale(1.15)":"scale(1)"}}/>
+              ))}
+            </div>
+          </div>
+
+          {/* Icon picker */}
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Icon</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {OBJECT_ICONS.map(ic=>(
+                <button key={ic} onClick={()=>set("icon",ic)} title={ic}
+                  style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${form.icon===ic?form.color:C.border}`,
+                    background:form.icon===ic?`${form.color}15`:"#fafafa",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                    transition:"all .1s",transform:form.icon===ic?"scale(1.1)":"scale(1)"}}>
+                  <Ic n={ic} s={15} c={form.icon===ic?form.color:C.text3}/>
+                </button>
               ))}
             </div>
           </div>
@@ -1821,6 +1845,9 @@ function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose
   const [typed, setTyped] = useState("");
   const hasWarnings = impact?.warnings?.length > 0;
   const confirmed = typed.trim().toLowerCase() === obj.name.toLowerCase();
+  // Auto-focus the confirm input
+  const inputRef = React.useRef(null);
+  React.useEffect(() => { if (!loading) setTimeout(()=>inputRef.current?.focus(), 50); }, [loading]);
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}
@@ -1838,9 +1865,11 @@ function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose
           </div>
         </div>
 
-        {/* Impact analysis */}
+        {/* Impact analysis — shown when available */}
         {loading && (
-          <div style={{padding:"20px 0",textAlign:"center",color:C.text3,fontSize:13}}>Checking impact…</div>
+          <div style={{padding:"12px 0 4px",color:C.text3,fontSize:12,display:"flex",alignItems:"center",gap:6}}>
+            <Ic n="loader" s={12} c={C.text3}/> Checking impact…
+          </div>
         )}
 
         {!loading && impact && (
@@ -1848,12 +1877,12 @@ function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose
             {/* Impact stat chips */}
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
               {[
-                { label:"Records",   val:impact.impact.records,        color:"#dc2626", bg:"#fee2e2" },
-                { label:"Fields",    val:impact.impact.fields,         color:"#d97706", bg:"#fef3c7" },
-                { label:"Workflows", val:impact.impact.workflows,      color:"#7c3aed", bg:"#ede9fe" },
-                { label:"Lookups",   val:impact.impact.inbound_lookups,color:"#0369a1", bg:"#e0f2fe" },
-                { label:"Forms",     val:impact.impact.forms,          color:"#065f46", bg:"#d1fae5" },
-                { label:"Reports",   val:impact.impact.reports,        color:"#64748b", bg:"#f1f5f9" },
+                { label:"Records",   val:impact.impact?.records,         color:"#dc2626", bg:"#fee2e2" },
+                { label:"Fields",    val:impact.impact?.fields,          color:"#d97706", bg:"#fef3c7" },
+                { label:"Workflows", val:impact.impact?.workflows,       color:"#7c3aed", bg:"#ede9fe" },
+                { label:"Lookups",   val:impact.impact?.inbound_lookups, color:"#0369a1", bg:"#e0f2fe" },
+                { label:"Forms",     val:impact.impact?.forms,           color:"#065f46", bg:"#d1fae5" },
+                { label:"Reports",   val:impact.impact?.reports,         color:"#64748b", bg:"#f1f5f9" },
               ].filter(x => x.val > 0).map(x => (
                 <span key={x.label} style={{padding:"3px 10px",borderRadius:999,background:x.bg,color:x.color,fontSize:11,fontWeight:700}}>
                   {x.val} {x.label}
@@ -1877,23 +1906,25 @@ function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose
                 </ul>
               </div>
             )}
-
-            {/* Confirmation input */}
-            <div style={{marginBottom:16}}>
-              <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>
-                Type <strong>{obj.name}</strong> to confirm deletion
-              </label>
-              <input value={typed} onChange={e=>setTyped(e.target.value)}
-                placeholder={obj.name}
-                style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${confirmed?"#dc2626":C.border}`,fontSize:13,fontFamily:F,outline:"none"}}/>
-            </div>
           </>
         )}
 
+        {/* Confirmation input — always shown */}
+        <div style={{marginBottom:16,marginTop:impact?0:8}}>
+          <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>
+            Type <strong>{obj.name}</strong> to confirm deletion
+          </label>
+          <input ref={inputRef} value={typed} onChange={e=>setTyped(e.target.value)}
+            placeholder={obj.name}
+            onKeyDown={e=>e.key==="Enter"&&confirmed&&!deleting&&onConfirm()}
+            style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",borderRadius:8,
+              border:`1.5px solid ${confirmed?"#dc2626":C.border}`,fontSize:13,fontFamily:F,outline:"none"}}/>
+        </div>
+
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",borderTop:`1px solid ${C.border}`,paddingTop:16}}>
           <Btn v="secondary" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={onConfirm} disabled={!confirmed||deleting||loading}
-            style={{background:"#dc2626",opacity:(!confirmed||deleting)?.6:1}}>
+          <Btn onClick={onConfirm} disabled={!confirmed||deleting}
+            style={{background:"#dc2626",opacity:(!confirmed||deleting)?0.5:1}}>
             {deleting ? "Deleting…" : "Delete Object"}
           </Btn>
         </div>
@@ -1904,7 +1935,7 @@ function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose
 
 // ─── CreateObjectModal (module-level) ─────────────────────────────────────────
 function CreateObjectModal({ selEnv, onCreated, onClose }) {
-  const [form, setForm] = React.useState({name:"",plural_name:"",slug:"",color:"#6366f1",description:""});
+  const [form, setForm] = React.useState({name:"",plural_name:"",slug:"",color:"#6366f1",icon:"circle",description:""});
   const [saving, setSaving] = React.useState(false);
   const [autoSlug, setAutoSlug] = React.useState(true);
   const [autoPlural, setAutoPlural] = React.useState(true);
@@ -1923,8 +1954,14 @@ function CreateObjectModal({ selEnv, onCreated, onClose }) {
   };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:440,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
-        <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px",marginBottom:16}}>New Object</div>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:500,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)",maxHeight:"90vh",overflowY:"auto"}}>
+        {/* Live preview header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <div style={{width:40,height:40,borderRadius:10,background:form.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n={form.icon||"circle"} s={20} c="white"/>
+          </div>
+          <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>New Object</div>
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <Inp label="Name" value={form.name} onChange={handleName} required/>
@@ -1933,9 +1970,28 @@ function CreateObjectModal({ selEnv, onCreated, onClose }) {
           <Inp label="Slug" value={form.slug} onChange={v=>{set("slug",v);setAutoSlug(false);}} help="Used in API and URLs"/>
           <Inp label="Description" value={form.description} onChange={v=>set("description",v)}/>
           <div>
-            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Color</label>
-            <div style={{display:"flex",gap:6}}>
-              {COLORS_DM.map(c=><button key={c} onClick={()=>set("color",c)} style={{width:26,height:26,borderRadius:"50%",background:c,border:"none",cursor:"pointer",outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2}}/>)}
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Colour</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {COLORS_DM.map(c=>(
+                <button key={c} onClick={()=>set("color",c)}
+                  style={{width:26,height:26,borderRadius:"50%",background:c,border:"none",cursor:"pointer",
+                    outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2,
+                    transform:form.color===c?"scale(1.15)":"scale(1)",transition:"transform .1s"}}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Icon</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {OBJECT_ICONS.map(ic=>(
+                <button key={ic} onClick={()=>set("icon",ic)} title={ic}
+                  style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${form.icon===ic?form.color:C.border}`,
+                    background:form.icon===ic?`${form.color}15`:"#fafafa",cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    transition:"all .1s",transform:form.icon===ic?"scale(1.1)":"scale(1)"}}>
+                  <Ic n={ic} s={15} c={form.icon===ic?form.color:C.text3}/>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2089,7 +2145,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
               onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="#d1d5db";e.currentTarget.querySelector('.obj-actions').style.opacity="1";}}
               onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;e.currentTarget.querySelector('.obj-actions').style.opacity="0";}}>
               <div style={{width:40,height:40,borderRadius:10,background:o.color||"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <span style={{color:"white",fontSize:16,fontWeight:700}}>{o.name.charAt(0)}</span>
+                <Ic n={o.icon||"circle"} s={20} c="white"/>
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{o.plural_name||o.name}</div>
@@ -2122,7 +2178,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
         <div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,padding:"14px 16px",background:"#fff",borderRadius:12,border:`1px solid ${C.border}`}}>
             <div style={{width:36,height:36,borderRadius:9,background:selObj.color||"#6366f1",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{color:"white",fontSize:14,fontWeight:700}}>{selObj.name.charAt(0)}</span>
+                <Ic n={selObj.icon||"circle"} s={18} c="white"/>
             </div>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>{selObj.name} Schema</div>
