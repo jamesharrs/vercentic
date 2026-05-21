@@ -1414,7 +1414,52 @@ action must be: approve | send | withdraw. Only use offer IDs visible in context
 TODAY'S SCHEDULE:
 When asked "what interviews do I have today?", "today's schedule", "what's on today?":
 Output exactly: <TODAY_SCHEDULE/>
-The client fetches and displays the schedule automatically.`;
+The client fetches and displays the schedule automatically.
+
+AGENT CREATION INSTRUCTIONS:
+When the user asks to create an AI agent, collect the details and output:
+<CREATE_AGENT>
+{
+  "name": "Agent name",
+  "description": "What this agent does",
+  "trigger_type": "record_created|record_updated|stage_changed|form_submitted|schedule_daily|schedule_weekly|manual",
+  "target_object_slug": "people|jobs|talent-pools",
+  "schedule_time": "09:00",
+  "conditions": [
+    { "field": "status", "operator": "equals", "value": "Active" }
+  ],
+  "actions": [
+    {
+      "type": "ai_analyse|ai_draft_email|ai_summarise|ai_score|send_email|update_field|add_note|webhook|human_review",
+      "label": "Step label shown to user",
+      "prompt": "AI prompt text (for ai_* action types)",
+      "requires_approval": false
+    }
+  ],
+  "requires_approval": false
+}
+</CREATE_AGENT>
+Rules:
+- trigger_type "manual" = user triggers from a record; "schedule_daily"/"schedule_weekly" need schedule_time HH:MM
+- conditions is optional (leave [] if none)
+- For ai_* actions always include a clear prompt
+- requires_approval true = all actions wait for human sign-off before running
+- Always include at least one action
+- Ask ONE clarifying question if the request is vague
+
+Common patterns to suggest:
+- Candidate screening on create: trigger=record_created, object=people, action=ai_analyse
+- Stage-change follow-up email: trigger=stage_changed, action=ai_draft_email
+- Daily pipeline digest: trigger=schedule_daily, action=ai_summarise
+- Manual profile enrichment: trigger=manual, action=update_field
+
+RUN AGENT INSTRUCTIONS:
+When the user asks to run an agent on the current record, output:
+<RUN_AGENT>{"agent_id":"<exact id from AVAILABLE AGENTS context>","agent_name":"<name>"}</RUN_AGENT>
+- Only output this if AVAILABLE AGENTS is in the context AND the user has a record open
+- If no record is open, tell the user to navigate to a record first
+- If agent_id is unknown, do NOT guess — ask the user which agent they mean`;
+
 
 
 // Record-specific actions shown when viewing a record — keyed by object slug
@@ -1633,6 +1678,7 @@ function getContextActions(activeNav, settingsSection, navObjects, editorContext
     { id:"bp",   icon:"globe",       label:"Build Portal",        prompt:"I want to build a new portal — a branded external experience like a career site" },
     { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
     { id:"nd",   icon:"layout",      label:"New Dashboard",       prompt:"I want to create a new dashboard" },
+    { id:"na",   icon:"cpu",         label:"Create Agent",         prompt:"I want to create a new AI agent" },
     { id:"iu",   icon:"user",        label:"Invite User",         prompt:"I want to invite a new user" },
     { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
     { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
@@ -1822,6 +1868,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [pendingReport,    setPendingReport]    = useState(null);
   const [pendingPortal,    setPendingPortal]    = useState(null);
   const [pendingDashboard, setPendingDashboard] = useState(null);
+  const [pendingAgent,     setPendingAgent]     = useState(null);
+  const [agentRunning,     setAgentRunning]     = useState(false);
+  const [allAgents,        setAllAgents]        = useState([]);
   const [parsedPerson,     setParsedPerson]     = useState(null);
   const [parsedJob,        setParsedJob]        = useState(null);
   const [proposedAction,   setProposedAction]   = useState(null);
@@ -1861,6 +1910,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(jobsObj)  api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllJobs(r.records||[])).catch(()=>{});
       if(poolsObj) api.get(`/records?object_id=${poolsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPools(r.records||[])).catch(()=>{});
       if(pplObj)   api.get(`/records?object_id=${pplObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPeople(r.records||[])).catch(()=>{});
+      api.get(`/agents?environment_id=${environment.id}`).then(r=>setAllAgents(Array.isArray(r)?r:[])).catch(()=>{});
     });
   },[environment?.id]);
 
@@ -2092,7 +2142,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
 
-    // Inject company knowledge base context
+    // Inject available agents list so copilot can run them or describe them
+    if(allAgents.length>0){
+      parts.push('');
+      parts.push(`AVAILABLE AI AGENTS (${allAgents.length} total):`);
+      allAgents.slice(0,20).forEach(a=>{
+        const trigger=a.trigger_type||'manual';
+        const actionTypes=(a.actions||[]).map(ac=>ac.type).join(', ')||'no actions';
+        const status=a.is_active?'active':'inactive';
+        parts.push(`  • "${a.name}" [${status}] — trigger: ${trigger} | actions: ${actionTypes} | ID: ${a.id}`);
+      });
+      parts.push('To run one of these on the current record, output: <RUN_AGENT>{"agent_id":"<id>","agent_name":"<name>"}</RUN_AGENT>');
+    }
     if(companyDocs.length>0){
       parts.push('');
       parts.push(`COMPANY KNOWLEDGE BASE — ${companyDocs.length} documents available:`);
@@ -2472,6 +2533,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  const parseCreateAgent = (text) => {
+    const m = text.match(/<CREATE_AGENT>([\s\S]*?)<\/CREATE_AGENT>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
+  const parseRunAgent = (text) => {
+    const m = text.match(/<RUN_AGENT>([\s\S]*?)<\/RUN_AGENT>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
   const parseCreateReport = (text) => {
     const match = text.match(/<CREATE_REPORT>([\s\S]*?)<\/CREATE_REPORT>/);
     if (!match) return null;
@@ -2569,6 +2642,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<CREATE_FORM>[\s\S]*?<\/CREATE_FORM>/g,"")
     .replace(/<CREATE_PORTAL>[\s\S]*?<\/CREATE_PORTAL>/g,"")
     .replace(/<CREATE_DASHBOARD>[\s\S]*?<\/CREATE_DASHBOARD>/g,"")
+    .replace(/<CREATE_AGENT>[\s\S]*?<\/CREATE_AGENT>/g,"")
+    .replace(/<RUN_AGENT>[\s\S]*?<\/RUN_AGENT>/g,"")
     .replace(/<CREATE_REPORT>[\s\S]*?<\/CREATE_REPORT>/g,"")
     .replace(/<PARSE_CV>[\s\S]*?<\/PARSE_CV>/g,"")
     .replace(/<PARSE_JD>[\s\S]*?<\/PARSE_JD>/g,"")
@@ -2777,6 +2852,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setPendingPortal(null);
     setPendingPortal(null);
     setPendingReport(null);
+    setPendingAgent(null);
     setParsedPerson(null);
     setParsedJob(null);
     setProposedAction(null);
@@ -3047,6 +3123,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const taskData      = parseCreateTask(reply);
       const portalData    = parseCreatePortal(reply);
       const dashboardData = parseCreateDashboard(reply);
+      const agentData     = parseCreateAgent(reply);
+      const runAgentData  = parseRunAgent(reply);
       const modifyReport  = parseModifyReport(reply);
       const reportData    = parseCreateReport(reply);
       const cvData        = parseParsedCV(reply);
@@ -3069,12 +3147,13 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         : portalData     ? `I've designed the **${portalData.name}** portal:`
         : formData2      ? `I've designed the **${formData2.name}** form:`
         : dashboardData  ? `I've designed the **${dashboardData.name}** dashboard:`
+        : agentData      ? `I've designed the **${agentData.name}** agent — review it below before creating:`
         : reportData     ? `I've built a **${reportData.title}** report — does this look right?`
         : "";
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
-      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
-        interviewData, formData2, taskData, reportData, portalData, dashboardData,
+      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasAgent:!!agentData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
+        interviewData, formData2, taskData, reportData, portalData, dashboardData, agentData,
         hasTaskSearch:taskSearchHits.length>0, taskSearchIndex:msgIndex,
         hasDbQuery:dbQueryHits.length>0, dbQueryHits}]);
       if(taskSearchHits.length>0) setTaskSearchResults(prev=>({...prev,[msgIndex]:taskSearchHits}));
@@ -3087,7 +3166,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(taskData)      setPendingTask(taskData);
       if(portalData)    setPendingPortal(portalData);
       if(dashboardData)  setPendingDashboard(dashboardData);
-      if(modifyReport)  window.dispatchEvent(new CustomEvent("talentos:modify-report", { detail: modifyReport }));
+      if(agentData)      setPendingAgent(agentData);
+      if(runAgentData && !agentData) handleRunAgent(runAgentData);
       const applyFilter   = parseApplyFilter(reply);
       const applyIdFilter = parseApplyIdFilter(reply);
       if(applyFilter)   window.dispatchEvent(new CustomEvent("talentos:apply-filter",    { detail: applyFilter }));
@@ -4009,6 +4089,68 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       }]);
     }
     setCreating(false);
+  };
+
+  // ── Create agent ────────────────────────────────────────────────────────────
+  const handleConfirmAgent = async () => {
+    if (!pendingAgent || !environment?.id) return;
+    setCreating(true);
+    try {
+      const obj = objects.find(o => o.slug === pendingAgent.target_object_slug);
+      const payload = {
+        name:              pendingAgent.name,
+        description:       pendingAgent.description || '',
+        trigger_type:      pendingAgent.trigger_type || 'manual',
+        target_object_id:  obj?.id || null,
+        schedule_time:     pendingAgent.schedule_time || null,
+        conditions:        pendingAgent.conditions || [],
+        actions:           (pendingAgent.actions || []).map((a, i) => ({ ...a, id: String(i + 1) })),
+        requires_approval: pendingAgent.requires_approval || false,
+        is_active:         true,
+        environment_id:    environment.id,
+      };
+      const created = await api.post('/agents', payload);
+      if (!created?.id) throw new Error(created?.error || 'Agent creation failed');
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: `✅ **${created.name}** is live. It will trigger on **${payload.trigger_type.replace(/_/g,' ')}** events${obj ? ` for ${obj.plural_name || obj.name}` : ''}. Manage it in Settings → Agents.`,
+        ts: new Date(),
+      }]);
+      setPendingAgent(null);
+      // Refresh agents list so context is up to date
+      api.get(`/agents?environment_id=${environment.id}`).then(r => setAllAgents(Array.isArray(r) ? r : [])).catch(() => {});
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `Failed to create agent: ${err.message}`, ts: new Date(), error: true }]);
+    }
+    setCreating(false);
+  };
+
+  // ── Run agent on current record ─────────────────────────────────────────────
+  const handleRunAgent = async (runData) => {
+    if (!runData?.agent_id) return;
+    if (!currentRecord?.id) {
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: '⚠️ No record is currently open. Navigate to a record first, then ask me to run the agent.',
+        ts: new Date(),
+      }]);
+      return;
+    }
+    setAgentRunning(true);
+    try {
+      const result = await api.post(`/agents/${runData.agent_id}/run`, {
+        record_id:      currentRecord.id,
+        environment_id: environment?.id,
+      });
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: `🤖 **${runData.agent_name}** started (run \`${(result.run_id||'').slice(0,8)}…\`). Check Settings → Agents → Runs for live progress and results.`,
+        ts: new Date(),
+      }]);
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `Agent run failed: ${err.message}`, ts: new Date(), error: true }]);
+    }
+    setAgentRunning(false);
   };
 
   const copyMessage = (text,id) => { navigator.clipboard.writeText(text); setCopied(id); setTimeout(()=>setCopied(null),2000); };
@@ -5103,6 +5245,52 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                       <button onClick={()=>setPendingDashboard(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
                       <button onClick={handleConfirmDashboard} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#0ea5e9",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                         {creating?<><Ic n="loader" s={12} c="white"/> Creating…</>:<><Ic n="bar-chart-2" s={12} c="white"/> Create Dashboard</>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Agent Creation Card ──────────────────────────────────── */}
+                {msg.role==="assistant"&&msg.hasAgent&&msg.agentData&&i===messages.length-1&&(
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #7048e8",background:"rgba(112,72,232,0.05)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:"#7048e8",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Ic n="cpu" s={14} c="white"/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{msg.agentData.name}</div>
+                        <div style={{fontSize:11,color:"#7048e8",fontWeight:600}}>
+                          {(msg.agentData.trigger_type||'manual').replace(/_/g,' ')}
+                          {msg.agentData.target_object_slug ? ` · ${msg.agentData.target_object_slug}` : ''}
+                        </div>
+                      </div>
+                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(112,72,232,0.12)",color:"#7048e8",fontWeight:700,flexShrink:0}}>
+                        {(msg.agentData.actions||[]).length} action{(msg.agentData.actions||[]).length!==1?'s':''}
+                      </span>
+                    </div>
+                    {msg.agentData.description&&<p style={{fontSize:12,color:C.text2,margin:"0 0 10px",lineHeight:1.5}}>{msg.agentData.description}</p>}
+                    <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
+                      {(msg.agentData.actions||[]).map((a,ai)=>(
+                        <div key={ai} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 10px",background:"white",borderRadius:8,border:"1px solid rgba(112,72,232,0.2)",fontSize:12}}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7048e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginTop:1,flexShrink:0}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                          <div style={{flex:1}}>
+                            <span style={{fontWeight:600,color:C.text1}}>{a.label||a.type}</span>
+                            {a.prompt&&<div style={{color:C.text3,marginTop:2,fontSize:11,lineHeight:1.4}}>"{a.prompt.slice(0,90)}{a.prompt.length>90?'…':''}"</div>}
+                            {a.requires_approval&&<span style={{fontSize:10,color:"#d97706",fontWeight:700}}> · requires approval</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {(msg.agentData.conditions||[]).length>0&&(
+                      <div style={{fontSize:11,color:C.text3,marginBottom:10}}>
+                        Conditions: {msg.agentData.conditions.map(c=>`${c.field} ${c.operator} "${c.value}"`).join(' AND ')}
+                      </div>
+                    )}
+                    {msg.agentData.requires_approval&&<div style={{fontSize:11,color:"#d97706",fontWeight:600,marginBottom:10}}>⚠️ All actions require human approval before running</div>}
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingAgent(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
+                      <button onClick={handleConfirmAgent} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#7048e8",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        {creating?<><Ic n="loader" s={12} c="white"/> Creating…</>:<><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Create Agent</>}
                       </button>
                     </div>
                   </div>
