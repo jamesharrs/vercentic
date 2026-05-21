@@ -1744,23 +1744,21 @@ function App({ onEnvReady }) {
     return _sessionPerms.some(p => p.object_slug === objectSlug && p.action === action && p.allowed);
   };
   const [environments, setEnvironments] = useState([]);
-  // Seed selectedEnv from sessionStorage so Vite HMR doesn't reset it to null.
-  // sessionStorage persists across hot reloads (same tab) but not page refreshes.
-  // NOTE: this is just an optimistic seed — fetchEnvs() will correct it if the ID
-  // is stale (e.g. after switching between local and Railway contexts).
+  // Seed selectedEnv from localStorage so it survives page refreshes.
+  // fetchEnvs() will correct it if the ID is stale.
   const [selectedEnv, setSelectedEnv] = useState(() => {
     try {
-      const cached = sessionStorage.getItem('vercentic_selected_env');
+      const cached = localStorage.getItem('vercentic_selected_env');
       return cached ? JSON.parse(cached) : null;
     } catch { return null; }
   });
   const [selectedObject, setSelectedObject] = useState(null);
   const [allObjects, setAllObjects] = useState([]);
 
-  // Persist selectedEnv to sessionStorage so HMR remounts start with the right env
+  // Persist selectedEnv to localStorage so it survives page refreshes
   useEffect(() => {
     if (!selectedEnv) return;
-    try { sessionStorage.setItem('vercentic_selected_env', JSON.stringify(selectedEnv)); } catch {}
+    try { localStorage.setItem('vercentic_selected_env', JSON.stringify(selectedEnv)); } catch {}
   }, [selectedEnv?.id]);
   // ── URL-based routing helpers ──────────────────────────────────────────────
   // Convert a URL path to an activeNav value (called on mount + popstate)
@@ -1929,15 +1927,84 @@ activeNavRef.current = activeNav;
 
   // When any API call returns 401, clear the local session and show the login screen
   useEffect(() => {
+    let debounceTimer = null;
     const handler = () => {
-      // Only auto-logout on 401 in production. In dev, server restarts can cause
-      // transient 401s — don't wipe localStorage and force re-login every time.
-      if (!import.meta.env.PROD) return;
+      // In dev: debounce 401s — a server restart causes a brief 401 storm.
+      // If we still get a 401 after 5s, the session is genuinely gone → show login.
+      // 5s gives nodemon/manual restarts enough headroom to come back online before
+      // we nuke the user's session.
+      // In prod: redirect immediately.
+      if (!import.meta.env.PROD) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          fetch('/api/users/me', { credentials: 'include' })
+            .then(r => {
+              if (r.status === 401) {
+                try { localStorage.removeItem(_sessionKey()); } catch {}
+                startTransition(() => setSession(null));
+                try { window.__toast?.alert('Your session expired — please log in again.'); } catch {}
+              }
+            })
+            .catch(() => {});
+        }, 5000);
+        return;
+      }
       try { localStorage.removeItem(_sessionKey()); } catch {}
       startTransition(() => setSession(null));
+      try { window.__toast?.alert('Your session expired — please log in again.'); } catch {}
     };
     window.addEventListener('talentos:unauthenticated', handler);
-    return () => window.removeEventListener('talentos:unauthenticated', handler);
+    window.addEventListener('talentos:session-lost', handler);
+    return () => {
+      window.removeEventListener('talentos:unauthenticated', handler);
+      window.removeEventListener('talentos:session-lost', handler);
+      clearTimeout(debounceTimer);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dev auto-session sync — on every page load in dev, verify server session and sync localStorage.
+  // This fixes the blank state after server restarts without requiring manual re-login.
+  useEffect(() => {
+    if (import.meta.env.PROD) return;
+    let attempts = 0;
+    let syncing = false;
+    const sync = () => {
+      if (syncing) return;
+      syncing = true;
+      fetch('/api/dev/session', { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => {
+          syncing = false;
+          if (d.authenticated && d.user) {
+            const sessionData = { user: d.user, role: d.role, permissions: d.permissions || [], tenant_slug: d.tenant_slug };
+            try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
+            setSession(prev => {
+              if (prev?.user?.id === d.user.id) return prev;
+              return sessionData;
+            });
+            attempts = 0; // reset on success
+          } else if (!d.authenticated && attempts < 8) {
+            attempts++;
+            setTimeout(sync, 1500);
+          }
+        })
+        .catch(() => { syncing = false; if (attempts < 8) { attempts++; setTimeout(sync, 1500); } });
+    };
+    sync(); // Run on mount
+
+    // Also re-sync on Vite hot-reload (HMR doesn't remount root, so useEffect[] doesn't re-run)
+    if (import.meta.hot) {
+      import.meta.hot.on('vite:afterUpdate', () => { attempts = 0; setTimeout(sync, 300); });
+    }
+
+    // Also re-sync whenever any API call gets a 401 in dev
+    const onSessionLost = () => { attempts = 0; sync(); };
+    window.addEventListener('talentos:session-lost', onSessionLost);
+    window.addEventListener('talentos:server-starting', onSessionLost);
+    return () => {
+      window.removeEventListener('talentos:session-lost', onSessionLost);
+      window.removeEventListener('talentos:server-starting', onSessionLost);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On startup: validate the stored session against the server.
@@ -2125,7 +2192,7 @@ activeNavRef.current = activeNav;
     },
     {
       label: t("nav.recruit"),
-      items: navObjects.map(o => ({ id: `obj_${o.id}`, icon: OBJECT_ICONS[o.slug] || "database", label: o.plural_name, object: o }))
+      items: navObjects.map(o => ({ id: `obj_${o.id}`, icon: o.icon || OBJECT_ICONS[o.slug] || "database", label: o.plural_name, object: o }))
     },
     {
       label: t("nav.tools"),
@@ -2268,6 +2335,9 @@ activeNavRef.current = activeNav;
   useEffect(() => {
     if (!activeNav?.startsWith('resolve_')) return;
     if (!selectedEnv || !navObjects?.length) return;
+    // Don't resolve until environments have been confirmed by the server (loading===false)
+    // This prevents using a stale sessionStorage env ID before fetchEnvs corrects it
+    if (loading) return;
     const [, slug, number] = activeNav.split('_');
     if (!slug || !number) { setActiveNav('dashboard'); return; }
     // Clear resolve_ immediately so HMR remounts don't re-fire this effect
@@ -2279,7 +2349,7 @@ activeNavRef.current = activeNav;
       })
       .catch(() => setActiveNav('dashboard'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNav, selectedEnv?.id, navObjects?.length]);
+  }, [activeNav, selectedEnv?.id, navObjects?.length, loading]);
 
 
 
@@ -2298,6 +2368,13 @@ activeNavRef.current = activeNav;
     window.addEventListener("talentos:openRecord", handler);
     return () => window.removeEventListener("talentos:openRecord", handler);
   }, []); // safe — uses ref, not stale closure
+
+  // 🔄 Live update — refresh nav objects when Copilot (or Settings) creates/edits an object
+  useEffect(() => {
+    const handler = () => { if (selectedEnv?.id) loadNavObjects(selectedEnv.id); };
+    window.addEventListener('talentos:refreshObjects', handler);
+    return () => window.removeEventListener('talentos:refreshObjects', handler);
+  }, [selectedEnv?.id, loadNavObjects]);
 
   // Copilot navigation — switch to a named section or object
   useEffect(() => {
@@ -2372,8 +2449,28 @@ activeNavRef.current = activeNav;
   }, []);
 
   // talentos:navigate — generic nav event (e.g. "← Dashboard" back button)
+  // detail can be a string ("people", "obj_xxx") or an object ({ slug: "people", record_id: "..." })
   useEffect(() => {
-    const handler = (e) => { if (e.detail) switchNavRef.current(e.detail); };
+    const handler = (e) => {
+      if (!e.detail) return;
+      // Normalise to a string nav id
+      const raw = e.detail;
+      if (typeof raw === 'string') {
+        switchNavRef.current(raw);
+        return;
+      }
+      // Object form: { slug, destination, record_id }
+      const dest = raw.slug || raw.destination;
+      if (raw.record_id) {
+        window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: raw.record_id } }));
+        return;
+      }
+      if (!dest) return;
+      // Map slug to the right nav id
+      const { navObjects: objs } = filterNavRef.current || {};
+      const obj = objs?.find(o => o.slug === dest);
+      switchNavRef.current(obj ? `obj_${obj.id}` : dest);
+    };
     window.addEventListener("talentos:navigate", handler);
     return () => window.removeEventListener("talentos:navigate", handler);
   }, []);

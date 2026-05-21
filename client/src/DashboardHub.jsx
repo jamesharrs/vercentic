@@ -88,6 +88,16 @@ function StyledSel({ value, onChange, options, placeholder, accentColor = PUR })
 export default function DashboardHub({ tab = "overview", onTabChange, environment, session, onOpenRecord, onNavigate, builderMode, setBuilderMode, onViewAll }) {
   const [editDashId, setEditDashId] = useState(null);
   const [viewDashId, setViewDashId] = useState(null);
+
+  // Auto-select a dashboard created by the Copilot — it stores the ID in sessionStorage
+  // before navigating here so we can open it immediately without the user having to pick from the dropdown.
+  useEffect(() => {
+    const pending = sessionStorage.getItem('vercentic_open_dashboard');
+    if (pending) {
+      sessionStorage.removeItem('vercentic_open_dashboard');
+      setViewDashId(pending);
+    }
+  }, []);
   const showNav = ["overview","screening","interviews","offers","onboarding"].includes(tab);
 
   const navigate = (id) => {

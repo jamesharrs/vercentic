@@ -905,7 +905,13 @@ RULES:
 - After applying, briefly confirm what you did ("I've filtered the list to show Active candidates in Engineering.")
 - If the user's intent is ambiguous about a field value, apply it and offer to refine
 - NEVER say "I can't apply filters" — you CAN, use <APPLY_FILTER>
-- GEOGRAPHY INTELLIGENCE: When a user asks for a country (e.g. "France"), use "contains" with the country name. If 0 results come back, recognise that data may be stored as cities (Paris, Lyon) — in that case use APPLY_ID_FILTER with the IDs of records whose location contains any city in that country, based on what you can see in the LIST context.
+- FIELD FILTER vs SEMANTIC SEARCH — critical distinction:
+  * APPLY_FILTER is for DIRECT field matches: status=Active, location=Dubai, department=Engineering, person_type=Candidate. The field and value must EXACTLY exist in the data.
+  * DO NOT use APPLY_FILTER for CONCEPTS or SKILLS that aren't a direct field value: "technical skills", "senior candidates", "Arabic speakers", "experienced engineers" — these require FILE_SEARCH + APPLY_ID_FILTER.
+  * Rule: if you cannot point to a SPECIFIC field in the FIELDS list AND a SPECIFIC value that exactly matches what the user wants, use FILE_SEARCH instead.
+  * BAD example: user asks "candidates with technical skills" → WRONG to filter by person_type=Candidate. RIGHT: FILE_SEARCH for "technical skills" in CVs + search skills field.
+  * GOOD example: user asks "show candidates" → filter person_type is Candidate. Clear direct match.
+- GEOGRAPHY INTELLIGENCE: When a user asks for a country/region (e.g. "UAE", "France"), use "contains" with the country name IMMEDIATELY — no questions. If 0 results come back after filtering, THEN automatically try city-level using APPLY_ID_FILTER. NEVER ask the user how their location data is stored upfront — just act.
 
 SEMANTIC ID FILTER — use when APPLY_FILTER would return 0 results due to data format mismatch:
 <APPLY_ID_FILTER>
@@ -913,8 +919,51 @@ SEMANTIC ID FILTER — use when APPLY_FILTER would return 0 results due to data 
 </APPLY_ID_FILTER>
 Use this when: geography mismatch (cities stored, country searched), complex cross-field logic, or communications/relationship data.
 
+FILE CONTENT SEARCH — two-tier search combining field data with document content:
+Use FILE_SEARCH when: user asks about skills, languages, experience, qualifications that may be in CVs/files but not in profile fields. Always do the field search first (APPLY_FILTER for any matching field), then ALSO emit FILE_SEARCH to find additional matches in documents.
+
+SKILLS/EXPERIENCE/QUALIFICATIONS RULE: Requests like "candidates with technical skills", "Python developers", "Arabic speakers", "senior engineers", "MBA holders", "development skills" MUST use FILE_SEARCH. These are semantic concepts. Do NOT use APPLY_FILTER with person_type or any unrelated field as a proxy.
+For skills: first check if a "skills" field exists in FIELDS — if yes, use APPLY_FILTER with skills contains [term]. Always ALSO emit FILE_SEARCH to catch people who have it in CVs but not in their profile fields.
+
+PROACTIVE SEARCH RULE — NEVER ask clarifying questions for skills/talent searches:
+- When a user mentions any skill, technology, language, qualification or role type, ACT IMMEDIATELY — do not ask for more detail first.
+- Navigate to People if not already there, run FILE_SEARCH for the term as-is, show results, THEN offer to refine.
+- "development skills" → search for "development" across CVs and skills fields right now. Don't ask what kind of development.
+- "Python developers" → FILE_SEARCH "Python" immediately.
+- "Arabic speakers" → FILE_SEARCH "Arabic" immediately.
+- The user can always refine after seeing results. Showing broad results and refining is always better than asking questions upfront.
+- If NOT on a list page (e.g. on Dashboard, Achievements, Calendar): output NAVIGATE to people first, then the action block.
+<FILE_SEARCH>
+{ "term": "Arabic", "categories": ["cv","cover_letter"], "reason": "searching for Arabic language skills in uploaded documents" }
+</FILE_SEARCH>
+Valid categories: "cv", "cover_letter", "portfolio", "right_to_work", "id_document", "contract", "reference", "other". Omit categories to search all files.
+After results are returned, present as: "X people have [term] in their profile fields. I also found Y additional people who mention it in their [CV/documents]." Then offer to combine both into a selection using APPLY_ID_FILTER.
+
+CROSS-PAGE SEARCH RULE — when NOT on a relevant list page:
+If the user asks to "find people", "show jobs", "search candidates" etc. while on ANY non-list page (Dashboard, Achievements, Calendar, Offers, Settings, Reports etc.):
+1. Output <NAVIGATE> to the correct object FIRST (e.g. people, jobs, talent-pools, or the custom object slug)
+2. IMMEDIATELY output the filter/search block in the SAME response — do NOT wait for the navigation to complete
+3. NEVER ask clarifying questions before doing this — act on the intent and refine after
+
+Examples:
+- "find people in France" (on Achievements) → NAVIGATE to people + APPLY_FILTER location contains "France"
+- "show open jobs" (on Dashboard) → NAVIGATE to jobs + APPLY_FILTER status is "Open"
+- "search for Sarah" (on Settings) → NAVIGATE to people + APPLY_FILTER search "Sarah"
+
+GEOGRAPHY RULE — location is always a direct field filter, never FILE_SEARCH:
+- "people in France" → APPLY_FILTER location contains "France" — do this immediately, no questions
+- "candidates in Dubai" → APPLY_FILTER location contains "Dubai"
+- If 0 results come back, THEN suggest city-level search (Paris, Lyon, etc.)
+- NEVER ask the user how their location data is stored — just apply "contains" with the country/city name and let the results speak
+
 DATABASE SEARCH INSTRUCTIONS:
 When a user asks to find, search, look up, or show records, output a search block:
+
+⚠️ PRIORITY RULE: If the user's request can be expressed as a field filter (location, status, department, person type etc.), ALWAYS use APPLY_FILTER or APPLY_ID_FILTER instead of SEARCH_QUERY. Only use SEARCH_QUERY for finding a specific named person/job (e.g. "find Ahmed", "search for Sarah Jones").
+
+GEOGRAPHY RULE: "candidates in France" / "people in Dubai" / "jobs in London" → NEVER use SEARCH_QUERY. Always:
+1. First try APPLY_FILTER with location contains [country/city]
+2. If you can see in the LIST STATE that locations are stored as cities (Paris, Lyon) when country (France) was asked, use the location_ids data from CURRENT LIST STATE to build APPLY_ID_FILTER directly — the location_ids line shows exactly which record IDs have each city. Example: if LIST STATE shows "location_ids: Paris=[id1,id2]; Lyon=[id3]" and user asks for France, immediately output APPLY_ID_FILTER with ids:[id1,id2,id3]. Do NOT do a DB search.
 
 IMPORTANT MATCHING RULES — CRITICAL:
 
@@ -991,7 +1040,9 @@ RULES:
 - Valid Job status: Draft, Open, On Hold, Filled, Cancelled (default Open)
 - Valid work_type: On-site, Remote, Hybrid
 - Valid employment_type: Full-time, Part-time, Contract, Internship, Freelance
-- Always include <CREATE_RECORD> when you have at least the mandatory fields- Be conversational and efficient
+- For custom objects (not people/jobs/talent-pools), use the object_slug shown in CURRENT OBJECT context (e.g. "tests", "events"). The object_slug is ALWAYS provided in context when on a custom object list page.
+- Always include <CREATE_RECORD> when you have at least the mandatory fields — NEVER use PROPOSE_ACTION with action_type "create_record"
+- Be conversational and efficient
 
 ADMIN ACTIONS — USER & ROLE MANAGEMENT:
 You can also help admins create users and roles. Use the same conversational collect-then-confirm pattern.
@@ -1382,7 +1433,52 @@ action must be: approve | send | withdraw. Only use offer IDs visible in context
 TODAY'S SCHEDULE:
 When asked "what interviews do I have today?", "today's schedule", "what's on today?":
 Output exactly: <TODAY_SCHEDULE/>
-The client fetches and displays the schedule automatically.`;
+The client fetches and displays the schedule automatically.
+
+AGENT CREATION INSTRUCTIONS:
+When the user asks to create an AI agent, collect the details and output:
+<CREATE_AGENT>
+{
+  "name": "Agent name",
+  "description": "What this agent does",
+  "trigger_type": "record_created|record_updated|stage_changed|form_submitted|schedule_daily|schedule_weekly|manual",
+  "target_object_slug": "people|jobs|talent-pools",
+  "schedule_time": "09:00",
+  "conditions": [
+    { "field": "status", "operator": "equals", "value": "Active" }
+  ],
+  "actions": [
+    {
+      "type": "ai_analyse|ai_draft_email|ai_summarise|ai_score|send_email|update_field|add_note|webhook|human_review",
+      "label": "Step label shown to user",
+      "prompt": "AI prompt text (for ai_* action types)",
+      "requires_approval": false
+    }
+  ],
+  "requires_approval": false
+}
+</CREATE_AGENT>
+Rules:
+- trigger_type "manual" = user triggers from a record; "schedule_daily"/"schedule_weekly" need schedule_time HH:MM
+- conditions is optional (leave [] if none)
+- For ai_* actions always include a clear prompt
+- requires_approval true = all actions wait for human sign-off before running
+- Always include at least one action
+- Ask ONE clarifying question if the request is vague
+
+Common patterns to suggest:
+- Candidate screening on create: trigger=record_created, object=people, action=ai_analyse
+- Stage-change follow-up email: trigger=stage_changed, action=ai_draft_email
+- Daily pipeline digest: trigger=schedule_daily, action=ai_summarise
+- Manual profile enrichment: trigger=manual, action=update_field
+
+RUN AGENT INSTRUCTIONS:
+When the user asks to run an agent on the current record, output:
+<RUN_AGENT>{"agent_id":"<exact id from AVAILABLE AGENTS context>","agent_name":"<name>"}</RUN_AGENT>
+- Only output this if AVAILABLE AGENTS is in the context AND the user has a record open
+- If no record is open, tell the user to navigate to a record first
+- If agent_id is unknown, do NOT guess — ask the user which agent they mean`;
+
 
 
 // Record-specific actions shown when viewing a record — keyed by object slug
@@ -1601,6 +1697,7 @@ function getContextActions(activeNav, settingsSection, navObjects, editorContext
     { id:"bp",   icon:"globe",       label:"Build Portal",        prompt:"I want to build a new portal — a branded external experience like a career site" },
     { id:"rpt",  icon:"bar-chart-2", label:"Build a report",      prompt:"I want to build a report" },
     { id:"nd",   icon:"layout",      label:"New Dashboard",       prompt:"I want to create a new dashboard" },
+    { id:"na",   icon:"cpu",         label:"Create Agent",         prompt:"I want to create a new AI agent" },
     { id:"iu",   icon:"user",        label:"Invite User",         prompt:"I want to invite a new user" },
     { id:"nr",   icon:"shield",      label:"New Role",            prompt:"I want to create a new role" },
     { id:"srch", icon:"search",      label:"Search records",      prompt:"Search for " },
@@ -1790,6 +1887,9 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [pendingReport,    setPendingReport]    = useState(null);
   const [pendingPortal,    setPendingPortal]    = useState(null);
   const [pendingDashboard, setPendingDashboard] = useState(null);
+  const [pendingAgent,     setPendingAgent]     = useState(null);
+  const [agentRunning,     setAgentRunning]     = useState(false);
+  const [allAgents,        setAllAgents]        = useState([]);
   const [parsedPerson,     setParsedPerson]     = useState(null);
   const [parsedJob,        setParsedJob]        = useState(null);
   const [proposedAction,   setProposedAction]   = useState(null);
@@ -1829,6 +1929,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(jobsObj)  api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllJobs(r.records||[])).catch(()=>{});
       if(poolsObj) api.get(`/records?object_id=${poolsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPools(r.records||[])).catch(()=>{});
       if(pplObj)   api.get(`/records?object_id=${pplObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPeople(r.records||[])).catch(()=>{});
+      api.get(`/agents?environment_id=${environment.id}`).then(r=>setAllAgents(Array.isArray(r)?r:[])).catch(()=>{});
     });
   },[environment?.id]);
 
@@ -1869,6 +1970,14 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         :activeNav?.startsWith('record_')?'Record detail view'
         :activeNav;
       parts.push('USER IS CURRENTLY ON: '+lbl);
+      // Inject object slug when on a custom object list — so the model can use CREATE_RECORD with the right slug
+      if(activeNav?.startsWith('obj_')){
+        const o=(navObjects||[]).find(o=>'obj_'+o.id===activeNav);
+        if(o){
+          parts.push(`CURRENT OBJECT: ${o.plural_name||o.name} | slug: "${o.slug}" | id: ${o.id}`);
+          parts.push(`To create a new ${o.name}, use: <CREATE_RECORD>{"object_slug":"${o.slug}","data":{...fields...}}</CREATE_RECORD>`);
+        }
+      }
     }
     if(currentRecord&&currentObject){
       const d=currentRecord.data||{};
@@ -2060,7 +2169,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       });
     }
 
-    // Inject company knowledge base context
+    // Inject available agents list so copilot can run them or describe them
+    if(allAgents.length>0){
+      parts.push('');
+      parts.push(`AVAILABLE AI AGENTS (${allAgents.length} total):`);
+      allAgents.slice(0,20).forEach(a=>{
+        const trigger=a.trigger_type||'manual';
+        const actionTypes=(a.actions||[]).map(ac=>ac.type).join(', ')||'no actions';
+        const status=a.is_active?'active':'inactive';
+        parts.push(`  • "${a.name}" [${status}] — trigger: ${trigger} | actions: ${actionTypes} | ID: ${a.id}`);
+      });
+      parts.push('To run one of these on the current record, output: <RUN_AGENT>{"agent_id":"<id>","agent_name":"<name>"}</RUN_AGENT>');
+    }
     if(companyDocs.length>0){
       parts.push('');
       parts.push(`COMPANY KNOWLEDGE BASE — ${companyDocs.length} documents available:`);
@@ -2111,7 +2231,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           if(sec==='datamodel'){
             const objList = (navObjects||[]).map(o=>`• ${o.name} (id: ${o.id})`).join('\n');
             const envId = environment?.id || '';
-            return `You're in **Data Model**. Environment ID: ${envId}\n\nAvailable objects:\n${objList||'(none yet)'}\n\nI can help you:\n• Create new objects or custom fields\n• Explain field types and when to use them\n• Suggest a field structure for your use case\n\nTo create a field use PROPOSE_ACTION with action_type "create_field" and include the object_id from the list above.\nTo create an object use action_type "create_object" with environment_id: "${envId}".\n\nWhat would you like to configure?`;
+            return `You're in **Data Model**. Environment ID: ${envId}\n\nAvailable objects:\n${objList||'(none yet)'}\n\nI can help you:\n• Create new objects or custom fields\n• Explain field types and when to use them\n• Suggest a field structure for your use case\n\nTo create an object AND its fields in one step, output a CREATE_OBJECT block immediately followed by CREATE_FIELD blocks (using the new object's slug as object_id — the system resolves slugs automatically):\n\n<CREATE_OBJECT>\n{"name":"Events","plural_name":"Events","slug":"events","environment_id":"${envId}","icon":"calendar","color":"#6366f1"}\n</CREATE_OBJECT>\n<CREATE_FIELD>\n{"object_id":"events","name":"Event Name","api_key":"event_name","field_type":"text","is_required":true,"show_in_list":true}\n</CREATE_FIELD>\n<CREATE_FIELD>\n{"object_id":"events","name":"Status","api_key":"status","field_type":"select","options":["Draft","Active","Completed"]}\n</CREATE_FIELD>\n\nIMPORTANT: Output ALL blocks (object + all fields) in a SINGLE response — do NOT stop after the object and wait. Use the object's slug (lowercase_with_underscores) as the object_id in CREATE_FIELD blocks.\n\nTo create ONLY a field on an EXISTING object, use PROPOSE_ACTION with action_type "create_field" and include the object_id UUID from the list above.\nTo create ONLY an object with no fields, use action_type "create_object".\n\nWhat would you like to configure?`;
           }
           if(sec==='users')       return `You're in **Users**.\n\nI can help you:\n• Invite a new user and set their role\n• Explain the difference between roles\n• Suggest the right permissions for a use case\n\nWhat would you like to do?`;
           if(sec==='roles')       return `You're in **Roles & Permissions**.\n\nI can help you:\n• Create a new role\n• Explain what each permission controls\n• Suggest role configurations for your team structure\n\nWhat would you like to configure?`;
@@ -2401,6 +2521,32 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
 
+  // Parse CREATE_OBJECT / CREATE_FIELD blocks — alternative format the model sometimes uses
+  const parseCreateObjectBlocks = (text) => {
+    const results = [];
+    const re = /<CREATE_OBJECT>([\s\S]*?)<\/CREATE_OBJECT>/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try { results.push(JSON.parse(m[1].trim())); } catch {}
+    }
+    return results;
+  };
+  const parseCreateFieldBlocks = (text) => {
+    const results = [];
+    const re = /<CREATE_FIELD>([\s\S]*?)<\/CREATE_FIELD>/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try { results.push(JSON.parse(m[1].trim())); } catch {}
+    }
+    return results;
+  };
+
+  const parseFileSearch = (text) => {
+    const m = text.match(/<FILE_SEARCH>([\s\S]*?)<\/FILE_SEARCH>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
 
   const parseModifyReport = (text) => {
     const m = text.match(/<MODIFY_REPORT>([\s\S]*?)<\/MODIFY_REPORT>/);
@@ -2410,6 +2556,18 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   const parseCreateDashboard = (text) => {
     const m = text.match(/<CREATE_DASHBOARD>([\s\S]*?)<\/CREATE_DASHBOARD>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
+  const parseCreateAgent = (text) => {
+    const m = text.match(/<CREATE_AGENT>([\s\S]*?)<\/CREATE_AGENT>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1].trim()); } catch { return null; }
+  };
+
+  const parseRunAgent = (text) => {
+    const m = text.match(/<RUN_AGENT>([\s\S]*?)<\/RUN_AGENT>/);
     if (!m) return null;
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   };
@@ -2511,12 +2669,17 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<CREATE_FORM>[\s\S]*?<\/CREATE_FORM>/g,"")
     .replace(/<CREATE_PORTAL>[\s\S]*?<\/CREATE_PORTAL>/g,"")
     .replace(/<CREATE_DASHBOARD>[\s\S]*?<\/CREATE_DASHBOARD>/g,"")
+    .replace(/<CREATE_AGENT>[\s\S]*?<\/CREATE_AGENT>/g,"")
+    .replace(/<RUN_AGENT>[\s\S]*?<\/RUN_AGENT>/g,"")
     .replace(/<CREATE_REPORT>[\s\S]*?<\/CREATE_REPORT>/g,"")
     .replace(/<PARSE_CV>[\s\S]*?<\/PARSE_CV>/g,"")
     .replace(/<PARSE_JD>[\s\S]*?<\/PARSE_JD>/g,"")
     .replace(/<PROPOSE_ACTION>[\s\S]*?<\/PROPOSE_ACTION>/g,"")
     .replace(/<APPLY_FILTER>[\s\S]*?<\/APPLY_FILTER>/g,"")
     .replace(/<APPLY_ID_FILTER>[\s\S]*?<\/APPLY_ID_FILTER>/g,"")
+    .replace(/<FILE_SEARCH>[\s\S]*?<\/FILE_SEARCH>/g,"")
+    .replace(/<CREATE_OBJECT>[\s\S]*?<\/CREATE_OBJECT>/g,"")
+    .replace(/<CREATE_FIELD>[\s\S]*?<\/CREATE_FIELD>/g,"")
     .replace(/<SEARCH_QUERY>[\s\S]*?<\/SEARCH_QUERY>/g,"")
     .replace(/<DB_QUERY>[\s\S]*?<\/DB_QUERY>/g,"")
     .replace(/<DOC_SEARCH>[\s\S]*?<\/DOC_SEARCH>/g,"")
@@ -2716,6 +2879,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setPendingPortal(null);
     setPendingPortal(null);
     setPendingReport(null);
+    setPendingAgent(null);
     setParsedPerson(null);
     setParsedJob(null);
     setProposedAction(null);
@@ -2986,6 +3150,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const taskData      = parseCreateTask(reply);
       const portalData    = parseCreatePortal(reply);
       const dashboardData = parseCreateDashboard(reply);
+      const agentData     = parseCreateAgent(reply);
+      const runAgentData  = parseRunAgent(reply);
       const modifyReport  = parseModifyReport(reply);
       const reportData    = parseCreateReport(reply);
       const cvData        = parseParsedCV(reply);
@@ -3008,12 +3174,13 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         : portalData     ? `I've designed the **${portalData.name}** portal:`
         : formData2      ? `I've designed the **${formData2.name}** form:`
         : dashboardData  ? `I've designed the **${dashboardData.name}** dashboard:`
+        : agentData      ? `I've designed the **${agentData.name}** agent — review it below before creating:`
         : reportData     ? `I've built a **${reportData.title}** report — does this look right?`
         : "";
 
       // Store action data on the message itself so each card is self-contained and immune to state resets
-      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
-        interviewData, formData2, taskData, reportData, portalData, dashboardData,
+      setMessages(m=>[...m,{role:"assistant",content:displayText||fallbackMsg,ts:new Date(),hasCreate:!!createData,hasWorkflow:!!workflowData,hasUser:!!userData,hasRole:!!roleData,hasInterview:!!interviewData,hasForm:!!formData2,hasTask:!!taskData,hasPortal:!!portalData,hasDashboard:!!dashboardData,hasAgent:!!agentData,hasReport:!!reportData,hasParsedCV:!!cvData,hasParsedJD:!!jdData,hasProposedAction:!!propAction,hasMatches:hasMatchRec,hasSearch:searchHits.length>0,searchIndex:msgIndex,
+        interviewData, formData2, taskData, reportData, portalData, dashboardData, agentData,
         hasTaskSearch:taskSearchHits.length>0, taskSearchIndex:msgIndex,
         hasDbQuery:dbQueryHits.length>0, dbQueryHits}]);
       if(taskSearchHits.length>0) setTaskSearchResults(prev=>({...prev,[msgIndex]:taskSearchHits}));
@@ -3026,11 +3193,196 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(taskData)      setPendingTask(taskData);
       if(portalData)    setPendingPortal(portalData);
       if(dashboardData)  setPendingDashboard(dashboardData);
-      if(modifyReport)  window.dispatchEvent(new CustomEvent("talentos:modify-report", { detail: modifyReport }));
+      if(agentData)      setPendingAgent(agentData);
+      if(runAgentData && !agentData) handleRunAgent(runAgentData);
       const applyFilter   = parseApplyFilter(reply);
       const applyIdFilter = parseApplyIdFilter(reply);
       if(applyFilter)   window.dispatchEvent(new CustomEvent("talentos:apply-filter",    { detail: applyFilter }));
       if(applyIdFilter) window.dispatchEvent(new CustomEvent("talentos:apply-id-filter", { detail: applyIdFilter }));
+
+      // Execute CREATE_OBJECT / CREATE_FIELD blocks directly (model sometimes uses these instead of PROPOSE_ACTION)
+      const createObjBlocks = parseCreateObjectBlocks(reply);
+      const createFldBlocks = parseCreateFieldBlocks(reply);
+      if (createObjBlocks.length || createFldBlocks.length) {
+        const envId = environment?.id;
+        let createdObjId = null;
+        let statusLines = [];
+        for (const obj of createObjBlocks) {
+          const resolvedEnv = obj.environment_id === 'Production' ? envId : (obj.environment_id || envId);
+          const slug = obj.slug || obj.name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+          try {
+            const res = await tFetch('/api/objects', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                environment_id: resolvedEnv,
+                name:        obj.name,
+                plural_name: obj.plural_name || obj.name + 's',
+                slug,
+                description: obj.description || '',
+                icon:        obj.icon || 'circle',
+                color:       obj.color || '#6366f1',
+              }),
+            });
+            if (res?.id) {
+              createdObjId = res.id;
+              statusLines.push(`✅ Object **${obj.name}** created`);
+            } else if (res?.error?.includes('already exists') || res?.error?.includes('slug')) {
+              // Object already exists — fetch its ID so fields can still be created
+              const existing = await tFetch(`/api/objects?environment_id=${resolvedEnv}`)
+                .then(r => (Array.isArray(r) ? r : []).find(o => o.slug === slug || o.name === obj.name))
+                .catch(() => null);
+              if (existing?.id) {
+                createdObjId = existing.id;
+                statusLines.push(`ℹ️ Object **${obj.name}** already exists — adding fields to it`);
+              } else {
+                statusLines.push(`❌ Object **${obj.name}** already exists and could not be found`);
+              }
+            } else {
+              statusLines.push(`❌ Object **${obj.name}** failed: ${res?.error || 'unknown error'}`);
+            }
+          } catch(e) {
+            // tFetch throws on non-2xx — try to recover by looking up existing object
+            try {
+              const existing = await tFetch(`/api/objects?environment_id=${resolvedEnv}`)
+                .then(r => (Array.isArray(r) ? r : []).find(o => o.slug === slug || o.name === obj.name))
+                .catch(() => null);
+              if (existing?.id) {
+                createdObjId = existing.id;
+                statusLines.push(`ℹ️ Object **${obj.name}** already exists — adding fields to it`);
+              } else {
+                statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`);
+              }
+            } catch { statusLines.push(`❌ Object **${obj.name}** failed: ${e.message}`); }
+          }
+        }
+        for (const fld of createFldBlocks) {
+          // Resolve object_id — may be a slug like "events" or an actual UUID
+          let objId = fld.object_id;
+          if (objId && !objId.includes('-')) {
+            // It's a slug — fetch fresh objects (includes the one just created)
+            const objs = await tFetch(`/api/objects?environment_id=${envId}`).then(r => Array.isArray(r) ? r : []).catch(() => []);
+            const match = objs.find(o =>
+              o.slug === objId ||
+              o.slug === objId.toLowerCase().replace(/[^a-z0-9]+/g,'_') ||
+              o.name.toLowerCase() === objId.toLowerCase()
+            );
+            objId = match?.id || createdObjId || objId;
+          }
+          // Also try using createdObjId if object_id was empty or unresolvable
+          if (!objId || objId === fld.object_id) objId = createdObjId || objId;
+          if (!objId) { statusLines.push(`❌ Field **${fld.name}** — no object ID`); continue; }
+          try {
+            const fieldRes = await tFetch('/api/fields', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                object_id:      objId,
+                environment_id: envId,
+                name:           fld.name,
+                api_key:        fld.api_key || fld.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),
+                field_type:     fld.field_type || 'text',
+                is_required:    fld.is_required || false,
+                show_in_list:   fld.show_in_list !== undefined ? fld.show_in_list : false,
+                description:    fld.description || '',
+                options:        Array.isArray(fld.options) ? fld.options : [],
+              }),
+            });
+            if (fieldRes?.id) {
+              statusLines.push(`✅ Field **${fld.name}** added`);
+            } else if (fieldRes?.error?.includes('already exists') || fieldRes?.error?.includes('api_key')) {
+              statusLines.push(`ℹ️ Field **${fld.name}** already exists — skipped`);
+            } else {
+              statusLines.push(`❌ Field **${fld.name}** failed: ${fieldRes?.error || 'unknown'}`);
+            }
+          } catch(e) {
+            // 409 = already exists, treat as success
+            if (e.message?.includes('409') || e.message?.includes('already exists')) {
+              statusLines.push(`ℹ️ Field **${fld.name}** already exists — skipped`);
+            } else {
+              statusLines.push(`❌ Field **${fld.name}** failed: ${e.message}`);
+            }
+          }
+        }
+        if (statusLines.length) {
+          const errors    = statusLines.filter(l => l.startsWith('❌'));
+          const successes = statusLines.filter(l => l.startsWith('✅'));
+          const skipped   = statusLines.filter(l => l.startsWith('ℹ️'));
+          const objLine   = [...successes, ...skipped].find(l => l.includes('Object') || l.includes('already exists — adding'));
+          const fieldSucc = successes.filter(l => l.includes('Field')).length;
+          const fieldSkip = skipped.filter(l => l.includes('Field')).length;
+          const fieldCount = fieldSucc + fieldSkip;
+          let summary = '';
+          if (objLine && fieldCount > 0) {
+            const objName = objLine.match(/\*\*([^*]+)\*\*/)?.[1] || 'object';
+            const alreadyExisted = objLine.startsWith('ℹ️');
+            const fieldNote = fieldSkip > 0 && fieldSucc === 0
+              ? `${fieldSkip} field${fieldSkip !== 1 ? 's' : ''} already existed`
+              : fieldSucc > 0 && fieldSkip > 0
+                ? `${fieldSucc} field${fieldSucc !== 1 ? 's' : ''} added, ${fieldSkip} already existed`
+                : `${fieldSucc} field${fieldSucc !== 1 ? 's' : ''} added`;
+            summary = alreadyExisted
+              ? `ℹ️ **${objName}** already existed — ${fieldNote}. Find it in the Data Model.`
+              : `✅ **${objName}** created with ${fieldNote}. You can now find it in the Data Model and start adding records.`;
+          } else if (fieldCount > 0) {
+            summary = `✅ **${fieldCount} field${fieldCount !== 1 ? 's' : ''}** added successfully.`;
+          } else if (successes.length > 0) {
+            summary = successes.join('\n');
+          } else {
+            summary = skipped.join('\n') || 'Nothing to do.';
+          }
+          if (errors.length) summary += '\n\n' + errors.join('\n');
+          setMessages(m => [...m, { role: 'assistant', content: summary, ts: new Date() }]);
+          // Refresh the objects list so the new object appears in the nav
+          window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+        }
+      }
+
+      // FILE_SEARCH — search indexed file content, inject results, re-ask Claude to summarise
+      const fileSearch = parseFileSearch(reply);
+      if (fileSearch?.term) {
+        try {
+          const fsRes = await fetch('/api/file-index/search', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              term: fileSearch.term,
+              categories: fileSearch.categories || null,
+              environment_id: environment?.id,
+            }),
+          }).then(r => r.json());
+
+          if (fsRes.results?.length) {
+            const fileResultsText = fsRes.results.map(r =>
+              `- ${r.filename} (${r.category}): "${r.snippet}"`
+            ).join('\n');
+            // Re-call Claude with file search results injected
+            const followUp = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514', max_tokens: 600,
+                system: `You previously searched file documents for "${fileSearch.term}". Here are the matching files found:\n${fileResultsText}\n\nNow present these results clearly to the user, combining with any field-level results already shown. Format: "I found X people who mention [term] in their uploaded documents: [names/files]. [Optional: combine with field results if relevant]"`,
+                messages: [{ role: 'user', content: `Summarise the file search results for "${fileSearch.term}"` }],
+              }),
+            }).then(r => r.json());
+
+            const fileReply = followUp.content?.[0]?.text || '';
+            if (fileReply) {
+              setMessages(m => [...m, { role: 'assistant', content: fileReply }]);
+            }
+          } else {
+            // No file results — append a note
+            setMessages(m => {
+              const last = m[m.length - 1];
+              if (last?.role === 'assistant') {
+                return [...m.slice(0,-1), { ...last, content: last.content + `\n\nI also searched uploaded CVs and documents for "${fileSearch.term}" but found no additional matches.` }];
+              }
+              return m;
+            });
+          }
+        } catch(e) {
+          console.warn('[fileSearch] error:', e.message);
+        }
+      }
 
       if(reportData)    setPendingReport(reportData);
       if(cvData)        setParsedPerson(cvData);
@@ -3077,6 +3429,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const d = pendingRecord.data;
       const name = (d.first_name?`${d.first_name} ${d.last_name||""}`.trim():null)||d.job_title||d.pool_name||"Record";
       setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${name}** created successfully!`,ts:new Date(),createdRecord:{id:created.id,name,objectName:obj.name,objectColor:obj.color,objectSlug:obj.slug,sub:d.email||d.department||d.category||""}}]);
+      // 🔄 Live update — tell the list view to refresh without a full page reload
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: obj.id, objectSlug: obj.slug, recordId: created.id } }));
       const actionType = obj.slug==='people' ? 'person_created' : obj.slug==='jobs' ? 'job_created' : null;
       if(actionType) showNextActions(actionType, { name });
       setPendingRecord(null);
@@ -3196,6 +3550,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         },created_by:'Copilot'})}).then(r=>r.json());
       const name = `${parsedPerson.first_name||''} ${parsedPerson.last_name||''}`.trim();
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: peopleObj.id, objectSlug: peopleObj.slug, recordId: rec.id } }));
       setParsedPerson(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -3219,6 +3574,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           requirements:parsedJob.requirements||'',skills:parsedJob.skills||[],status:'Open',
         },created_by:'Copilot'})}).then(r=>r.json());
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: jobObj.id, objectSlug: jobObj.slug, recordId: rec2.id } }));
       setParsedJob(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -3371,26 +3727,59 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         resultMsg = `**Done** — Field **${payload.name}** added to **${payload.object_name || 'object'}**`;
 
       // ── Create a new object ─────────────────────────────────────────────────
-      } else if (action_type === 'create_object' && payload?.name && payload?.environment_id) {
-        await tFetch('/api/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            environment_id: payload.environment_id,
-            name:           payload.name,
-            plural_name:    payload.plural_name || payload.name + 's',
-            slug:           payload.slug || payload.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
-            description:    payload.description || '',
-            icon:           payload.icon || 'circle',
-            color:          payload.color || '#6366f1',
-          }),
-        });
-        resultMsg = `**Done** — Object **${payload.name}** created`;
+      } else if (action_type === 'create_object') {
+        // Fall back to environment from context if not in payload
+        const envId = payload?.environment_id || environment?.id;
+        const objName = payload?.name;
+        if (!objName || !envId) {
+          console.warn('[Copilot] create_object missing name or environment_id', { payload, envId });
+          resultMsg = `**Error** — Could not create object: missing name or environment ID`;
+        } else {
+          await tFetch('/api/objects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              environment_id: envId,
+              name:           objName,
+              plural_name:    payload.plural_name || objName + 's',
+              slug:           payload.slug || objName.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+              description:    payload.description || '',
+              icon:           payload.icon || 'circle',
+              color:          payload.color || '#6366f1',
+            }),
+          });
+          resultMsg = `**Done** — Object **${objName}** created`;
+        }
+
+      } else if (action_type === 'create_record') {
+        // Fallback handler — model used PROPOSE_ACTION instead of CREATE_RECORD block.
+        // Route through the standard record creation path.
+        const slug = payload?.object_slug || payload?.object_type;
+        const obj = slug ? objects.find(o => o.slug === slug) : null;
+        if (!obj) {
+          resultMsg = `**Error** — Could not find object "${slug}". Please try again.`;
+        } else {
+          const data = payload?.data || {};
+          const created = await api.post('/records', {
+            object_id: obj.id,
+            environment_id: environment?.id,
+            data,
+            created_by: 'Copilot',
+          });
+          if (!created?.id) throw new Error(created?.error || 'Record creation failed');
+          const d = data;
+          const name = [d.first_name, d.last_name].filter(Boolean).join(' ')
+            || d.job_title || d.pool_name || d.name || d.title
+            || Object.values(d).find(v => typeof v === 'string' && v.trim()) || 'Record';
+          resultMsg = `**Done** — **${name}** created in ${obj.plural_name || obj.name}`;
+          // Fire live-update event so the list refreshes
+          window.dispatchEvent(new CustomEvent('talentos:recordCreated', { detail: { objectId: obj.id, objectSlug: obj.slug, recordId: created.id } }));
+        }
 
       } else {
         // Unknown action type — log it
         console.warn('[Copilot] Unknown action_type:', action_type, payload);
-        resultMsg = `**Done** — Done — action completed successfully.`;
+        resultMsg = `**Done** — action completed.`;
       }
 
       setMessages(m => [...m, { role: 'assistant', content: resultMsg, ts: new Date() }]);
@@ -3823,7 +4212,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         },
       }]);
       setPendingDashboard(null);
-      // Navigate to My Dashboards so user can see it immediately
+      // Navigate to My Dashboards and auto-select the newly created one
+      if (dash?.id) sessionStorage.setItem('vercentic_open_dashboard', dash.id);
       window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: "dashboard_custom" }));
     } catch (err) {
       setMessages(m => [...m, {
@@ -3834,6 +4224,68 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       }]);
     }
     setCreating(false);
+  };
+
+  // ── Create agent ────────────────────────────────────────────────────────────
+  const handleConfirmAgent = async () => {
+    if (!pendingAgent || !environment?.id) return;
+    setCreating(true);
+    try {
+      const obj = objects.find(o => o.slug === pendingAgent.target_object_slug);
+      const payload = {
+        name:              pendingAgent.name,
+        description:       pendingAgent.description || '',
+        trigger_type:      pendingAgent.trigger_type || 'manual',
+        target_object_id:  obj?.id || null,
+        schedule_time:     pendingAgent.schedule_time || null,
+        conditions:        pendingAgent.conditions || [],
+        actions:           (pendingAgent.actions || []).map((a, i) => ({ ...a, id: String(i + 1) })),
+        requires_approval: pendingAgent.requires_approval || false,
+        is_active:         true,
+        environment_id:    environment.id,
+      };
+      const created = await api.post('/agents', payload);
+      if (!created?.id) throw new Error(created?.error || 'Agent creation failed');
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: `✅ **${created.name}** is live. It will trigger on **${payload.trigger_type.replace(/_/g,' ')}** events${obj ? ` for ${obj.plural_name || obj.name}` : ''}. Manage it in Settings → Agents.`,
+        ts: new Date(),
+      }]);
+      setPendingAgent(null);
+      // Refresh agents list so context is up to date
+      api.get(`/agents?environment_id=${environment.id}`).then(r => setAllAgents(Array.isArray(r) ? r : [])).catch(() => {});
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `Failed to create agent: ${err.message}`, ts: new Date(), error: true }]);
+    }
+    setCreating(false);
+  };
+
+  // ── Run agent on current record ─────────────────────────────────────────────
+  const handleRunAgent = async (runData) => {
+    if (!runData?.agent_id) return;
+    if (!currentRecord?.id) {
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: '⚠️ No record is currently open. Navigate to a record first, then ask me to run the agent.',
+        ts: new Date(),
+      }]);
+      return;
+    }
+    setAgentRunning(true);
+    try {
+      const result = await api.post(`/agents/${runData.agent_id}/run`, {
+        record_id:      currentRecord.id,
+        environment_id: environment?.id,
+      });
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: `🤖 **${runData.agent_name}** started (run \`${(result.run_id||'').slice(0,8)}…\`). Check Settings → Agents → Runs for live progress and results.`,
+        ts: new Date(),
+      }]);
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `Agent run failed: ${err.message}`, ts: new Date(), error: true }]);
+    }
+    setAgentRunning(false);
   };
 
   const copyMessage = (text,id) => { navigator.clipboard.writeText(text); setCopied(id); setTimeout(()=>setCopied(null),2000); };
@@ -4928,6 +5380,52 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                       <button onClick={()=>setPendingDashboard(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
                       <button onClick={handleConfirmDashboard} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#0ea5e9",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                         {creating?<><Ic n="loader" s={12} c="white"/> Creating…</>:<><Ic n="bar-chart-2" s={12} c="white"/> Create Dashboard</>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Agent Creation Card ──────────────────────────────────── */}
+                {msg.role==="assistant"&&msg.hasAgent&&msg.agentData&&i===messages.length-1&&(
+                  <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #7048e8",background:"rgba(112,72,232,0.05)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:"#7048e8",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Ic n="cpu" s={14} c="white"/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{msg.agentData.name}</div>
+                        <div style={{fontSize:11,color:"#7048e8",fontWeight:600}}>
+                          {(msg.agentData.trigger_type||'manual').replace(/_/g,' ')}
+                          {msg.agentData.target_object_slug ? ` · ${msg.agentData.target_object_slug}` : ''}
+                        </div>
+                      </div>
+                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(112,72,232,0.12)",color:"#7048e8",fontWeight:700,flexShrink:0}}>
+                        {(msg.agentData.actions||[]).length} action{(msg.agentData.actions||[]).length!==1?'s':''}
+                      </span>
+                    </div>
+                    {msg.agentData.description&&<p style={{fontSize:12,color:C.text2,margin:"0 0 10px",lineHeight:1.5}}>{msg.agentData.description}</p>}
+                    <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
+                      {(msg.agentData.actions||[]).map((a,ai)=>(
+                        <div key={ai} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 10px",background:"white",borderRadius:8,border:"1px solid rgba(112,72,232,0.2)",fontSize:12}}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7048e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginTop:1,flexShrink:0}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                          <div style={{flex:1}}>
+                            <span style={{fontWeight:600,color:C.text1}}>{a.label||a.type}</span>
+                            {a.prompt&&<div style={{color:C.text3,marginTop:2,fontSize:11,lineHeight:1.4}}>"{a.prompt.slice(0,90)}{a.prompt.length>90?'…':''}"</div>}
+                            {a.requires_approval&&<span style={{fontSize:10,color:"#d97706",fontWeight:700}}> · requires approval</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {(msg.agentData.conditions||[]).length>0&&(
+                      <div style={{fontSize:11,color:C.text3,marginBottom:10}}>
+                        Conditions: {msg.agentData.conditions.map(c=>`${c.field} ${c.operator} "${c.value}"`).join(' AND ')}
+                      </div>
+                    )}
+                    {msg.agentData.requires_approval&&<div style={{fontSize:11,color:"#d97706",fontWeight:600,marginBottom:10}}>⚠️ All actions require human approval before running</div>}
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setPendingAgent(null)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Discard</button>
+                      <button onClick={handleConfirmAgent} disabled={creating} style={{flex:2,padding:"8px",borderRadius:8,border:"none",background:"#7048e8",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        {creating?<><Ic n="loader" s={12} c="white"/> Creating…</>:<><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Create Agent</>}
                       </button>
                     </div>
                   </div>

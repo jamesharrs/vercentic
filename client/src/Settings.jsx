@@ -1751,9 +1751,191 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
 };
 
 
+// ─── EditObjectModal ───────────────────────────────────────────────────────────
+// Icons available for object selection — a curated subset of PATHS
+const OBJECT_ICONS = [
+  "users","user","briefcase","layers","building","database","star","target",
+  "grid","list","calendar","mail","clipboard","form","flag","globe",
+  "zap","shield","key","bar-chart-2","filter","activity","monitor","cpu",
+  "paperclip","file-text","link","send","home","palette","bot","sparkles",
+  "git-branch","webhook","dollar","search","settings","help-circle",
+];
+
+function EditObjectModal({ obj, onSave, onClose }) {
+  const [form, setForm] = useState({
+    name:        obj.name        || "",
+    plural_name: obj.plural_name || "",
+    description: obj.description || "",
+    color:       obj.color       || "#6366f1",
+    icon:        obj.icon        || "circle",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const handle = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:500,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)",maxHeight:"90vh",overflowY:"auto"}}>
+        {/* Header — live preview */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{width:40,height:40,borderRadius:10,background:form.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n={form.icon||"circle"} s={20} c="white"/>
+          </div>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>Edit Object</div>
+            <div style={{fontSize:11,color:C.text3}}>Update name, icon, colour and description</div>
+          </div>
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Inp label="Name" value={form.name} onChange={v=>set("name",v)} required/>
+            <Inp label="Plural Name" value={form.plural_name} onChange={v=>set("plural_name",v)}/>
+          </div>
+          <Inp label="Description" value={form.description} onChange={v=>set("description",v)}/>
+
+          {/* Colour picker */}
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Colour</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {COLORS_DM.map(c=>(
+                <button key={c} onClick={()=>set("color",c)}
+                  style={{width:28,height:28,borderRadius:"50%",background:c,border:"none",cursor:"pointer",
+                    outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2,transition:"transform .1s",transform:form.color===c?"scale(1.15)":"scale(1)"}}/>
+              ))}
+            </div>
+          </div>
+
+          {/* Icon picker */}
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Icon</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {OBJECT_ICONS.map(ic=>(
+                <button key={ic} onClick={()=>set("icon",ic)} title={ic}
+                  style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${form.icon===ic?form.color:C.border}`,
+                    background:form.icon===ic?`${form.color}15`:"#fafafa",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                    transition:"all .1s",transform:form.icon===ic?"scale(1.1)":"scale(1)"}}>
+                  <Ic n={ic} s={15} c={form.icon===ic?form.color:C.text3}/>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end",borderTop:`1px solid ${C.border}`,paddingTop:16,marginTop:20}}>
+          <Btn v="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={handle} disabled={saving||!form.name.trim()} style={{background:form.color}}>
+            {saving ? "Saving…" : "Save Changes"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DeleteObjectDialog ────────────────────────────────────────────────────────
+function DeleteObjectDialog({ obj, impact, loading, deleting, onConfirm, onClose }) {
+  const [typed, setTyped] = useState("");
+  const hasWarnings = impact?.warnings?.length > 0;
+  const confirmed = typed.trim().toLowerCase() === obj.name.toLowerCase();
+  // Auto-focus the confirm input
+  const inputRef = React.useRef(null);
+  React.useEffect(() => { if (!loading) setTimeout(()=>inputRef.current?.focus(), 50); }, [loading]);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:480,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
+
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <div style={{width:36,height:36,borderRadius:9,background:"#fee2e2",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n="trash" s={16} c="#dc2626"/>
+          </div>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,color:"#dc2626",fontFamily:"'Space Grotesk', sans-serif"}}>Delete "{obj.name}"</div>
+            <div style={{fontSize:11,color:C.text3}}>This action cannot be undone</div>
+          </div>
+        </div>
+
+        {/* Impact analysis — shown when available */}
+        {loading && (
+          <div style={{padding:"12px 0 4px",color:C.text3,fontSize:12,display:"flex",alignItems:"center",gap:6}}>
+            <Ic n="loader" s={12} c={C.text3}/> Checking impact…
+          </div>
+        )}
+
+        {!loading && impact && (
+          <>
+            {/* Impact stat chips */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+              {[
+                { label:"Records",   val:impact.impact?.records,         color:"#dc2626", bg:"#fee2e2" },
+                { label:"Fields",    val:impact.impact?.fields,          color:"#d97706", bg:"#fef3c7" },
+                { label:"Workflows", val:impact.impact?.workflows,       color:"#7c3aed", bg:"#ede9fe" },
+                { label:"Lookups",   val:impact.impact?.inbound_lookups, color:"#0369a1", bg:"#e0f2fe" },
+                { label:"Forms",     val:impact.impact?.forms,           color:"#065f46", bg:"#d1fae5" },
+                { label:"Reports",   val:impact.impact?.reports,         color:"#64748b", bg:"#f1f5f9" },
+              ].filter(x => x.val > 0).map(x => (
+                <span key={x.label} style={{padding:"3px 10px",borderRadius:999,background:x.bg,color:x.color,fontSize:11,fontWeight:700}}>
+                  {x.val} {x.label}
+                </span>
+              ))}
+              {!hasWarnings && (
+                <span style={{padding:"3px 10px",borderRadius:999,background:"#d1fae5",color:"#065f46",fontSize:11,fontWeight:700}}>No linked data</span>
+              )}
+            </div>
+
+            {/* Warning list */}
+            {hasWarnings && (
+              <div style={{background:"#fff7ed",borderRadius:10,border:"1px solid #fed7aa",padding:"12px 14px",marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#c2410c",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
+                  <Ic n="info" s={12} c="#c2410c"/> What will be deleted
+                </div>
+                <ul style={{margin:0,padding:"0 0 0 14px"}}>
+                  {impact.warnings.map((w,i) => (
+                    <li key={i} style={{fontSize:12,color:"#92400e",marginBottom:3}}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Confirmation input — always shown */}
+        <div style={{marginBottom:16,marginTop:impact?0:8}}>
+          <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>
+            Type <strong>{obj.name}</strong> to confirm deletion
+          </label>
+          <input ref={inputRef} value={typed} onChange={e=>setTyped(e.target.value)}
+            placeholder={obj.name}
+            onKeyDown={e=>e.key==="Enter"&&confirmed&&!deleting&&onConfirm()}
+            style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",borderRadius:8,
+              border:`1.5px solid ${confirmed?"#dc2626":C.border}`,fontSize:13,fontFamily:F,outline:"none"}}/>
+        </div>
+
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end",borderTop:`1px solid ${C.border}`,paddingTop:16}}>
+          <Btn v="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={onConfirm} disabled={!confirmed||deleting}
+            style={{background:"#dc2626",opacity:(!confirmed||deleting)?0.5:1}}>
+            {deleting ? "Deleting…" : "Delete Object"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── CreateObjectModal (module-level) ─────────────────────────────────────────
 function CreateObjectModal({ selEnv, onCreated, onClose }) {
-  const [form, setForm] = React.useState({name:"",plural_name:"",slug:"",color:"#6366f1",description:""});
+  const [form, setForm] = React.useState({name:"",plural_name:"",slug:"",color:"#6366f1",icon:"circle",description:""});
   const [saving, setSaving] = React.useState(false);
   const [autoSlug, setAutoSlug] = React.useState(true);
   const [autoPlural, setAutoPlural] = React.useState(true);
@@ -1772,8 +1954,14 @@ function CreateObjectModal({ selEnv, onCreated, onClose }) {
   };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:440,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}}>
-        <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px",marginBottom:16}}>New Object</div>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 28px",width:500,fontFamily:F,boxShadow:"0 20px 60px rgba(0,0,0,.2)",maxHeight:"90vh",overflowY:"auto"}}>
+        {/* Live preview header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <div style={{width:40,height:40,borderRadius:10,background:form.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ic n={form.icon||"circle"} s={20} c="white"/>
+          </div>
+          <div style={{fontSize:16,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>New Object</div>
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <Inp label="Name" value={form.name} onChange={handleName} required/>
@@ -1782,9 +1970,28 @@ function CreateObjectModal({ selEnv, onCreated, onClose }) {
           <Inp label="Slug" value={form.slug} onChange={v=>{set("slug",v);setAutoSlug(false);}} help="Used in API and URLs"/>
           <Inp label="Description" value={form.description} onChange={v=>set("description",v)}/>
           <div>
-            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Color</label>
-            <div style={{display:"flex",gap:6}}>
-              {COLORS_DM.map(c=><button key={c} onClick={()=>set("color",c)} style={{width:26,height:26,borderRadius:"50%",background:c,border:"none",cursor:"pointer",outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2}}/>)}
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Colour</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {COLORS_DM.map(c=>(
+                <button key={c} onClick={()=>set("color",c)}
+                  style={{width:26,height:26,borderRadius:"50%",background:c,border:"none",cursor:"pointer",
+                    outline:form.color===c?`3px solid ${c}`:"none",outlineOffset:2,
+                    transform:form.color===c?"scale(1.15)":"scale(1)",transition:"transform .1s"}}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:C.text2,display:"block",marginBottom:6}}>Icon</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {OBJECT_ICONS.map(ic=>(
+                <button key={ic} onClick={()=>set("icon",ic)} title={ic}
+                  style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${form.icon===ic?form.color:C.border}`,
+                    background:form.icon===ic?`${form.color}15`:"#fafafa",cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    transition:"all .1s",transform:form.icon===ic?"scale(1.1)":"scale(1)"}}>
+                  <Ic n={ic} s={15} c={form.icon===ic?form.color:C.text3}/>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -1799,11 +2006,15 @@ function CreateObjectModal({ selEnv, onCreated, onClose }) {
 
 const DataModelSection = ({ environment: activeEnv }) => {
   const [envs,       setEnvs]       = useState([]);
-  // selEnv starts from the app-level selectedEnv, falls back to first in list
   const [selEnv,     setSelEnv]     = useState(activeEnv || null);
   const [objects,    setObjects]    = useState([]);
   const [selObj,     setSelObj]     = useState(null);
   const [fields,     setFields]     = useState([]);
+  const [editObj,    setEditObj]    = useState(null);   // object being edited
+  const [deleteObj,  setDeleteObj]  = useState(null);   // object pending deletion
+  const [impact,     setImpact]     = useState(null);   // delete impact data
+  const [impactLoad, setImpactLoad] = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
 
   // Sync selEnv when the app-level environment changes (e.g. switching sandbox ↔ production)
   useEffect(() => {
@@ -1864,6 +2075,44 @@ const DataModelSection = ({ environment: activeEnv }) => {
     reloadFields();
   };
 
+  const openDeleteObject = async (o, e) => {
+    e.stopPropagation();
+    setDeleteObj(o);
+    setImpact(null);
+    setImpactLoad(true);
+    try {
+      const data = await api.get(`/objects/${o.id}/delete-impact?environment_id=${selEnv?.id}`);
+      setImpact(data);
+    } catch { setImpact(null); }
+    setImpactLoad(false);
+  };
+
+  const confirmDeleteObject = async () => {
+    if (!deleteObj) return;
+    setDeleting(true);
+    try {
+      await api.del(`/objects/${deleteObj.id}`);
+      setDeleteObj(null); setImpact(null);
+      if (selObj?.id === deleteObj.id) setSelObj(null);
+      reloadObjects();
+      window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    }
+    setDeleting(false);
+  };
+
+  const handleEditObject = async (updated) => {
+    await api.patch(`/objects/${editObj.id}`, updated);
+    setEditObj(null);
+    reloadObjects();
+    if (selObj?.id === editObj.id) {
+      const fresh = await api.get(`/objects/${editObj.id}`).catch(() => null);
+      if (fresh?.id) setSelObj(fresh);
+    }
+    window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+  };
+
   // ── FieldModal & CreateObjectModal are defined at module level above ──
 
 
@@ -1891,15 +2140,32 @@ const DataModelSection = ({ environment: activeEnv }) => {
       {!selObj && (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
           {objects.map(o=>(
-            <div key={o.id} onClick={()=>setSelObj(o)} style={{background:"#fff",borderRadius:12,border:`1px solid ${C.border}`,padding:"16px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"all .15s"}}
-              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="#d1d5db";}}
-              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
+            <div key={o.id} onClick={()=>setSelObj(o)}
+              style={{background:"#fff",borderRadius:12,border:`1px solid ${C.border}`,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"all .15s",position:"relative"}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="#d1d5db";e.currentTarget.querySelector('.obj-actions').style.opacity="1";}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;e.currentTarget.querySelector('.obj-actions').style.opacity="0";}}>
               <div style={{width:40,height:40,borderRadius:10,background:o.color||"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <span style={{color:"white",fontSize:16,fontWeight:700}}>{o.name.charAt(0)}</span>
+                <Ic n={o.icon||"circle"} s={20} c="white"/>
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.text1}}>{o.plural_name||o.name}</div>
                 <div style={{fontSize:11,color:C.text3}}>{o.field_count||0} fields · {o.record_count||0} records {o.is_system&&"· system"}</div>
+              </div>
+              {/* Action buttons — visible on hover */}
+              <div className="obj-actions" onClick={e=>e.stopPropagation()}
+                style={{display:"flex",gap:4,opacity:0,transition:"opacity .15s"}}>
+                <button onClick={e=>{e.stopPropagation();setEditObj(o);}}
+                  title="Edit object"
+                  style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${C.border}`,background:"#fff",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600,color:C.text2,fontFamily:F}}>
+                  <Ic n="edit" s={12} c={C.text3}/> Edit
+                </button>
+                {!o.is_system && (
+                  <button onClick={e=>openDeleteObject(o,e)}
+                    title="Delete object"
+                    style={{padding:"5px 8px",borderRadius:7,border:"1px solid #fecaca",background:"#fff9f9",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600,color:"#dc2626",fontFamily:F}}>
+                    <Ic n="trash" s={12} c="#dc2626"/> Delete
+                  </button>
+                )}
               </div>
               <Ic n="chevR" s={14} c={C.text3}/>
             </div>
@@ -1912,7 +2178,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
         <div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,padding:"14px 16px",background:"#fff",borderRadius:12,border:`1px solid ${C.border}`}}>
             <div style={{width:36,height:36,borderRadius:9,background:selObj.color||"#6366f1",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{color:"white",fontSize:14,fontWeight:700}}>{selObj.name.charAt(0)}</span>
+                <Ic n={selObj.icon||"circle"} s={18} c="white"/>
             </div>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif",letterSpacing:"-0.3px"}}>{selObj.name} Schema</div>
@@ -1943,6 +2209,8 @@ const DataModelSection = ({ environment: activeEnv }) => {
 
       {showCreate && <CreateObjectModal selEnv={selEnv} onCreated={()=>{ reloadObjects(); }} onClose={()=>setShowCreate(false)}/>}
       {(showField||editField) && <FieldModal field={editField} selEnv={selEnv} selObj={selObj} onSaved={()=>{}} onClose={()=>{setShowField(false);setEditField(null);setTimeout(reloadFields,150);}}/>}
+      {editObj && <EditObjectModal obj={editObj} onSave={handleEditObject} onClose={()=>setEditObj(null)}/>}
+      {deleteObj && <DeleteObjectDialog obj={deleteObj} impact={impact} loading={impactLoad} deleting={deleting} onConfirm={confirmDeleteObject} onClose={()=>{setDeleteObj(null);setImpact(null);}}/>}
     </div>
   );
 };

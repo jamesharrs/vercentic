@@ -8,6 +8,11 @@ import CommunicationsPanel from "./Communications.jsx";
 import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
+
+// Set PDF.js worker once at module load — prevents CDN fallback
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import * as _pdfjsInit from 'pdfjs-dist';
+_pdfjsInit.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
@@ -499,7 +504,7 @@ const FilePageThumb = ({ url }) => {
     (async () => {
       try {
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+        // workerSrc already set at module load — no need to set again
         const pdf  = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         if (cancelled || !canvasRef.current) return;
@@ -1203,9 +1208,23 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
 // Module-level environment ref — set by RecordsView on mount
 let _currentEnvId = null;
 
-// Module-level cache so PeoplePicker doesn't re-fetch on every open
-const _pickerCache = {};
+// Module-level pending filter — set by talentos:apply-filter when RecordsView isn't mounted yet.
+// RecordsView picks this up on mount and applies it immediately.
+// Keyed by object slug so the filter only applies to the intended list.
+let _pendingFilter = null; // { objectSlug: string, detail: object }
+
+// Global listener set up once — stores the filter so whichever RecordsView next mounts can pick it up.
+// This fires before RecordsView is even mounted when the Copilot emits NAVIGATE + APPLY_FILTER together.
+window.addEventListener('talentos:apply-filter', (e) => {
+  // Only store if no RecordsView is currently listening (i.e. we're navigating away from a list)
+  // RecordsView sets _pendingFilter = null when it claims it on mount, and null again when unmounted.
+  // We store unconditionally here; RecordsView will either pick it up on mount or handle it live.
+  if (e.detail && !_pendingFilter) {
+    _pendingFilter = { detail: e.detail, ts: Date.now() };
+  }
+});
 // Called by Settings after a field is saved so the picker re-fetches with new config
+const _pickerCache = {};
 export const clearPickerCache = () => { Object.keys(_pickerCache).forEach(k => delete _pickerCache[k]); };
 // Module-level cache for dataset options and skills
 const _datasetCache = {};
@@ -5538,9 +5557,7 @@ const PdfViewer = ({ data }) => {
     (async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        // Use the bundled worker — CDN version won't match pdfjs-dist v5
-        const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url);
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl.toString();
+        // workerSrc already set at module load via top-level import
         const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
         const pdf = await loadingTask.promise;
         if (cancelled) return;
@@ -11418,6 +11435,20 @@ function buildListContext(object, records, total, fields) {
     lines.push("sample_names: " + names.join(", ") +
       (records.length > 10 ? " ... +" + (records.length - 10) + " more" : ""));
 
+  // Location-to-ID map — lets Copilot resolve geography mismatches (Paris→France) using APPLY_ID_FILTER
+  const locationIds = {};
+  records.forEach(r => {
+    const loc = r.data?.location;
+    if (loc && r.id) {
+      if (!locationIds[loc]) locationIds[loc] = [];
+      locationIds[loc].push(r.id);
+    }
+  });
+  if (Object.keys(locationIds).length > 0) {
+    lines.push("location_ids: " + Object.entries(locationIds)
+      .map(([loc, ids]) => `${loc}=[${ids.join(",")}]`).join("; "));
+  }
+
   return lines.join("\n");
 }
 
@@ -11656,18 +11687,52 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // Copilot filter events
   useEffect(() => {
     const handleApplyFilter = (e) => {
-      const { fieldKey, op, value } = e.detail || {};
-      if (!fieldKey) return;
-      const field = fields.find(f => f.api_key === fieldKey);
-      if (!field) {
-        setAiFilter({ type: 'pending', fieldKey, op: op || 'contains', value: value || '' });
+      const detail = e.detail || {};
+
+      // Handle both formats:
+      // Format A (new): { filters: [{field, op, value}], search? }  ← what AI actually emits
+      // Format B (old): { fieldKey, op, value }                     ← legacy single-filter format
+      const filtersArr = detail.filters || (detail.fieldKey ? [{ field: detail.fieldKey, op: detail.op, value: detail.value }] : null);
+
+      if (detail.clearFilters) {
+        setActiveFilters([]);
+        setAiFilter(null);
+        setPage(1);
         return;
       }
-      setActiveFilters(prev => {
-        if (prev.some(f => f.fieldId === field.id && f.value === value)) return prev;
-        return [...prev, { id: 'ai_' + Date.now(), fieldId: field.id, op: op || 'contains', value: value || '', ai: true }];
-      });
-      setPage(1);
+      if (detail.search !== undefined) {
+        setSearch(detail.search || '');
+        setPage(1);
+        return;
+      }
+      if (!filtersArr?.length) return;
+
+      // Map each filter to a field ID
+      const newFilters = [];
+      for (const f of filtersArr) {
+        const fieldKey = f.field || f.fieldKey;
+        if (!fieldKey) continue;
+        const field = fields.find(fd => fd.api_key === fieldKey);
+        if (!field) {
+          // Field not loaded yet — store as pending
+          setAiFilter({ type: 'pending', fieldKey, op: f.op || 'contains', value: f.value || '' });
+          continue;
+        }
+        if (!newFilters.some(nf => nf.fieldId === field.id && nf.value === f.value)) {
+          newFilters.push({ id: 'ai_' + Date.now() + Math.random(), fieldId: field.id, op: f.op || 'contains', value: f.value || '', ai: true });
+        }
+      }
+      if (newFilters.length) {
+        setActiveFilters(prev => {
+          const merged = [...prev];
+          for (const nf of newFilters) {
+            if (!merged.some(f => f.fieldId === nf.fieldId && f.value === nf.value)) merged.push(nf);
+          }
+          return merged;
+        });
+        setShowFilterPanel(true);
+        setPage(1);
+      }
     };
     const handleApplyIdFilter = (e) => {
       const { ids, label, reason } = e.detail || {};
@@ -11714,7 +11779,21 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [activeTab, setActiveTab] = useState("records");
 
   // Listen for copilot filter commands — talentos:apply-filter
+  // Also check _pendingFilter on mount: when the Copilot fires NAVIGATE + APPLY_FILTER together,
+  // the filter event fires before RecordsView is mounted. The module-level listener stores it,
+  // and we consume it here once fields are loaded.
   useEffect(() => {
+    // Consume any pending filter that arrived before this component mounted.
+    // Only apply if it's fresh (< 10s old) to avoid stale filters on unrelated navigation.
+    if (_pendingFilter && (Date.now() - _pendingFilter.ts) < 10000) {
+      const pending = _pendingFilter;
+      _pendingFilter = null; // claim it
+      // Delay one tick so fields have populated from the load() call
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('talentos:apply-filter', { detail: pending.detail }));
+      }, 150);
+    }
+
     const handler = (e) => {
       const { search: q, filters, clearFilters, field, op, value } = e.detail || {};
 
@@ -11906,6 +11985,20 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     window.addEventListener('talentos:server-online', handler);
     return () => window.removeEventListener('talentos:server-online', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 🔄 Live update — Copilot (or any other source) fires this after creating a record.
+  // If the new record belongs to the object we're currently viewing, silently reload.
+  useEffect(() => {
+    const handler = (e) => {
+      const { objectId } = e.detail || {};
+      if (objectId && objectId === object?.id) {
+        // Bump reloadKey to trigger a fresh load without clearing existing records
+        setReloadKey(k => k + 1);
+      }
+    };
+    window.addEventListener('talentos:recordCreated', handler);
+    return () => window.removeEventListener('talentos:recordCreated', handler);
+  }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
   useEffect(() => {

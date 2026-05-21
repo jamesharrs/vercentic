@@ -137,9 +137,33 @@ if (!sessionStore) {
     const FileStore = require('session-file-store')(session);
     const sessDir = require('path').join(__dirname, '../data/sessions');
     if (!require('fs').existsSync(sessDir)) require('fs').mkdirSync(sessDir, { recursive: true });
+
+    // ── Startup cleanup: prune session files older than the TTL ──────────────
+    // file-store doesn't prune on read — old files accumulate forever.
+    // Sweep once on boot so the directory stays tidy.
+    try {
+      const fsMod = require('fs');
+      const pathMod = require('path');
+      const ttlMs = (process.env.NODE_ENV === 'production' ? 24 * 60 * 60 : 30 * 24 * 60 * 60) * 1000;
+      const cutoff = Date.now() - ttlMs;
+      const files = fsMod.readdirSync(sessDir);
+      let pruned = 0;
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        const fp = pathMod.join(sessDir, f);
+        try {
+          const stat = fsMod.statSync(fp);
+          if (stat.mtimeMs < cutoff) { fsMod.unlinkSync(fp); pruned++; }
+        } catch {/* ignore individual file errors */}
+      }
+      if (pruned > 0) console.log(`[session] Pruned ${pruned} expired session file(s)`);
+    } catch (e) {
+      console.warn('[session] Cleanup pass failed:', e.message);
+    }
+
     sessionStore = new FileStore({
       path:    sessDir,
-      ttl:     process.env.NODE_ENV === 'production' ? 8 * 60 * 60 : 30 * 24 * 60 * 60, // 8h prod / 30d dev
+      ttl:     process.env.NODE_ENV === 'production' ? 24 * 60 * 60 : 30 * 24 * 60 * 60, // 24h prod / 30d dev
       retries: 0,
       logFn:   () => {},      // suppress verbose file-store logs
     });
@@ -158,13 +182,16 @@ app.use(session({
   })(),
   resave: false,
   saveUninitialized: false,
+  rolling: true,                  // ← Sliding window: every authed request resets the cookie expiry,
+                                  //   so an active user never gets logged out mid-session.
   cookie: {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     // Do NOT set domain when Vercel and Railway are on different root domains —
     // the browser will reject cross-domain cookies. Let it default to the Railway origin.
-    maxAge:   process.env.NODE_ENV === 'production' ? 8 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+    maxAge:   process.env.NODE_ENV === 'production' ? 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+                                  // 24h prod / 30d dev (with rolling: true, idle window not total session)
   },
 }));
 app.use(tenantMiddleware);        // tenant isolation — must come before routes
@@ -189,23 +216,46 @@ app.use((req, res, next) => {
 // ── Dev auto-login — creates a session for admin when none exists in local dev ──
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
-    // Skip if already authenticated, or if this is a login/auth/portal/health route
     if (req.session?.userId) return next();
     const skip = ['/api/portals', '/api/health', '/api/superadmin', '/__vite'];
     if (skip.some(p => req.path.startsWith(p))) return next();
-    // Also skip the login POST itself to avoid infinite loop
     if (req.method === 'POST' && req.path === '/api/auth/login') return next();
-    // Find the admin user in the store and auto-create a session
+    if (!storeReady) return next(); // don't attempt auto-login before store is ready
     try {
       const store = getStore();
       const admin = (store.users || []).find(u => u.email === 'admin@talentos.io' && !u.deleted_at);
       if (admin) {
         req.session.userId     = admin.id;
-        req.session.tenantSlug = store.tenant?.slug || (process.env.NODE_ENV === 'production' ? 'production' : 'master');
-        return req.session.save((err) => next()); // wait for save before continuing
+        req.session.tenantSlug = store.tenant?.slug || 'master';
+        return req.session.save((err) => next());
       }
     } catch (e) { /* silent */ }
     next();
+  });
+
+  // Dev convenience: GET /api/dev/session — returns full session status
+  // Client uses this to sync localStorage after server restart
+  app.get('/api/dev/session', (req, res) => {
+    const uid = req.session?.userId;
+    if (!uid) return res.json({ authenticated: false });
+    try {
+      const store = getStore();
+      const user  = (store.users || []).find(u => u.id === uid && !u.deleted_at);
+      if (!user) return res.json({ authenticated: false });
+      const role  = (store.roles || []).find(r => r.id === user.role_id);
+      const perms = (store.role_permissions || []).filter(p => p.role_id === user.role_id);
+      // Return full session data so client can sync localStorage
+      res.json({
+        authenticated: true,
+        user: { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name,
+                environment_id: user.environment_id, role_id: user.role_id },
+        role,
+        permissions: perms,
+        tenant_slug: req.session.tenantSlug || 'master',
+      });
+    } catch(e) {
+      res.json({ authenticated: false, error: e.message });
+    }
   });
 }
 
@@ -213,6 +263,17 @@ app.use(attachUser);              // attach current user to req (reads session O
 app.use(attachCsrfCookie);        // set vercentic_csrf cookie when user is authenticated
 app.use(verifyCsrf);              // enforce CSRF token on state-changing requests
 app.use(auditResponseMiddleware); // log 403 responses to security audit log
+
+// ── Store-ready guard — return 503 until DB is initialised ───────────────────
+// Prevents auth failures during the brief startup window before initDB() completes.
+// Client apiClient.js treats 503 as a retryable error, not a logout trigger.
+app.use((req, res, next) => {
+  if (storeReady) return next();
+  // Allow health check and auth routes through immediately
+  const alwaysAllow = ['/api/health', '/api/users/login', '/api/users/auth/login'];
+  if (alwaysAllow.some(p => req.path.startsWith(p))) return next();
+  res.status(503).json({ status: 'starting', message: 'Server initialising — please retry in a moment' });
+});
 
 // ── Portal session middleware — resolves x-portal-token to req.portalUser ────
 app.use((req, res, next) => {
@@ -341,6 +402,7 @@ app.use('/api/relationships',     require('./routes/relationships'));
 app.use('/api/notes',             require('./routes/notes'));
 app.use('/api/attachments',       require('./routes/attachments'));
 app.use('/api/file-types',        require('./routes/file_types'));
+app.use('/api/file-index',        require('./routes/file_index'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
 app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));
 app.use('/api/groups',            require('./routes/groups'));
@@ -602,6 +664,12 @@ if (process.env.NODE_ENV !== 'test') {
 
 initDB().then(async () => {
   storeReady = true;
+
+  // ── File index backfill — runs silently in background on startup ─────────
+  setTimeout(() => {
+    require('./services/fileIndex').backfillAll()
+      .catch(e => console.error('[fileIndex] startup backfill error:', e.message));
+  }, 5000); // wait 5s for store to fully settle
   const store = getStore();
   const fs   = require('fs');
   const path = require('path');

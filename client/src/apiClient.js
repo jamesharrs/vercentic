@@ -80,20 +80,47 @@ const SILENT_404_PATTERNS = [
 
 function handleResponse(r, path = '') {
   if (r.status === 404 && SILENT_404_PATTERNS.some(p => path.includes(p))) return null;
+  if (r.status === 503) {
+    // Server still starting up — NOT a logout trigger. Retry after 2s.
+    window.dispatchEvent(new CustomEvent('talentos:server-starting'));
+    return Promise.resolve(null);
+  }
   if (r.status === 401) {
-    // Dispatch a global event so App can redirect to login without a hard reload
+    // In dev: try to re-sync session before logging out
+    if (!import.meta.env.PROD) {
+      window.dispatchEvent(new CustomEvent('talentos:session-lost'));
+      return Promise.resolve(null); // return null instead of the error JSON
+    }
     window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
   }
   return r.json();
 }
 
+// Mutation response handler — fires same events as handleResponse but always returns parsed JSON
+// (call sites expect to read .id, .error etc on the response — we shouldn't return null mid-flow)
+function handleMutationResponse(r, path = '') {
+  if (r.status === 503) {
+    window.dispatchEvent(new CustomEvent('talentos:server-starting'));
+    return Promise.resolve({ __server_starting: true, error: 'Server starting up — try again' });
+  }
+  if (r.status === 401) {
+    if (!import.meta.env.PROD) {
+      window.dispatchEvent(new CustomEvent('talentos:session-lost'));
+    } else {
+      window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
+    }
+    // Still parse the body so callers see { error: 'Authentication required' }
+  }
+  return r.json().catch(() => ({ error: 'Response not JSON', status: r.status }));
+}
+
 const api = {
   get:    (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', headers: authHeaders() }).then(r => handleResponse(r, path)),
-  post:   (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'POST',   headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
-  patch:  (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PATCH',  headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
-  put:    (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PUT',    headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => r.json()),
-  del:    (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'DELETE', headers: mutationHeaders() }).then(r => r.json()),
-  delete: (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'DELETE', headers: mutationHeaders() }).then(r => r.json()),
+  post:   (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'POST',   headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => handleMutationResponse(r, path)),
+  patch:  (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PATCH',  headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => handleMutationResponse(r, path)),
+  put:    (path, body) => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'PUT',    headers: jsonHeaders(),     body: JSON.stringify(body) }).then(r => handleMutationResponse(r, path)),
+  del:    (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'DELETE', headers: mutationHeaders() }).then(r => handleMutationResponse(r, path)),
+  delete: (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'DELETE', headers: mutationHeaders() }).then(r => handleMutationResponse(r, path)),
 };
 
 export default api;
