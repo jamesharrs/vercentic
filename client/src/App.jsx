@@ -2355,6 +2355,13 @@ activeNavRef.current = activeNav;
     return () => window.removeEventListener("talentos:openRecord", handler);
   }, []); // safe — uses ref, not stale closure
 
+  // 🔄 Live update — refresh nav objects when Copilot (or Settings) creates/edits an object
+  useEffect(() => {
+    const handler = () => { if (selectedEnv?.id) loadNavObjects(selectedEnv.id); };
+    window.addEventListener('talentos:refreshObjects', handler);
+    return () => window.removeEventListener('talentos:refreshObjects', handler);
+  }, [selectedEnv?.id, loadNavObjects]);
+
   // Copilot navigation — switch to a named section or object
   useEffect(() => {
     const handler = (e) => {

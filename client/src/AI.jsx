@@ -3402,6 +3402,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const d = pendingRecord.data;
       const name = (d.first_name?`${d.first_name} ${d.last_name||""}`.trim():null)||d.job_title||d.pool_name||"Record";
       setMessages(m=>[...m,{role:"assistant",content:`**Done** — **${name}** created successfully!`,ts:new Date(),createdRecord:{id:created.id,name,objectName:obj.name,objectColor:obj.color,objectSlug:obj.slug,sub:d.email||d.department||d.category||""}}]);
+      // 🔄 Live update — tell the list view to refresh without a full page reload
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: obj.id, objectSlug: obj.slug, recordId: created.id } }));
       const actionType = obj.slug==='people' ? 'person_created' : obj.slug==='jobs' ? 'job_created' : null;
       if(actionType) showNextActions(actionType, { name });
       setPendingRecord(null);
@@ -3521,6 +3523,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         },created_by:'Copilot'})}).then(r=>r.json());
       const name = `${parsedPerson.first_name||''} ${parsedPerson.last_name||''}`.trim();
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: peopleObj.id, objectSlug: peopleObj.slug, recordId: rec.id } }));
       setParsedPerson(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);
@@ -3544,6 +3547,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           requirements:parsedJob.requirements||'',skills:parsedJob.skills||[],status:'Open',
         },created_by:'Copilot'})}).then(r=>r.json());
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
+      window.dispatchEvent(new CustomEvent("talentos:recordCreated", { detail: { objectId: jobObj.id, objectSlug: jobObj.slug, recordId: rec2.id } }));
       setParsedJob(null);
     } catch(err) {
       setMessages(m=>[...m,{role:'assistant',content:`Failed: ${err.message}`,ts:new Date(),error:true}]);

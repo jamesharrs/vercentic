@@ -11958,6 +11958,20 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     return () => window.removeEventListener('talentos:server-online', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 🔄 Live update — Copilot (or any other source) fires this after creating a record.
+  // If the new record belongs to the object we're currently viewing, silently reload.
+  useEffect(() => {
+    const handler = (e) => {
+      const { objectId } = e.detail || {};
+      if (objectId && objectId === object?.id) {
+        // Bump reloadKey to trigger a fresh load without clearing existing records
+        setReloadKey(k => k + 1);
+      }
+    };
+    window.addEventListener('talentos:recordCreated', handler);
+    return () => window.removeEventListener('talentos:recordCreated', handler);
+  }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
   useEffect(() => {
     if (!isPeopleObj || !records.length || !showEngagement) return;
