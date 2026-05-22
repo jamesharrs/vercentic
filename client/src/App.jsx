@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, startTransition } from "react";
 import { useTour } from "./GuidedTour.jsx";
 import api, { getTenantSlug } from "./apiClient.js";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
@@ -1635,6 +1635,26 @@ function App({ onEnvReady }) {
   const featPanelInsights    = useFeature('panel_insights');
   const featPanelQuestions   = useFeature('panel_questions');
 
+  // Memoize featureFlags so RecordPage/RecordDetail don't remount when App re-renders
+  // (e.g. typing in a modal causes App state changes which previously recreated this object)
+  const featureFlags = useMemo(() => ({
+    bulk_actions: featBulk, communications_panel: featComms, duplicate_detection: featDupDetect,
+    cv_parsing: featCvParse, linkedin_finder: featLinkedIn, ai_copilot: featCopilot,
+    ai_matching: featAiMatching, interviews: featInterviews,
+    panel_notes: featPanelNotes, panel_files: featPanelFiles, panel_activity: featPanelActivity,
+    panel_forms: featPanelForms, panel_recommendations: featPanelRecommend,
+    panel_linked_records: featPanelLinked, panel_tasks: featPanelTasks,
+    panel_assessments: featPanelAssessments, panel_engagement: featPanelEngagement,
+    panel_reporting: featPanelReporting, panel_agents: featPanelAgents,
+    panel_user: featPanelUser, panel_insights: featPanelInsights,
+    panel_questions: featPanelQuestions,
+    _perObject: featPerObject, _panelConditions: featPanelConditions,
+  }), [featBulk, featComms, featDupDetect, featCvParse, featLinkedIn, featCopilot,
+    featAiMatching, featInterviews, featPanelNotes, featPanelFiles, featPanelActivity,
+    featPanelForms, featPanelRecommend, featPanelLinked, featPanelTasks,
+    featPanelAssessments, featPanelEngagement, featPanelReporting, featPanelAgents,
+    featPanelUser, featPanelInsights, featPanelQuestions, featPerObject, featPanelConditions]);
+
   // ── Route detection (non-hook, safe before returns) ──────────────────────────
   // ── App function — all hooks must be called unconditionally ─────────────────
   // Special-route routing (hub, portal, superadmin, bot, etc.) has been moved
@@ -2881,13 +2901,7 @@ activeNavRef.current = activeNav;
           const parts = activeNav.split("_"); const recordId = parts[1]; const objectId = parts[2];
           const obj = navObjects.find(o => o.id === objectId);
           return <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"visible"}}><RecordPage recordId={recordId} objectId={objectId} environment={selectedEnv} allObjects={navObjects} onBack={() => { setActiveRecord(null); setActiveRecordObj(null); setActiveNav(obj ? `obj_${obj.id}` : "dashboard"); }} onNavigate={openRecord} onHistoryUpdate={pushHistory}
-            featureFlags={{ bulk_actions: featBulk, communications_panel: featComms, duplicate_detection: featDupDetect, cv_parsing: featCvParse, linkedin_finder: featLinkedIn, ai_copilot: featCopilot, ai_matching: featAiMatching, interviews: featInterviews,
-              panel_notes: featPanelNotes, panel_files: featPanelFiles, panel_activity: featPanelActivity,
-              panel_forms: featPanelForms, panel_recommendations: featPanelRecommend, panel_linked_records: featPanelLinked,
-              panel_tasks: featPanelTasks, panel_assessments: featPanelAssessments, panel_engagement: featPanelEngagement,
-              panel_reporting: featPanelReporting, panel_agents: featPanelAgents, panel_user: featPanelUser,
-              panel_insights: featPanelInsights, panel_questions: featPanelQuestions,
-              _perObject: featPerObject, _panelConditions: featPanelConditions }}
+            featureFlags={featureFlags}
             onRecordLoad={(rec, recObj) => {
             setActiveRecord(rec); setActiveRecordObj(recObj);
             // Swap UUID URL for clean numeric URL once record is loaded
