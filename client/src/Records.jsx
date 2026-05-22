@@ -10200,9 +10200,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     return true;
   };
 
-  const visibleFields = fields.filter(f => {
-    return evaluateFieldConditions(f, liveData);
-  });
+  // Only recompute visible fields when fields list or saved record data changes.
+  // NOT on every editing keystroke — `editing` state changes every character but
+  // field visibility conditions only matter after save. Keeps panels stable while typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const visibleFields = useMemo(() => fields.filter(f => evaluateFieldConditions(f, record.data)),
+    [fields, record.id, record.updated_at]); // updated_at changes on save → recomputes
 
   // Build sections dynamically from section_separator fields.
   // Fields before the first separator go into an implicit "Details" section.
