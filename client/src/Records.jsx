@@ -5,6 +5,8 @@ import RichTextEditor from "./RichTextEditor.jsx";
 import AITextEditor from "./AITextEditor.jsx";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel from "./Communications.jsx";
+// Stable wrapper — prevents remounting when parent re-renders (fixes input focus loss)
+const StableCommunicationsPanel = memo(CommunicationsPanel);
 import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
@@ -10511,7 +10513,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="comms") {
       if (!ff.communications_panel) return null;
       return canRecord('record_view_comms') ? (
-        <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
+        <StableCommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
       ) : <AccessDeniedPanel label="Communications"/>;
     }
     if (id==="coordination") {
@@ -10763,7 +10765,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections]);
+  }, [record, notes, attachments, fields, environment, objectName, composeType, activeJobContext, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections]);
 
 
   // PanelCard is defined at module level above RecordDetail
