@@ -2,9 +2,10 @@
  * mailer.js — Vercentic central email service powered by Resend
  *
  * Sending priority:
- *   1. Client's verified custom domain (e.g. jobs@acme.com)       — per-environment setting
- *   2. Vercentic default subdomain  (noreply@mail.vercentic.com)  — always available once configured
- *   3. Simulation mode              (logs only, no real send)       — when RESEND_API_KEY not set
+ *   1. Client's verified custom domain (e.g. jobs@acme.com)            — per-environment setting
+ *   2. Auto-provisioned subdomain     (noreply@slug.mail.vercentic.com) — auto-created per tenant
+ *   3. Vercentic default              (noreply@mail.vercentic.com)      — platform fallback
+ *   4. Simulation mode                (logs only, no real send)          — when RESEND_API_KEY not set
  */
 
 const { getStore, saveStore } = require('../db/init');
@@ -38,16 +39,57 @@ function getClientEmailDomain(environmentId) {
 }
 
 // ── Core send function ─────────────────────────────────────────────────────────
+// ── Auto-provision a subdomain for an environment (slug.mail.vercentic.com) ───
+// Called lazily the first time an environment sends email without a custom domain.
+async function getOrProvisionSubdomain(environmentId) {
+  if (!environmentId) return null;
+  const resend = getResend();
+  if (!resend) return null;
+
+  const store = getStore();
+  if (!store.email_domain_configs) store.email_domain_configs = [];
+
+  // Already provisioned (any status)?
+  const existing = store.email_domain_configs.find(c => c.environment_id === environmentId);
+  if (existing) return existing.status === 'verified' ? existing : null;
+
+  // Derive slug from environment name or id
+  const env = (store.environments || []).find(e => e.id === environmentId);
+  const rawSlug = (env?.name || environmentId)
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+  const subdomain = `${rawSlug}.${DEFAULT_FROM_DOMAIN}`; // e.g. acme-corp.mail.vercentic.com
+
+  try {
+    const cfg = await registerClientDomain({
+      environmentId,
+      domain:     subdomain,
+      fromEmail:  'noreply',
+      fromName:   env?.name || DEFAULT_FROM_NAME,
+    });
+    console.log(`[mailer] Auto-provisioned subdomain ${subdomain} for env ${environmentId}`);
+    return cfg.status === 'verified' ? cfg : null;
+  } catch (err) {
+    console.warn(`[mailer] Subdomain auto-provision failed for ${subdomain}:`, err.message);
+    return null;
+  }
+}
+
 async function sendEmail({ to, subject, html, text, from, replyTo, environmentId, attachments }) {
   const resend = getResend();
 
-  // Resolve from address — client domain > default > simulation
+  // Resolve from address — custom domain > auto-subdomain > platform default
   let fromAddr = from;
   if (!fromAddr) {
     const clientDomain = getClientEmailDomain(environmentId);
-    fromAddr = clientDomain
-      ? `${clientDomain.from_name || DEFAULT_FROM_NAME} <${clientDomain.from_email}@${clientDomain.domain}>`
-      : DEFAULT_FROM;
+    if (clientDomain) {
+      fromAddr = `${clientDomain.from_name || DEFAULT_FROM_NAME} <${clientDomain.from_email}@${clientDomain.domain}>`;
+    } else {
+      // Try auto-provisioned subdomain (non-blocking — if not verified yet, fall back)
+      const subdomain = await getOrProvisionSubdomain(environmentId).catch(() => null);
+      fromAddr = subdomain
+        ? `${subdomain.from_name || DEFAULT_FROM_NAME} <${subdomain.from_email}@${subdomain.domain}>`
+        : DEFAULT_FROM;
+    }
   }
 
   if (!resend) {
@@ -165,6 +207,7 @@ module.exports = {
   testConnection,
   resetResendClient,
   getClientEmailDomain,
+  getOrProvisionSubdomain,
   DEFAULT_FROM,
   DEFAULT_FROM_DOMAIN,
 };
