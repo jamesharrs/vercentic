@@ -43,6 +43,11 @@ export function PermissionProvider({ userId, children }) {
     'access_sourcing','access_campaigns','access_chat','access_documents',
     'access_calendar','access_search','access_dashboard','access_org_chart',
     'access_interviews','access_offers','access_reports',
+    // Record-level panels — default open so existing roles aren't locked out
+    'record_view_comms','record_send_email','record_send_sms',
+    'record_add_note','record_view_notes','record_delete_note',
+    'record_view_files','record_upload_file','record_delete_file',
+    'record_parse_cv','record_extract_doc',
   ]);
 
   const checkGlobal = useCallback((action) => {
