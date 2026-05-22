@@ -226,4 +226,32 @@ router.post('/reset-password', (req, res) => {
   }
 });
 
+// ── Global Integrations — Resend ──────────────────────────────────────────────
+router.post('/global-integrations/resend/test', async (req, res) => {
+  try {
+    const mailer = require('../services/mailer');
+    mailer.resetResendClient(); // pick up any newly saved key
+    const result = await mailer.testConnection();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/global-integrations', (req, res) => {
+  // Return non-secret global integration config status
+  const { getStore } = require('../db/init');
+  const store = getStore();
+  const gi = store.global_integrations || {};
+  res.json({
+    resend: {
+      configured: !!process.env.RESEND_API_KEY,
+      default_domain: process.env.RESEND_DEFAULT_DOMAIN || null,
+      default_from_name: process.env.RESEND_DEFAULT_FROM_NAME || null,
+    },
+    ...gi,
+  });
+});
+
 module.exports = router;
+

@@ -6,8 +6,7 @@ import {
   FunnelChart, Funnel, LabelList,
   XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
 } from "recharts";
-import apiClient from "./apiClient.js";
-const api = apiClient;
+import api from "./apiClient";
 
 const B = {
   purple:"#7F77DD", purpleLight:"#AFA9EC", rose:"#D4537E", teal:"#1D9E75",

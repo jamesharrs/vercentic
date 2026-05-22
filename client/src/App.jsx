@@ -2100,6 +2100,8 @@ activeNavRef.current = activeNav;
           // Persist to sessionStorage so HMR remounts show the nav immediately
           if (next.length > 0) {
             try { sessionStorage.setItem('vercentic_nav_objects', JSON.stringify(next)); } catch {}
+            // Also persist slug list so the route guard can let custom-object URLs through
+            try { sessionStorage.setItem('vercentic_obj_slugs', next.map(o => o.slug).filter(Boolean).join(',')); } catch {}
           }
           return next;
         });
@@ -3309,7 +3311,14 @@ export default function AppRoot() {
   if (_path !== '/' && !_appRoutes.test(_path)) {
     const segments = _path.replace(/^\//, '').split('/');
     const cleanSlug = segments[0];
-    if (cleanSlug && !cleanSlug.includes('.') && segments.length <= 2) {
+
+    // If the first segment matches a known custom object slug, let MainApp handle it.
+    // Also let through any path where the second segment looks like a UUID (record route).
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isRecordRoute = segments.length === 2 && UUID_RE.test(segments[1]);
+    const isCustomObjectSlug = cleanSlug && !cleanSlug.includes('.') && sessionStorage.getItem('vercentic_obj_slugs')?.split(',').includes(cleanSlug);
+
+    if (!isRecordRoute && !isCustomObjectSlug && cleanSlug && !cleanSlug.includes('.') && segments.length <= 2) {
       return <PortalApp slug={cleanSlug}/>;
     }
   }

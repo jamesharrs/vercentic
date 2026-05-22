@@ -415,6 +415,197 @@ function IntCard({item,connection,onConfigure,onToggle,onDelete}){
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
+// ── Email Domain Tab ──────────────────────────────────────────────────────────
+function EmailDomainTab({ envId }) {
+  const [cfg, setCfg]           = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [verifying, setVerify]  = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [testing, setTesting]   = useState(false);
+  const [testResult, setTest]   = useState(null);
+  const [msg, setMsg]           = useState(null);
+  const [form, setForm]         = useState({ domain:'', from_email:'noreply', from_name:'' });
+  const [testEmail, setTestEmail] = useState('');
+
+  const showMsg = (text, ok=true) => { setMsg({text,ok}); setTimeout(()=>setMsg(null),4000); };
+
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/email-domains?environment_id=${envId}`)
+      .then(d => { setCfg(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [envId]);
+
+  const handleRegister = async () => {
+    if (!form.domain.trim()) return;
+    setSaving(true);
+    try {
+      const d = await api.post('/email-domains', { environment_id: envId, domain: form.domain.trim(), from_email: form.from_email.trim()||'noreply', from_name: form.from_name.trim() });
+      setCfg(d); showMsg('Domain registered — add the DNS records below then click Verify');
+    } catch(e) { showMsg(e.message||'Failed to register domain', false); }
+    setSaving(false);
+  };
+
+  const handleVerify = async () => {
+    setVerify(true);
+    try {
+      const d = await api.post('/email-domains/verify', { environment_id: envId });
+      setCfg(d);
+      showMsg(d.status === 'verified' ? '✓ Domain verified — sending is live!' : `Status: ${d.status} — DNS may still be propagating (can take up to 24h)`);
+    } catch(e) { showMsg(e.message||'Verification check failed', false); }
+    setVerify(false);
+  };
+
+  const handleRemove = async () => {
+    if (!confirm('Remove this domain? All emails will revert to the Vercentic default sender.')) return;
+    setRemoving(true);
+    try {
+      await api.del(`/email-domains?environment_id=${envId}`);
+      setCfg(null); showMsg('Domain removed');
+    } catch(e) { showMsg(e.message||'Failed to remove', false); }
+    setRemoving(false);
+  };
+
+  const handleTestSend = async () => {
+    if (!testEmail.trim()) return;
+    setTesting(true); setTest(null);
+    try {
+      const d = await api.post('/email-domains/test-send', { environment_id: envId, to: testEmail.trim() });
+      setTest({ ok:true, msg: d.simulated ? 'Simulated (no API key set yet)' : `Sent — ID: ${d.id}` });
+    } catch(e) { setTest({ ok:false, msg: e.message||'Send failed' }); }
+    setTesting(false);
+  };
+
+  const statusColor  = { verified:'#16a34a', pending:'#d97706', failed:'#dc2626', not_started:'#6b7280' };
+  const statusBg     = { verified:'#f0fdf4', pending:'#fffbeb', failed:'#fef2f2', not_started:'#f9fafb' };
+  const statusBorder = { verified:'#bbf7d0', pending:'#fde68a', failed:'#fecaca', not_started:'#e5e7eb' };
+
+  if (loading) return <div style={{padding:32,color:'#9CA3AF',fontFamily:F}}>Loading…</div>;
+
+  return (
+    <div style={{ maxWidth:640, fontFamily:F }}>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:'#111827', marginBottom:4 }}>Custom Sending Domain</div>
+        <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>
+          Send emails from your own domain (e.g. <code style={{background:'#F3F4F6',padding:'1px 5px',borderRadius:4}}>noreply@yourdomain.com</code>) instead of the Vercentic default.
+          Requires adding DNS records at your domain provider. Verification can take up to 24 hours.
+        </div>
+      </div>
+
+      {msg && (
+        <div style={{ padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:13, fontWeight:600,
+          background: msg.ok ? '#f0fdf4' : '#fef2f2',
+          color: msg.ok ? '#15803d' : '#dc2626',
+          border: `1px solid ${msg.ok ? '#bbf7d0' : '#fecaca'}` }}>
+          {msg.text}
+        </div>
+      )}
+
+      {!cfg ? (
+        /* ── Register form ── */
+        <div style={{ background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:10, padding:20 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:'#111827', marginBottom:14 }}>Register a domain</div>
+          {[
+            { label:'Domain', name:'domain', placeholder:'mail.yourdomain.com', hint:'Use a subdomain dedicated to sending, e.g. mail.acme.com' },
+            { label:'From email prefix', name:'from_email', placeholder:'noreply', hint:'The part before @yourdomain.com' },
+            { label:'From name', name:'from_name', placeholder:'Acme Recruiting', hint:'Shown as the sender name in inboxes' },
+          ].map(row => (
+            <div key={row.name} style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:3, textTransform:'uppercase', letterSpacing:'.04em' }}>{row.label}</div>
+              {row.hint && <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:5 }}>{row.hint}</div>}
+              <input value={form[row.name]} onChange={e=>setForm(f=>({...f,[row.name]:e.target.value}))}
+                placeholder={row.placeholder}
+                style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:7,
+                  border:'1px solid #D1D5DB', fontSize:13, fontFamily:F, outline:'none' }}/>
+            </div>
+          ))}
+          <button onClick={handleRegister} disabled={saving||!form.domain.trim()}
+            style={{ padding:'9px 18px', borderRadius:7, border:'none', background:'#4361EE', color:'white',
+              fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F, opacity:saving?0.6:1 }}>
+            {saving ? 'Registering…' : 'Register Domain'}
+          </button>
+        </div>
+      ) : (
+        /* ── Domain status + DNS records ── */
+        <div>
+          {/* Status card */}
+          <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderRadius:10,
+            background: statusBg[cfg.status]||statusBg.not_started,
+            border: `1px solid ${statusBorder[cfg.status]||statusBorder.not_started}`,
+            marginBottom:16 }}>
+            <div style={{ width:10, height:10, borderRadius:'50%', background:statusColor[cfg.status]||'#9ca3af', flexShrink:0 }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'#111827' }}>{cfg.domain}</div>
+              <div style={{ fontSize:12, color: statusColor[cfg.status]||'#6b7280', fontWeight:600, textTransform:'capitalize' }}>
+                {cfg.status?.replace(/_/g,' ')} — {cfg.from_email}@{cfg.domain}
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={handleVerify} disabled={verifying||cfg.status==='verified'}
+                style={{ padding:'6px 12px', borderRadius:6, border:'1px solid #D1D5DB', background:'white',
+                  fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F, opacity:cfg.status==='verified'?0.4:1 }}>
+                {verifying ? 'Checking…' : 'Check Status'}
+              </button>
+              <button onClick={handleRemove} disabled={removing}
+                style={{ padding:'6px 12px', borderRadius:6, border:'1px solid #FECACA', background:'#FEF2F2',
+                  color:'#DC2626', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+                {removing ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+
+          {/* DNS records */}
+          {cfg.records && cfg.records.length > 0 && (
+            <div style={{ background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:10, padding:16, marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#374151', marginBottom:12, textTransform:'uppercase', letterSpacing:'.05em' }}>
+                DNS Records — add these at your domain registrar
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {cfg.records.map((rec, i) => (
+                  <div key={i} style={{ background:'white', border:'1px solid #E5E7EB', borderRadius:8, padding:12 }}>
+                    <div style={{ display:'flex', gap:8, marginBottom:6 }}>
+                      <span style={{ padding:'2px 7px', borderRadius:4, background:'#EEF2FF', color:'#4361EE', fontSize:11, fontWeight:700 }}>{rec.type}</span>
+                      <span style={{ fontSize:12, color:'#374151', fontWeight:600 }}>{rec.name}</span>
+                    </div>
+                    <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace', wordBreak:'break-all',
+                      background:'#F3F4F6', padding:'6px 8px', borderRadius:5 }}>
+                      {rec.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Test send */}
+          {cfg.status === 'verified' && (
+            <div style={{ background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:10, padding:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#374151', marginBottom:10 }}>Send a test email</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={testEmail} onChange={e=>setTestEmail(e.target.value)} placeholder="test@example.com"
+                  style={{ flex:1, padding:'8px 10px', borderRadius:7, border:'1px solid #D1D5DB', fontSize:13, fontFamily:F, outline:'none' }}/>
+                <button onClick={handleTestSend} disabled={testing||!testEmail.trim()}
+                  style={{ padding:'8px 14px', borderRadius:7, border:'none', background:'#4361EE', color:'white',
+                    fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                  {testing ? 'Sending…' : 'Send Test'}
+                </button>
+              </div>
+              {testResult && (
+                <div style={{ marginTop:8, padding:'6px 10px', borderRadius:6, fontSize:12, fontWeight:600,
+                  color: testResult.ok ? '#15803d' : '#dc2626',
+                  background: testResult.ok ? '#f0fdf4' : '#fef2f2' }}>
+                  {testResult.ok ? `✓ ${testResult.msg}` : `✗ ${testResult.msg}`}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IntegrationsSettings({environment}){
   const [catalog,setCatalog]=useState([]);
   const [connections,setConnections]=useState([]);
@@ -480,7 +671,7 @@ export default function IntegrationsSettings({environment}){
     <div style={{fontFamily:F}}>
       {/* Tab strip */}
       <div style={{display:'flex',gap:0,borderBottom:'2px solid #E5E7EB',marginBottom:20}}>
-        {[{id:'library',label:'Library',icon:'grid'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null},{id:'flows',label:'Flows',icon:'activity'}].map(tab=>(
+        {[{id:'library',label:'Library',icon:'grid'},{id:'email_domain',label:'Email Domain',icon:'mail'},{id:'monitor',label:'Monitor',icon:'zap',badge:errorCount>0?errorCount:null},{id:'flows',label:'Flows',icon:'activity'}].map(tab=>(
           <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:'9px 20px',fontSize:13,
             fontWeight:activeTab===tab.id?700:500,fontFamily:F,cursor:'pointer',background:'transparent',border:'none',
             color:activeTab===tab.id?'#4361EE':'#374151',
@@ -496,6 +687,8 @@ export default function IntegrationsSettings({environment}){
       {activeTab==='monitor'&&<IntegrationMonitor environment={environment} connections={connections} onRetest={handleRetest}/>}
       {/* Flows tab */}
       {activeTab==='flows'&&<FlowBuilder environment={environment}/>}
+      {/* Email Domain tab */}
+      {activeTab==='email_domain'&&<EmailDomainTab envId={envId}/>}
       {/* Library tab */}
       {activeTab==='library'&&<div>
       {/* Stats strip */}

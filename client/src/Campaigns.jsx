@@ -1,7 +1,6 @@
 // client/src/Campaigns.jsx  — Campaign Builder (Phase 1)
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
-import apiClient from "./apiClient.js";
-const api = apiClient;
+import api from "./apiClient";
 import { ChannelTemplatePicker, AutomationRulesPanel, CampaignCalendar } from "./CampaignPhase2.jsx";
 
 const CampaignLinksInline = lazy(() => import("./CampaignLinks.jsx"));

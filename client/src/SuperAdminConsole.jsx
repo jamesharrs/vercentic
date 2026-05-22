@@ -335,23 +335,24 @@ const NavIcon = ({ id, size=14, color="currentColor" }) => {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
 };
 const NAV_ITEMS = [
-  { id:'env',      label:'Environment',    icon:'env',      desc:'Manage .env variables' },
-  { id:'health',   label:'System Health',  icon:'health',   desc:'Server stats & uptime' },
-  { id:'clients',  label:'Clients',        icon:'clients',  desc:'Manage client organisations' },
-  { id:'provision',label:'Provision',      icon:'provision',desc:'Provision a new client environment' },
-  { id:'templates',label:'Templates',      icon:'layers',   desc:'Template environments — copy config to new clients' },
-  { id:'features', label:'Feature Packs',  icon:'features', desc:'Enable/disable feature packs per environment' },
-  { id:'perf',     label:'Performance',    icon:'perf',     desc:'Platform-wide stats & usage' },
-  { id:'demo',     label:'Demo Data',      icon:'provision',desc:'Generate realistic demo data' },
-  { id:'errors',   label:'Error Logs',     icon:'errors',   desc:'App errors across all environments' },
-  { id:'release_notes', label:'Release Notes', icon:'bell', desc:'Manage platform release notes' },
-  { id:'cases',    label:'Support Cases',  icon:'cases',    desc:'Customer service case management' },
-  { id:'diagnose', label:'AI Diagnose',    icon:'health',   desc:'AI environment health check for any client' },
-  { id:'sequencer',label:'Email Sequencer',icon:'mail',     desc:'Client onboarding email automation' },
-  { id:'ai_usage', label:'AI Usage',       icon:'cpu',      desc:'Token usage, costs & quota management' },
-  { id:'ai_credits',label:'AI Credits',   icon:'zap',      desc:'Per-environment budgets, 5× margin, enforcement' },
-  { id:'activity', label:'Activity Report',icon:'activity', desc:'Environment activity & usage analytics' },
-  { id:'platform_events', label:'Platform Events', icon:'zap', desc:'Digest sends, scheduler runs, SSE connections & system events' },
+  { id:'env',      label:'Environment',          icon:'env',      desc:'Manage .env variables' },
+  { id:'global_integrations', label:'Global Integrations', icon:'mail', desc:'Resend email, default domain & platform-wide API keys' },
+  { id:'health',   label:'System Health',         icon:'health',   desc:'Server stats & uptime' },
+  { id:'clients',  label:'Clients',               icon:'clients',  desc:'Manage client organisations' },
+  { id:'provision',label:'Provision',             icon:'provision',desc:'Provision a new client environment' },
+  { id:'templates',label:'Templates',             icon:'layers',   desc:'Template environments — copy config to new clients' },
+  { id:'features', label:'Feature Packs',         icon:'features', desc:'Enable/disable feature packs per environment' },
+  { id:'perf',     label:'Performance',           icon:'perf',     desc:'Platform-wide stats & usage' },
+  { id:'demo',     label:'Demo Data',             icon:'provision',desc:'Generate realistic demo data' },
+  { id:'errors',   label:'Error Logs',            icon:'errors',   desc:'App errors across all environments' },
+  { id:'release_notes', label:'Release Notes',    icon:'bell',     desc:'Manage platform release notes' },
+  { id:'cases',    label:'Support Cases',         icon:'cases',    desc:'Customer service case management' },
+  { id:'diagnose', label:'AI Diagnose',           icon:'health',   desc:'AI environment health check for any client' },
+  { id:'sequencer',label:'Email Sequencer',       icon:'mail',     desc:'Client onboarding email automation' },
+  { id:'ai_usage', label:'AI Usage',             icon:'cpu',      desc:'Token usage, costs & quota management' },
+  { id:'ai_credits',label:'AI Credits',          icon:'zap',      desc:'Per-environment budgets, 5× margin, enforcement' },
+  { id:'activity', label:'Activity Report',      icon:'activity', desc:'Environment activity & usage analytics' },
+  { id:'platform_events', label:'Platform Events', icon:'zap',    desc:'Digest sends, scheduler runs, SSE connections & system events' },
 ];
 
 // ── Platform Events Monitor ───────────────────────────────────────────────────
@@ -744,6 +745,134 @@ function TemplateEnvironments() {
   );
 }
 
+// ── Global Integrations Section ───────────────────────────────────────────────
+function GlobalIntegrationsSection() {
+  const [status, setStatus]     = useState(null);
+  const [testing, setTesting]   = useState(false);
+  const [testResult, setTest]   = useState(null);
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [form, setForm]         = useState({ RESEND_API_KEY:'', RESEND_DEFAULT_DOMAIN:'mail.vercentic.com', RESEND_DEFAULT_FROM_NAME:'Vercentic' });
+
+  useEffect(() => {
+    fetch('/api/superadmin/global-integrations', { credentials:'include' })
+      .then(r=>r.json()).then(d=>setStatus(d)).catch(()=>{});
+  }, []);
+
+  const handleTest = async () => {
+    setTesting(true); setTest(null);
+    const r = await fetch('/api/superadmin/global-integrations/resend/test', { method:'POST', credentials:'include' });
+    setTest(await r.json());
+    setTesting(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    // Save each non-empty value to the env vars endpoint
+    for (const [key, val] of Object.entries(form)) {
+      if (!val.trim()) continue;
+      await fetch('/api/superadmin/env', { method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ key, value: val.trim() }) });
+    }
+    setSaved(true); setSaving(false);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const Row = ({ label, hint, name, type='text', placeholder }) => (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:C.text2, marginBottom:4, letterSpacing:'.04em', textTransform:'uppercase' }}>{label}</div>
+      {hint && <div style={{ fontSize:11, color:C.text3, marginBottom:6 }}>{hint}</div>}
+      <input type={type} value={form[name]} onChange={e=>setForm(f=>({...f,[name]:e.target.value}))}
+        placeholder={placeholder}
+        style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:7, border:`1px solid ${C.border}`,
+          fontSize:13, fontFamily:F, color:C.text1, background:'#0a0f1e', outline:'none' }}/>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth:680 }}>
+      {/* Status banner */}
+      {status && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:8,
+          background: status.resend?.configured ? '#0d2b1a' : '#2b1a0d', border:`1px solid ${status.resend?.configured ? '#1a4731' : '#4731 1a'}`,
+          marginBottom:24 }}>
+          <div style={{ width:8, height:8, borderRadius:'50%', background: status.resend?.configured ? '#22c55e' : '#f59e0b', flexShrink:0 }}/>
+          <span style={{ fontSize:12, color: status.resend?.configured ? '#86efac' : '#fcd34d', fontWeight:600 }}>
+            Resend {status.resend?.configured ? `configured — sending from ${status.resend.default_domain || 'mail.vercentic.com'}` : 'not yet configured — emails will simulate only'}
+          </span>
+        </div>
+      )}
+
+      {/* Resend config card */}
+      <div style={{ background:'#0d1117', border:`1px solid ${C.border}`, borderRadius:10, padding:20, marginBottom:20 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
+          <div style={{ width:36, height:36, borderRadius:8, background:'#1a82e2', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6"/></svg>
+          </div>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Resend — Platform Email Service</div>
+            <div style={{ fontSize:11, color:C.text3 }}>Powers all outbound email — client notifications, campaigns, workflows</div>
+          </div>
+          <a href="https://resend.com/signup" target="_blank" rel="noreferrer"
+            style={{ marginLeft:'auto', fontSize:11, color:C.purple, textDecoration:'none', fontWeight:600 }}>
+            Get API key ↗
+          </a>
+        </div>
+
+        <Row name="RESEND_API_KEY" label="API Key" type="password"
+          hint="From resend.com → API Keys. Free tier: 3,000 emails/month, 1 domain. Pro ($20/mo): 50,000 emails, unlimited domains."
+          placeholder="re_xxxxxxxxxxxxxxxxxxxx"/>
+        <Row name="RESEND_DEFAULT_DOMAIN" label="Default Sending Domain"
+          hint="Subdomain you own that Vercentic sends from by default (all clients). Add DNS records shown below after saving."
+          placeholder="mail.vercentic.com"/>
+        <Row name="RESEND_DEFAULT_FROM_NAME" label="Default From Name"
+          placeholder="Vercentic"/>
+
+        {/* DNS records helper */}
+        <div style={{ background:'#060a12', borderRadius:8, padding:14, marginBottom:16, border:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.text3, marginBottom:8, letterSpacing:'.04em', textTransform:'uppercase' }}>DNS Records to add for {form.RESEND_DEFAULT_DOMAIN || 'your domain'}</div>
+          <div style={{ fontSize:11, color:C.text2, lineHeight:1.7, fontFamily:'monospace' }}>
+            <div>TXT&nbsp;&nbsp; <span style={{color:'#60a5fa'}}>{form.RESEND_DEFAULT_DOMAIN || 'mail.vercentic.com'}</span> &nbsp;"v=spf1 include:_spf.resend.com ~all"</div>
+            <div>CNAME&nbsp; <span style={{color:'#60a5fa'}}>resend._domainkey.{form.RESEND_DEFAULT_DOMAIN || 'mail.vercentic.com'}</span> &nbsp;→ resend._domainkey.resend.com</div>
+            <div style={{color:C.text3}}>MX records are generated by Resend after domain verification in their dashboard.</div>
+          </div>
+        </div>
+
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{ padding:'8px 16px', borderRadius:7, border:'none', background:C.purple, color:'white',
+              fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save & Apply'}
+          </button>
+          <button onClick={handleTest} disabled={testing}
+            style={{ padding:'8px 16px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent',
+              color:C.text2, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+            {testing ? 'Testing…' : 'Test Connection'}
+          </button>
+        </div>
+
+        {testResult && (
+          <div style={{ marginTop:10, padding:'8px 12px', borderRadius:7, fontSize:12,
+            background: testResult.ok ? '#0d2b1a' : '#2b0d0d',
+            color: testResult.ok ? '#86efac' : '#fca5a5',
+            border: `1px solid ${testResult.ok ? '#1a4731' : '#4b1a1a'}` }}>
+            {testResult.ok
+              ? `✓ Connected — ${testResult.domain_count} domain(s) registered in Resend`
+              : `✗ Failed: ${testResult.error}`}
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize:11, color:C.text3, lineHeight:1.6 }}>
+        <strong style={{color:C.text2}}>How it works:</strong> All platform emails go through Resend using your default domain.
+        Clients can optionally add their own sending domain in Settings → Integrations (requires Pro plan for multiple domains).
+        Free tier (3,000 emails/month, 1 domain) is sufficient for testing.
+      </div>
+    </div>
+  );
+}
+
 export default function SuperAdminConsole() {
   const [authed,  setAuthed]  = useState(() => !!sessionStorage.getItem('sa_token'));
   const [section, setSection] = useState('clients');
@@ -816,8 +945,9 @@ export default function SuperAdminConsole() {
           </p>
         </div>
 
-        {section === 'env'    && <EnvSection/>}
-        {section === 'health' && <HealthSection/>}
+        {section === 'env'                && <EnvSection/>}
+        {section === 'global_integrations' && <GlobalIntegrationsSection/>}
+        {section === 'health'             && <HealthSection/>}
         {section === 'clients' && (
           clientView === 'detail'
             ? <ClientDetail clientId={selectedClientId} onBack={()=>setClientView('list')} onProvisionEnv={()=>setSection('provision')}/>

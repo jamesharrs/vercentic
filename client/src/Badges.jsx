@@ -4,9 +4,7 @@
 // Feature-flag gated via access_achievements permission
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import apiClient from "./apiClient.js";
-
-const api = { get: (path) => apiClient.get(path) };
+import api from "./apiClient";
 
 const C = {
   bg:          "var(--t-bg, #f0f2ff)",

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import api from "./apiClient.js";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -424,17 +425,71 @@ function ActionBtn({ label, color, iconPath, onClick }) {
 // Shared styled select — matches the UI design system (no native browser chrome)
 function StyledSelect({ value, onChange, options, placeholder, active }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [rect, setRect] = useState(null);
+  const btnRef = useRef(null);
+  const dropRef = useRef(null);
+
+  // Open: measure button position for portal placement
+  const handleOpen = () => {
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(o => !o);
+  };
+
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const h = e => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
+
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return;
+    const update = () => { if (btnRef.current) setRect(btnRef.current.getBoundingClientRect()); };
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => { window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
+  }, [open]);
+
   const selected = options.find(o => o.value === value);
+
+  const dropdown = open && rect && ReactDOM.createPortal(
+    <div ref={dropRef} style={{
+      position:"fixed", top: rect.bottom + 4, left: rect.left, width: rect.width,
+      zIndex: 99999, background:"white", borderRadius:10,
+      border:"1.5px solid rgba(0,0,0,.09)", boxShadow:"0 8px 24px rgba(0,0,0,.15)",
+      maxHeight:220, overflowY:"auto", padding:"4px"
+    }}>
+      {options.map(o => (
+        <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); }}
+          style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+            width:"100%", padding:"8px 10px", borderRadius:7, border:"none",
+            cursor:"pointer", fontFamily:"inherit", fontSize:13, textAlign:"left",
+            color: o.value === value ? V.purple : "#1e293b",
+            fontWeight: o.value === value ? 700 : 400,
+            background: o.value === value ? `${V.purple}08` : "transparent" }}
+          onMouseEnter={e => e.currentTarget.style.background = o.value === value ? `${V.purple}12` : "#f8faff"}
+          onMouseLeave={e => e.currentTarget.style.background = o.value === value ? `${V.purple}08` : "transparent"}>
+          <span>{o.label}</span>
+          {o.value === value && (
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={V.purple} strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          )}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+
   return (
-    <div ref={ref} style={{ position:"relative", width:"100%" }}>
-      <button onClick={() => setOpen(o => !o)}
+    <div style={{ position:"relative", width:"100%" }}>
+      <button ref={btnRef} onClick={handleOpen}
         style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
           padding:"8px 12px", borderRadius:9, border:`1.5px solid ${active ? V.purple+"60" : "rgba(0,0,0,.1)"}`,
           background: active ? `${V.purple}06` : "white", cursor:"pointer", fontFamily:"inherit",
@@ -448,30 +503,7 @@ function StyledSelect({ value, onChange, options, placeholder, active }) {
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </button>
-      {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:99,
-          background:"white", borderRadius:10, border:"1.5px solid rgba(0,0,0,.09)",
-          boxShadow:"0 8px 24px rgba(0,0,0,.12)", maxHeight:220, overflowY:"auto", padding:"4px" }}>
-          {options.map(o => (
-            <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); }}
-              style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                width:"100%", padding:"8px 10px", borderRadius:7, border:"none", background:"none",
-                cursor:"pointer", fontFamily:"inherit", fontSize:13, textAlign:"left",
-                color: o.value === value ? V.purple : "#1e293b",
-                fontWeight: o.value === value ? 700 : 400,
-                background: o.value === value ? `${V.purple}08` : "transparent" }}
-              onMouseEnter={e => e.currentTarget.style.background = o.value === value ? `${V.purple}12` : "#f8faff"}
-              onMouseLeave={e => e.currentTarget.style.background = o.value === value ? `${V.purple}08` : "transparent"}>
-              <span>{o.label}</span>
-              {o.value === value && (
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={V.purple} strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }

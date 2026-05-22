@@ -1,6 +1,6 @@
 // client/src/ABTestPanel.jsx  — A/B Test comparison UI with statistical significance
 import { useState, useEffect, useCallback } from "react";
-import apiClient from "./apiClient.js";
+import api from "./apiClient";
 const F = "'Space Grotesk','DM Sans',system-ui,sans-serif";
 const C = {
   surface:"var(--t-surface,#fff)",s2:"var(--t-surface2,#F8F9FF)",border:"var(--t-border,#E8ECF8)",

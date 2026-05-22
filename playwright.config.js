@@ -73,14 +73,14 @@ module.exports = defineConfig({
   webServer: [
     {
       command:              'node server/index.js',
-      cwd:                  '/Users/james/projects/talentos',
+      cwd:                  process.env.GITHUB_WORKSPACE || process.cwd(),
       url:                  'http://localhost:3001/api/health',
       reuseExistingServer:  true,
       env: { NODE_ENV: 'development', PLAYWRIGHT_TEST: '1', ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '' },
     },
     {
-      command:              'npm run dev',
-      cwd:                  '/Users/james/projects/talentos/client',
+      command:              'npm run dev -- --port 3000',
+      cwd:                  process.env.GITHUB_WORKSPACE ? `${process.env.GITHUB_WORKSPACE}/client` : `${process.cwd()}/client`,
       url:                  'http://localhost:3000',
       reuseExistingServer:  true,
     },

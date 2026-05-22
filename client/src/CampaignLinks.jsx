@@ -1,6 +1,6 @@
 // client/src/CampaignLinks.jsx  — Smart link builder with UTM tracking + A/B support
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
-import apiClient from "./apiClient.js";
+import api from "./apiClient";
 
 // Lazy-load ABTestPanel to avoid circular dependency issues and hook count problems
 const ABTestPanel = lazy(() => import("./ABTestPanel.jsx"));

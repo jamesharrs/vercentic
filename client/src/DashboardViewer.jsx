@@ -1,5 +1,6 @@
 // DashboardViewer v3 — fixed chart heights
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import api from "./apiClient";
 
@@ -190,20 +191,72 @@ function SavedReportPanel({ panel, data, onNavigate, onOpenRecord }) {
 }
 
 function DashboardSwitcher({ dashboards, current, onChange }) {
-  const [open,setOpen]=useState(false); const ref=useRef(null);
-  useEffect(()=>{ const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);}; document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h); },[]);
-  // No early return after hooks — use conditional render in JSX
-  if(dashboards.length<=1)return <span/>; 
-  return <div ref={ref} style={{ position:"relative" }}>
-    <button onClick={()=>setOpen(p=>!p)} style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,border:`1.5px solid ${V.border}`,background:V.card,fontSize:12,color:V.text2,cursor:"pointer",fontFamily:F,fontWeight:600 }}>
-      <div style={{ width:8,height:8,borderRadius:"50%",background:current?.color||V.accent }}/>{current?.name||"Select dashboard"}<Ic n="chevD" s={12} c={V.text3}/>
-    </button>
-    {open&&<div style={{ position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:200,background:V.card,borderRadius:10,border:`1px solid ${V.border}`,boxShadow:"0 8px 24px rgba(0,0,0,0.1)",minWidth:220,overflow:"hidden" }}>
-      {dashboards.map(d=><button key={d.id} onClick={()=>{onChange(d);setOpen(false);}} style={{ width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:"none",background:d.id===current?.id?`${V.accent}08`:"transparent",cursor:"pointer",fontFamily:F,textAlign:"left",fontSize:13,color:d.id===current?.id?V.accent:V.text2,fontWeight:d.id===current?.id?700:500 }}>
-        <div style={{ width:8,height:8,borderRadius:"50%",background:d.color||V.accent,flexShrink:0 }}/><span style={{ flex:1 }}>{d.name}</span>{d.is_default&&<span style={{ fontSize:10,color:V.text3 }}>default</span>}
-      </button>)}
-    </div>}
-  </div>;
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState(null);
+  const btnRef  = useRef(null);
+  const dropRef = useRef(null);
+
+  const handleOpen = () => {
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(o => !o);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const h = e => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const update = () => { if (btnRef.current) setRect(btnRef.current.getBoundingClientRect()); };
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => { window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
+  }, [open]);
+
+  if (dashboards.length <= 1) return <span/>;
+
+  const dropdown = open && rect && ReactDOM.createPortal(
+    <div ref={dropRef} style={{
+      position:"fixed", top: rect.bottom + 6, left: rect.left, minWidth: 220,
+      zIndex:99999, background:V.card, borderRadius:10,
+      border:`1px solid ${V.border}`, boxShadow:"0 8px 24px rgba(0,0,0,0.1)", overflow:"hidden"
+    }}>
+      {dashboards.map(d => (
+        <button key={d.id} onClick={() => { onChange(d); setOpen(false); }}
+          style={{ width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:"none",
+            background: d.id===current?.id ? `${V.accent}08` : "transparent",
+            cursor:"pointer", fontFamily:F, textAlign:"left", fontSize:13,
+            color: d.id===current?.id ? V.accent : V.text2,
+            fontWeight: d.id===current?.id ? 700 : 500 }}
+          onMouseEnter={e => { if (d.id !== current?.id) e.currentTarget.style.background = "#f5f5f7"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = d.id===current?.id ? `${V.accent}08` : "transparent"; }}>
+          <div style={{ width:8,height:8,borderRadius:"50%",background:d.color||V.accent,flexShrink:0 }}/>
+          <span style={{ flex:1 }}>{d.name}</span>
+          {d.is_default && <span style={{ fontSize:10,color:V.text3 }}>default</span>}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+
+  return (
+    <div style={{ position:"relative" }}>
+      <button ref={btnRef} onClick={handleOpen}
+        style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,
+          border:`1.5px solid ${open ? V.accent : V.border}`,background:V.card,
+          fontSize:12,color:V.text2,cursor:"pointer",fontFamily:F,fontWeight:600,transition:"border-color 0.12s" }}>
+        <div style={{ width:8,height:8,borderRadius:"50%",background:current?.color||V.accent }}/>
+        {current?.name||"Select dashboard"}
+        <Ic n="chevD" s={12} c={V.text3} style={{ transform: open?"rotate(180deg)":"none", transition:"transform 0.15s" }}/>
+      </button>
+      {dropdown}
+    </div>
+  );
 }
 
 export default function DashboardViewer({ environment, session, onNavigate, onOpenRecord, onManage, initialDashId }) {

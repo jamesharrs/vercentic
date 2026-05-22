@@ -2,7 +2,7 @@
 // Vercentic — Getting Started / Onboarding Dashboard
 
 import { useState, useEffect, useCallback } from "react";
-import apiClient from "./apiClient";
+import api from "./apiClient";
 
 const C = {
   accent: "var(--t-accent, #4361EE)", accentLight: "var(--t-accent-light, #EEF2FF)",
@@ -157,7 +157,7 @@ export default function GettingStarted({ environment, navObjects, onNavigate }) 
     if (!envId) return;
     setLoading(true);
     try {
-      const res = await apiClient.get(`/onboarding-progress?environment_id=${envId}`);
+      const res = await api.get(`/onboarding-progress?environment_id=${envId}`);
       // Only store if it's a valid response with phases
       if (res && Array.isArray(res.phases)) setData(res);
       else setData(null);
