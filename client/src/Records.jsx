@@ -9413,7 +9413,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     return true;
   };
   const _permCtx = usePermCtx();
-  const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
+  // Optimistic: return true while permissions load, or if no context (local dev)
+  const canRecord = (flag) => {
+    if (!_permCtx || _permCtx.loading) return true;
+    return _permCtx.canGlobal(flag);
+  };
   // Ensure module-level env ID is always set — PeoplePicker depends on it
   useEffect(() => { if (environment?.id) _currentEnvId = environment.id; }, [environment?.id]);
   // ── Job context — Person records only ────────────────────────────────────
@@ -11764,7 +11768,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       p => p.object_slug === object.slug && p.action === action && p.allowed
     );
   };
-  const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
+  const canRecord = (flag) => (!_permCtx || _permCtx.loading) ? true : _permCtx.canGlobal(flag);
   const [selected, setSelected] = useState(null);   // slide-out panel only
   const [showForm, setShowForm] = useState(false);
 
