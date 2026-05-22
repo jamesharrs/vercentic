@@ -768,12 +768,12 @@ function GlobalIntegrationsSection() {
 
   const handleSave = async () => {
     setSaving(true);
-    // Save each non-empty value to the env vars endpoint
-    for (const [key, val] of Object.entries(form)) {
-      if (!val.trim()) continue;
-      await fetch('/api/superadmin/env', { method:'POST', credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ key, value: val.trim() }) });
+    // PATCH /api/superadmin/env expects { updates: [{key, value}] }
+    const updates = Object.entries(form)
+      .filter(([, val]) => val.trim())
+      .map(([key, val]) => ({ key, value: val.trim() }));
+    if (updates.length > 0) {
+      await api.patch('/env', { updates });
     }
     setSaved(true); setSaving(false);
     setTimeout(() => setSaved(false), 3000);
