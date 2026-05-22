@@ -84,21 +84,29 @@ router.get('/env', (req, res) => {
 router.patch('/env', (req, res) => {
   try {
     const { updates } = req.body; // [{ key, value }]
-    let raw = fs.readFileSync(ENV_PATH, 'utf8');
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ error: 'updates array required' });
+    }
 
-    updates.forEach(({ key, value }) => {
-      const regex = new RegExp(`^(${key}=).*$`, 'm');
-      if (regex.test(raw)) {
-        raw = raw.replace(regex, `$1${value}`);
-      } else {
-        raw += `\n${key}=${value}`;
-      }
-    });
-
-    fs.writeFileSync(ENV_PATH, raw, 'utf8');
-
-    // Hot-reload into process.env
+    // Hot-reload into process.env immediately — works on Railway (no .env file)
     updates.forEach(({ key, value }) => { process.env[key] = value; });
+
+    // Also persist to .env file if it exists (local dev)
+    if (fs.existsSync(ENV_PATH)) {
+      let raw = fs.readFileSync(ENV_PATH, 'utf8');
+      updates.forEach(({ key, value }) => {
+        const regex = new RegExp(`^(${key}=).*$`, 'm');
+        if (regex.test(raw)) {
+          raw = raw.replace(regex, `$1${value}`);
+        } else {
+          raw += `\n${key}=${value}`;
+        }
+      });
+      fs.writeFileSync(ENV_PATH, raw, 'utf8');
+    }
+
+    // Reset any cached service clients that depend on these keys
+    try { require('../services/mailer').resetResendClient(); } catch {}
 
     res.json({ ok: true });
   } catch (e) {
