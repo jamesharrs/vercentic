@@ -386,5 +386,25 @@ router.post('/:id/impersonate', async (req, res) => {
 });
 
 
+// ── E2E cleanup: purge all E2ETest* tenants ───────────────────────────────────
+// Called by the provisioning spec's afterAll to keep the data store clean.
+router.post('/purge-test-clients', (req, res) => {
+  try {
+    const { getStore, saveStore } = require('../db/init');
+    const { keep_slugs = [] } = req.body || {};
+    const store = getStore();
+    if (!store.clients) return res.json({ removed_count: 0 });
+
+    const before = store.clients.length;
+    store.clients = store.clients.filter(c => {
+      const isTest = /^e2e/i.test(c.slug || '') || /^e2e/i.test(c.name || '');
+      return !isTest || keep_slugs.includes(c.slug);
+    });
+    const removed = before - store.clients.length;
+    if (removed > 0) saveStore();
+    res.json({ ok: true, removed_count: removed });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.buildTemplate = resolveTemplate; // backward compat alias
