@@ -87,23 +87,18 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
     return ms.sendEmail({ to, toName, from, fromName, replyTo, subject, text: textBody, html: htmlBody, tags });
   }
 
-  // ── Resend (fallback) ─────────────────────────────────────────────────────
+  // ── Resend (via mailer.js — handles per-environment custom domains) ──────────
   if (RESEND_CONFIGURED) {
-    const fromAddr  = from || process.env.SENDGRID_FROM_EMAIL || 'onboarding@resend.dev';
-    const fromLabel = fromName || process.env.SENDGRID_FROM_NAME || 'Vercentic';
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: `${fromLabel} <${fromAddr}>`,
-        to: toName ? [{ email: to, name: toName }] : [to],
-        subject, text: textBody, html: htmlBody,
-        reply_to: replyTo || undefined,
-      }),
+    const mailer = require('./mailer');
+    const result = await mailer.sendEmail({
+      to, subject,
+      html: htmlBody,
+      text: textBody,
+      from: from ? `${fromName || 'Vercentic'} <${from}>` : undefined,
+      replyTo,
+      environmentId: tags?.environment_id, // pass env so mailer picks the right domain
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Resend error');
-    return { messageId: data.id, status: 'sent', provider: 'resend' };
+    return { messageId: result.id, status: result.simulated ? 'simulated' : 'sent', provider: 'resend' };
   }
 
   // ── SendGrid (legacy) ─────────────────────────────────────────────────────
