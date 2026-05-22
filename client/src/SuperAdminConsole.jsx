@@ -868,6 +868,10 @@ function GlobalIntegrationsSection() {
         <strong style={{color:C.text2}}>How it works:</strong> All platform emails go through Resend using your default domain.
         Clients can optionally add their own sending domain in Settings → Integrations (requires Pro plan for multiple domains).
         Free tier (3,000 emails/month, 1 domain) is sufficient for testing.
+        <br/><br/>
+        <strong style={{color:C.amber}}>⚠ Railway note:</strong> Saving here applies the key for this session only.
+        To persist across deploys, also add <code style={{fontFamily:'monospace',color:C.text1}}>RESEND_API_KEY</code> in your{' '}
+        <a href="https://railway.app" target="_blank" rel="noreferrer" style={{color:C.purple}}>Railway dashboard → Variables</a>.
       </div>
     </div>
   );
