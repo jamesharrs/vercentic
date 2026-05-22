@@ -272,7 +272,7 @@ async function triggerWorkflows(event, record, changedFields) {
                 const body    = (cfg.body    || '').replace(/\{\{(\w+)\}\}/g, (_, k) => currentRecord.data?.[k] ?? `{{${k}}}`);
                 try {
                   const msg = require('../services/messaging');
-                  for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g,'<br>') });
+                  for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g,'<br>'), tags: { environment_id: wf.environment_id || record?.environment_id } });
                   output = `Email → ${resolved.emails.map(r=>r.email).join(', ')}`;
                 } catch(e) { output = `[Sim] Email → ${resolved.emails.map(r=>r.email).join(', ')}`; }
               }
@@ -547,7 +547,7 @@ router.post('/:id/run', async (req, res) => {
               try {
                 const msg = require('../services/messaging');
                 for (const r of resolved.emails) {
-                  await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>') });
+                  await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>'), tags: { environment_id: wf.environment_id || record?.environment_id } });
                 }
                 actionOutput = `Email → ${toList}: "${subject}"`;
               } catch(e) {
@@ -629,7 +629,7 @@ router.post('/:id/run', async (req, res) => {
                   const msg = require('../services/messaging');
                   for (const r of resolved.emails) {
                     const personalBody = body.replace(/\{\{first_name\}\}/g, r.name?.split(' ')[0] || 'there');
-                    const res = await msg.sendEmail({ to: r.email, subject, text: personalBody, html: personalBody.replace(/\n/g,'<br>') });
+                    const res = await msg.sendEmail({ to: r.email, subject, text: personalBody, html: personalBody.replace(/\n/g,'<br>'), tags: { environment_id: wf.environment_id || record?.environment_id } });
                     actionOutput = res.simulated ? `[Sim] Invitation → ${toList}` : `Invitation sent → ${toList}`;
                   }
                 } catch(e) { actionOutput = `[Demo] Invitation → ${toList}`; }
@@ -942,7 +942,7 @@ router.patch('/people-links/:id', async (req, res) => {
                 const body    = interpolate(cfg.body);
                 try {
                   const msg = require('../services/messaging');
-                  for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>') });
+                  for (const r of resolved.emails) await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g, '<br>'), tags: { environment_id: person.environment_id } });
                   actionOutput = `Email → ${toList}: "${subject}"`;
                 } catch(e) { actionOutput = `[Demo] Email → ${toList}: "${subject}"`; }
                 // Save to communications so it appears on the person's record
@@ -968,7 +968,7 @@ router.patch('/people-links/:id', async (req, res) => {
                     .replace(/\{\{interview_link\}\}/g, interviewUrl);
                   try {
                     const msg = require('../services/messaging');
-                    for (const r of resolved.emails) { const res2 = await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g,'<br>') }); actionOutput = res2.simulated ? `[Sim] Invitation → ${toList}` : `Invitation sent → ${toList}`; }
+                    for (const r of resolved.emails) { const res2 = await msg.sendEmail({ to: r.email, subject, text: body, html: body.replace(/\n/g,'<br>'), tags: { environment_id: person.environment_id } }); actionOutput = res2.simulated ? `[Sim] Invitation → ${toList}` : `Invitation sent → ${toList}`; }
                   } catch(e) { actionOutput = `[Demo] Invitation → ${toList}`; }
                   if (!s.communications) s.communications = [];
                   s.communications.push({ id: uuidv4(), record_id: person.id, type:'email', direction:'outbound', subject, body, status:'sent', created_by:'workflow-auto', created_at: new Date().toISOString() });
@@ -1047,7 +1047,7 @@ router.post('/run-step', async (req, res) => {
         else {
           const subj2 = (cfg2.subject||'').replace(/\{\{(\w+)\}\}/g, (_,k)=>record.data?.[k]??`{{${k}}}`);
           const body2 = (cfg2.body   ||'').replace(/\{\{(\w+)\}\}/g, (_,k)=>record.data?.[k]??`{{${k}}}`);
-          try { const msg2 = require('../services/messaging'); for (const r of resolved2.emails) await msg2.sendEmail({ to: r.email, subject: subj2, text: body2, html: body2.replace(/\n/g,'<br>') }); out2 = `Email → ${resolved2.emails.map(r=>r.email).join(', ')}`; }
+          try { const msg2 = require('../services/messaging'); for (const r of resolved2.emails) await msg2.sendEmail({ to: r.email, subject: subj2, text: body2, html: body2.replace(/\n/g,'<br>'), tags: { environment_id: record.environment_id } }); out2 = `Email → ${resolved2.emails.map(r=>r.email).join(', ')}`; }
           catch(e) { out2 = `[Sim] Email → ${resolved2.emails.map(r=>r.email).join(', ')}`; }
         }
       }
