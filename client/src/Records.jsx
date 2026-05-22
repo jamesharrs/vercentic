@@ -10981,12 +10981,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                 background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
                 boxShadow:"0 8px 32px rgba(0,0,0,.14)", minWidth:200, zIndex:9990,
                 overflow:"hidden", padding:"4px 0" }}>
-                {COMM_OPTIONS.filter(opt => {
-                  if (opt.type==='email') return canRecord('record_send_email');
-                  if (opt.type==='sms' || opt.type==='whatsapp') return canRecord('record_send_sms');
-                  if (opt.type==='call') return canRecord('record_log_call');
-                  return true;
-                }).map(opt=>(
+                {COMM_OPTIONS.map(opt=>(
                   <button key={opt.type}
                     onClick={()=>{ setComposeType(opt.type); setShowCommMenu(false); }}
                     style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 16px",
