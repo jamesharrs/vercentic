@@ -261,5 +261,23 @@ router.get('/global-integrations', (req, res) => {
   });
 });
 
+router.post('/global-integrations/resend/test-send', async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ error: 'to required' });
+  try {
+    const mailer = require('../services/mailer');
+    const result = await mailer.sendEmail({
+      to,
+      subject: 'Vercentic — Email Test',
+      html: `<p>This is a test email from <strong>Vercentic</strong>.</p>
+             <p>Your Resend integration is working correctly.</p>
+             <p style="color:#9ca3af;font-size:12px">Sent from ${mailer.DEFAULT_FROM}</p>`,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
 
