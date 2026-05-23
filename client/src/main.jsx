@@ -22,23 +22,36 @@ if (isMobileDevice && existingSession) {
   // Render the lightweight mobile shell immediately — no desktop code loads
   const MobileRoot = () => {
     const [env, setEnv] = React.useState(null);
+    const [envError, setEnvError] = React.useState(null);
 
-    React.useEffect(() => {
-      // Load the default environment quietly in the background
-      fetch('/api/environments')
-        .then(r => r.json())
-        .then(envs => {
-          if (Array.isArray(envs) && envs.length > 0) {
-            setEnv(envs.find(e => e.is_default) || envs[0]);
-          }
-        })
-        .catch(() => {});
+    const loadEnv = React.useCallback(() => {
+      setEnvError(null);
+      // Use the authenticated apiClient so X-User-Id / X-Tenant-Slug headers
+      // are attached — required for multi-tenant data scoping.
+      import('./apiClient.js').then(({ default: api }) => {
+        api.get('/environments')
+          .then(envs => {
+            if (Array.isArray(envs) && envs.length > 0) {
+              setEnv(envs.find(e => e.is_default) || envs[0]);
+            } else {
+              setEnvError('No environments available for this account');
+            }
+          })
+          .catch(err => {
+            console.error('[mobile] env load failed', err);
+            setEnvError(err?.message || 'Could not reach the server');
+          });
+      });
     }, []);
+
+    React.useEffect(() => { loadEnv(); }, [loadEnv]);
 
     return (
       <MobileShell
         session={existingSession.user}
         environment={env}
+        envError={envError}
+        onRetryEnv={loadEnv}
         objects={[]}
       />
     );
@@ -46,7 +59,9 @@ if (isMobileDevice && existingSession) {
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-      <MobileRoot />
+      <ToastProvider>
+        <MobileRoot />
+      </ToastProvider>
     </React.StrictMode>
   );
 } else {
