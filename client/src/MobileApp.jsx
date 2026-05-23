@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import _apiClient from "./apiClient.js";
+import { useToast } from "./Toast.jsx";
 
 function _sessionKey() {
   try {
@@ -11,7 +12,6 @@ function _sessionKey() {
     return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
   } catch { return 'talentos_session_default'; }
 }
-
 
 // ─── Vercentic Brand Palette ──────────────────────────────────────────────────
 const V = {
@@ -34,25 +34,41 @@ const V = {
 const F  = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const FD = "'Geist', 'DM Sans', -apple-system, sans-serif";
 
-// Auth-aware API client — attaches session headers so CSRF/auth middleware passes
-function getAuthHeaders(extra = {}) {
-  try {
-    const sess = JSON.parse(localStorage.getItem(_sessionKey()) || 'null');
-    const slug = sess?.tenant_slug || window.location.hostname.split('.')[0] || null;
-    const userId = sess?.user?.id || null;
-    const csrf = (document.cookie.match(/vercentic_csrf=([^;]+)/)||[])[1] || '';
-    const h = { 'Content-Type': 'application/json', ...extra };
-    if (slug && slug !== 'www' && slug !== 'app') h['X-Tenant-Slug'] = slug;
-    if (userId) h['X-User-Id'] = userId;
-    if (csrf) h['X-CSRF-Token'] = csrf;
-    return h;
-  } catch { return { 'Content-Type': 'application/json' }; }
-}
-
-// Null-safe wrapper around apiClient for mobile (swallows errors gracefully)
+// ─── API helper — surfaces real errors instead of swallowing ──────────────────
 const api = {
-  async get(p)       { try { return await _apiClient.get(p);    } catch { return {}; } },
-  async post(p, b)   { try { return await _apiClient.post(p, b);} catch { return {}; } },
+  async get(p) {
+    try {
+      const d = await _apiClient.get(p);
+      if (d && typeof d === 'object' && d.error && !Array.isArray(d)) {
+        return { ok: false, error: d.error, data: null };
+      }
+      return { ok: true, data: d, error: null };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Network error', data: null };
+    }
+  },
+  async post(p, b) {
+    try {
+      const d = await _apiClient.post(p, b);
+      if (d && typeof d === 'object' && d.error) {
+        return { ok: false, error: d.error, data: null };
+      }
+      return { ok: true, data: d, error: null };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Network error', data: null };
+    }
+  },
+  async patch(p, b) {
+    try {
+      const d = await _apiClient.patch(p, b);
+      if (d && typeof d === 'object' && d.error) {
+        return { ok: false, error: d.error, data: null };
+      }
+      return { ok: true, data: d, error: null };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Network error', data: null };
+    }
+  },
 };
 
 const statusColor = (s = "") => {
@@ -82,6 +98,13 @@ const PATHS = {
   clock:     "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
   layers:    "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   arrowR:    "M5 12h14M12 5l7 7-7 7",
+  plus:      "M12 4v16m-8-8h16",
+  mic:       "M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8",
+  refresh:   "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+  trash:     "M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",
+  alert:     "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
+  wifi:      "M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01",
+  inbox:     "M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z",
 };
 
 const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
@@ -92,7 +115,6 @@ const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
   </svg>
 );
 
-// ─── Vercentic Logo — icon + wordmark, no external font dependency ────────────
 const VIcon = ({ size = 24, color = "#0D0D0F" }) => (
   <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
     <path d="M8 52 L40 36 L72 52 L40 68 Z" stroke={color} strokeWidth="2.2" strokeLinejoin="round" fill="none"/>
@@ -166,25 +188,250 @@ const Sheet = ({ open, onClose, title, children, height = "88vh" }) => {
   );
 };
 
-// ── COPILOT SCREEN ────────────────────────────────────────────────────────────
+// ─── Skeleton Loader ──────────────────────────────────────────────────────────
+const Skeleton = ({ count = 6, type = "row" }) => {
+  const items = Array.from({ length: count });
+  return (
+    <div>
+      <style>{`@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}.skel{background:linear-gradient(90deg,rgba(0,0,0,0.04) 0%,rgba(0,0,0,0.08) 50%,rgba(0,0,0,0.04) 100%);background-size:400px 100%;animation:shimmer 1.4s ease-in-out infinite}`}</style>
+      {items.map((_, i) => (
+        type === "card" ? (
+          <div key={i} style={{ padding: 14, margin: 14, background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}` }}>
+            <div className="skel" style={{ height: 16, borderRadius: 6, marginBottom: 10, width: "70%" }} />
+            <div className="skel" style={{ height: 12, borderRadius: 6, width: "50%" }} />
+          </div>
+        ) : (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: `1px solid ${V.cardBorder}` }}>
+            <div className="skel" style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="skel" style={{ height: 14, borderRadius: 6, marginBottom: 8, width: "60%" }} />
+              <div className="skel" style={{ height: 12, borderRadius: 6, width: "40%" }} />
+            </div>
+          </div>
+        )
+      ))}
+    </div>
+  );
+};
+
+const EmptyState = ({ icon = "inbox", title, body, action }) => (
+  <div style={{ padding: "60px 32px", textAlign: "center", color: V.muted, fontFamily: F }}>
+    <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(0,0,0,0.04)",
+      display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+      <Ic n={icon} s={24} c={V.muted} />
+    </div>
+    <div style={{ fontSize: 16, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 6, letterSpacing: "-0.02em" }}>{title}</div>
+    {body && <div style={{ fontSize: 13, lineHeight: 1.55, maxWidth: 280, margin: "0 auto 16px" }}>{body}</div>}
+    {action}
+  </div>
+);
+
+const ErrorState = ({ message, onRetry }) => (
+  <div style={{ padding: "60px 32px", textAlign: "center", color: V.muted, fontFamily: F }}>
+    <div style={{ width: 56, height: 56, borderRadius: 18, background: `${V.danger}15`,
+      display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+      <Ic n="alert" s={24} c={V.danger} />
+    </div>
+    <div style={{ fontSize: 16, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 6, letterSpacing: "-0.02em" }}>Couldn't load data</div>
+    <div style={{ fontSize: 13, lineHeight: 1.55, maxWidth: 280, margin: "0 auto 16px" }}>{message || "Something went wrong"}</div>
+    {onRetry && (
+      <button onClick={onRetry} style={{ padding: "10px 22px", borderRadius: 12, border: "none",
+        background: V.ink, color: "white", fontSize: 13, fontWeight: 700, fontFamily: F, cursor: "pointer",
+        display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Ic n="refresh" s={14} c="white" /> Try again
+      </button>
+    )}
+  </div>
+);
+
+// ─── Pull-to-refresh ──────────────────────────────────────────────────────────
+const PullToRefresh = ({ onRefresh, children, disabled = false }) => {
+  const [pullDist, setPullDist] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const startY = useRef(0);
+  const scrollRef = useRef(null);
+  const THRESHOLD = 70;
+
+  const onTouchStart = (e) => {
+    if (disabled || refreshing) return;
+    const el = scrollRef.current;
+    if (!el || el.scrollTop > 0) return;
+    startY.current = e.touches[0].clientY;
+  };
+  const onTouchMove = (e) => {
+    if (disabled || refreshing || !startY.current) return;
+    const dy = e.touches[0].clientY - startY.current;
+    if (dy > 0) setPullDist(Math.min(dy * 0.5, 100));
+  };
+  const onTouchEnd = async () => {
+    if (disabled || refreshing) { startY.current = 0; return; }
+    if (pullDist >= THRESHOLD) {
+      setRefreshing(true);
+      setPullDist(50);
+      try { await onRefresh(); } catch {}
+      setRefreshing(false);
+    }
+    setPullDist(0);
+    startY.current = 0;
+  };
+
+  const progress = Math.min(pullDist / THRESHOLD, 1);
+
+  return (
+    <div ref={scrollRef}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", position: "relative", touchAction: "pan-y" }}>
+      <div style={{
+        height: pullDist, display: "flex", alignItems: "flex-end", justifyContent: "center",
+        paddingBottom: pullDist > 8 ? 8 : 0, transition: refreshing ? "none" : "height 0.2s",
+        overflow: "hidden",
+      }}>
+        {pullDist > 8 && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, color: V.muted,
+            transform: `rotate(${refreshing ? 0 : progress * 360}deg)`,
+            animation: refreshing ? "spin 0.8s linear infinite" : "none",
+          }}>
+            <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+            <Ic n="refresh" s={16} c={progress >= 1 ? V.ink : V.muted} />
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+};
+
+const FAB = ({ icon = "plus", onClick, label, color = V.ink }) => (
+  <button onClick={onClick}
+    style={{
+      position: "absolute", bottom: 20, right: 20, zIndex: 50,
+      width: 56, height: 56, borderRadius: 18, border: "none",
+      background: color, color: "white", boxShadow: "0 6px 20px rgba(0,0,0,0.22)",
+      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+      transition: "transform 0.15s",
+    }}
+    onTouchStart={e => { e.currentTarget.style.transform = "scale(0.94)"; }}
+    onTouchEnd={e => { e.currentTarget.style.transform = "scale(1)"; }}
+    aria-label={label}>
+    <Ic n={icon} s={24} c="white" />
+  </button>
+);
+
+// ─── SwipeRow ────────────────────────────────────────────────────────────────
+const SwipeRow = ({ children, onCall, onEmail, hasPhone, hasEmail }) => {
+  const [x, setX] = useState(0);
+  const [startX, setStartX] = useState(null);
+  const [animating, setAnimating] = useState(false);
+  const ACTION_WIDTH = 84;
+
+  const onTouchStart = (e) => { setStartX(e.touches[0].clientX); setAnimating(false); };
+  const onTouchMove = (e) => {
+    if (startX === null) return;
+    const dx = e.touches[0].clientX - startX;
+    const clamped = Math.max(-ACTION_WIDTH * 1.2, Math.min(ACTION_WIDTH * 1.2, dx));
+    setX(clamped);
+  };
+  const onTouchEnd = () => {
+    setStartX(null);
+    setAnimating(true);
+    if (x > ACTION_WIDTH * 0.6 && onCall && hasPhone) { onCall(); setX(0); }
+    else if (x < -ACTION_WIDTH * 0.6 && onEmail && hasEmail) { onEmail(); setX(0); }
+    else setX(0);
+  };
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden", background: V.cardSolid }}>
+      {hasPhone && (
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: ACTION_WIDTH,
+          background: V.success, display: "flex", alignItems: "center", justifyContent: "center",
+          color: "white", flexDirection: "column", gap: 4,
+        }}>
+          <Ic n="phone" s={20} c="white" />
+          <span style={{ fontSize: 11, fontFamily: F, fontWeight: 700 }}>Call</span>
+        </div>
+      )}
+      {hasEmail && (
+        <div style={{
+          position: "absolute", right: 0, top: 0, bottom: 0, width: ACTION_WIDTH,
+          background: V.lavender, display: "flex", alignItems: "center", justifyContent: "center",
+          color: "white", flexDirection: "column", gap: 4,
+        }}>
+          <Ic n="mail" s={20} c="white" />
+          <span style={{ fontSize: 11, fontFamily: F, fontWeight: 700 }}>Email</span>
+        </div>
+      )}
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${x}px)`,
+          transition: animating ? "transform 0.22s cubic-bezier(0.34,1.2,0.64,1)" : "none",
+          background: V.cardSolid, position: "relative", zIndex: 1,
+        }}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// ─── COPILOT SCREEN ───────────────────────────────────────────────────────────
 const CopilotScreen = ({ session, environment, onNavigate }) => {
+  const toast = useToast();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
   const [started, setStarted] = useState(false);
+  const [listening, setListening] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const recogRef = useRef(null);
 
   useEffect(() => {
     if (!environment?.id) return;
-    api.get(`/interviews?environment_id=${environment.id}&limit=20`).then(d => {
-      const today = new Date().toDateString();
-      setTodayCount((d.items || []).filter(i => new Date(i.date).toDateString() === today).length);
-    }).catch(() => {});
+    api.get(`/interviews?environment_id=${environment.id}&limit=20`).then(res => {
+      if (res.ok) {
+        const items = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+        const today = new Date().toDateString();
+        setTodayCount(items.filter(i => new Date(i.date).toDateString() === today).length);
+      }
+    });
   }, [environment?.id]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  const speechSupported = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  const toggleVoice = () => {
+    if (!speechSupported) {
+      toast?.warning?.("Voice input is not supported on this browser");
+      return;
+    }
+    if (listening) { recogRef.current?.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const r = new SR();
+    r.lang = navigator.language || "en-GB";
+    r.interimResults = true;
+    r.continuous = false;
+    r.onresult = (e) => {
+      const txt = Array.from(e.results).map(res => res[0].transcript).join("");
+      setInput(txt);
+    };
+    r.onerror = (e) => {
+      setListening(false);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        toast?.error?.("Microphone permission denied");
+      } else if (e.error !== "no-speech" && e.error !== "aborted") {
+        toast?.error?.("Voice input error: " + e.error);
+      }
+    };
+    r.onend = () => setListening(false);
+    recogRef.current = r;
+    try { r.start(); setListening(true); } catch { setListening(false); }
+  };
 
   const send = async (text) => {
     const msg = text.trim();
@@ -195,160 +442,290 @@ const CopilotScreen = ({ session, environment, onNavigate }) => {
     setLoading(true);
     try {
       const system = `You are the Vercentic copilot on mobile. Be very concise (2-3 sentences max). User: ${session?.first_name} ${session?.last_name}. Env: ${environment?.name}. If user wants to navigate, end with [NAVIGATE:candidates], [NAVIGATE:interviews], or [NAVIGATE:jobs].`;
-      const res = await fetch("/api/ai/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages.map(m => ({ role: m.role, content: m.text })), { role: "user", content: msg }], system })
+      const res = await _apiClient.post("/ai/chat", {
+        messages: [...messages.map(m => ({ role: m.role, content: m.text })), { role: "user", content: msg }],
+        system,
       });
-      const data = await res.json();
-      let reply = data.content?.[0]?.text || data.reply || "I couldn't process that. Try again.";
-      const nav = reply.match(/\[NAVIGATE:(\w+)\]/);
-      if (nav) { reply = reply.replace(/\[NAVIGATE:\w+\]/, "").trim(); setTimeout(() => onNavigate(nav[1]), 350); }
-      setMessages(prev => [...prev, { role: "assistant", text: reply, time: new Date() }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", text: "Something went wrong. Please try again.", time: new Date() }]);
+      const replyText = res?.content || res?.message || (typeof res === "string" ? res : "I'm not sure how to help with that yet.");
+      const nav = replyText.match(/\[NAVIGATE:(\w+)\]/);
+      const clean = replyText.replace(/\[NAVIGATE:\w+\]/g, "").trim();
+      setMessages(prev => [...prev, { role: "assistant", text: clean, time: new Date() }]);
+      if (nav && onNavigate) setTimeout(() => onNavigate(nav[1]), 500);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: "assistant", text: "Sorry, I had trouble reaching the AI service.", time: new Date(), error: true }]);
+      toast?.error?.("Couldn't reach the AI service");
     }
     setLoading(false);
   };
 
-  const timeStr = d => { const s = (new Date() - new Date(d)) / 1000; if (s < 60) return "now"; if (s < 3600) return `${Math.floor(s / 60)}m`; return new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
-
   const quickActions = [
-    { label: todayCount > 0 ? `${todayCount} interview${todayCount > 1 ? "s" : ""} today` : "Today's schedule", nav: "interviews", color: V.lavender },
-    { label: "Candidates",  nav: "candidates", color: V.rose },
-    { label: "Open jobs",   nav: "jobs",       color: V.sage },
-    { label: "Find someone", prompt: "Find ",  color: V.lilac },
+    { label: "Today's interviews", icon: "calendar", action: () => onNavigate?.("interviews"), count: todayCount },
+    { label: "Find a candidate", icon: "users", action: () => onNavigate?.("candidates") },
+    { label: "Open jobs", icon: "briefcase", action: () => onNavigate?.("jobs") },
   ];
 
-  const AiAvatar = () => (
-    <div style={{ width: 26, height: 26, borderRadius: 8, background: V.ink, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <VIcon size={18} color="white" />
-    </div>
-  );
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: V.gradientBg }}>
-      {!started && messages.length === 0 && (
-        <div style={{ padding: "36px 22px 0", textAlign: "center", flexShrink: 0 }}>
-          <div style={{ fontSize: 27, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.04em", lineHeight: 1.15, marginBottom: 8 }}>
-            Good to see you, {session?.first_name || "there"}
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: V.gradientBg, position: "relative" }}>
+      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: started ? "16px 14px 12px" : "20px 22px" }}>
+        {!started ? (
+          <div>
+            <div style={{ marginTop: 10, marginBottom: 26 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.04em", lineHeight: 1.1, marginBottom: 6 }}>
+                Hi {session?.first_name || "there"}.
+              </div>
+              <div style={{ fontSize: 15, color: V.muted, fontFamily: F, lineHeight: 1.5 }}>
+                What can I help you with?
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {quickActions.map(qa => (
+                <button key={qa.label} onClick={qa.action}
+                  style={{
+                    background: V.cardSolid, border: `1px solid ${V.cardBorder}`,
+                    borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+                    cursor: "pointer", textAlign: "left", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                  }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, background: "rgba(13,13,15,0.05)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Ic n={qa.icon} s={18} c={V.inkMid} />
+                  </div>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: V.inkMid, fontFamily: F }}>{qa.label}</span>
+                  {qa.count ? <Badge label={qa.count} color={V.lavender} /> : null}
+                  <Ic n="chevR" s={16} c={V.muted} />
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={{ fontSize: 15, color: V.muted, fontFamily: F, lineHeight: 1.55 }}>
-            What do you need today?
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 26 }}>
-            {quickActions.map((qa, i) => (
-              <button key={i}
-                onClick={() => qa.nav ? onNavigate(qa.nav) : (setInput(qa.prompt || ""), inputRef.current?.focus())}
-                style={{ padding: "14px 16px", borderRadius: 18, border: `1.5px solid rgba(0,0,0,0.07)`,
-                  background: "rgba(255,255,255,0.78)", backdropFilter: "blur(10px)",
-                  cursor: "pointer", textAlign: "left", fontFamily: F,
-                  boxShadow: "0 2px 14px rgba(0,0,0,0.05)" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: qa.color, marginBottom: 10 }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: V.inkMid, lineHeight: 1.3 }}>{qa.label}</div>
-                <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                  <Ic n="arrowR" s={13} c={V.muted} />
-                </div>
-              </button>
+        ) : (
+          <div>
+            {messages.map((m, i) => (
+              <div key={i} style={{
+                display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+                marginBottom: 10,
+              }}>
+                <div style={{
+                  maxWidth: "82%",
+                  padding: "10px 14px", borderRadius: 18,
+                  background: m.role === "user" ? V.ink : (m.error ? `${V.danger}10` : V.cardSolid),
+                  color: m.role === "user" ? "white" : (m.error ? V.danger : V.inkMid),
+                  fontSize: 14, fontFamily: F, lineHeight: 1.45,
+                  border: m.role === "assistant" && !m.error ? `1px solid ${V.cardBorder}` : "none",
+                  boxShadow: m.role === "assistant" ? "0 2px 8px rgba(0,0,0,0.04)" : "none",
+                  whiteSpace: "pre-wrap",
+                }}>{m.text}</div>
+              </div>
             ))}
-          </div>
-        </div>
-      )}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", WebkitOverflowScrolling: "touch" }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 14 }}>
-            {m.role === "assistant" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                <AiAvatar />
-                <span style={{ fontSize: 10, color: V.muted, fontFamily: F, fontWeight: 500 }}>Vercentic · {timeStr(m.time)}</span>
+            {loading && (
+              <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
+                <div style={{ padding: "10px 14px", background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}` }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[0, 1, 2].map(i => (
+                      <span key={i} style={{
+                        width: 6, height: 6, borderRadius: "50%", background: V.muted,
+                        animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite`,
+                      }} />
+                    ))}
+                  </div>
+                  <style>{`@keyframes bounce{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}`}</style>
+                </div>
               </div>
             )}
-            <div style={{ maxWidth: "80%", padding: "11px 16px",
-              borderRadius: m.role === "user" ? "18px 4px 18px 18px" : "4px 18px 18px 18px",
-              background: m.role === "user" ? V.ink : "rgba(255,255,255,0.9)",
-              color: m.role === "user" ? "white" : V.inkMid,
-              fontSize: 14.5, lineHeight: 1.6, fontFamily: F, fontWeight: 400,
-              boxShadow: m.role === "user" ? "0 4px 16px rgba(13,13,15,0.2)" : "0 2px 10px rgba(0,0,0,0.06)",
-              border: m.role === "user" ? "none" : `1px solid rgba(0,0,0,0.07)`,
-              backdropFilter: m.role !== "user" ? "blur(8px)" : "none" }}>
-              {m.text}
-            </div>
-            {m.role === "user" && <span style={{ fontSize: 10, color: V.muted, fontFamily: F, marginTop: 3 }}>{timeStr(m.time)}</span>}
-          </div>
-        ))}
-        {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <AiAvatar />
-            <div style={{ padding: "12px 18px", borderRadius: "4px 18px 18px 18px",
-              background: "rgba(255,255,255,0.9)", border: `1px solid rgba(0,0,0,0.07)`,
-              backdropFilter: "blur(8px)", display: "flex", gap: 5, alignItems: "center" }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: V.muted,
-                  animation: `vcDot 1.4s ${i * 0.2}s ease-in-out infinite` }} />
-              ))}
-              <style>{`@keyframes vcDot{0%,80%,100%{transform:scale(0.55);opacity:0.3}40%{transform:scale(1);opacity:1}}`}</style>
-            </div>
+            <div ref={endRef} />
           </div>
         )}
-        <div ref={endRef} />
       </div>
-      <div style={{ padding: "10px 14px 16px", flexShrink: 0 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center",
-          background: "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)",
-          borderRadius: 22, border: `1.5px solid rgba(0,0,0,0.1)`,
-          padding: "6px 6px 6px 18px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-          <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-            placeholder="Ask me anything…"
-            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, color: V.inkMid, fontFamily: F, outline: "none", minWidth: 0 }} />
-          <button onClick={() => send(input)} disabled={!input.trim() || loading}
-            style={{ width: 38, height: 38, borderRadius: 16, border: "none", flexShrink: 0,
-              background: input.trim() && !loading ? V.ink : "rgba(0,0,0,0.08)",
+
+      <div style={{
+        background: V.cardSolid, borderTop: `1px solid ${V.cardBorder}`,
+        padding: "10px 14px", display: "flex", alignItems: "center", gap: 8,
+        flexShrink: 0,
+      }}>
+        <input ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") send(input); }}
+          placeholder={listening ? "Listening…" : "Ask anything…"}
+          style={{
+            flex: 1, padding: "11px 14px", borderRadius: 99,
+            border: `1px solid ${V.cardBorder}`, background: "rgba(0,0,0,0.03)",
+            fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none",
+          }}
+        />
+        {speechSupported && (
+          <button onClick={toggleVoice}
+            style={{
+              width: 42, height: 42, borderRadius: 99, border: "none",
+              background: listening ? V.danger : "rgba(0,0,0,0.06)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: input.trim() && !loading ? "pointer" : "default", transition: "background 0.18s" }}>
-            <Ic n="send" s={16} c={input.trim() && !loading ? "white" : V.muted} />
+              cursor: "pointer", transition: "background 0.18s",
+              animation: listening ? "pulse 1.2s ease-in-out infinite" : "none",
+            }}
+            aria-label="Voice input">
+            <style>{`@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}`}</style>
+            <Ic n="mic" s={18} c={listening ? "white" : V.inkMid} />
           </button>
-        </div>
+        )}
+        <button onClick={() => send(input)} disabled={!input.trim() || loading}
+          style={{
+            width: 42, height: 42, borderRadius: 99, border: "none",
+            background: input.trim() && !loading ? V.ink : "rgba(0,0,0,0.08)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: input.trim() && !loading ? "pointer" : "default", transition: "background 0.18s",
+          }}>
+          <Ic n="send" s={16} c={input.trim() && !loading ? "white" : V.muted} />
+        </button>
       </div>
     </div>
   );
 };
 
-// ── CANDIDATE DETAIL ──────────────────────────────────────────────────────────
-const CandidateDetail = ({ record }) => {
+// ─── CANDIDATE DETAIL ─────────────────────────────────────────────────────────
+const CandidateDetail = ({ record, onUpdate }) => {
+  const toast = useToast();
   const d = record.data || {};
   const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || "Unnamed";
-  const [note, setNote] = useState(""); const [notes, setNotes] = useState([]); const [saving, setSaving] = useState(false);
-  useEffect(() => { api.get(`/records/${record.id}/notes`).then(n => setNotes(Array.isArray(n) ? n : [])).catch(() => {}); }, [record.id]);
-  const addNote = async () => { if (!note.trim()) return; setSaving(true); try { const n = await api.post(`/records/${record.id}/notes`, { content: note }); setNotes(p => [n, ...p]); setNote(""); } catch {} setSaving(false); };
-  const fields = [{ l: "Email", v: d.email, i: "mail" }, { l: "Phone", v: d.phone, i: "phone" }, { l: "Location", v: d.location, i: "map" }, { l: "Role", v: d.current_title || d.job_title, i: "briefcase" }, { l: "Status", v: d.status, i: "layers" }, { l: "Source", v: d.source, i: "user" }].filter(f => f.v);
+  const [note, setNote] = useState("");
+  const [notes, setNotes] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [stageBusy, setStageBusy] = useState(false);
+
+  useEffect(() => {
+    api.get(`/records/${record.id}/notes`).then(res => {
+      if (res.ok) setNotes(Array.isArray(res.data) ? res.data : []);
+    });
+  }, [record.id]);
+
+  const addNote = async () => {
+    if (!note.trim()) return;
+    setSaving(true);
+    const res = await api.post(`/records/${record.id}/notes`, { content: note });
+    if (res.ok && res.data) {
+      setNotes(p => [res.data, ...p]);
+      setNote("");
+      toast?.success?.("Note added");
+    } else {
+      toast?.error?.(res.error || "Could not save note");
+    }
+    setSaving(false);
+  };
+
+  const currentStage = d.pipeline_stage || d.status || d.stage || null;
+  const STAGES = ["new", "screening", "interview", "offer", "hired"];
+  const REJECT = ["declined", "withdrawn", "rejected"];
+
+  const advanceStage = async (next) => {
+    setStageBusy(true);
+    const field = d.pipeline_stage ? "pipeline_stage" : "status";
+    const res = await api.patch(`/records/${record.id}`, { data: { ...d, [field]: next } });
+    if (res.ok) {
+      toast?.success?.(`Moved to ${next}`);
+      onUpdate?.({ ...record, data: { ...d, [field]: next } });
+    } else {
+      toast?.error?.(res.error || "Could not update stage");
+    }
+    setStageBusy(false);
+  };
+
+  const currentIdx = currentStage ? STAGES.indexOf(currentStage.toLowerCase()) : -1;
+  const canAdvance = currentIdx >= 0 && currentIdx < STAGES.length - 1;
+  const nextStage = canAdvance ? STAGES[currentIdx + 1] : null;
+  const isRejected = currentStage && REJECT.includes(currentStage.toLowerCase());
+
+  const callPhone = () => {
+    if (d.phone) window.location.href = `tel:${d.phone}`;
+    else toast?.warning?.("No phone number on file");
+  };
+  const sendEmail = () => {
+    if (d.email) window.location.href = `mailto:${d.email}`;
+    else toast?.warning?.("No email address on file");
+  };
+
   return (
-    <div style={{ paddingBottom: 40 }}>
-      <div style={{ padding: "24px 22px 18px", background: V.gradientBg, textAlign: "center", borderBottom: `1px solid ${V.cardBorder}` }}>
-        <Avatar name={name} size={60} color={V.lavender} />
-        <div style={{ marginTop: 12, fontSize: 20, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.03em" }}>{name}</div>
-        <div style={{ fontSize: 13, color: V.muted, fontFamily: F, marginTop: 2 }}>{d.current_title || d.job_title || d.email || ""}</div>
-        {d.status && <div style={{ marginTop: 10 }}><Badge label={d.status} color={statusColor(d.status)} /></div>}
+    <div style={{ padding: "18px 22px 40px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+        <Avatar name={name} size={52} color={V.lavender} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.03em" }}>{name}</div>
+          {d.current_title && <div style={{ fontSize: 13, color: V.muted, fontFamily: F, marginTop: 2 }}>{d.current_title}</div>}
+        </div>
       </div>
-      <div style={{ display: "flex", borderBottom: `1px solid ${V.cardBorder}` }}>
-        {d.phone && <a href={`tel:${d.phone}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "14px 0", gap: 5, textDecoration: "none", borderRight: `1px solid ${V.cardBorder}` }}><Ic n="phone" s={20} c={V.success} /><span style={{ fontSize: 10, color: V.success, fontFamily: F, fontWeight: 800, letterSpacing: "0.06em" }}>CALL</span></a>}
-        {d.email && <a href={`mailto:${d.email}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "14px 0", gap: 5, textDecoration: "none" }}><Ic n="mail" s={20} c={V.lavender} /><span style={{ fontSize: 10, color: V.lavender, fontFamily: F, fontWeight: 800, letterSpacing: "0.06em" }}>EMAIL</span></a>}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+        <button onClick={callPhone} disabled={!d.phone}
+          style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+            background: d.phone ? V.cardSolid : "rgba(0,0,0,0.02)", color: d.phone ? V.success : V.muted,
+            cursor: d.phone ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            fontSize: 13, fontWeight: 700, fontFamily: F }}>
+          <Ic n="phone" s={14} c={d.phone ? V.success : V.muted} /> Call
+        </button>
+        <button onClick={sendEmail} disabled={!d.email}
+          style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+            background: d.email ? V.cardSolid : "rgba(0,0,0,0.02)", color: d.email ? V.lavender : V.muted,
+            cursor: d.email ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            fontSize: 13, fontWeight: 700, fontFamily: F }}>
+          <Ic n="mail" s={14} c={d.email ? V.lavender : V.muted} /> Email
+        </button>
       </div>
-      <div style={{ padding: "18px 22px" }}>
-        <div style={{ fontSize: 10, fontWeight: 800, color: V.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 14, fontFamily: F }}>Profile</div>
-        {fields.map((f, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 0", borderBottom: i < fields.length - 1 ? `1px solid ${V.cardBorder}` : "none" }}>
-            <Ic n={f.i} s={15} c={V.muted} />
-            <div><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{f.l}</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{f.v}</div></div>
+
+      {currentStage && (
+        <div style={{ background: V.cardSolid, border: `1px solid ${V.cardBorder}`, borderRadius: 16, padding: 16, marginBottom: 22 }}>
+          <div style={{ fontSize: 10, color: V.muted, fontFamily: F, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>
+            Current Stage
           </div>
-        ))}
-      </div>
-      <div style={{ padding: "16px 22px 22px", borderTop: `1px solid ${V.cardBorder}` }}>
-        <div style={{ fontSize: 10, fontWeight: 800, color: V.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 14, fontFamily: F }}>Notes</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <Badge label={currentStage} color={statusColor(currentStage)} />
+            {isRejected && <span style={{ fontSize: 12, color: V.muted, fontFamily: F }}>Closed</span>}
+          </div>
+          {!isRejected && (
+            <div style={{ display: "flex", gap: 8 }}>
+              {canAdvance && (
+                <button onClick={() => advanceStage(nextStage)} disabled={stageBusy}
+                  style={{ flex: 2, padding: "11px", borderRadius: 12, border: "none",
+                    background: V.success, color: "white", fontSize: 13, fontWeight: 700, fontFamily: F,
+                    cursor: stageBusy ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    opacity: stageBusy ? 0.6 : 1 }}>
+                  <Ic n="arrowR" s={14} c="white" /> Advance to {nextStage}
+                </button>
+              )}
+              <button onClick={() => advanceStage("declined")} disabled={stageBusy}
+                style={{ flex: 1, padding: "11px", borderRadius: 12, border: `1px solid ${V.cardBorder}`,
+                  background: "transparent", color: V.danger, fontSize: 13, fontWeight: 700, fontFamily: F,
+                  cursor: stageBusy ? "default" : "pointer", opacity: stageBusy ? 0.6 : 1 }}>
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {[{ l: "Email", v: d.email, i: "mail" }, { l: "Phone", v: d.phone, i: "phone" },
+        { l: "Location", v: d.location || d.city, i: "map" }].filter(r => r.v).map((row, i, arr) => (
+        <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
+          <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div>
+            <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500, wordBreak: "break-all" }}>{row.v}</div>
+          </div>
+        </div>
+      ))}
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          Notes
+        </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <input value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => e.key === "Enter" && addNote()} placeholder="Add a note…"
-            style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${V.cardBorder}`, fontSize: 14, fontFamily: F, outline: "none", color: V.inkMid, background: "rgba(0,0,0,0.02)" }} />
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note…"
+            onKeyDown={e => { if (e.key === "Enter") addNote(); }}
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1px solid ${V.cardBorder}`,
+              fontSize: 14, fontFamily: F, color: V.inkMid, outline: "none" }} />
           <button onClick={addNote} disabled={!note.trim() || saving}
-            style={{ padding: "10px 16px", borderRadius: 12, border: "none", background: note.trim() ? V.ink : "rgba(0,0,0,0.06)", color: "white", fontSize: 13, fontWeight: 700, fontFamily: F, cursor: note.trim() ? "pointer" : "default" }}>
+            style={{ padding: "10px 18px", borderRadius: 12, border: "none",
+              background: note.trim() && !saving ? V.ink : "rgba(0,0,0,0.08)",
+              color: note.trim() && !saving ? "white" : V.muted,
+              fontSize: 13, fontWeight: 700, fontFamily: F,
+              cursor: note.trim() && !saving ? "pointer" : "default" }}>
             {saving ? "…" : "Add"}
           </button>
         </div>
@@ -363,31 +740,52 @@ const CandidateDetail = ({ record }) => {
   );
 };
 
-// ── CANDIDATES SCREEN ─────────────────────────────────────────────────────────
+// ─── CANDIDATES SCREEN ────────────────────────────────────────────────────────
 const CandidatesScreen = ({ environment }) => {
-  const [records, setRecords] = useState([]); const [loading, setLoading] = useState(true); const [search, setSearch] = useState(""); const [sel, setSel] = useState(null);
-  useEffect(() => {
+  const toast = useToast();
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState(null);
+  const [objectId, setObjectId] = useState(null);
+
+  const load = useCallback(async () => {
     if (!environment?.id) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const objs = await api.get(`/objects?environment_id=${environment.id}`);
-        const o = (Array.isArray(objs) ? objs : []).find(o => o.slug === "people" || o.name?.toLowerCase().includes("people"));
-        if (!o || cancelled) return;
-        const d = await api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&limit=50&sort=updated_at&order=desc`);
-        if (!cancelled) setRecords(d?.records || []);
-      } catch {}
-      if (!cancelled) setLoading(false);
-    }
-    load();
-    return () => { cancelled = true; };
+    setError(null);
+    const objsRes = await api.get(`/objects?environment_id=${environment.id}`);
+    if (!objsRes.ok) { setError(objsRes.error); setLoading(false); return; }
+    const objs = Array.isArray(objsRes.data) ? objsRes.data : [];
+    const o = objs.find(o => o.slug === "people" || o.name?.toLowerCase().includes("people"));
+    if (!o) { setError("People object not found in this environment"); setLoading(false); return; }
+    setObjectId(o.id);
+    const dRes = await api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&limit=50&sort=updated_at&order=desc`);
+    if (!dRes.ok) { setError(dRes.error); setLoading(false); return; }
+    setRecords(dRes.data?.records || []);
+    setLoading(false);
   }, [environment?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = async () => { await load(); toast?.success?.("Refreshed"); };
+
+  const handleUpdate = (updated) => {
+    setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
+    setSel(updated);
+  };
+
   const getName = r => [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.email || "Unnamed";
   const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
   const colorFor = n => { let h = 0; for (let c of n) h += c.charCodeAt(0); return palette[h % palette.length]; };
-  const filtered = records.filter(r => { const n = getName(r).toLowerCase(); const t = (r.data?.current_title || r.data?.job_title || "").toLowerCase(); const q = search.toLowerCase(); return !q || n.includes(q) || t.includes(q); });
+  const filtered = records.filter(r => {
+    const n = getName(r).toLowerCase();
+    const t = (r.data?.current_title || r.data?.job_title || "").toLowerCase();
+    const q = search.toLowerCase();
+    return !q || n.includes(q) || t.includes(q);
+  });
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2" }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
       <div style={{ padding: "12px 16px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px" }}>
           <Ic n="search" s={15} c={V.muted} />
@@ -395,85 +793,159 @@ const CandidatesScreen = ({ environment }) => {
             style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        {loading ? <div style={{ padding: 40, textAlign: "center", color: V.muted, fontFamily: F }}>Loading…</div>
-          : filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: V.muted, fontFamily: F }}>{search ? "No matches" : "No candidates yet"}</div>
+
+      <PullToRefresh onRefresh={refresh} disabled={loading}>
+        {loading ? <Skeleton count={8} />
+          : error ? <ErrorState message={error} onRetry={load} />
+          : filtered.length === 0 ? (
+            <EmptyState icon="users"
+              title={search ? "No matches" : "No candidates yet"}
+              body={search ? "Try a different search term" : "Tap the + button to add your first candidate"} />
+          )
           : filtered.map(r => {
-            const name = getName(r); const col = colorFor(name); const status = r.data?.status || r.data?.pipeline_stage;
+            const name = getName(r);
+            const col = colorFor(name);
+            const status = r.data?.status || r.data?.pipeline_stage;
             return (
-              <button key={r.id} onClick={() => setSel(r)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${V.cardBorder}` }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, background: col, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "white", fontFamily: F, flexShrink: 0, letterSpacing: "-0.01em" }}>
-                  {name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 2, letterSpacing: "-0.02em" }}>{name}</div>
-                  <div style={{ fontSize: 13, color: V.muted, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.data?.current_title || r.data?.job_title || r.data?.email || "No title"}</div>
-                  {status && <div style={{ marginTop: 5 }}><Badge label={status} color={statusColor(status)} /></div>}
-                </div>
-                <Ic n="chevR" s={15} c={V.muted} />
-              </button>
+              <SwipeRow key={r.id}
+                hasPhone={!!r.data?.phone} hasEmail={!!r.data?.email}
+                onCall={() => { window.location.href = `tel:${r.data.phone}`; }}
+                onEmail={() => { window.location.href = `mailto:${r.data.email}`; }}>
+                <button onClick={() => setSel(r)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${V.cardBorder}` }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: col, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "white", fontFamily: F, flexShrink: 0, letterSpacing: "-0.01em" }}>
+                    {name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 2, letterSpacing: "-0.02em" }}>{name}</div>
+                    <div style={{ fontSize: 13, color: V.muted, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.data?.current_title || r.data?.job_title || r.data?.email || "No title"}</div>
+                    {status && <div style={{ marginTop: 5 }}><Badge label={status} color={statusColor(status)} /></div>}
+                  </div>
+                  <Ic n="chevR" s={15} c={V.muted} />
+                </button>
+              </SwipeRow>
             );
           })}
-      </div>
+      </PullToRefresh>
+
+      {!loading && !error && (
+        <FAB icon="plus" label="Add candidate"
+          onClick={() => {
+            const first = prompt("First name?");
+            if (!first) return;
+            const last = prompt("Last name?") || "";
+            const email = prompt("Email (optional)") || "";
+            api.post("/records", {
+              object_id: objectId,
+              environment_id: environment.id,
+              data: { first_name: first, last_name: last, email, status: "new" },
+            }).then(res => {
+              if (res.ok) { toast?.success?.(`${first} ${last} added`); load(); }
+              else { toast?.error?.(res.error || "Could not add candidate"); }
+            });
+          }} />
+      )}
+
       <Sheet open={!!sel} onClose={() => setSel(null)} title={sel ? getName(sel) : ""} height="82vh">
-        {sel && <CandidateDetail record={sel} />}
+        {sel && <CandidateDetail record={sel} onUpdate={handleUpdate} />}
       </Sheet>
     </div>
   );
 };
 
-// ── INTERVIEWS SCREEN ─────────────────────────────────────────────────────────
+// ─── INTERVIEWS SCREEN ────────────────────────────────────────────────────────
 const InterviewsScreen = ({ environment }) => {
-  const [items, setItems] = useState([]); const [loading, setLoading] = useState(true); const [filter, setFilter] = useState("today"); const [sel, setSel] = useState(null);
-  useEffect(() => {
+  const toast = useToast();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState("today");
+  const [sel, setSel] = useState(null);
+
+  const load = useCallback(async () => {
     if (!environment?.id) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const d = await api.get(`/interviews?environment_id=${environment.id}&limit=50`);
-        // Interviews route returns a plain array
-        const items = Array.isArray(d) ? d : (d?.items || d?.interviews || d?.data || []);
-        if (!cancelled) setItems(items);
-      } catch {}
-      if (!cancelled) setLoading(false);
-    }
-    load();
-    return () => { cancelled = true; };
+    setError(null);
+    const res = await api.get(`/interviews?environment_id=${environment.id}&limit=50`);
+    if (!res.ok) { setError(res.error); setLoading(false); return; }
+    const list = Array.isArray(res.data) ? res.data : (res.data?.items || res.data?.interviews || res.data?.data || []);
+    setItems(list);
+    setLoading(false);
   }, [environment?.id]);
-  const today = new Date().toDateString(); const tom = new Date(Date.now() + 86400000).toDateString();
-  const filtered = items.filter(i => { const d = new Date(i.date).toDateString(); if (filter === "today") return d === today; if (filter === "tomorrow") return d === tom; if (filter === "upcoming") return new Date(i.date) >= new Date(); return true; });
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = async () => { await load(); toast?.success?.("Refreshed"); };
+
+  const today = new Date().toDateString();
+  const tom = new Date(Date.now() + 86400000).toDateString();
+  const filtered = items.filter(i => {
+    const d = new Date(i.date).toDateString();
+    if (filter === "today") return d === today;
+    if (filter === "tomorrow") return d === tom;
+    if (filter === "upcoming") return new Date(i.date) >= new Date();
+    return true;
+  });
   const fmtTime = (dt, t) => t || new Date(dt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const fmtDate = dt => { const d = new Date(dt).toDateString(); if (d === today) return "Today"; if (d === tom) return "Tomorrow"; return new Date(dt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }); };
+  const fmtDate = dt => {
+    const d = new Date(dt).toDateString();
+    if (d === today) return "Today";
+    if (d === tom) return "Tomorrow";
+    return new Date(dt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  };
   const typeCol = f => ({ video: V.lavender, phone: V.success, onsite: V.rose, panel: V.lilac }[f?.toLowerCase()] || V.muted);
-  const tabs = [{ id: "today", label: "Today" }, { id: "tomorrow", label: "Tomorrow" }, { id: "upcoming", label: "Upcoming" }, { id: "all", label: "All" }];
+  const tabs = [
+    { id: "today", label: "Today" },
+    { id: "tomorrow", label: "Tomorrow" },
+    { id: "upcoming", label: "Upcoming" },
+    { id: "all", label: "All" },
+  ];
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2" }}>
-      <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "12px 16px", display: "flex", gap: 6 }}>
-        {tabs.map(t => { const cnt = t.id === "today" ? items.filter(i => new Date(i.date).toDateString() === today).length : 0; return (
-          <button key={t.id} onClick={() => setFilter(t.id)} style={{ padding: "7px 14px", borderRadius: 99, border: "none", background: filter === t.id ? V.ink : "rgba(0,0,0,0.05)", color: filter === t.id ? "white" : V.muted, fontSize: 12, fontWeight: 700, fontFamily: F, cursor: "pointer", letterSpacing: "0.01em" }}>
-            {t.label}{cnt > 0 && <span style={{ marginLeft: 5, background: filter === t.id ? "rgba(255,255,255,0.25)" : V.lavender, color: "white", borderRadius: 99, padding: "1px 6px", fontSize: 10 }}>{cnt}</span>}
-          </button>
-        ); })}
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        {loading ? <div style={{ padding: 40, textAlign: "center", color: V.muted, fontFamily: F }}>Loading…</div>
-          : filtered.length === 0 ? <div style={{ padding: 48, textAlign: "center", color: V.muted, fontFamily: F, fontSize: 14 }}>No interviews scheduled</div>
-          : filtered.map((iv, i) => { const col = typeCol(iv.format); return (
-            <button key={iv.id || i} onClick={() => setSel(iv)} style={{ width: "100%", display: "flex", gap: 14, padding: "16px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${V.cardBorder}`, alignItems: "flex-start" }}>
-              <div style={{ width: 48, flexShrink: 0, textAlign: "center" }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.02em" }}>{fmtTime(iv.date, iv.time)}</div>
-                {iv.duration_minutes && <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginTop: 2, fontWeight: 600 }}>{iv.duration_minutes}m</div>}
-              </div>
-              <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: col, flexShrink: 0, marginTop: 3 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 2, letterSpacing: "-0.02em" }}>{iv.candidate_name || "Candidate"}</div>
-                <div style={{ fontSize: 12, color: V.muted, fontFamily: F, marginBottom: 6 }}>{iv.job_title || iv.type_name || "Interview"} · {fmtDate(iv.date)}</div>
-                {iv.format && <Badge label={iv.format} color={col} />}
-              </div>
-              <Ic n="chevR" s={14} c={V.muted} style={{ marginTop: 4 }} />
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
+      <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "12px 16px", display: "flex", gap: 6, overflowX: "auto" }}>
+        {tabs.map(t => {
+          const cnt = t.id === "today" ? items.filter(i => new Date(i.date).toDateString() === today).length : 0;
+          return (
+            <button key={t.id} onClick={() => setFilter(t.id)}
+              style={{ padding: "7px 14px", borderRadius: 99, border: "none",
+                background: filter === t.id ? V.ink : "rgba(0,0,0,0.05)",
+                color: filter === t.id ? "white" : V.muted, fontSize: 12, fontWeight: 700,
+                fontFamily: F, cursor: "pointer", letterSpacing: "0.01em", whiteSpace: "nowrap" }}>
+              {t.label}{cnt > 0 && <span style={{ marginLeft: 5, background: filter === t.id ? "rgba(255,255,255,0.25)" : V.lavender, color: "white", borderRadius: 99, padding: "1px 6px", fontSize: 10 }}>{cnt}</span>}
             </button>
-          ); })}
+          );
+        })}
       </div>
+
+      <PullToRefresh onRefresh={refresh} disabled={loading}>
+        {loading ? <Skeleton count={6} />
+          : error ? <ErrorState message={error} onRetry={load} />
+          : filtered.length === 0 ? (
+            <EmptyState icon="calendar"
+              title="No interviews scheduled"
+              body={filter === "today" ? "Your schedule is clear today." : "Nothing in this view yet."} />
+          )
+          : filtered.map((iv, i) => {
+            const col = typeCol(iv.format);
+            return (
+              <button key={iv.id || i} onClick={() => setSel(iv)}
+                style={{ width: "100%", display: "flex", gap: 14, padding: "16px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${V.cardBorder}`, alignItems: "flex-start" }}>
+                <div style={{ width: 48, flexShrink: 0, textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.02em" }}>{fmtTime(iv.date, iv.time)}</div>
+                  {iv.duration_minutes && <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginTop: 2, fontWeight: 600 }}>{iv.duration_minutes}m</div>}
+                </div>
+                <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: col, flexShrink: 0, marginTop: 3 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 2, letterSpacing: "-0.02em" }}>{iv.candidate_name || "Candidate"}</div>
+                  <div style={{ fontSize: 12, color: V.muted, fontFamily: F, marginBottom: 6 }}>{iv.job_title || iv.type_name || "Interview"} · {fmtDate(iv.date)}</div>
+                  {iv.format && <Badge label={iv.format} color={col} />}
+                </div>
+                <Ic n="chevR" s={14} c={V.muted} style={{ marginTop: 4 }} />
+              </button>
+            );
+          })}
+      </PullToRefresh>
+
       <Sheet open={!!sel} onClose={() => setSel(null)} title="Interview">
         {sel && (
           <div style={{ padding: "20px 22px 40px" }}>
@@ -481,14 +953,32 @@ const InterviewsScreen = ({ environment }) => {
               <div style={{ fontSize: 18, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.03em", marginBottom: 4 }}>{sel.candidate_name || "Candidate"}</div>
               <div style={{ fontSize: 13, color: V.muted, fontFamily: F }}>{sel.job_title || sel.type_name || "Interview"}</div>
             </div>
-            {[{ l: "Date & Time", v: `${fmtDate(sel.date)} at ${fmtTime(sel.date, sel.time)}`, i: "calendar" }, { l: "Duration", v: sel.duration_minutes ? `${sel.duration_minutes} min` : "—", i: "clock" }, { l: "Format", v: sel.format || "—", i: "layers" }, { l: "Location", v: sel.location || sel.video_link || "—", i: "map" }].map((row, i) => (
+            {[
+              { l: "Date & Time", v: `${fmtDate(sel.date)} at ${fmtTime(sel.date, sel.time)}`, i: "calendar" },
+              { l: "Duration", v: sel.duration_minutes ? `${sel.duration_minutes} min` : "—", i: "clock" },
+              { l: "Format", v: sel.format || "—", i: "layers" },
+              { l: "Location", v: sel.location || sel.video_link || "—", i: "map" },
+            ].map((row, i) => (
               <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: `1px solid ${V.cardBorder}`, alignItems: "flex-start" }}>
                 <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
-                <div><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div>
+                  <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500, wordBreak: "break-word" }}>{row.v}</div>
+                </div>
               </div>
             ))}
-            {sel.notes && <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12, border: `1px solid ${V.cardBorder}` }}><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 6, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Notes</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.65 }}>{sel.notes}</div></div>}
-            <button style={{ width: "100%", marginTop: 22, padding: "15px", borderRadius: 14, border: "none", background: V.ink, color: "white", fontSize: 15, fontWeight: 700, fontFamily: F, cursor: "pointer", letterSpacing: "-0.01em" }}>→ Submit Scorecard</button>
+            {sel.notes && (
+              <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12, border: `1px solid ${V.cardBorder}` }}>
+                <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 6, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Notes</div>
+                <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.65 }}>{sel.notes}</div>
+              </div>
+            )}
+            {sel.video_link && (
+              <a href={sel.video_link} target="_blank" rel="noreferrer"
+                style={{ display: "block", textDecoration: "none", marginTop: 22, padding: "15px", borderRadius: 14, background: V.ink, color: "white", fontSize: 15, fontWeight: 700, fontFamily: F, letterSpacing: "-0.01em", textAlign: "center" }}>
+                → Join video call
+              </a>
+            )}
           </div>
         )}
       </Sheet>
@@ -496,30 +986,46 @@ const InterviewsScreen = ({ environment }) => {
   );
 };
 
-// ── JOBS SCREEN ───────────────────────────────────────────────────────────────
+// ─── JOBS SCREEN ──────────────────────────────────────────────────────────────
 const JobsScreen = ({ environment }) => {
-  const [jobs, setJobs] = useState([]); const [loading, setLoading] = useState(true); const [search, setSearch] = useState(""); const [sel, setSel] = useState(null);
-  useEffect(() => {
+  const toast = useToast();
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState(null);
+  const [objectId, setObjectId] = useState(null);
+
+  const load = useCallback(async () => {
     if (!environment?.id) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const objs = await api.get(`/objects?environment_id=${environment.id}`);
-        const o = (Array.isArray(objs) ? objs : []).find(o => o.slug === "jobs" || o.name?.toLowerCase().includes("job"));
-        if (!o || cancelled) return;
-        const d = await api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&limit=50&sort=updated_at&order=desc`);
-        if (!cancelled) setJobs(d?.records || []);
-      } catch {}
-      if (!cancelled) setLoading(false);
-    }
-    load();
-    return () => { cancelled = true; };
+    setError(null);
+    const objsRes = await api.get(`/objects?environment_id=${environment.id}`);
+    if (!objsRes.ok) { setError(objsRes.error); setLoading(false); return; }
+    const objs = Array.isArray(objsRes.data) ? objsRes.data : [];
+    const o = objs.find(o => o.slug === "jobs" || o.name?.toLowerCase().includes("job"));
+    if (!o) { setError("Jobs object not found in this environment"); setLoading(false); return; }
+    setObjectId(o.id);
+    const dRes = await api.get(`/records?object_id=${o.id}&environment_id=${environment.id}&limit=50&sort=updated_at&order=desc`);
+    if (!dRes.ok) { setError(dRes.error); setLoading(false); return; }
+    setJobs(dRes.data?.records || []);
+    setLoading(false);
   }, [environment?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = async () => { await load(); toast?.success?.("Refreshed"); };
+
   const getTitle = j => j.data?.job_title || j.data?.title || "Untitled Role";
   const getStatus = j => j.data?.status || "Open";
-  const filtered = jobs.filter(j => { const t = getTitle(j).toLowerCase(); const dep = (j.data?.department || "").toLowerCase(); const q = search.toLowerCase(); return !q || t.includes(q) || dep.includes(q); });
+  const filtered = jobs.filter(j => {
+    const t = getTitle(j).toLowerCase();
+    const dep = (j.data?.department || "").toLowerCase();
+    const q = search.toLowerCase();
+    return !q || t.includes(q) || dep.includes(q);
+  });
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2" }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
       <div style={{ padding: "12px 16px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px" }}>
           <Ic n="search" s={15} c={V.muted} />
@@ -527,13 +1033,21 @@ const JobsScreen = ({ environment }) => {
             style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        {loading ? <div style={{ padding: 40, textAlign: "center", color: V.muted, fontFamily: F }}>Loading…</div>
-          : filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: V.muted, fontFamily: F }}>No jobs found</div>
+
+      <PullToRefresh onRefresh={refresh} disabled={loading}>
+        {loading ? <Skeleton count={5} type="card" />
+          : error ? <ErrorState message={error} onRetry={load} />
+          : filtered.length === 0 ? (
+            <EmptyState icon="briefcase"
+              title={search ? "No matches" : "No jobs yet"}
+              body={search ? "Try a different search term" : "Tap the + button to post your first role"} />
+          )
           : <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>{filtered.map(j => {
-            const status = getStatus(j); const col = statusColor(status);
+            const status = getStatus(j);
+            const col = statusColor(status);
             return (
-              <button key={j.id} onClick={() => setSel(j)} style={{ background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}`, padding: 18, textAlign: "left", cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderLeft: `4px solid ${col}` }}>
+              <button key={j.id} onClick={() => setSel(j)}
+                style={{ background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}`, padding: 18, textAlign: "left", cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderLeft: `4px solid ${col}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                   <div style={{ fontSize: 16, fontWeight: 800, color: V.inkMid, fontFamily: FD, flex: 1, marginRight: 10, letterSpacing: "-0.03em", lineHeight: 1.2 }}>{getTitle(j)}</div>
                   <Badge label={status} color={col} />
@@ -543,17 +1057,46 @@ const JobsScreen = ({ environment }) => {
               </button>
             );
           })}</div>}
-      </div>
+      </PullToRefresh>
+
+      {!loading && !error && (
+        <FAB icon="plus" label="New job"
+          onClick={() => {
+            const title = prompt("Job title?");
+            if (!title) return;
+            const dept = prompt("Department (optional)") || "";
+            const loc = prompt("Location (optional)") || "";
+            api.post("/records", {
+              object_id: objectId,
+              environment_id: environment.id,
+              data: { job_title: title, department: dept, location: loc, status: "Open" },
+            }).then(res => {
+              if (res.ok) { toast?.success?.(`${title} posted`); load(); }
+              else { toast?.error?.(res.error || "Could not post job"); }
+            });
+          }} />
+      )}
+
       <Sheet open={!!sel} onClose={() => setSel(null)} title={sel ? getTitle(sel) : ""}>
         {sel && (
           <div style={{ padding: "20px 22px 40px" }}>
-            {[{ l: "Department", v: sel.data?.department, i: "layers" }, { l: "Location", v: sel.data?.location, i: "map" }, { l: "Status", v: getStatus(sel), i: "check" }, { l: "Type", v: sel.data?.employment_type, i: "briefcase" }].filter(f => f.v).map((row, i, arr) => (
+            {[
+              { l: "Department", v: sel.data?.department, i: "layers" },
+              { l: "Location", v: sel.data?.location, i: "map" },
+              { l: "Status", v: getStatus(sel), i: "check" },
+              { l: "Type", v: sel.data?.employment_type, i: "briefcase" },
+            ].filter(f => f.v).map((row, i, arr) => (
               <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
                 <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
                 <div><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div></div>
               </div>
             ))}
-            {sel.data?.description && <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12 }}><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7 }}>{sel.data.description}</div></div>}
+            {sel.data?.description && (
+              <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12 }}>
+                <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div>
+                <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.data.description}</div>
+              </div>
+            )}
           </div>
         )}
       </Sheet>
@@ -561,9 +1104,71 @@ const JobsScreen = ({ environment }) => {
   );
 };
 
-// ── MOBILE SHELL ──────────────────────────────────────────────────────────────
-export const MobileShell = ({ session, environment, objects }) => {
+// ─── MORE SCREEN ──────────────────────────────────────────────────────────────
+const MoreScreen = ({ session, onLogout }) => {
+  const toast = useToast();
+  const items = [
+    { icon: "user", label: "Profile", action: () => toast?.info?.("Profile editing coming soon") },
+    { icon: "inbox", label: "Inbox", action: () => toast?.info?.("Inbox coming soon to mobile") },
+    { icon: "refresh", label: "Sync data", action: () => window.location.reload() },
+    { icon: "alert", label: "Report a problem", action: () => window.location.href = "mailto:support@vercentic.com?subject=Mobile%20app%20issue" },
+  ];
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#F7F5F2", WebkitOverflowScrolling: "touch" }}>
+      <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "24px 22px", display: "flex", alignItems: "center", gap: 14 }}>
+        <Avatar name={[session?.first_name || "", session?.last_name || ""].join(" ").trim() || "U"} size={52} color={V.lavender} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.02em" }}>
+            {[session?.first_name, session?.last_name].filter(Boolean).join(" ") || "User"}
+          </div>
+          <div style={{ fontSize: 13, color: V.muted, fontFamily: F, marginTop: 2, wordBreak: "break-all" }}>{session?.email}</div>
+        </div>
+      </div>
+
+      <div style={{ padding: "14px 0" }}>
+        {items.map(item => (
+          <button key={item.label} onClick={item.action}
+            style={{ width: "100%", padding: "14px 22px", background: "none", border: "none", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", textAlign: "left" }}>
+            <Ic n={item.icon} s={18} c={V.muted} />
+            <span style={{ flex: 1, fontSize: 15, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{item.label}</span>
+            <Ic n="chevR" s={14} c={V.muted} />
+          </button>
+        ))}
+      </div>
+
+      {onLogout && (
+        <div style={{ padding: "20px 22px" }}>
+          <button onClick={onLogout}
+            style={{ width: "100%", padding: "13px", borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+              background: V.cardSolid, color: V.danger, fontSize: 14, fontWeight: 700, fontFamily: F, cursor: "pointer" }}>
+            Sign out
+          </button>
+        </div>
+      )}
+
+      <div style={{ textAlign: "center", padding: "20px 22px 40px", color: V.muted, fontSize: 11, fontFamily: F }}>
+        Vercentic Mobile · v1.0
+      </div>
+    </div>
+  );
+};
+
+// ─── MOBILE SHELL ─────────────────────────────────────────────────────────────
+export const MobileShell = ({ session, environment, envError, onRetryEnv, objects }) => {
   const [screen, setScreen] = useState("copilot");
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
   const nav = [
     { id: "copilot",    icon: "spark",    label: "Copilot" },
     { id: "candidates", icon: "users",    label: "People" },
@@ -585,44 +1190,75 @@ export const MobileShell = ({ session, environment, objects }) => {
     return <Ic n={nav.find(n => n.id === id)?.icon} s={21} c={active ? V.inkMid : V.muted} />;
   };
 
+  if (envError && !environment) {
+    return (
+      <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", fontFamily: F, maxWidth: 600, margin: "0 auto" }}>
+        <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 54, flexShrink: 0 }}>
+          <VLogo height={22} />
+        </div>
+        <ErrorState message={envError} onRetry={onRetryEnv} />
+      </div>
+    );
+  }
+
+  if (!environment && !envError) {
+    return (
+      <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", fontFamily: F, maxWidth: 600, margin: "0 auto" }}>
+        <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 54, flexShrink: 0 }}>
+          <VLogo height={22} />
+        </div>
+        <Skeleton count={6} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", fontFamily: F, overscrollBehavior: "none", maxWidth: 600, margin: "0 auto" }}>
-      {/* Header */}
+      {!online && (
+        <div style={{ background: V.warning, color: "white", padding: "6px 16px", fontSize: 12, fontWeight: 700, fontFamily: F, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Ic n="wifi" s={13} c="white" /> You're offline — some features may not work
+        </div>
+      )}
+
       <div style={{ background: "rgba(247,245,242,0.92)", backdropFilter: "blur(16px)", borderBottom: `1px solid rgba(0,0,0,0.07)`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 54, flexShrink: 0, zIndex: 10 }}>
         {screen === "copilot" ? (
-          // Copilot home — logo centred, avatar right, nothing left
           <>
             <div style={{ width: 30 }} />
             <VLogo height={22} />
-            <Avatar name={[session?.first_name || "", session?.last_name || ""].join(" ").trim() || "U"} size={30} color={V.lavender} />
+            <button onClick={() => setScreen("more")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <Avatar name={[session?.first_name || "", session?.last_name || ""].join(" ").trim() || "U"} size={30} color={V.lavender} />
+            </button>
           </>
         ) : (
-          // Other screens — back button left, page title centred, avatar right
           <>
             <button onClick={() => setScreen("copilot")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", padding: "4px 0", width: 30 }}>
               <Ic n="chevL" s={18} c={V.inkMid} />
             </button>
             <span style={{ fontSize: 16, fontWeight: 800, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.03em" }}>{titles[screen]}</span>
-            <Avatar name={[session?.first_name || "", session?.last_name || ""].join(" ").trim() || "U"} size={30} color={V.lavender} />
+            <button onClick={() => setScreen("more")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <Avatar name={[session?.first_name || "", session?.last_name || ""].join(" ").trim() || "U"} size={30} color={V.lavender} />
+            </button>
           </>
         )}
       </div>
 
-      {/* Screen */}
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" }}>
         {screen === "copilot"    && <CopilotScreen session={session} environment={environment} onNavigate={setScreen} />}
         {screen === "candidates" && <CandidatesScreen environment={environment} />}
         {screen === "interviews" && <InterviewsScreen environment={environment} />}
         {screen === "jobs"       && <JobsScreen environment={environment} />}
-        {screen === "more"       && <div style={{ padding: 48, textAlign: "center", color: V.muted, fontFamily: F }}>More features coming soon</div>}
+        {screen === "more"       && <MoreScreen session={session} onLogout={() => {
+          localStorage.removeItem(_sessionKey());
+          window.location.href = "/";
+        }} />}
       </div>
 
-      {/* Bottom nav */}
-      <div style={{ background: "rgba(247,245,242,0.95)", backdropFilter: "blur(16px)", borderTop: `1px solid rgba(0,0,0,0.07)`, display: "flex", flexShrink: 0, zIndex: 10 }}>
+      <div style={{ background: "rgba(247,245,242,0.95)", backdropFilter: "blur(16px)", borderTop: `1px solid rgba(0,0,0,0.07)`, display: "flex", flexShrink: 0, zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {nav.map(item => {
           const active = screen === item.id;
           return (
-            <button key={item.id} onClick={() => setScreen(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0 9px", background: "none", border: "none", cursor: "pointer", gap: 4, position: "relative" }}>
+            <button key={item.id} onClick={() => setScreen(item.id)}
+              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0 9px", background: "none", border: "none", cursor: "pointer", gap: 4, position: "relative" }}>
               {active && <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 20, height: 2.5, borderRadius: "0 0 2px 2px", background: V.ink }} />}
               <NavIcon id={item.id} active={active} />
               <span style={{ fontSize: 10, fontWeight: active ? 800 : 500, color: active ? V.inkMid : V.muted, fontFamily: F, letterSpacing: "0.01em" }}>{item.label}</span>
@@ -634,7 +1270,6 @@ export const MobileShell = ({ session, environment, objects }) => {
   );
 };
 
-// ── MOBILE DETECTION HOOK ─────────────────────────────────────────────────────
 export const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
