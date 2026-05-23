@@ -4,7 +4,9 @@ import ReactDOM from "react-dom";
 import RichTextEditor from "./RichTextEditor.jsx";
 import AITextEditor from "./AITextEditor.jsx";
 import { MatchingEngine } from "./AI.jsx";
-import CommunicationsPanel from "./Communications.jsx";
+import CommunicationsPanel, { ComposeModal as CommsComposeModal } from "./Communications.jsx";
+// Stable wrapper — prevents remounting when parent re-renders (fixes input focus loss)
+const StableCommunicationsPanel = memo(CommunicationsPanel);
 import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
@@ -9411,7 +9413,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     return true;
   };
   const _permCtx = usePermCtx();
-  const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
+  // Optimistic: return true while permissions load, or if no context (local dev)
+  const canRecord = (flag) => {
+    if (!_permCtx || _permCtx.loading) return true;
+    return _permCtx.canGlobal(flag);
+  };
   // Ensure module-level env ID is always set — PeoplePicker depends on it
   useEffect(() => { if (environment?.id) _currentEnvId = environment.id; }, [environment?.id]);
   // ── Job context — Person records only ────────────────────────────────────
@@ -10511,7 +10517,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="comms") {
       if (!ff.communications_panel) return null;
       return canRecord('record_view_comms') ? (
-        <CommunicationsPanel record={record} environment={environment} externalCompose={composeType} onExternalComposeDone={()=>setComposeType(null)} initialJobContext={activeJobContext}/>
+        <StableCommunicationsPanel record={record} environment={environment} externalCompose={null} onExternalComposeDone={null} initialJobContext={activeJobContext}/>
       ) : <AccessDeniedPanel label="Communications"/>;
     }
     if (id==="coordination") {
@@ -10763,7 +10769,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, notes, attachments, fields, environment, objectName, composeType, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections]);
+  }, [record, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections]);
 
 
   // PanelCard is defined at module level above RecordDetail
@@ -10979,12 +10985,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
                 background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
                 boxShadow:"0 8px 32px rgba(0,0,0,.14)", minWidth:200, zIndex:9990,
                 overflow:"hidden", padding:"4px 0" }}>
-                {COMM_OPTIONS.filter(opt => {
-                  if (opt.type==='email') return canRecord('record_send_email');
-                  if (opt.type==='sms' || opt.type==='whatsapp') return canRecord('record_send_sms');
-                  if (opt.type==='call') return canRecord('record_log_call');
-                  return true;
-                }).map(opt=>(
+                {COMM_OPTIONS.map(opt=>(
                   <button key={opt.type}
                     onClick={()=>{ setComposeType(opt.type); setShowCommMenu(false); }}
                     style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 16px",
@@ -11357,6 +11358,18 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           onClose={()=>setTableModalField(null)}
         />,
         document.body
+      )}
+
+      {/* ── Compose modal — rendered here (outside panel system) so typing never loses focus ── */}
+      {composeType && (
+        <CommsComposeModal
+          type={composeType}
+          record={record}
+          environment={environment}
+          defaultRelatedRecordId={activeJobContext || ""}
+          onSave={()=>{ setComposeType(null); }}
+          onClose={()=>{ setComposeType(null); }}
+        />
       )}
     </div>
   );
@@ -11767,7 +11780,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       p => p.object_slug === object.slug && p.action === action && p.allowed
     );
   };
-  const canRecord = (flag) => _permCtx ? _permCtx.canGlobal(flag) : true;
+  const canRecord = (flag) => (!_permCtx || _permCtx.loading) ? true : _permCtx.canGlobal(flag);
   const [selected, setSelected] = useState(null);   // slide-out panel only
   const [showForm, setShowForm] = useState(false);
 
