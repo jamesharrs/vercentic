@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import _apiClient from "./apiClient.js";
 import { useToast } from "./Toast.jsx";
 
@@ -986,6 +986,145 @@ const InterviewsScreen = ({ environment }) => {
   );
 };
 
+// ─── STAGE CANDIDATE LIST ─────────────────────────────────────────────────────
+const StageCandidateList = ({ candidates, stages, currentStageName, onMoveRequest }) => {
+  const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
+  const colorFor = name => { let h = 0; for (const c of name) h += c.charCodeAt(0); return palette[h % palette.length]; };
+
+  if (candidates.length === 0) {
+    return (
+      <EmptyState icon="users"
+        title="No candidates here"
+        body={`Nobody is currently in the "${currentStageName}" stage.`} />
+    );
+  }
+
+  return (
+    <div style={{ paddingBottom: 32 }}>
+      {candidates.map((link, i) => {
+        const d = link.person_data || {};
+        const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || "Unnamed";
+        const col = colorFor(name);
+        return (
+          <div key={link.id || i} style={{
+            display: "flex", alignItems: "center", gap: 14,
+            padding: "14px 18px", borderBottom: `1px solid ${V.cardBorder}`, background: V.cardSolid,
+          }}>
+            <Avatar name={name} size={42} color={col} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: V.inkMid, fontFamily: FD,
+                letterSpacing: "-0.02em", marginBottom: 1 }}>{name}</div>
+              {(d.current_title || d.job_title) && (
+                <div style={{ fontSize: 12, color: V.muted, fontFamily: F,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {d.current_title || d.job_title}
+                </div>
+              )}
+              {(d.location || d.city) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                  <Ic n="map" s={11} c={V.muted} />
+                  <span style={{ fontSize: 11, color: V.muted, fontFamily: F }}>{d.location || d.city}</span>
+                </div>
+              )}
+            </div>
+            {stages.length > 1 && (
+              <button onClick={() => onMoveRequest(link)}
+                style={{ padding: "7px 12px", borderRadius: 10, border: `1px solid ${V.cardBorder}`,
+                  background: "rgba(0,0,0,0.03)", color: V.inkMid, fontSize: 12, fontWeight: 600,
+                  fontFamily: F, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                Move
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── JOB PIPELINE SECTION ─────────────────────────────────────────────────────
+const JobPipelineSection = ({ job, environment, onStageSelect, links, stages, loading }) => {
+  const countByStage = useMemo(() => {
+    const map = {};
+    links.forEach(l => {
+      const sn = l.stage_name || "Unassigned";
+      map[sn] = (map[sn] || 0) + 1;
+    });
+    return map;
+  }, [links]);
+
+  const totalCandidates = links.length;
+
+  // Derive displayable stages: workflow steps first, then from links, then fallback
+  const displayStages = useMemo(() => {
+    if (stages.length > 0) return stages;
+    // Derive from link stage names
+    const seen = new Set();
+    const derived = [];
+    links.forEach(l => {
+      const sn = l.stage_name || "Unassigned";
+      if (!seen.has(sn)) { seen.add(sn); derived.push({ id: sn, name: sn, color: statusColor(sn) }); }
+    });
+    return derived;
+  }, [stages, links]);
+
+  return (
+    <div style={{ borderTop: `1px solid ${V.cardBorder}`, paddingTop: 20, marginTop: 4 }}>
+      <div style={{ padding: "0 22px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Ic n="layers" s={14} c={V.muted} />
+          <span style={{ fontSize: 10, color: V.muted, fontFamily: F, fontWeight: 700,
+            letterSpacing: "0.06em", textTransform: "uppercase" }}>Pipeline</span>
+        </div>
+        {totalCandidates > 0 && (
+          <span style={{ fontSize: 12, color: V.muted, fontFamily: F }}>
+            {totalCandidates} candidate{totalCandidates !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "0 22px" }}><Skeleton count={3} /></div>
+      ) : displayStages.length === 0 ? (
+        <div style={{ padding: "16px 22px", textAlign: "center", color: V.muted, fontFamily: F, fontSize: 13 }}>
+          No pipeline configured for this job
+        </div>
+      ) : (
+        <div style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+          {displayStages.map((stage, idx) => {
+            const count = countByStage[stage.name] || 0;
+            const col = stage.color || statusColor(stage.name);
+            const candidatesHere = links.filter(l => (l.stage_name || "Unassigned") === stage.name);
+            return (
+              <button key={stage.id || idx}
+                onClick={() => onStageSelect(stage, candidatesHere)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
+                  background: V.cardSolid, borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+                  cursor: "pointer", textAlign: "left", boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                }}
+                onTouchStart={e => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                onTouchEnd={e => { e.currentTarget.style.background = V.cardSolid; }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%",
+                  background: col, flexShrink: 0, boxShadow: `0 0 0 2px ${col}28` }} />
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: V.inkMid, fontFamily: F }}>{stage.name}</span>
+                {count > 0 ? (
+                  <span style={{ padding: "3px 10px", borderRadius: 99, background: `${col}18`,
+                    color: col, fontSize: 12, fontWeight: 700, fontFamily: F }}>{count}</span>
+                ) : (
+                  <span style={{ fontSize: 12, color: V.faint, fontFamily: F }}>—</span>
+                )}
+                <Ic n="chevR" s={13} c={V.muted} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ height: 24 }} />
+    </div>
+  );
+};
+
 // ─── JOBS SCREEN ──────────────────────────────────────────────────────────────
 const JobsScreen = ({ environment }) => {
   const toast = useToast();
@@ -995,6 +1134,14 @@ const JobsScreen = ({ environment }) => {
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState(null);
   const [objectId, setObjectId] = useState(null);
+
+  // Pipeline state — lifted up so sibling sheets can share it
+  const [pipelineStages, setPipelineStages] = useState([]);
+  const [pipelineLinks, setPipelineLinks] = useState([]);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [selStage, setSelStage] = useState(null);          // { stage, candidates[] }
+  const [moveCandidate, setMoveCandidate] = useState(null); // link object to move
+  const [moving, setMoving] = useState(false);
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
@@ -1014,6 +1161,77 @@ const JobsScreen = ({ environment }) => {
   useEffect(() => { load(); }, [load]);
 
   const refresh = async () => { await load(); toast?.success?.("Refreshed"); };
+
+  // Load pipeline data whenever a job is selected
+  useEffect(() => {
+    if (!sel) { setPipelineStages([]); setPipelineLinks([]); return; }
+    let cancelled = false;
+    setPipelineLoading(true);
+    (async () => {
+      const [assignRes, linksRes] = await Promise.all([
+        api.get(`/workflows/assignments?record_id=${sel.id}`),
+        api.get(`/workflows/people-links?target_record_id=${sel.id}`),
+      ]);
+      if (cancelled) return;
+
+      // Build stage list from workflow assignment
+      let stageList = [];
+      if (assignRes.ok && Array.isArray(assignRes.data) && assignRes.data.length > 0) {
+        const pipelineAssignment =
+          assignRes.data.find(a => a.type === "pipeline" || a.type === "people_link") ||
+          assignRes.data[0];
+        stageList = pipelineAssignment?.workflow?.steps || [];
+      }
+      // Fallback: pull steps from the first link's workflow_steps
+      if (!stageList.length && linksRes.ok) {
+        const firstLink = Array.isArray(linksRes.data) && linksRes.data[0];
+        if (firstLink?.workflow_steps?.length) stageList = firstLink.workflow_steps;
+      }
+      // Fallback: stage-categories
+      if (!stageList.length && environment?.id) {
+        const catRes = await api.get(`/stage-categories?environment_id=${environment.id}`);
+        if (!cancelled && catRes.ok && Array.isArray(catRes.data)) {
+          stageList = catRes.data.map(c => ({ id: c.id, name: c.name, color: c.color }));
+        }
+      }
+      setPipelineStages(stageList);
+      setPipelineLinks(Array.isArray(linksRes.data) ? linksRes.data : []);
+      setPipelineLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [sel?.id, environment?.id]);
+
+  const handleMoveStage = async (targetStage) => {
+    if (!moveCandidate) return;
+    setMoving(true);
+    const res = await api.patch(`/workflows/people-links/${moveCandidate.id}`, {
+      stage_id: targetStage.id !== targetStage.name ? targetStage.id : undefined,
+      stage_name: targetStage.name,
+    });
+    if (res.ok) {
+      toast?.success?.(`Moved to ${targetStage.name}`);
+      // Update local links
+      setPipelineLinks(prev => prev.map(l =>
+        l.id === moveCandidate.id
+          ? { ...l, stage_id: targetStage.id, stage_name: targetStage.name }
+          : l
+      ));
+      // Update the stage candidates sheet if it's showing the same stage
+      if (selStage) {
+        const updatedLinks = pipelineLinks.map(l =>
+          l.id === moveCandidate.id ? { ...l, stage_name: targetStage.name } : l
+        );
+        setSelStage(prev => ({
+          ...prev,
+          candidates: updatedLinks.filter(l => (l.stage_name || "Unassigned") === prev.stage.name),
+        }));
+      }
+      setMoveCandidate(null);
+    } else {
+      toast?.error?.(res.error || "Could not move candidate");
+    }
+    setMoving(false);
+  };
 
   const getTitle = j => j.data?.job_title || j.data?.title || "Untitled Role";
   const getStatus = j => j.data?.status || "Open";
@@ -1077,26 +1295,93 @@ const JobsScreen = ({ environment }) => {
           }} />
       )}
 
-      <Sheet open={!!sel} onClose={() => setSel(null)} title={sel ? getTitle(sel) : ""}>
+      {/* Job detail sheet */}
+      <Sheet open={!!sel} onClose={() => { setSel(null); setSelStage(null); setMoveCandidate(null); }}
+        title={sel ? getTitle(sel) : ""} height="90vh">
         {sel && (
-          <div style={{ padding: "20px 22px 40px" }}>
-            {[
-              { l: "Department", v: sel.data?.department, i: "layers" },
-              { l: "Location", v: sel.data?.location, i: "map" },
-              { l: "Status", v: getStatus(sel), i: "check" },
-              { l: "Type", v: sel.data?.employment_type, i: "briefcase" },
-            ].filter(f => f.v).map((row, i, arr) => (
-              <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
-                <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
-                <div><div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div><div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div></div>
-              </div>
-            ))}
-            {sel.data?.description && (
-              <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12 }}>
-                <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div>
-                <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.data.description}</div>
-              </div>
-            )}
+          <div style={{ paddingBottom: 40, overflowY: "auto" }}>
+            {/* Job fields */}
+            <div style={{ padding: "20px 22px 0" }}>
+              {[
+                { l: "Department", v: sel.data?.department, i: "layers" },
+                { l: "Location", v: sel.data?.location, i: "map" },
+                { l: "Status", v: getStatus(sel), i: "check" },
+                { l: "Type", v: sel.data?.employment_type, i: "briefcase" },
+              ].filter(f => f.v).map((row, i, arr) => (
+                <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
+                  <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
+                  <div>
+                    <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div>
+                    <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div>
+                  </div>
+                </div>
+              ))}
+              {sel.data?.description && (
+                <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12, marginBottom: 4 }}>
+                  <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div>
+                  <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.data.description}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Pipeline section */}
+            <JobPipelineSection
+              job={sel}
+              environment={environment}
+              stages={pipelineStages}
+              links={pipelineLinks}
+              loading={pipelineLoading}
+              onStageSelect={(stage, candidates) => setSelStage({ stage, candidates })}
+            />
+          </div>
+        )}
+      </Sheet>
+
+      {/* Stage candidates sheet */}
+      <Sheet
+        open={!!selStage}
+        onClose={() => { setSelStage(null); setMoveCandidate(null); }}
+        title={selStage ? `${selStage.stage.name} (${pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name).length})` : ""}
+        height="82vh">
+        {selStage && (
+          <StageCandidateList
+            candidates={pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name)}
+            stages={pipelineStages}
+            currentStageName={selStage.stage.name}
+            onMoveRequest={(link) => setMoveCandidate(link)}
+          />
+        )}
+      </Sheet>
+
+      {/* Move stage sheet */}
+      <Sheet
+        open={!!moveCandidate}
+        onClose={() => setMoveCandidate(null)}
+        title="Move to stage"
+        height="auto">
+        {moveCandidate && (
+          <div style={{ padding: "12px 16px 40px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {pipelineStages.filter(s => s.name !== moveCandidate.stage_name).map((stage, idx) => {
+              const col = stage.color || statusColor(stage.name);
+              return (
+                <button key={stage.id || idx}
+                  onClick={() => handleMoveStage(stage)}
+                  disabled={moving}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "15px 16px",
+                    background: V.cardSolid, borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+                    cursor: moving ? "default" : "pointer", textAlign: "left",
+                    opacity: moving ? 0.6 : 1, boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                  onTouchStart={e => { if (!moving) e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                  onTouchEnd={e => { e.currentTarget.style.background = V.cardSolid; }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%",
+                    background: col, flexShrink: 0, boxShadow: `0 0 0 2px ${col}28` }} />
+                  <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: V.inkMid, fontFamily: F }}>{stage.name}</span>
+                  {moving && <Ic n="refresh" s={14} c={V.muted} />}
+                </button>
+              );
+            })}
           </div>
         )}
       </Sheet>
