@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 import AITextEditor from "./AITextEditor.jsx";
+import RichTextEditor, { htmlToText } from "./RichTextEditor.jsx";
 
 // ─── Shared helpers (inline to avoid circular imports) ───────────────────────
 import api from './apiClient.js';
@@ -201,8 +202,9 @@ export function ComposeModal({
   const [showSchedule,setShowSchedule] = useState(false);
 
   const meta = TYPE_META[type] || {};
-  const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
-  const charCount = body.length;
+  const bodyText = type === "email" ? htmlToText(body) : body;
+  const wordCount = bodyText.trim() ? bodyText.trim().split(/\s+/).length : 0;
+  const charCount = bodyText.length;
 
   // ── Effects ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -290,7 +292,10 @@ export function ComposeModal({
       return api.post("/comms", {
         record_id: rec.id, environment_id: environment?.id,
         type, direction, to: recTo || undefined,
-        subject: subject || undefined, body,
+        subject: subject || undefined,
+        body: type === "email" ? body : bodyText, // HTML for email, plain for others
+        body_html: type === "email" ? body : undefined,
+        body_text: type === "email" ? bodyText : undefined,
         duration_seconds: duration ? Number(duration) : undefined,
         outcome: outcome || undefined,
         from_label: direction === "inbound" ? "External" : "Me",
@@ -304,7 +309,7 @@ export function ComposeModal({
   };
 
   const isSimulated = providerStatus && type !== "call" && direction === "outbound" && providerStatus[type] === "simulation";
-  const canSend = type === "call" ? true : !!body.trim();
+  const canSend = type === "call" ? true : !!bodyText.trim();
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const accent = meta.color || C.accent;
@@ -440,10 +445,10 @@ export function ComposeModal({
   );
 
   const WriteArea = () => (
-    <div style={{ display:"flex", flexDirection:"column", gap:0, flex:1 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:0, flex:1, minHeight:0 }}>
       {/* Subject */}
       {type === "email" && (
-        <div style={{ borderBottom:`1.5px solid ${border}`, paddingBottom:0 }}>
+        <div style={{ borderBottom:`1.5px solid ${border}`, paddingBottom:0, flexShrink:0 }}>
           <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject line…"
             style={{ width:"100%", boxSizing:"border-box", padding:"12px 0", border:"none",
               fontSize:17, fontWeight:700, color:C.text1, fontFamily:"inherit", outline:"none",
@@ -451,20 +456,29 @@ export function ComposeModal({
         </div>
       )}
 
-      {/* Body */}
-      <AITextEditor context={type === "email" ? "outreach email" : `${meta.label} message`}
-        onApply={newText => setBody(newText)}>
-        <textarea value={body} onChange={e => setBody(e.target.value)}
-          placeholder={type === "email" ? "Write your message…" : `${meta.label} message…`}
-          autoFocus
-          style={{ flex:1, width:"100%", boxSizing:"border-box", padding:"14px 0", border:"none",
-            fontSize:14, lineHeight:1.75, color:C.text1, fontFamily:"inherit", outline:"none",
-            resize:"none", background:"transparent", minHeight: type === "email" ? 220 : 140 }}/>
-      </AITextEditor>
+      {/* Body — RichTextEditor for email, plain textarea for SMS/WhatsApp/call */}
+      {type === "email" ? (
+        <RichTextEditor
+          value={body}
+          onChange={html => setBody(html)}
+          placeholder="Write your message…"
+          minHeight={220}
+        />
+      ) : type !== "call" ? (
+        <AITextEditor context={`${meta.label} message`} onApply={newText => setBody(newText)}>
+          <textarea value={body} onChange={e => setBody(e.target.value)}
+            placeholder={`${meta.label} message…`}
+            autoFocus
+            style={{ flex:1, width:"100%", boxSizing:"border-box", padding:"14px 0", border:"none",
+              fontSize:14, lineHeight:1.75, color:C.text1, fontFamily:"inherit", outline:"none",
+              resize:"none", background:"transparent", minHeight:140 }}/>
+        </AITextEditor>
+      ) : null}
 
-      {/* Schedule send — collapsed by default */}
+      {/* Schedule send */}
       {type === "email" && showSchedule && (
-        <div style={{ borderTop:`1.5px solid ${border}`, paddingTop:10, display:"flex", alignItems:"center", gap:8 }}>
+        <div style={{ borderTop:`1.5px solid ${border}`, paddingTop:10, flexShrink:0,
+          display:"flex", alignItems:"center", gap:8 }}>
           <label style={{ fontSize:11, fontWeight:700, color:C.text3 }}>Send at</label>
           <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
             style={{ flex:1, padding:"5px 8px", borderRadius:7, border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none" }}/>
