@@ -515,15 +515,15 @@ export function ComposeModal({
         </div>
 
         {/* ── Type picker (if no initialType) ── */}
-        {!initialType && <TypeSelector/>}
+        {!initialType && TypeSelector()}
 
         {/* ── Mode tabs ── */}
-        {type !== "call" && mode !== "preview" && <ModeTabs/>}
+        {type !== "call" && mode !== "preview" && ModeTabs()}
 
-        {/* ── Content area ── */}
-        {mode === "scratch"  && <ScratchBody/>}
-        {mode === "template" && <TemplateList/>}
-        {mode === "preview"  && <EmailPreview/>}
+        {/* ── Content area — called as functions not components to avoid remount on re-render ── */}
+        {mode === "scratch"  && ScratchBody()}
+        {mode === "template" && TemplateList()}
+        {mode === "preview"  && EmailPreview()}
 
         {/* ── Footer ── */}
         {(mode === "scratch" || mode === "preview") && (
