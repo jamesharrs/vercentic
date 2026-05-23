@@ -105,6 +105,7 @@ const PATHS = {
   alert:     "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
   wifi:      "M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01",
   inbox:     "M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z",
+  monitor:   "M2 4a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2zM8 22h8M12 18v4",
 };
 
 const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
@@ -1392,12 +1393,22 @@ const JobsScreen = ({ environment }) => {
 // ─── MORE SCREEN ──────────────────────────────────────────────────────────────
 const MoreScreen = ({ session, onLogout }) => {
   const toast = useToast();
+  const [showDesktopConfirm, setShowDesktopConfirm] = useState(false);
+
+  const switchToDesktop = () => {
+    // Set a flag so App.jsx skips the mobile shell even on a narrow viewport
+    try { localStorage.setItem("vercentic_force_desktop", "1"); } catch {}
+    window.location.href = window.location.origin + "/";
+  };
+
   const items = [
-    { icon: "user", label: "Profile", action: () => toast?.info?.("Profile editing coming soon") },
-    { icon: "inbox", label: "Inbox", action: () => toast?.info?.("Inbox coming soon to mobile") },
-    { icon: "refresh", label: "Sync data", action: () => window.location.reload() },
-    { icon: "alert", label: "Report a problem", action: () => window.location.href = "mailto:support@vercentic.com?subject=Mobile%20app%20issue" },
+    { icon: "user",    label: "Profile",          action: () => toast?.info?.("Profile editing coming soon") },
+    { icon: "inbox",   label: "Inbox",             action: () => toast?.info?.("Inbox coming soon to mobile") },
+    { icon: "refresh", label: "Sync data",         action: () => window.location.reload() },
+    { icon: "monitor", label: "Switch to Desktop", action: () => setShowDesktopConfirm(true) },
+    { icon: "alert",   label: "Report a problem",  action: () => { window.location.href = "mailto:support@vercentic.com?subject=Mobile%20app%20issue"; } },
   ];
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#F7F5F2", WebkitOverflowScrolling: "touch" }}>
       <div style={{ background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}`, padding: "24px 22px", display: "flex", alignItems: "center", gap: 14 }}>
@@ -1414,8 +1425,8 @@ const MoreScreen = ({ session, onLogout }) => {
         {items.map(item => (
           <button key={item.label} onClick={item.action}
             style={{ width: "100%", padding: "14px 22px", background: "none", border: "none", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", textAlign: "left" }}>
-            <Ic n={item.icon} s={18} c={V.muted} />
-            <span style={{ flex: 1, fontSize: 15, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{item.label}</span>
+            <Ic n={item.icon} s={18} c={item.label === "Switch to Desktop" ? V.lavender : V.muted} />
+            <span style={{ flex: 1, fontSize: 15, color: item.label === "Switch to Desktop" ? V.inkMid : V.inkMid, fontFamily: F, fontWeight: item.label === "Switch to Desktop" ? 600 : 500 }}>{item.label}</span>
             <Ic n="chevR" s={14} c={V.muted} />
           </button>
         ))}
@@ -1434,6 +1445,67 @@ const MoreScreen = ({ session, onLogout }) => {
       <div style={{ textAlign: "center", padding: "20px 22px 40px", color: V.muted, fontSize: 11, fontFamily: F }}>
         Vercentic Mobile · v1.0
       </div>
+
+      {/* Desktop switch confirmation modal */}
+      {showDesktopConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 400,
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+        }}>
+          {/* Backdrop */}
+          <div
+            onClick={() => setShowDesktopConfirm(false)}
+            style={{ position: "absolute", inset: 0, background: "rgba(13,13,15,0.45)", backdropFilter: "blur(4px)" }}
+          />
+          {/* Sheet */}
+          <div style={{
+            position: "relative", width: "100%", maxWidth: 600,
+            background: V.cardSolid, borderRadius: "24px 24px 0 0",
+            padding: "28px 24px 44px", boxShadow: "0 -12px 48px rgba(0,0,0,0.14)",
+            animation: "slideUp 0.26s cubic-bezier(0.34,1.2,0.64,1)",
+          }}>
+            {/* Drag handle */}
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(0,0,0,0.1)", margin: "0 auto 24px" }} />
+
+            {/* Icon */}
+            <div style={{
+              width: 52, height: 52, borderRadius: 16, background: `${V.lavender}18`,
+              display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
+            }}>
+              <Ic n="monitor" s={24} c={V.lavender} />
+            </div>
+
+            <div style={{ fontSize: 19, fontWeight: 800, color: V.inkMid, fontFamily: FD,
+              letterSpacing: "-0.03em", marginBottom: 10 }}>
+              Switch to Desktop Version?
+            </div>
+            <div style={{ fontSize: 14, color: V.muted, fontFamily: F, lineHeight: 1.6, marginBottom: 28 }}>
+              The desktop version gives you full access to all features — including Settings, Workflows, Analytics, and more — but it isn't optimised for small screens.
+              <br /><br />
+              To come back, tap <strong style={{ color: V.inkMid }}>Use Mobile View</strong> in the desktop app's user menu, or just use your browser's back button.
+            </div>
+
+            <button onClick={switchToDesktop}
+              style={{
+                width: "100%", padding: "15px", borderRadius: 14, border: "none",
+                background: V.ink, color: "white", fontSize: 15, fontWeight: 700,
+                fontFamily: F, cursor: "pointer", marginBottom: 10,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              }}>
+              <Ic n="monitor" s={16} c="white" />
+              Continue to Desktop
+            </button>
+            <button onClick={() => setShowDesktopConfirm(false)}
+              style={{
+                width: "100%", padding: "15px", borderRadius: 14,
+                border: `1px solid ${V.cardBorder}`, background: "transparent",
+                color: V.muted, fontSize: 15, fontWeight: 600, fontFamily: F, cursor: "pointer",
+              }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -117,7 +117,12 @@ function _sessionKey() {
 
 const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
 const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
-const useIsMobile       = () => typeof window !== 'undefined' && window.innerWidth < 768;
+const useIsMobile       = () => {
+  if (typeof window === 'undefined') return false;
+  // Allow the mobile app's "Switch to Desktop" action to override detection
+  try { if (localStorage.getItem('vercentic_force_desktop') === '1') return false; } catch {}
+  return window.innerWidth < 768;
+};
 
 
 // ─── AccessDenied fallback ───────────────────────────────────────────────────
@@ -227,6 +232,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     "file-text": "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
     "message-circle": "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
     image: "M21 19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3l2-3h4l2 3h3a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+    smartphone: "M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM12 18h.01",
   };
 
   return (
@@ -3229,6 +3235,20 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
               </button>
             ))}
             <button onClick={()=>{setOpen(false);window.dispatchEvent(new CustomEvent("vercentic:start-tour"));}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 14px",border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500,color:"var(--t-text2)",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon name="play-circle" size={14} color="var(--t-text3)"/>Product tour</button>
+            <button
+              onClick={() => {
+                try { localStorage.removeItem('vercentic_force_desktop'); } catch {}
+                window.location.href = window.location.origin + '/';
+              }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
+                padding: "9px 14px", border: "none", background: "transparent",
+                cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
+                color: "var(--t-text2)", textAlign: "left" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <Icon name="smartphone" size={14} color="var(--t-text3)" />
+              Use Mobile View
+            </button>
             <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
             <button onClick={() => { clearSession(); setOpen(false); startTransition(() => setSession(null)); }}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
