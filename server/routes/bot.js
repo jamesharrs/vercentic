@@ -150,7 +150,24 @@ router.get('/sessions/:token', (req, res) => {
   const store = getStore();
   const session = store.bot_sessions?.find(s => s.token === req.params.token);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  res.json({ id: session.id, token: session.token, candidate_name: session.candidate_name, status: session.status, current_question_index: session.current_question_index, total_questions: session.questions.length, config: session.config, knockout_passed: session.knockout_passed, next_question: session.status !== 'completed' && session.status !== 'knocked_out' ? session.questions[session.current_question_index] || null : null });
+
+  // Resolve default brand kit for this environment
+  const brandKits = (store.brand_kits || []).filter(k => !k.deleted_at && k.environment_id === session.environment_id);
+  const brandKit  = brandKits.find(k => k.is_default) || null;
+  const brand = brandKit ? {
+    company_name:  brandKit.company_name  || brandKit.name || null,
+    logo_url:      brandKit.logo_url      || null,
+    logo_dark_url: brandKit.logo_dark_url || null,
+    favicon_url:   brandKit.favicon_url   || null,
+    primary_color: brandKit.primaryColor  || '#4361ee',
+    bg_color:      brandKit.bgColor       || null,
+    text_color:    brandKit.textColor     || null,
+    font_family:   brandKit.fontFamily    || null,
+    button_style:  brandKit.buttonStyle   || 'filled',
+    button_radius: brandKit.buttonRadius  || '8px',
+  } : null;
+
+  res.json({ id: session.id, token: session.token, candidate_name: session.candidate_name, status: session.status, current_question_index: session.current_question_index, total_questions: session.questions.length, config: session.config, knockout_passed: session.knockout_passed, brand, next_question: session.status !== 'completed' && session.status !== 'knocked_out' ? session.questions[session.current_question_index] || null : null });
 });
 
 router.post('/sessions/:token/start', (req, res) => {

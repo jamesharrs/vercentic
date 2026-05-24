@@ -102,7 +102,26 @@ export default function InterviewSession() {
     if (!token) { setError('Invalid interview link'); setPhase('error'); return; }
     fetch(`/api/ai-interview/session/${token}`)
       .then(r => r.json())
-      .then(data => { if (data.error) { setError(data.error); setPhase('error'); return; } setSession(data); setPhase('waiting'); })
+      .then(data => {
+        if (data.error) { setError(data.error); setPhase('error'); return; }
+        setSession(data);
+        // Apply brand kit to the page
+        const b = data.brand;
+        if (b?.favicon_url) {
+          let link = document.querySelector("link[rel~='icon']");
+          if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+          link.href = b.favicon_url;
+        }
+        if (b?.company_name) document.title = `Interview · ${b.company_name}`;
+        if (b?.font_family) {
+          const font = b.font_family.replace(/['"]/g,'').split(',')[0].trim();
+          const link = document.createElement('link');
+          link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;600;700;800&display=swap`;
+          link.rel = 'stylesheet';
+          document.head.appendChild(link);
+        }
+        setPhase('waiting');
+      })
       .catch(() => { setError('Could not connect.'); setPhase('error'); });
   }, [token]);
 
@@ -170,21 +189,34 @@ export default function InterviewSession() {
   };
 
   const agentColor = session?.agent?.avatar_color || '#6366f1';
-  const spinStyle = { width:40, height:40, borderRadius:'50%', border:`3px solid ${agentColor}`, borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 16px' };
-
+  // Brand kit values with sensible fallbacks for the dark interview theme
+  const brand = session?.brand || {};
+  const brandPrimary = brand.primary_color || agentColor;
+  const brandFont    = brand.font_family ? `'${brand.font_family.replace(/['"]/g,'').split(',')[0].trim()}', ${F}` : F;
+  const brandBg      = null; // keep dark bg for interview atmosphere regardless of brand bg
+  const brandLogo    = brand.logo_dark_url || brand.logo_url || null;
+  const brandCompany = brand.company_name || null;
+  const spinStyle = { width:40, height:40, borderRadius:'50%', border:`3px solid ${brandPrimary}`, borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 16px' };
   const css = `@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes dotBounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}`;
 
   if (phase==='loading') return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',fontFamily:F}}><style>{css}</style><div style={{textAlign:'center',color:'#94a3b8'}}><div style={spinStyle}/>Setting up your interview…</div></div>;
   if (phase==='error')   return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',fontFamily:F,padding:24}}><style>{css}</style><div style={{textAlign:'center',maxWidth:400}}><div style={{fontSize:48,marginBottom:16}}>⚠️</div><h2 style={{color:'#f1f5f9',fontSize:22,fontWeight:800,margin:'0 0 10px'}}>Interview Unavailable</h2><p style={{color:'#94a3b8',lineHeight:1.6,margin:0}}>{error}</p></div></div>;
-  if (phase==='done')    return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',fontFamily:F,padding:24}}><style>{css}</style><div style={{textAlign:'center',maxWidth:480,animation:'fadeUp .6s ease'}}><div style={{width:80,height:80,borderRadius:'50%',background:'#059669',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px',fontSize:36}}>✓</div><h1 style={{color:'#f1f5f9',fontSize:28,fontWeight:900,margin:'0 0 12px'}}>Interview Complete</h1><p style={{color:'#94a3b8',fontSize:16,lineHeight:1.6,margin:'0 0 24px'}}>Thank you, {session?.candidate_name||'for your time'}. Your responses have been saved and our team will be in touch.</p><p style={{fontSize:13,color:'#475569'}}>You can close this window.</p></div></div>;
-  if (phase==='processing') return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',fontFamily:F}}><style>{css}</style><div style={{textAlign:'center',color:'#94a3b8'}}><div style={spinStyle}/>Saving your interview…</div></div>;
+  if (phase==='done')    return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',fontFamily:brandFont,padding:24}}><style>{css}</style><div style={{textAlign:'center',maxWidth:480,animation:'fadeUp .6s ease'}}><div style={{width:80,height:80,borderRadius:'50%',background:'#059669',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px',fontSize:36}}>✓</div><h1 style={{color:'#f1f5f9',fontSize:28,fontWeight:900,margin:'0 0 12px'}}>Interview Complete</h1><p style={{color:'#94a3b8',fontSize:16,lineHeight:1.6,margin:'0 0 24px'}}>Thank you, {session?.candidate_name||'for your time'}. Your responses have been saved and our team will be in touch.</p>{brandLogo&&<img src={brandLogo} alt="" style={{height:28,maxWidth:120,objectFit:'contain',opacity:.5,marginTop:16}}/>}<p style={{fontSize:13,color:'#475569'}}>You can close this window.</p></div></div>;
+  if (phase==='processing') return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',fontFamily:brandFont}}><style>{css}</style><div style={{textAlign:'center',color:'#94a3b8'}}><div style={spinStyle}/>Saving your interview…</div></div>;
 
   if (phase==='waiting') return (
-    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:F,padding:24}}>
+    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0f172a,#1e1b4b)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:brandFont,padding:24}}>
       <style>{css}</style>
       <div style={{textAlign:'center',maxWidth:480,animation:'fadeUp .5s ease'}}>
-        <div style={{width:80,height:80,borderRadius:'50%',background:agentColor,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px',fontSize:36,boxShadow:`0 8px 32px ${agentColor}60`}}>🤖</div>
+        {/* Brand logo or avatar */}
+        {brandLogo ? (
+          <div style={{marginBottom:20}}>
+            <img src={brandLogo} alt={brandCompany||''} style={{height:40,maxWidth:180,objectFit:'contain',marginBottom:12}}/>
+          </div>
+        ) : null}
+        <div style={{width:80,height:80,borderRadius:'50%',background:brandPrimary,display:'flex',alignItems:'center',justifyContent:'center',margin:`0 auto ${brandLogo?'12':'20'}px`,fontSize:36,boxShadow:`0 8px 32px ${brandPrimary}60`}}>🤖</div>
         <h1 style={{color:'#f1f5f9',fontSize:26,fontWeight:900,margin:'0 0 8px'}}>Interview with {session?.agent?.persona_name}</h1>
+        {brandCompany&&<p style={{color:`${brandPrimary}cc`,fontSize:13,margin:'0 0 4px',fontWeight:600}}>{brandCompany}</p>}
         <p style={{color:'#94a3b8',fontSize:15,margin:'0 0 24px'}}>Role: <strong style={{color:'#e2e8f0'}}>{session?.job_title}</strong>{session?.candidate_name&&<> · Hi <strong style={{color:'#e2e8f0'}}>{session.candidate_name}</strong> 👋</>}</p>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:28}}>
           {[['🎤','Voice interview','Speak your answers — Alex listens'],['⏱','15–20 minutes','Take your time'],['🔒','Recorded','Transcript saved securely'],['💡','Text fallback','Can\'t use voice? Type instead']].map(([icon,title,desc])=>(
@@ -197,12 +229,12 @@ export default function InterviewSession() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10,justifyContent:'center',marginBottom:24}}>
           <span style={{fontSize:13,color:'#94a3b8'}}>Voice</span>
-          <div onClick={()=>setUseTextMode(!useTextMode)} style={{width:44,height:24,borderRadius:12,background:useTextMode?'#475569':agentColor,cursor:'pointer',position:'relative',transition:'background .2s'}}>
+          <div onClick={()=>setUseTextMode(!useTextMode)} style={{width:44,height:24,borderRadius:12,background:useTextMode?'#475569':brandPrimary,cursor:'pointer',position:'relative',transition:'background .2s'}}>
             <div style={{width:18,height:18,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:useTextMode?23:3,transition:'left .2s'}}/>
           </div>
           <span style={{fontSize:13,color:'#94a3b8'}}>Text</span>
         </div>
-        <button onClick={startInterview} style={{padding:'14px 40px',borderRadius:14,border:'none',background:`linear-gradient(135deg,${agentColor},${agentColor}cc)`,color:'#fff',fontSize:16,fontWeight:800,cursor:'pointer',fontFamily:F,boxShadow:`0 8px 32px ${agentColor}40`}}>
+        <button onClick={startInterview} style={{padding:'14px 40px',borderRadius:brand.button_radius||'14px',border:'none',background:`linear-gradient(135deg,${brandPrimary},${brandPrimary}cc)`,color:'#fff',fontSize:16,fontWeight:800,cursor:'pointer',fontFamily:brandFont,boxShadow:`0 8px 32px ${brandPrimary}40`}}>
           Begin Interview
         </button>
       </div>
@@ -210,12 +242,19 @@ export default function InterviewSession() {
   );
 
   return (
-    <div style={{minHeight:'100vh',background:'linear-gradient(180deg,#0f172a,#1a1040)',display:'flex',flexDirection:'column',fontFamily:F}}>
+    <div style={{minHeight:'100vh',background:'linear-gradient(180deg,#0f172a,#1a1040)',display:'flex',flexDirection:'column',fontFamily:brandFont}}>
       <style>{css}</style>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 20px',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 20px',borderBottom:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(8px)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:agentColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🤖</div>
-          <div><div style={{fontSize:13,fontWeight:700,color:'#f1f5f9'}}>{session?.agent?.persona_name}</div><div style={{fontSize:11,color:'#64748b'}}>AI Interviewer · {session?.job_title}</div></div>
+          {brandLogo
+            ? <img src={brandLogo} alt={brandCompany||''} style={{height:24,maxWidth:100,objectFit:'contain'}}/>
+            : <div style={{width:32,height:32,borderRadius:'50%',background:brandPrimary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🤖</div>
+          }
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:'#f1f5f9'}}>{brandCompany||session?.agent?.persona_name}</div>
+            <div style={{fontSize:11,color:'#64748b'}}>{session?.job_title}</div>
+          </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <span style={{fontSize:12,color:'#64748b'}}>{exchangeCount} exchanges</span>
@@ -228,19 +267,19 @@ export default function InterviewSession() {
       <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 20px',gap:28}}>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
           <div style={{position:'relative',width:96,height:96}}>
-            {agentState==='speaking'&&<div style={{position:'absolute',inset:-8,borderRadius:'50%',background:`${agentColor}30`,animation:'barPulse 1.5s ease-out infinite'}}/>}
-            <div style={{width:96,height:96,borderRadius:'50%',background:`linear-gradient(135deg,${agentColor},${agentColor}cc)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:40,boxShadow:'0 8px 32px rgba(0,0,0,0.3)'}}>🤖</div>
+            {agentState==='speaking'&&<div style={{position:'absolute',inset:-8,borderRadius:'50%',background:`${brandPrimary}30`,animation:'barPulse 1.5s ease-out infinite'}}/>}
+            <div style={{width:96,height:96,borderRadius:'50%',background:`linear-gradient(135deg,${brandPrimary},${brandPrimary}cc)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:40,boxShadow:'0 8px 32px rgba(0,0,0,0.3)'}}>🤖</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 14px',background:'rgba(255,255,255,0.06)',borderRadius:99,border:'1px solid rgba(255,255,255,0.08)'}}>
-            {agentState==='speaking'&&<MicBars active color={agentColor}/>}
+            {agentState==='speaking'&&<MicBars active color={brandPrimary}/>}
             {agentState==='listening'&&<div style={{display:'flex',gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:'50%',background:'#10b981',animation:`dotBounce 1.2s ${i*0.2}s infinite`}}/>)}</div>}
-            {agentState==='thinking'&&<div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${agentColor}`,borderTopColor:'transparent',animation:'spin 0.6s linear infinite'}}/>}
+            {agentState==='thinking'&&<div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${brandPrimary}`,borderTopColor:'transparent',animation:'spin 0.6s linear infinite'}}/>}
             <span style={{fontSize:12,color:'#94a3b8'}}>{agentState==='speaking'?`${session?.agent?.persona_name} is speaking…`:agentState==='listening'?'Listening…':agentState==='thinking'?'Thinking…':'Your turn'}</span>
           </div>
         </div>
         {currentText&&<div style={{maxWidth:600,width:'100%',animation:'fadeUp .3s ease'}}><div style={{padding:'16px 20px',background:'rgba(255,255,255,0.07)',borderRadius:'4px 16px 16px 16px',border:'1px solid rgba(255,255,255,0.1)',fontSize:15,color:'#e2e8f0',lineHeight:1.7}}>{currentText}</div></div>}
-        {!useTextMode&&agentState==='idle'&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10}}><button onClick={listenFlow} style={{width:72,height:72,borderRadius:'50%',border:'none',background:`linear-gradient(135deg,${agentColor},${agentColor}cc)`,color:'#fff',fontSize:28,cursor:'pointer',boxShadow:`0 8px 32px ${agentColor}60`}}>🎤</button><span style={{fontSize:12,color:'#64748b'}}>Tap to speak</span></div>}
-        {!useTextMode&&agentState==='listening'&&<button onClick={()=>{stopListening();setAgentState('idle');}} style={{padding:'10px 24px',borderRadius:99,border:'2px solid #10b981',background:'transparent',color:'#10b981',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F}}>✓ Done speaking</button>}
+        {!useTextMode&&agentState==='idle'&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10}}><button onClick={listenFlow} style={{width:72,height:72,borderRadius:'50%',border:'none',background:`linear-gradient(135deg,${brandPrimary},${brandPrimary}cc)`,color:'#fff',fontSize:28,cursor:'pointer',boxShadow:`0 8px 32px ${brandPrimary}60`}}>🎤</button><span style={{fontSize:12,color:'#64748b'}}>Tap to speak</span></div>}
+        {!useTextMode&&agentState==='listening'&&<button onClick={()=>{stopListening();setAgentState('idle');}} style={{padding:'10px 24px',borderRadius:99,border:'2px solid #10b981',background:'transparent',color:'#10b981',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:brandFont}}>✓ Done speaking</button>}
       </div>
 
       <div style={{padding:'16px 20px',borderTop:'1px solid rgba(255,255,255,0.06)',background:'rgba(0,0,0,0.3)'}}>
@@ -248,7 +287,7 @@ export default function InterviewSession() {
           <input value={candidateInput} onChange={e=>setCandidateInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleTextSubmit();}}} placeholder={useTextMode?'Type your response…':'Or type your answer here…'} disabled={agentState==='thinking'||agentState==='speaking'}
             style={{flex:1,padding:'11px 16px',borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:'#f1f5f9',fontSize:14,fontFamily:F,outline:'none'}}/>
           <button onClick={handleTextSubmit} disabled={!candidateInput.trim()||agentState==='thinking'||agentState==='speaking'}
-            style={{padding:'11px 18px',borderRadius:12,border:'none',background:candidateInput.trim()?agentColor:'#334155',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F,transition:'background .15s'}}>
+            style={{padding:'11px 18px',borderRadius:12,border:'none',background:candidateInput.trim()?brandPrimary:'#334155',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:brandFont,transition:'background .15s'}}>
             Send
           </button>
         </div>
