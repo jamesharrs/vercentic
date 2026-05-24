@@ -30,8 +30,7 @@ import AssessmentsPanel from "./AssessmentsPanel.jsx";
 import AiBadge, { isAiGenerated } from "./AiBadge.jsx";
 import InsightsPanel from "./InsightsPanel.jsx";
 
-import api from './apiClient.js';
-import { authHeaders } from './apiClient.js';
+import api, { authHeaders, getCsrfToken } from './apiClient.js';
 import { sanitizeHtml, sanitizeCopilot, sanitizeInline } from './sanitize.js';
 import TalentCardModal from './TalentCard.jsx';
 import ScreeningRulesPanel from './ScreeningRulesPanel.jsx'; // kept for ScreeningTab inside JobQuestionsPanel
@@ -54,7 +53,13 @@ const ScheduleModalLazy = lazy(() => import('./Interviews.jsx').then(m => ({ def
 // Bare fetch wrapper that always includes X-Tenant-Slug + X-User-Id headers.
 // Use this instead of raw fetch() anywhere in this file.
 const tFetch = (url, opts = {}) => {
-  const h = { ...authHeaders(), ...(opts.headers || {}) };
+  const isMutation = opts.method && opts.method !== 'GET';
+  const csrf = isMutation ? getCsrfToken() : null;
+  const h = {
+    ...authHeaders(),
+    ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+    ...(opts.headers || {}),
+  };
   return fetch(url, { ...opts, headers: h });
 };
 
