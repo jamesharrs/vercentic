@@ -2747,6 +2747,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [saving, setSaving]               = useState(false);
   const [categories, setCategories]       = useState([]);
   const [expandedCat, setExpandedCat]     = useState(null);
+  const [peopleObjectId, setPeopleObjectId] = useState(null); // cached for onNavigate
 
   // Defined here (before first use) to avoid temporal dead zone error
   const PEOPLE_LINK_TYPES = ["people_link", "linked_person"];
@@ -2776,6 +2777,18 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   useEffect(() => { load(); }, [record?.id, environment?.id]);
 
+  // Eagerly resolve the People object ID so name-click navigation always works,
+  // even before the "Add person" modal has been opened.
+  useEffect(() => {
+    if (!environment?.id || peopleObjectId) return;
+    api.get(`/objects?environment_id=${environment.id}`).then(objs => {
+      const po = (Array.isArray(objs) ? objs : []).find(o =>
+        o.slug === 'people' || o.name === 'People' || o.name === 'Person'
+      );
+      if (po) setPeopleObjectId(po.id);
+    }).catch(() => {});
+  }, [environment?.id, peopleObjectId]);
+
   const assignWorkflow = async (workflow_id) => {
     setSaving(true);
     await api.put("/workflows/assignments", { record_id: record.id, workflow_id: workflow_id || null, type: "people_link" });
@@ -2789,6 +2802,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
       o.slug === 'people' || o.name === 'People' || o.name === 'Person'
     );
     if (!personObj) { console.warn('[AddPerson] Could not find people object', objs); return; }
+    if (!peopleObjectId) setPeopleObjectId(personObj.id); // cache for nav
     const recs = await api.get(`/records?object_id=${personObj.id}&environment_id=${environment.id}&limit=500`);
     setPersonRecords(recs.records || []);
   };
@@ -2873,7 +2887,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
     await load();
   };
 
-  const pLabel = (p) => { const d = p.person_data || {}; return [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || p.person_record_id?.slice(0,8); };
+  const pLabel = (p) => { const d = p.person_data || {}; return [d.first_name, d.last_name].filter(Boolean).join(" ") || d.email || d.name || "Unnamed person"; };
   const pSub   = (p) => { const d = p.person_data || {}; return d.current_title || d.email || ""; };
   const pInit  = (p) => pLabel(p).charAt(0).toUpperCase();
 
@@ -3677,7 +3691,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   environmentId={environment?.id}
                   steps={plSteps}
                   onClose={()=>setActiveProfile(null)}
-                  onNavigate={id=>{setActiveProfile(null);onNavigate&&onNavigate(id);}}
+                  onNavigate={id=>{setActiveProfile(null);onNavigate&&onNavigate(id, peopleObjectId);}}
                   onMoveStage={moveStage}
                 />
               )}
@@ -3689,7 +3703,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                   visibleColIds={visibleColIds}
                   selected={selectedLinks.includes(link.id)}
                   onSelect={id=>setSelectedLinks(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
-                  onMove={moveStage} onRemove={removeLink} onNavigate={onNavigate}/>
+                  onMove={moveStage} onRemove={removeLink}
+                  onNavigate={id=>onNavigate&&onNavigate(id, peopleObjectId)}/>
               ))}
             </div>
       )}
