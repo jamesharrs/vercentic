@@ -121,6 +121,16 @@ const ScoreRing = ({ score, size=52 }) => {
 // ── Read the saved matching config from localStorage ─────────────────────────
 const MATCHING_CONFIG_KEY = "talentos_matching_config";
 const DEFAULT_MATCH_WEIGHTS = { title:15, skills:35, location:15, experience:15, availability:10, rating:10 };
+const DEFAULT_MIN_SCORE_THRESHOLD = 30;
+
+// Read the saved minimum score threshold (used by Recommendations panel and pipeline view)
+const getMinScoreThreshold = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MATCHING_CONFIG_KEY));
+    const v = saved?.min_score_threshold;
+    return (typeof v === "number" && !isNaN(v)) ? v : DEFAULT_MIN_SCORE_THRESHOLD;
+  } catch { return DEFAULT_MIN_SCORE_THRESHOLD; }
+};
 
 const getMatchingConfig = () => {
   try { return JSON.parse(localStorage.getItem(MATCHING_CONFIG_KEY)) || null; }
@@ -366,11 +376,19 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
   const [pools,setPools]       = useState([]);
   const [matches,setMatches]   = useState([]);
   const [loading,setLoading]   = useState(false);
-  const [minScore,setMinScore] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(MATCHING_CONFIG_KEY))?.min_score_threshold || 0; }
-    catch { return 0; }
-  });
+  const [minScore,setMinScore] = useState(getMinScoreThreshold);
   const [matchTarget,setMatchTarget] = useState("jobs"); // for person mode: "jobs" | "pools"
+
+  // Re-sync minScore when the AI matching settings are saved or another tab updates them
+  useEffect(() => {
+    const refresh = () => setMinScore(getMinScoreThreshold());
+    window.addEventListener("storage", refresh); // cross-tab
+    window.addEventListener("vercentic:matching-config-updated", refresh); // same-tab from settings save
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("vercentic:matching-config-updated", refresh);
+    };
+  }, []);
 
   // In job mode the "selected job" is always the initialRecord (locked)
   // In person mode we match the initialRecord person against all jobs/pools
