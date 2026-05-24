@@ -4265,19 +4265,22 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
   // Records available to link (exclude already linked)
   const linkedTargetIds = new Set(links.map(l => l.target_record_id));
   const nonPersonObjs = allObjects.filter(o => o.name !== "Person");
+
+  const recLabel = (r) => {
+    const d = r.data || {};
+    return d.job_title || d.pool_name || d.name || d.title
+      || d.event_name || d.event_title || d.campaign_name || d.campaign_title
+      || d.first_name || d.full_name
+      || Object.values(d).find(v => typeof v === 'string' && v.length > 0 && v.length < 120)
+      || 'Unnamed record';
+  };
+
   const filteredAddRecords = allRecords.filter(r => {
     if (linkedTargetIds.has(r.id)) return false;
     if (addObjFilter && r.object_id !== addObjFilter) return false;
     if (!addSearch) return true;
-    const d = r.data || {};
-    const label = [d.job_title, d.pool_name, d.name, d.first_name].filter(Boolean).join(" ").toLowerCase();
-    return label.includes(addSearch.toLowerCase());
+    return recLabel(r).toLowerCase().includes(addSearch.toLowerCase());
   });
-
-  const recLabel = (r) => {
-    const d = r.data || {};
-    return d.job_title || d.pool_name || d.name || d.first_name || r.id.slice(0,8);
-  };
 
   if (loading) return <div style={{ padding:"20px 0", textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>;
 

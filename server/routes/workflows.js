@@ -835,7 +835,13 @@ router.get('/people-links', (req, res) => {
     const targetObj = target ? findOne('objects', o => o.id === target.object_id) : null;
     // Build a display title for the target record
     const td = target?.data || {};
-    const targetTitle = td.job_title || td.pool_name || td.name || td.first_name || l.target_record_id?.slice(0,8);
+    // Build a display title — check all common field name patterns across object types
+    const targetTitle = td.job_title || td.pool_name || td.name || td.title
+      || td.event_name || td.event_title || td.campaign_name || td.campaign_title
+      || td.first_name  // person fallback
+      || td.full_name
+      || Object.values(td).find(v => typeof v === 'string' && v.length > 0 && v.length < 120)
+      || 'Unnamed record';
     // Hydrate workflow steps — steps live on wf.steps[] (embedded), not a separate table
     const wfAssignment = findOne('record_workflow_assignments', a => a.record_id === (l.target_record_id||l.job_id) && (a.type === 'people_link' || a.assignment_type === 'people_link' || a.assignment_type === 'linked_person'));
     const wf = wfAssignment ? findOne('workflows', w => w.id === wfAssignment.workflow_id) : null;
