@@ -3087,37 +3087,65 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   return (
     <div style={{ fontFamily:F, background:"white" }}>
 
-      {/* ── Simple stage strip — shown when no stage categories configured ── */}
+      {/* ── Connected pill track — Option B ── */}
       {hasStages && allGroups.length === 0 && (
-        <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, overflowX:"auto" }}>
-          {/* "All" pill */}
-          <button
-            onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
-            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-              padding:"10px 16px", border:"none", borderBottom: selectedStage === "__all__" ? `2px solid ${C.accent}` : "2px solid transparent",
-              background:"transparent", cursor:"pointer", fontFamily:F, flexShrink:0, minWidth:72 }}>
-            <span style={{ fontSize:15, fontWeight:700, color: selectedStage==="__all__" ? C.accent : C.text1 }}>{peopleLinks.length}</span>
-            <span style={{ fontSize:11, color: selectedStage==="__all__" ? C.accent : C.text3, fontWeight:500 }}>All</span>
-          </button>
-          <div style={{ width:1, background:C.border, alignSelf:"stretch", margin:"8px 0" }}/>
-          {plSteps.map((step, i) => {
-            const count   = countByStage[step.id] || 0;
-            const isActive = selectedStage === step.id;
-            return (
-              <button key={step.id}
-                onClick={() => { setSelectedStage(isActive ? null : step.id); setExpandedCat(null); }}
-                style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-                  padding:"10px 16px", border:"none",
-                  borderBottom: isActive ? `2px solid ${C.accent}` : "2px solid transparent",
-                  background:"transparent", cursor:"pointer", fontFamily:F, flexShrink:0, minWidth:80,
-                  transition:"all .12s" }}>
-                <span style={{ fontSize:15, fontWeight:700,
-                  color: isActive ? C.accent : count > 0 ? C.text1 : C.text3 }}>{count}</span>
-                <span style={{ fontSize:11, fontWeight:500, whiteSpace:"nowrap",
-                  color: isActive ? C.accent : C.text3 }}>{step.name}</span>
-              </button>
-            );
-          })}
+        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px", overflowX:"auto" }}>
+          {/* "All" chip */}
+          <div style={{ display:"flex", alignItems:"flex-start", gap:0, minWidth:"max-content" }}>
+            <button
+              onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 8px 0 0", flexShrink:0 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                background: selectedStage==="__all__" ? C.accent : `${C.accent}18`,
+                border:`2px solid ${C.accent}`, transition:"all .15s", flexShrink:0 }}>
+                <span style={{ fontSize:11, fontWeight:600, color: selectedStage==="__all__" ? "white" : C.accent }}>{peopleLinks.length}</span>
+              </div>
+              <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? C.accent : C.text3, whiteSpace:"nowrap" }}>All</span>
+            </button>
+
+            {/* Connector line */}
+            <div style={{ height:2, width:16, background:`${C.accent}30`, alignSelf:"14px", marginTop:13, flexShrink:0 }}/>
+
+            {plSteps.map((step, i) => {
+              const count    = countByStage[step.id] || 0;
+              const isActive = selectedStage === step.id;
+              const hasCount = count > 0;
+              const dotColor = isActive ? C.accent : hasCount ? C.accent : C.border;
+              const isLast   = i === plSteps.length - 1;
+              return (
+                <div key={step.id} style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+                  <button
+                    onClick={() => { setSelectedStage(isActive ? null : step.id); setExpandedCat(null); }}
+                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 4px", flexShrink:0 }}>
+                    <div style={{
+                      width: hasCount || isActive ? 30 : 20,
+                      height: hasCount || isActive ? 30 : 20,
+                      borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                      background: isActive ? C.accent : hasCount ? `${C.accent}14` : "transparent",
+                      border: isActive ? `2px solid ${C.accent}` : hasCount ? `2px solid ${C.accent}` : `1.5px solid ${C.border}`,
+                      transition:"all .15s", flexShrink:0,
+                      boxShadow: isActive ? `0 0 0 3px ${C.accent}22` : "none",
+                    }}>
+                      {(hasCount || isActive) && (
+                        <span style={{ fontSize:11, fontWeight:600,
+                          color: isActive ? "white" : C.accent }}>{count}</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize:10, fontWeight: isActive||hasCount ? 500 : 400, whiteSpace:"nowrap",
+                      color: isActive ? C.accent : hasCount ? C.text2 : C.text3,
+                      maxWidth:70, overflow:"hidden", textOverflow:"ellipsis", textAlign:"center" }}>{step.name}</span>
+                  </button>
+                  {/* Connector line between nodes */}
+                  {!isLast && (
+                    <div style={{ height:2, width:20, background: hasCount ? `${C.accent}30` : C.border,
+                      alignSelf:"flex-start", marginTop:14, flexShrink:0 }}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
