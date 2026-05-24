@@ -23,9 +23,9 @@ const DEFAULT_QUESTIONS = [
 
 const seedQuestionBank = () => {
   const store = getStore();
-  if (!store.question_bank) { store.question_bank = DEFAULT_QUESTIONS.map(q => ({ ...q, created_at: new Date().toISOString() })); saveStore(store); }
-  if (!store.bot_sessions) { store.bot_sessions = []; saveStore(store); }
-  if (!store.scorecards) { store.scorecards = []; saveStore(store); }
+  if (!store.question_bank) { store.question_bank = DEFAULT_QUESTIONS.map(q => ({ ...q, created_at: new Date().toISOString() })); saveStore(); }
+  if (!store.bot_sessions) { store.bot_sessions = []; saveStore(); }
+  if (!store.scorecards) { store.scorecards = []; saveStore(); }
 };
 seedQuestionBank();
 
@@ -83,7 +83,7 @@ router.post('/questions', (req, res) => {
   const store = getStore();
   const q = { id: uuidv4(), text, type, competency: competency || type, weight: weight || 10, options: options || null, pass_value: pass_value || null, created_at: new Date().toISOString(), is_custom: true };
   store.question_bank.push(q);
-  saveStore(store);
+  saveStore();
   res.json(q);
 });
 
@@ -92,7 +92,7 @@ router.delete('/questions/:id', (req, res) => {
   const idx = store.question_bank.findIndex(q => q.id === req.params.id && q.is_custom);
   if (idx === -1) return res.status(404).json({ error: 'Custom question not found' });
   store.question_bank.splice(idx, 1);
-  saveStore(store);
+  saveStore();
   res.json({ deleted: true });
 });
 
@@ -105,15 +105,21 @@ router.post('/sessions', (req, res) => {
   const d = candidate?.data || {};
   const candidateName = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Candidate';
   let questions;
+  const bankV2  = store.question_bank_v2 || [];
+  const bankV1  = store.question_bank      || [];
+  const bank    = bankV2.length ? bankV2 : bankV1.length ? bankV1 : DEFAULT_QUESTIONS;
   if (question_ids?.length) {
-    questions = store.question_bank.filter(q => question_ids.includes(q.id));
+    questions = bank.filter(q => question_ids.includes(q.id));
+    // if none matched (e.g. question_ids are from question_bank_v2 not yet loaded), fall back
+    if (!questions.length) questions = DEFAULT_QUESTIONS.slice(0, 6);
   } else {
     questions = [
-      ...store.question_bank.filter(q => q.type === 'knockout').slice(0, 2),
-      ...store.question_bank.filter(q => q.type === 'competency').slice(0, 2),
-      ...store.question_bank.filter(q => q.type === 'technical').slice(0, 1),
-      ...store.question_bank.filter(q => q.type === 'culture').slice(0, 1),
+      ...bank.filter(q => q.type === 'knockout').slice(0, 2),
+      ...bank.filter(q => q.type === 'competency').slice(0, 3),
+      ...bank.filter(q => q.type === 'technical').slice(0, 1),
+      ...bank.filter(q => q.type === 'culture').slice(0, 1),
     ];
+    if (!questions.length) questions = DEFAULT_QUESTIONS.slice(0, 6);
   }
   const session = {
     id: uuidv4(), interview_id, candidate_id, job_id, environment_id,
@@ -128,7 +134,7 @@ router.post('/sessions', (req, res) => {
   };
   if (!store.bot_sessions) store.bot_sessions = [];
   store.bot_sessions.push(session);
-  saveStore(store);
+  saveStore();
   res.json({ ...session, bot_url: `/bot/${session.token}` });
 });
 
@@ -154,7 +160,7 @@ router.post('/sessions/:token/start', (req, res) => {
   if (store.bot_sessions[idx].status !== 'pending') return res.status(400).json({ error: 'Already started' });
   store.bot_sessions[idx].status = 'in_progress';
   store.bot_sessions[idx].started_at = new Date().toISOString();
-  saveStore(store);
+  saveStore();
   res.json({ started: true, first_question: store.bot_sessions[idx].questions[0] });
 });
 
@@ -176,7 +182,7 @@ router.post('/sessions/:token/answer', async (req, res) => {
     store.bot_sessions[idx].knockout_passed = false;
     store.bot_sessions[idx].status = 'knocked_out';
     store.bot_sessions[idx].completed_at = new Date().toISOString();
-    saveStore(store);
+    saveStore();
     return res.json({ status: 'knocked_out', message: 'Session ended at knockout question.', answer_recorded: true });
   }
   const nextIndex = session.current_question_index + 1;
@@ -186,7 +192,7 @@ router.post('/sessions/:token/answer', async (req, res) => {
     store.bot_sessions[idx].status = 'completed';
     store.bot_sessions[idx].knockout_passed = store.bot_sessions[idx].knockout_passed !== false;
     store.bot_sessions[idx].completed_at = new Date().toISOString();
-    saveStore(store);
+    saveStore();
     const completedSession = { ...store.bot_sessions[idx] };
     generateSummary(completedSession, completedSession.job_context).then(summary => {
       const s2 = getStore(); const i2 = s2.bot_sessions.findIndex(x => x.token === req.params.token);
@@ -200,7 +206,7 @@ router.post('/sessions/:token/answer', async (req, res) => {
     }).catch(console.error);
     return res.json({ status: 'completed', message: 'All questions answered. Thank you!', answer_recorded: true, next_question: null });
   }
-  saveStore(store);
+  saveStore();
   res.json({ status: 'in_progress', answer_recorded: true, next_question: store.bot_sessions[idx].questions[nextIndex], progress: { current: nextIndex + 1, total: session.questions.length } });
 });
 
@@ -238,7 +244,7 @@ router.patch('/scorecards/:id', (req, res) => {
   if (idx === -1 || idx === undefined) return res.status(404).json({ error: 'Not found' });
   ['recommendation', 'recruiter_notes', 'status'].forEach(k => { if (req.body[k] !== undefined) store.scorecards[idx][k] = req.body[k]; });
   store.scorecards[idx].updated_at = new Date().toISOString();
-  saveStore(store);
+  saveStore();
   res.json(store.scorecards[idx]);
 });
 

@@ -22,19 +22,47 @@ function MicBars({ active, color = '#6366f1' }) {
   );
 }
 
-function useSpeech(language = 'en-US') {
-  const speak = useCallback((text, onEnd) => {
-    if (!window.speechSynthesis) { onEnd?.(); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = language; u.rate = 0.95; u.pitch = 1.05;
-    const voices = window.speechSynthesis.getVoices();
-    const pref = voices.find(v => v.lang.startsWith(language.slice(0,2)) && v.localService);
-    if (pref) u.voice = pref;
-    u.onend = () => onEnd?.(); u.onerror = () => onEnd?.();
-    window.speechSynthesis.speak(u);
-  }, [language]);
-  const stop = useCallback(() => window.speechSynthesis?.cancel(), []);
+function useSpeech() {
+  const audioRef = useRef(null);
+
+  const speak = useCallback(async (text, onEnd) => {
+    // Stop anything currently playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+
+    try {
+      const res = await fetch('/api/ai-interview/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error('TTS failed');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
+      await audio.play();
+    } catch {
+      // Fallback to browser TTS if ElevenLabs unavailable
+      if (!window.speechSynthesis) { onEnd?.(); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.95; u.pitch = 1.05;
+      u.onend = () => onEnd?.(); u.onerror = () => onEnd?.();
+      window.speechSynthesis.speak(u);
+    }
+  }, []);
+
+  const stop = useCallback(() => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    window.speechSynthesis?.cancel();
+  }, []);
+
   return { speak, stop };
 }
 
@@ -67,7 +95,7 @@ export default function InterviewSession() {
   const [result, setResult]     = useState(null);
   const historyRef = useRef([]);
 
-  const { speak, stop: stopSpeaking } = useSpeech(session?.agent?.language || 'en-US');
+  const { speak, stop: stopSpeaking } = useSpeech();
   const { startListening, stopListening } = useSpeechRec(session?.agent?.language || 'en-US');
 
   useEffect(() => {

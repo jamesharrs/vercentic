@@ -182,4 +182,44 @@ router.post('/complete', async (req, res) => {
   res.json({ success:true, summary, recommendation, key_strengths:keyStrengths, concerns, questions_scored:Object.keys(scores).length });
 });
 
+// ── POST /api/ai-interview/tts ─────────────────────────────────────────────
+// Proxy ElevenLabs TTS so the API key stays server-side.
+// Voice ID: "Rachel" — warm, natural, professional female voice (free tier).
+const ELEVEN_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Rachel
+router.post('/tts', async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}/stream`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_turbo_v2', // lowest latency, very natural
+          voice_settings: { stability: 0.45, similarity_boost: 0.82, style: 0.15, use_speaker_boost: true },
+        }),
+      }
+    );
+    if (!response.ok) {
+      const err = await response.text();
+      return res.status(response.status).json({ error: err });
+    }
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-cache');
+    // Stream directly to client
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
