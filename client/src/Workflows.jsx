@@ -3149,160 +3149,71 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         </div>
       )}
 
-      {/* ── SVG Funnel + category bar ──────────────────────────────────────── */}
+      {/* ── Connected pill track — categories ── */}
       {hasStages && allGroups.length > 0 && (
-        <div>
-          {/* SVG Funnel — organic flowing shape */}
-          {(() => {
-            const counts = allGroups.map(({ steps }) =>
-              steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0));
-            const total = counts.reduce((a,b)=>a+b,0);
-            const maxCount = Math.max(...counts, 1);
-            const W = 100; // viewBox width per segment
-            const H = 70;  // viewBox height
-            const PAD = 16; // vertical padding (top+bottom)
-            const HPAD = 12; // horizontal padding (left+right inset)
-            const n = allGroups.length;
-            const totalW = n * W + HPAD * 2;
+        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px", overflowX:"auto" }}>
+          <div style={{ display:"flex", alignItems:"flex-start", gap:0, minWidth:"max-content" }}>
 
-            // Half-height at each segment: zero = very thin sliver, max = almost full height
-            const halfH = (i) => {
-              const c = counts[i] || 0;
-              if (c === 0) return 5; // minimum visible height for empty stages
-              return PAD + (H/2 - PAD) * Math.pow(c / maxCount, 0.6); // power curve = more dramatic spread
-            };
+            {/* "All" node */}
+            <button
+              onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 8px 0 0", flexShrink:0 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                background: selectedStage==="__all__" ? C.accent : `${C.accent}18`,
+                border:`2px solid ${C.accent}`, transition:"all .15s",
+                boxShadow: selectedStage==="__all__" ? `0 0 0 3px ${C.accent}22` : "none" }}>
+                <span style={{ fontSize:11, fontWeight:600, color: selectedStage==="__all__" ? "white" : C.accent }}>{peopleLinks.length}</span>
+              </div>
+              <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? C.accent : C.text3, whiteSpace:"nowrap" }}>All</span>
+            </button>
 
-            // Build smooth SVG path: segment midpoints with HPAD inset
-            const pts = allGroups.map((_, i) => ({
-              x: HPAD + i * W + W/2,
-              topY: H/2 - halfH(i),
-              botY: H/2 + halfH(i),
-            }));
-            const allPts = [
-              { x: 0,       topY: pts[0].topY,              botY: pts[0].botY },
-              { x: HPAD,    topY: pts[0].topY,              botY: pts[0].botY },
-              ...pts,
-              { x: totalW - HPAD, topY: pts[pts.length-1].topY, botY: pts[pts.length-1].botY },
-              { x: totalW,        topY: pts[pts.length-1].topY, botY: pts[pts.length-1].botY },
-            ];
+            {/* Connector from All to first cat */}
+            <div style={{ height:2, width:14, background:`${C.accent}25`, alignSelf:"flex-start", marginTop:13, flexShrink:0 }}/>
 
-            const catCmd = (arr, key) => {
-              let d = `M ${arr[0].x} ${arr[0][key]}`;
-              for (let i = 0; i < arr.length - 1; i++) {
-                const cp1x = (arr[i].x + arr[i+1].x) / 2;
-                const cp2x = (arr[i].x + arr[i+1].x) / 2;
-                d += ` C ${cp1x} ${arr[i][key]}, ${cp2x} ${arr[i+1][key]}, ${arr[i+1].x} ${arr[i+1][key]}`;
-              }
-              return d;
-            };
-
-            const topPath = catCmd(allPts, 'topY');
-            const botPath = catCmd([...allPts].reverse(), 'botY');
-            const fullPath = topPath + ' ' + botPath.replace('M', 'L') + ' Z';
-
-            // Gradient stops
-            const gradId = 'funnelGrad';
-
-            // Per-box: compute the funnel slice path clipped to each segment's x range
-            const BW = 100; // viewBox width per box
-            const BH = 56;  // viewBox height per box
-            const getSlicePath = (i) => {
-              // Map the full funnel coords to a per-box 0-BW viewBox
-              // fullPath uses totalW × H space; segment i occupies [i*W, (i+1)*W]
-              const xStart = i * W;
-              const xEnd   = (i + 1) * W;
-              // top-left, top-right, bottom-right, bottom-left of funnel at this slice
-              const topL = pts[i]   ? pts[i].topY   : H * 0.2;
-              const botL = pts[i]   ? pts[i].botY   : H * 0.8;
-              const topR = pts[i+1] ? pts[i+1].topY : H * 0.2;
-              const botR = pts[i+1] ? pts[i+1].botY : H * 0.8;
-              // Normalise to BW × BH
-              const scaleX = BW / (xEnd - xStart);
-              const scaleY = BH / H;
-              const tL = topL * scaleY;
-              const bL = botL * scaleY;
-              const tR = topR * scaleY;
-              const bR = botR * scaleY;
-              return `M0,${tL} L${BW},${tR} L${BW},${bR} L0,${bL} Z`;
-            };
-
-            return (
-              <div>
-              {/* Box-per-segment layout — each box has its own funnel-slice background */}
-              <div style={{ display:"flex", width:"100%", gap:4, padding:"4px" }}>
-                {allGroups.map(({ cat }, i) => {
-                  const count = counts[i];
-                  const isExpanded = expandedCat === cat.id;
-                  const slicePath = getSlicePath(i);
-                  const gid = `${gradId}_${i}`;
-                  return (
-                    <div key={cat.id} style={{ flex:1, minWidth:0, cursor:"pointer",
-                      position:"relative", height:56, borderRadius:8, overflow:"hidden",
-                      border:`1px solid ${isExpanded ? cat.color : "#e8edf5"}`,
-                      background: "white",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      transition:"all .15s" }}
-                      onClick={() => {
-                        const next = isExpanded ? null : cat.id;
-                        setExpandedCat(next);
-                        setSelectedStage(next ? "__cat__" : null);
-                      }}>
-                      {count > 0 ? (
-                        <>
-                          {/* Funnel slice background */}
-                          <svg viewBox={`0 0 ${BW} ${BH}`} preserveAspectRatio="none"
-                            style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none" }}>
-                            <defs>
-                              <linearGradient id={gid} x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stopColor="#BFDBFE" stopOpacity={isExpanded ? "0.5" : "0.35"}/>
-                                <stop offset="100%" stopColor="#EFF6FF" stopOpacity={isExpanded ? "0.3" : "0.15"}/>
-                              </linearGradient>
-                            </defs>
-                            <path d={slicePath} fill={`url(#${gid})`}/>
-                          </svg>
-                          <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                            <span style={{
-                              fontSize: 17, fontWeight: 700,
-                              color: isExpanded ? cat.color : "#2563EB",
-                              fontFamily: "'DM Sans', -apple-system, sans-serif",
-                              lineHeight: 1,
-                            }}>
-                              {count}
-                            </span>
-                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                              <div style={{ width:5, height:5, borderRadius:"50%", background: cat.color, flexShrink:0 }}/>
-                              <span style={{
-                                fontSize: 10, fontWeight: 500,
-                                color: isExpanded ? cat.color : "#94a3b8",
-                                fontFamily: "'DM Sans', -apple-system, sans-serif",
-                                whiteSpace:"nowrap",
-                              }}>
-                                {cat.name}
-                              </span>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        /* Empty — show 0 count + name, muted */
-                        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                          <span style={{ fontSize:15, fontWeight:600, color:"#CBD5E1", lineHeight:1,
-                            fontFamily:"'DM Sans', -apple-system, sans-serif" }}>0</span>
-                          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <div style={{ width:5, height:5, borderRadius:"50%", background:cat.color, opacity:0.4, flexShrink:0 }}/>
-                            <span style={{ fontSize:10, fontWeight:500, color:"#C4CDD8",
-                              fontFamily:"'DM Sans', -apple-system, sans-serif", whiteSpace:"nowrap" }}>
-                              {cat.name}
-                            </span>
-                          </div>
-                        </div>
+            {allGroups.map(({ cat, steps }, gi) => {
+              const count    = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
+              const isActive = expandedCat === cat.id;
+              const hasCount = count > 0;
+              const color    = cat.color || C.accent;
+              const isLast   = gi === allGroups.length - 1;
+              return (
+                <div key={cat.id} style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+                  <button
+                    onClick={() => {
+                      const next = isActive ? null : cat.id;
+                      setExpandedCat(next);
+                      setSelectedStage(next ? "__cat__" : null);
+                    }}
+                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 4px", flexShrink:0 }}>
+                    <div style={{
+                      width: hasCount || isActive ? 30 : 20,
+                      height: hasCount || isActive ? 30 : 20,
+                      borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                      background: isActive ? color : hasCount ? `${color}18` : "transparent",
+                      border: isActive ? `2px solid ${color}` : hasCount ? `2px solid ${color}` : `1.5px solid ${C.border}`,
+                      transition:"all .15s", flexShrink:0,
+                      boxShadow: isActive ? `0 0 0 3px ${color}28` : "none",
+                    }}>
+                      {(hasCount || isActive) && (
+                        <span style={{ fontSize:11, fontWeight:600, color: isActive ? "white" : color }}>{count}</span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-            );
-          })()}
+                    <span style={{ fontSize:10, fontWeight: isActive||hasCount ? 500 : 400, whiteSpace:"nowrap",
+                      color: isActive ? color : hasCount ? C.text2 : C.text3,
+                      maxWidth:68, overflow:"hidden", textOverflow:"ellipsis", textAlign:"center" }}>{cat.name}</span>
+                  </button>
+                  {!isLast && (
+                    <div style={{ height:2, width:16, background: hasCount ? `${color}30` : C.border,
+                      alignSelf:"flex-start", marginTop:14, flexShrink:0 }}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
             {/* Workflow picker row — hidden when toolbar handles it */}
             {!toolbarMode && !hidePicker && (
@@ -3366,8 +3277,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                 </button>
               )}
             </div>
-          </div>
-            )} {/* end !toolbarMode picker row */}
+            )}
 
           {/* Expanded category: stage filter pills */}
           {expandedCat && (() => {
