@@ -50,6 +50,8 @@ export default function AiMatchingSettings() {
 
   const save = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    // Notify same-tab listeners (the storage event only fires cross-tab)
+    window.dispatchEvent(new CustomEvent("vercentic:matching-config-updated", { detail: config }));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
