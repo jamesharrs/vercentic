@@ -2318,7 +2318,15 @@ activeNavRef.current = activeNav;
   const [activeRecordObj, setActiveRecordObj] = useState(null);
   const [listContext,     setListContext]     = useState(null); // current list summary for copilot
 
-  const openRecord = (recordId, objectId, recordNumber) => {
+  const openRecord = async (recordId, objectId, recordNumber) => {
+    // Safety net: if objectId is missing (caller only passed recordId), resolve it via the API
+    if (!objectId && recordId) {
+      try {
+        const rec = await api.get(`/records/${recordId}`);
+        objectId = rec?.object_id;
+      } catch { /* ignore */ }
+      if (!objectId) return; // can't navigate without an object
+    }
     const nav = `record_${recordId}_${objectId}`;
     setActiveNav(nav);
     const obj = navObjects?.find(o => o.id === objectId);
