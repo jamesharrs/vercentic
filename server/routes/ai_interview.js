@@ -205,14 +205,16 @@ router.post('/complete', async (req, res) => {
 
 // ── POST /api/ai-interview/tokens — create an interview link ─────────────────
 router.post('/tokens', (req, res) => {
-  const { agent_id, candidate_name, candidate_email, job_title, job_department, job_id, scorecard_questions, expires_hours = 24 } = req.body;
+  const { agent_id, environment_id, candidate_name, candidate_email, job_title, job_department, job_id, scorecard_questions, expires_hours = 24 } = req.body;
   if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
   const store = getStore();
   const agent = (store.agents || []).find(a => a.id === agent_id && !a.deleted_at);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  // Resolve environment: explicit > agent's own > fallback
+  const resolvedEnvId = environment_id || agent.environment_id || null;
   const token = uuidv4();
   const expires_at = new Date(Date.now() + expires_hours * 3600 * 1000).toISOString();
-  const record = { id: uuidv4(), token, agent_id, candidate_name: candidate_name || 'Candidate', candidate_email: candidate_email || null, job_title: job_title || null, job_department: job_department || null, job_id: job_id || null, scorecard_questions: scorecard_questions || [], status: 'pending', started_at: null, completed_at: null, expires_at, created_at: new Date().toISOString() };
+  const record = { id: uuidv4(), token, agent_id, environment_id: resolvedEnvId, candidate_name: candidate_name || 'Candidate', candidate_email: candidate_email || null, job_title: job_title || null, job_department: job_department || null, job_id: job_id || null, scorecard_questions: scorecard_questions || [], status: 'pending', started_at: null, completed_at: null, expires_at, created_at: new Date().toISOString() };
   if (!store.agent_tokens) store.agent_tokens = [];
   store.agent_tokens.push(record);
   saveStore();
@@ -234,6 +236,18 @@ router.post('/agents', (req, res) => {
 router.get('/agents', (req, res) => {
   const store = getStore();
   res.json((store.agents || []).filter(a => !a.deleted_at));
+});
+
+// ── PATCH /api/ai-interview/agents/:id — update agent ────────────────────────
+router.patch('/agents/:id', (req, res) => {
+  const store = getStore();
+  const idx = (store.agents || []).findIndex(a => a.id === req.params.id && !a.deleted_at);
+  if (idx === -1) return res.status(404).json({ error: 'Agent not found' });
+  const allowed = ['name','persona_name','persona_description','avatar_color','language','environment_id','brand_kit_id'];
+  allowed.forEach(k => { if (req.body[k] !== undefined) store.agents[idx][k] = req.body[k]; });
+  store.agents[idx].updated_at = new Date().toISOString();
+  saveStore();
+  res.json(store.agents[idx]);
 });
 
 // ── POST /api/ai-interview/tts ─────────────────────────────────────────────
