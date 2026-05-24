@@ -3089,13 +3089,12 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
       {/* ── Connected pill track — Option B ── */}
       {hasStages && allGroups.length === 0 && (
-        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px", overflowX:"auto" }}>
-          {/* "All" chip */}
-          <div style={{ display:"flex", alignItems:"flex-start", gap:0, minWidth:"max-content" }}>
+        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px" }}>
+          <div style={{ display:"flex", alignItems:"flex-start", width:"100%" }}>
             <button
               onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 8px 0 0", flexShrink:0 }}>
+                background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:0, flexShrink:0 }}>
               <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
                 background: selectedStage==="__all__" ? C.accent : `${C.accent}18`,
                 border:`2px solid ${C.accent}`, transition:"all .15s", flexShrink:0 }}>
@@ -3104,21 +3103,19 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? C.accent : C.text3, whiteSpace:"nowrap" }}>All</span>
             </button>
 
-            {/* Connector line */}
-            <div style={{ height:2, width:16, background:`${C.accent}30`, alignSelf:"14px", marginTop:13, flexShrink:0 }}/>
+            <div style={{ flex:1, height:2, background:`${C.accent}30`, marginTop:13, minWidth:8 }}/>
 
             {plSteps.map((step, i) => {
               const count    = countByStage[step.id] || 0;
               const isActive = selectedStage === step.id;
               const hasCount = count > 0;
-              const dotColor = isActive ? C.accent : hasCount ? C.accent : C.border;
               const isLast   = i === plSteps.length - 1;
               return (
-                <div key={step.id} style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+                <React.Fragment key={step.id}>
                   <button
                     onClick={() => { setSelectedStage(isActive ? null : step.id); setExpandedCat(null); }}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 4px", flexShrink:0 }}>
+                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 2px", flexShrink:0 }}>
                     <div style={{
                       width: hasCount || isActive ? 30 : 20,
                       height: hasCount || isActive ? 30 : 20,
@@ -3129,20 +3126,18 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       boxShadow: isActive ? `0 0 0 3px ${C.accent}22` : "none",
                     }}>
                       {(hasCount || isActive) && (
-                        <span style={{ fontSize:11, fontWeight:600,
-                          color: isActive ? "white" : C.accent }}>{count}</span>
+                        <span style={{ fontSize:11, fontWeight:600, color: isActive ? "white" : C.accent }}>{count}</span>
                       )}
                     </div>
                     <span style={{ fontSize:10, fontWeight: isActive||hasCount ? 500 : 400, whiteSpace:"nowrap",
                       color: isActive ? C.accent : hasCount ? C.text2 : C.text3,
                       maxWidth:70, overflow:"hidden", textOverflow:"ellipsis", textAlign:"center" }}>{step.name}</span>
                   </button>
-                  {/* Connector line between nodes */}
                   {!isLast && (
-                    <div style={{ height:2, width:20, background: hasCount ? `${C.accent}30` : C.border,
-                      alignSelf:"flex-start", marginTop:14, flexShrink:0 }}/>
+                    <div style={{ flex:1, height:2, background: hasCount ? `${C.accent}30` : C.border,
+                      marginTop:14, minWidth:8 }}/>
                   )}
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
@@ -3151,25 +3146,27 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
       {/* ── Connected pill track — categories ── */}
       {hasStages && allGroups.length > 0 && (
-        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px", overflowX:"auto" }}>
-          <div style={{ display:"flex", alignItems:"flex-start", gap:0, minWidth:"max-content" }}>
+        <div style={{ borderBottom:`1px solid ${C.border}`, padding:"14px 20px 16px" }}>
+          <div style={{ display:"flex", alignItems:"flex-start", width:"100%" }}>
 
             {/* "All" node */}
-            <button
-              onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 8px 0 0", flexShrink:0 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                background: selectedStage==="__all__" ? C.accent : `${C.accent}18`,
-                border:`2px solid ${C.accent}`, transition:"all .15s",
-                boxShadow: selectedStage==="__all__" ? `0 0 0 3px ${C.accent}22` : "none" }}>
-                <span style={{ fontSize:11, fontWeight:600, color: selectedStage==="__all__" ? "white" : C.accent }}>{peopleLinks.length}</span>
-              </div>
-              <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? C.accent : C.text3, whiteSpace:"nowrap" }}>All</span>
-            </button>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
+              <button
+                onClick={() => { setSelectedStage("__all__"); setExpandedCat(null); }}
+                style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                  background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:0 }}>
+                <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                  background: selectedStage==="__all__" ? C.accent : `${C.accent}18`,
+                  border:`2px solid ${C.accent}`, transition:"all .15s",
+                  boxShadow: selectedStage==="__all__" ? `0 0 0 3px ${C.accent}22` : "none" }}>
+                  <span style={{ fontSize:11, fontWeight:600, color: selectedStage==="__all__" ? "white" : C.accent }}>{peopleLinks.length}</span>
+                </div>
+                <span style={{ fontSize:10, fontWeight:500, color: selectedStage==="__all__" ? C.accent : C.text3, whiteSpace:"nowrap" }}>All</span>
+              </button>
+            </div>
 
             {/* Connector from All to first cat */}
-            <div style={{ height:2, width:14, background:`${C.accent}25`, alignSelf:"flex-start", marginTop:13, flexShrink:0 }}/>
+            <div style={{ flex:1, height:2, background:`${C.accent}25`, marginTop:13, minWidth:8 }}/>
 
             {allGroups.map(({ cat, steps }, gi) => {
               const count    = steps.reduce((n, s) => n + (countByStage[s.id] || 0), 0);
@@ -3178,7 +3175,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               const color    = cat.color || C.accent;
               const isLast   = gi === allGroups.length - 1;
               return (
-                <div key={cat.id} style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+                <React.Fragment key={cat.id}>
                   <button
                     onClick={() => {
                       const next = isActive ? null : cat.id;
@@ -3186,7 +3183,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       setSelectedStage(next ? "__cat__" : null);
                     }}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 4px", flexShrink:0 }}>
+                      background:"none", border:"none", cursor:"pointer", fontFamily:F, padding:"0 2px", flexShrink:0 }}>
                     <div style={{
                       width: hasCount || isActive ? 30 : 20,
                       height: hasCount || isActive ? 30 : 20,
@@ -3205,10 +3202,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       maxWidth:68, overflow:"hidden", textOverflow:"ellipsis", textAlign:"center" }}>{cat.name}</span>
                   </button>
                   {!isLast && (
-                    <div style={{ height:2, width:16, background: hasCount ? `${color}30` : C.border,
-                      alignSelf:"flex-start", marginTop:14, flexShrink:0 }}/>
+                    <div style={{ flex:1, height:2, background: hasCount ? `${color}30` : C.border,
+                      marginTop:14, minWidth:8 }}/>
                   )}
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
