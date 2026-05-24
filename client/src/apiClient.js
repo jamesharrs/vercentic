@@ -43,7 +43,7 @@ function getTenantSlug() {
   return null;
 }
 
-function getCsrfToken() {
+export function getCsrfToken() {
   const match = document.cookie.match(/vercentic_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';
 }
