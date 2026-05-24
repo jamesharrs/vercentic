@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { usePermissions as _usePermCtx } from "./PermissionContext.jsx";
 import { createPortal } from "react-dom";
 import AITextEditor from "./AITextEditor.jsx";
@@ -3111,7 +3111,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               const hasCount = count > 0;
               const isLast   = i === plSteps.length - 1;
               return (
-                <React.Fragment key={step.id}>
+                <Fragment key={step.id}>
                   <button
                     onClick={() => { setSelectedStage(isActive ? null : step.id); setExpandedCat(null); }}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6,
@@ -3137,7 +3137,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     <div style={{ flex:1, height:2, background: hasCount ? `${C.accent}30` : C.border,
                       marginTop:14, minWidth:8 }}/>
                   )}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </div>
@@ -3175,7 +3175,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
               const color    = cat.color || C.accent;
               const isLast   = gi === allGroups.length - 1;
               return (
-                <React.Fragment key={cat.id}>
+                <Fragment key={cat.id}>
                   <button
                     onClick={() => {
                       const next = isActive ? null : cat.id;
@@ -3205,7 +3205,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                     <div style={{ flex:1, height:2, background: hasCount ? `${color}30` : C.border,
                       marginTop:14, minWidth:8 }}/>
                   )}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </div>
