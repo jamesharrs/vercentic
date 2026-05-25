@@ -302,12 +302,16 @@ export function ComposeModal({
       d.summary          && `Profile summary: ${d.summary}`,
     ].filter(Boolean).join("\n") : "";
 
-    const lengthInstr = aiLength === "concise" ? "Keep it to 3-4 sentences." : aiLength === "detailed" ? "Write 2-3 paragraphs with detail." : "Keep it to 1 short paragraph.";
+    const lengthInstr = aiLength === "concise"
+      ? "Write 2 short paragraphs."
+      : aiLength === "detailed"
+      ? "Write 3-4 well-structured paragraphs."
+      : "Write 2-3 paragraphs.";
     const extraContext = aiPrompt.trim() ? `\nInstructions: ${aiPrompt.trim()}` : "";
     const contextBlock = personContext ? `\n\nCandidate profile:\n${personContext}` : "";
 
     const prompt = type === "email"
-      ? `Write a ${aiTone} recruitment email to ${name}.${contextBlock}${extraContext}\n${lengthInstr} Personalise based on their profile. Return JSON only — no markdown, no code fences: {"subject":"...","body":"<p>...</p>"}`
+      ? `Write a ${aiTone} recruitment email to ${name}.${contextBlock}${extraContext}\n${lengthInstr} Personalise based on their profile. Use natural paragraph breaks — each paragraph should be a separate <p> tag. Return JSON only — no markdown, no code fences: {"subject":"...","body":"<p>paragraph one</p><p>paragraph two</p>"}`
       : `Write a brief, ${aiTone} ${type} message to ${name}.${extraContext} Under 160 chars for SMS. Return JSON only: {"body":"..."}`;
     try {
       const data = await tFetch("/api/ai/chat", {
