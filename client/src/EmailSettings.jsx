@@ -104,19 +104,18 @@ const FooterEditor = ({ value, onChange }) => {
 };
 
 export default function EmailSettings({ session }) {
-  const userId = session?.id || session?.userId;
   const [prefs, setPrefs] = useState({});
   const [loading, setLoading] = useState(true);
   const [sections, setSections] = useState({});
   const [verifyStatus, setVerifyStatus] = useState("idle");
 
   useEffect(() => {
-    if (!userId) return;
+    // No userId check needed — server validates session cookie
     fetch("/api/users/me/preferences", { credentials: "include" })
-      .then(r => r.json())
-      .then(d => { setPrefs(d); setLoading(false); })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(d => { setPrefs(d || {}); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [userId]);
+  }, []);
 
   const set = (key, val) => setPrefs(p => ({ ...p, [key]: val }));
 
