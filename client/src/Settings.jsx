@@ -46,6 +46,7 @@ const FieldModal = lazy(() => import("./FieldModal.jsx"));
 const TalentProfileBuilder = lazy(() => import("./TalentProfileView.jsx").then(m => ({default: m.TalentProfileBuilder})));
 const NotificationsSection = lazy(() => import("./NotificationsSection"));
 const EmailSettings = lazy(() => import("./EmailSettings"));
+const DefaultSignatureSettings = lazy(() => import("./EmailSettings").then(m => ({ default: m.DefaultSignatureSettings })));
 const IntegrationHub     = lazy(() => import("./IntegrationHub.jsx"));
 const IntegrationsSettings = lazy(() => import("./IntegrationsSettings.jsx"));
 const FormsList          = lazy(() => import("./Forms.jsx").then(m => ({ default: m.FormsList })));
@@ -2880,7 +2881,8 @@ const NAV_GROUPS = [
     label: "Processes",
     items: [
       { id:"brand_kits",      icon:"palette",  label:"Brand Kits" },
-      { id:"email_templates", icon:"mail",     label:"Email Templates" },
+      { id:"email_templates",   icon:"mail",     label:"Email Templates" },
+      { id:"default_signature", icon:"mail",     label:"Default Signature", perm:"manage_settings" },
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
       { id:"workflows", icon:"workflow", label:"Workflows", perm:"manage_workflows" },
       { id:"portals",   icon:"globe",    label:"Portals",   perm:"manage_portals" },
@@ -3111,7 +3113,8 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="forms"      && <LazyTab><FormsList environment={environment}/></LazyTab>}
         {activeSection==="appearance" && <AppearanceSection/>}
         {activeSection==="notifications" && <LazyTab><NotificationsSection/></LazyTab>}
-        {activeSection==="email_settings" && <LazyTab><EmailSettings session={currentUser}/></LazyTab>}
+        {activeSection==="email_settings"    && <LazyTab><EmailSettings session={currentUser}/></LazyTab>}
+        {activeSection==="default_signature" && <LazyTab><DefaultSignatureSettings environment={environment}/></LazyTab>}
         {activeSection==="language"   && <LanguageSection/>}
         {activeSection==="workflows"     && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
         {activeSection==="portals"       && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}

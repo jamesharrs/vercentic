@@ -373,3 +373,80 @@ export default function EmailSettings({ session }) {
     </div>
   );
 }
+
+// ── Admin: Default Signature Panel ───────────────────────────────────────────
+export function DefaultSignatureSettings({ environment }) {
+  const envId = environment?.id;
+  const [form, setForm] = useState({
+    default_email_footer: "",
+    default_email_greeting: "",
+    default_send_as_name: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!envId) return;
+    fetch(`/api/environments/${envId}`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        setForm({
+          default_email_footer:   d.default_email_footer   || "",
+          default_email_greeting: d.default_email_greeting || "",
+          default_send_as_name:   d.default_send_as_name   || "",
+        });
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [envId]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await fetch(`/api/environments/${envId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return <div style={{ padding: 32, color: "#6b7280", fontSize: 14 }}>Loading…</div>;
+
+  return (
+    <div style={{ maxWidth: 700, padding: "24px 32px", fontFamily: F }}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#111827" }}>Default email signature</h2>
+        <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
+          Set the organisation-wide default. New users inherit this — each person can personalise their own in <strong>Your Preferences → Email</strong>.
+        </p>
+      </div>
+
+      <div style={{ padding: "10px 14px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", fontSize: 12, color: "#1e40af", marginBottom: 20 }}>
+        Users who have not customised their signature will send with this default. Changes here do not override signatures users have already personalised.
+      </div>
+
+      <Card title="Default signature template" desc="HTML supported — build a branded template below.">
+        <Field label="Default greeting line" hint="optional">
+          <Inp value={form.default_email_greeting} onChange={v => set("default_email_greeting", v)}
+            placeholder="e.g. Hi {first_name}," />
+        </Field>
+        <Field label="Default display name" hint="shown as sender name when user has not set their own">
+          <Inp value={form.default_send_as_name} onChange={v => set("default_send_as_name", v)}
+            placeholder="e.g. The Talent Team" />
+        </Field>
+        <Field label="Signature / footer">
+          <FooterEditor value={form.default_email_footer} onChange={v => set("default_email_footer", v)} />
+        </Field>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <SaveBtn saving={saving} saved={saved} onClick={save} />
+        </div>
+      </Card>
+    </div>
+  );
+}

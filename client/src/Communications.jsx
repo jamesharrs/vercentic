@@ -200,6 +200,9 @@ export function ComposeModal({
   const [showPreview, setShowPreview] = useState(false);
   const [scheduleAt,  setScheduleAt] = useState("");
   const [showSchedule,setShowSchedule] = useState(false);
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [userSignature,    setUserSignature]    = useState("");   // HTML from preferences
+  const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
 
   const meta = TYPE_META[type] || {};
   const bodyText = type === "email" ? htmlToText(body) : body;
@@ -210,6 +213,26 @@ export function ComposeModal({
   useEffect(() => {
     api.get('/comms/status').then(s => setProviderStatus(s)).catch(() => {});
   }, []);
+
+  // Load user signature preferences (and org fallback)
+  useEffect(() => {
+    fetch("/api/users/me/preferences", { credentials: "include" })
+      .then(r => r.json())
+      .then(prefs => {
+        if (prefs?.email_footer) {
+          setUserSignature(prefs.email_footer);
+        } else if (environment?.default_email_footer) {
+          setOrgSignature(environment.default_email_footer);
+        } else if (environment?.id) {
+          // Fetch org default from environment
+          fetch(`/api/environments/${environment.id}`, { credentials: "include" })
+            .then(r => r.json())
+            .then(env => { if (env?.default_email_footer) setOrgSignature(env.default_email_footer); })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [environment?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
@@ -293,9 +316,9 @@ export function ComposeModal({
         record_id: rec.id, environment_id: environment?.id,
         type, direction, to: recTo || undefined,
         subject: subject || undefined,
-        body: type === "email" ? body : bodyText, // HTML for email, plain for others
-        body_html: type === "email" ? body : undefined,
-        body_text: type === "email" ? bodyText : undefined,
+        body: type === "email" ? bodyWithSignature : bodyText,
+        body_html: type === "email" ? bodyWithSignature : undefined,
+        body_text: type === "email" ? htmlToText(bodyWithSignature) : undefined,
         duration_seconds: duration ? Number(duration) : undefined,
         outcome: outcome || undefined,
         from_label: direction === "inbound" ? "External" : "Me",
@@ -310,6 +333,13 @@ export function ComposeModal({
 
   const isSimulated = providerStatus && type !== "call" && direction === "outbound" && providerStatus[type] === "simulation";
   const canSend = type === "call" ? true : !!bodyText.trim();
+
+  // Effective signature — user's own takes priority over org default
+  const activeSignature = userSignature || orgSignature;
+  // Full email body = composed body + signature separator + signature HTML
+  const bodyWithSignature = (type === "email" && includeSignature && activeSignature)
+    ? `${body}<br/><br/><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;"/>${activeSignature}`
+    : body;
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const accent = meta.color || C.accent;
@@ -702,6 +732,15 @@ export function ComposeModal({
                 background:"transparent", color:C.text3, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
               🕐 Schedule
             </button>
+          )}
+
+          {/* Signature toggle — email only */}
+          {type === "email" && activeSignature && (
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:C.text2 }}>
+              <input type="checkbox" checked={includeSignature} onChange={e => setIncludeSignature(e.target.checked)}
+                style={{ width:14, height:14, accentColor:accent, cursor:"pointer" }}/>
+              Include signature
+            </label>
           )}
 
           <div style={{ flex:1 }}/>
