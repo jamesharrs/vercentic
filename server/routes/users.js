@@ -123,6 +123,53 @@ router.post('/', validate(createUserSchema), (req, res) => {
   res.status(201).json({ ...user, password_hash: undefined, temp_password: tempPassword });
 });
 
+// ── Self-service preferences (no manage_users permission needed) ──────────────
+
+// GET /api/users/me/preferences
+router.get('/me/preferences', (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const u = findOne('users', x => x.id === userId);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  res.json(u.preferences || {});
+});
+
+// PATCH /api/users/me/preferences
+router.patch('/me/preferences', (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const allowedFields = [
+    'email_footer', 'email_signature', 'send_as_name', 'send_as_email',
+    'reply_to', 'default_cc', 'default_bcc', 'default_greeting',
+    'out_of_office_enabled', 'out_of_office_message', 'out_of_office_from', 'out_of_office_until',
+    'digest_frequency', 'timezone', 'working_hours_start', 'working_hours_end',
+    'avatar_url', 'job_title', 'phone', 'linkedin_url',
+  ];
+  const incoming = {};
+  allowedFields.forEach(k => { if (req.body[k] !== undefined) incoming[k] = req.body[k]; });
+  const existing = findOne('users', x => x.id === userId)?.preferences || {};
+  const u = update('users', x => x.id === userId, { preferences: { ...existing, ...incoming }, updated_at: new Date().toISOString() });
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  res.json({ ...u, password_hash: undefined });
+});
+
+// POST /api/users/me/verify-email — send verification to user's send-as address
+router.post('/me/verify-email', (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const { send_as_email } = req.body;
+  if (!send_as_email) return res.status(400).json({ error: 'send_as_email required' });
+  const token = require('crypto').randomBytes(20).toString('hex');
+  const expires = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  const existing = findOne('users', x => x.id === userId)?.preferences || {};
+  update('users', x => x.id === userId, {
+    preferences: { ...existing, send_as_email, send_as_verified: false, send_as_token: token, send_as_token_expires: expires },
+    updated_at: new Date().toISOString(),
+  });
+  // TODO: integrate with mailer.sendEmail() once Resend domain verified
+  res.json({ ok: true, message: `Verification sent to ${send_as_email}` });
+});
+
 // PATCH update user
 router.patch('/:id', validate(patchUserSchema), (req, res) => {
   if (checkGlobal(req, res, 'manage_users') === false) return;

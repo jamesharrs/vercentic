@@ -45,6 +45,7 @@ const SettingsDashboard = lazy(() => import("./SettingsDashboard.jsx"));
 const FieldModal = lazy(() => import("./FieldModal.jsx"));
 const TalentProfileBuilder = lazy(() => import("./TalentProfileView.jsx").then(m => ({default: m.TalentProfileBuilder})));
 const NotificationsSection = lazy(() => import("./NotificationsSection"));
+const EmailSettings = lazy(() => import("./EmailSettings"));
 const IntegrationHub     = lazy(() => import("./IntegrationHub.jsx"));
 const IntegrationsSettings = lazy(() => import("./IntegrationsSettings.jsx"));
 const FormsList          = lazy(() => import("./Forms.jsx").then(m => ({ default: m.FormsList })));
@@ -2836,6 +2837,7 @@ const NAV_GROUPS = [
       { id:"appearance",      icon:"sun",       label:"Appearance" },
       { id:"language",        icon:"globe",     label:"Language" },
       { id:"notifications",   icon:"bell",      label:"Notifications" },
+      { id:"email_settings",  icon:"mail",      label:"Email" },
       { id:"company_profile", icon:"building",  label:"Company Profile" },
     ],
   },
@@ -3109,6 +3111,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="forms"      && <LazyTab><FormsList environment={environment}/></LazyTab>}
         {activeSection==="appearance" && <AppearanceSection/>}
         {activeSection==="notifications" && <LazyTab><NotificationsSection/></LazyTab>}
+        {activeSection==="email_settings" && <LazyTab><EmailSettings session={currentUser}/></LazyTab>}
         {activeSection==="language"   && <LanguageSection/>}
         {activeSection==="workflows"     && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
         {activeSection==="portals"       && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
