@@ -488,6 +488,65 @@ export function ComposeModal({
         </div>
       )}
 
+      {/* ── Inline AI panel — appears between subject and body ── */}
+      {showAiPanel && (
+        <div style={{ borderBottom:`1.5px solid ${accent}25`, background:`${accent}06`,
+          padding:"12px 14px 14px", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:accent }}>✨ AI Compose</span>
+            <button onClick={() => setShowAiPanel(false)}
+              style={{ background:"none", border:"none", cursor:"pointer", fontSize:15, color:C.text3, lineHeight:1 }}>×</button>
+          </div>
+          {/* Tone + Length */}
+          <div style={{ display:"flex", gap:16, marginBottom:8, flexWrap:"wrap" }}>
+            {[
+              { label:"Tone", value:aiTone, setter:setAiTone, opts:[["professional","Professional"],["friendly","Friendly"],["formal","Formal"],["casual","Casual"],["persuasive","Persuasive"]] },
+              { label:"Length", value:aiLength, setter:setAiLength, opts:[["concise","Concise"],["medium","Medium"],["detailed","Detailed"]] },
+            ].map(({ label, value, setter, opts }) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                <span style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", whiteSpace:"nowrap" }}>{label}</span>
+                {opts.map(([val, lbl]) => (
+                  <button key={val} onClick={() => setter(val)}
+                    style={{ padding:"3px 8px", borderRadius:6,
+                      border:`1.5px solid ${value === val ? accent : border}`,
+                      background: value === val ? `${accent}15` : "white",
+                      color: value === val ? accent : C.text3,
+                      fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          {/* Prompt textarea */}
+          <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+            <textarea
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAiCompose(); }}
+              placeholder="Describe what to say, or leave blank for a general outreach…"
+              rows={2}
+              style={{ flex:1, padding:"7px 10px", borderRadius:7,
+                border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
+                resize:"none", color:C.text1, background:"white", lineHeight:1.5 }}
+            />
+            <button onClick={handleAiCompose} disabled={aiLoading}
+              style={{ padding:"7px 14px", borderRadius:7, border:"none",
+                background:accent, color:"white", fontSize:12, fontWeight:700,
+                cursor:aiLoading?"not-allowed":"pointer", fontFamily:"inherit",
+                display:"flex", alignItems:"center", gap:6, opacity:aiLoading?0.7:1, whiteSpace:"nowrap", flexShrink:0 }}>
+              {aiLoading ? (
+                <>
+                  <span style={{ width:11, height:11, border:"2px solid white", borderTopColor:"transparent",
+                    borderRadius:"50%", display:"inline-block", animation:"spin .7s linear infinite" }}/>
+                  Generating…
+                </>
+              ) : "✨ Generate"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Body — RichTextEditor for email, plain textarea for SMS/WhatsApp/call */}
       {type === "email" ? (
         <RichTextEditor
@@ -532,61 +591,7 @@ export function ComposeModal({
         </div>
       )}
 
-      {/* ── Inline AI panel (shown when ✨ AI button is active) ── */}
-      {showAiPanel && (
-        <div style={{ borderTop:`1.5px solid ${accent}30`, paddingTop:12, flexShrink:0,
-          background:`${accent}05`, borderRadius:"0 0 10px 10px", padding:"12px 14px 14px", marginTop:2 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-            <span style={{ fontSize:12, fontWeight:700, color:accent }}>✨ AI Compose</span>
-            <button onClick={() => setShowAiPanel(false)}
-              style={{ background:"none", border:"none", cursor:"pointer", fontSize:15, color:C.text3, lineHeight:1 }}>×</button>
-          </div>
-          {/* Tone + Length */}
-          <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
-            {[
-              { label:"Tone", value:aiTone, setter:setAiTone, opts:[["professional","Professional"],["friendly","Friendly"],["formal","Formal"],["casual","Casual"],["persuasive","Persuasive"]] },
-              { label:"Length", value:aiLength, setter:setAiLength, opts:[["concise","Concise"],["medium","Medium"],["detailed","Detailed"]] },
-            ].map(({ label, value, setter, opts }) => (
-              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                <span style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", whiteSpace:"nowrap" }}>{label}</span>
-                {opts.map(([val, lbl]) => (
-                  <button key={val} onClick={() => setter(val)}
-                    style={{ padding:"3px 8px", borderRadius:6,
-                      border:`1.5px solid ${value === val ? accent : border}`,
-                      background: value === val ? `${accent}15` : "white",
-                      color: value === val ? accent : C.text3,
-                      fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                    {lbl}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-          {/* Prompt textarea */}
-          <textarea
-            value={aiPrompt}
-            onChange={e => setAiPrompt(e.target.value)}
-            placeholder="Describe what to say, or leave blank for a general outreach email…"
-            rows={2}
-            style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
-              border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
-              resize:"none", color:C.text1, background:"white", lineHeight:1.5, marginBottom:8 }}
-          />
-          <button onClick={handleAiCompose} disabled={aiLoading}
-            style={{ width:"100%", padding:"8px", borderRadius:8, border:"none",
-              background:accent, color:"white", fontSize:12, fontWeight:700,
-              cursor:aiLoading?"not-allowed":"pointer", fontFamily:"inherit",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:7, opacity:aiLoading?0.7:1 }}>
-            {aiLoading ? (
-              <>
-                <span style={{ width:12, height:12, border:"2px solid white", borderTopColor:"transparent",
-                  borderRadius:"50%", display:"inline-block", animation:"spin .7s linear infinite" }}/>
-                Generating…
-              </>
-            ) : "✨ Generate Draft"}
-          </button>
-        </div>
-      )}
+
     </div>
   );
 
