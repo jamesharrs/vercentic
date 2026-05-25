@@ -2,6 +2,7 @@
  * EmailSettings.jsx — User email preferences section in Settings → Your Preferences
  */
 import { useState, useEffect, useRef } from "react";
+import { getCsrfToken } from "./apiClient.js";
 
 const F = "'Geist', -apple-system, sans-serif";
 const accent = "#4361ee";
@@ -203,7 +204,7 @@ export default function EmailSettings({ session }) {
       fields.forEach(k => { body[k] = prefs[k]; });
       const r = await fetch("/api/users/me/preferences", {
         method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error("Save failed");
@@ -220,7 +221,7 @@ export default function EmailSettings({ session }) {
     try {
       const r = await fetch("/api/users/me/verify-email", {
         method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
         body: JSON.stringify({ send_as_email: prefs.send_as_email }),
       });
       setVerifyStatus(r.ok ? "sent" : "error");
@@ -408,7 +409,7 @@ export function DefaultSignatureSettings({ environment }) {
     try {
       await fetch(`/api/environments/${envId}`, {
         method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
         body: JSON.stringify(form),
       });
       setSaved(true);
