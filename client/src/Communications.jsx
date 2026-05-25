@@ -190,6 +190,7 @@ export function ComposeModal({
   const [selTpl,     setSelTpl]    = useState(null);
   const [aiLoading,  setAiLoading] = useState(false);
   const [aiPrompt,   setAiPrompt]  = useState('');
+  const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiTone,     setAiTone]    = useState("professional");
   const [aiLength,   setAiLength]  = useState("concise");
   const [saving,     setSaving]    = useState(false);
@@ -292,17 +293,16 @@ export function ComposeModal({
       ? `Write a ${aiTone} outreach email to ${name} (${d.current_title || "professional"} in ${d.location || "their location"}). ${lengthInstr} Personalise it.${extraContext} Return JSON only: {"subject":"...","body":"..."}`
       : `Write a brief, ${aiTone} ${type} message to ${name}. Under 160 chars for SMS.${extraContext} Return JSON only: {"body":"..."}`;
     try {
-      const res = await tFetch("/api/ai/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens: 600 }),
+      const data = await tFetch("/api/ai/chat", {
+        method: "POST",
+        body: { messages: [{ role: "user", content: prompt }], max_tokens: 600 },
       });
-      const data = await res.json();
       const clean = (data?.content || "").replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       if (parsed.subject) setSubject(parsed.subject);
       if (parsed.body)    setBody(parsed.body);
-      setMode("write");
-    } catch { /* ignore */ }
+      setShowAiPanel(false); // collapse panel after generating
+    } catch (err) { console.error('[AI Compose]', err); }
     setAiLoading(false);
   };
 
@@ -531,6 +531,62 @@ export function ComposeModal({
             style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.text3 }}>×</button>
         </div>
       )}
+
+      {/* ── Inline AI panel (shown when ✨ AI button is active) ── */}
+      {showAiPanel && (
+        <div style={{ borderTop:`1.5px solid ${accent}30`, paddingTop:12, flexShrink:0,
+          background:`${accent}05`, borderRadius:"0 0 10px 10px", padding:"12px 14px 14px", marginTop:2 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:accent }}>✨ AI Compose</span>
+            <button onClick={() => setShowAiPanel(false)}
+              style={{ background:"none", border:"none", cursor:"pointer", fontSize:15, color:C.text3, lineHeight:1 }}>×</button>
+          </div>
+          {/* Tone + Length */}
+          <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
+            {[
+              { label:"Tone", value:aiTone, setter:setAiTone, opts:[["professional","Professional"],["friendly","Friendly"],["formal","Formal"],["casual","Casual"],["persuasive","Persuasive"]] },
+              { label:"Length", value:aiLength, setter:setAiLength, opts:[["concise","Concise"],["medium","Medium"],["detailed","Detailed"]] },
+            ].map(({ label, value, setter, opts }) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                <span style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", whiteSpace:"nowrap" }}>{label}</span>
+                {opts.map(([val, lbl]) => (
+                  <button key={val} onClick={() => setter(val)}
+                    style={{ padding:"3px 8px", borderRadius:6,
+                      border:`1.5px solid ${value === val ? accent : border}`,
+                      background: value === val ? `${accent}15` : "white",
+                      color: value === val ? accent : C.text3,
+                      fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          {/* Prompt textarea */}
+          <textarea
+            value={aiPrompt}
+            onChange={e => setAiPrompt(e.target.value)}
+            placeholder="Describe what to say, or leave blank for a general outreach email…"
+            rows={2}
+            style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
+              border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
+              resize:"none", color:C.text1, background:"white", lineHeight:1.5, marginBottom:8 }}
+          />
+          <button onClick={handleAiCompose} disabled={aiLoading}
+            style={{ width:"100%", padding:"8px", borderRadius:8, border:"none",
+              background:accent, color:"white", fontSize:12, fontWeight:700,
+              cursor:aiLoading?"not-allowed":"pointer", fontFamily:"inherit",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7, opacity:aiLoading?0.7:1 }}>
+            {aiLoading ? (
+              <>
+                <span style={{ width:12, height:12, border:"2px solid white", borderTopColor:"transparent",
+                  borderRadius:"50%", display:"inline-block", animation:"spin .7s linear infinite" }}/>
+                Generating…
+              </>
+            ) : "✨ Generate Draft"}
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -696,7 +752,6 @@ export function ComposeModal({
               {[
                 { id:"write", label:"Write" },
                 { id:"template", label:"Template" },
-                { id:"ai", label:"✨ AI" },
                 ...(type === "email" ? [{ id:"preview", label:"Preview" }] : []),
               ].map(m => (
                 <button key={m.id}
@@ -719,6 +774,17 @@ export function ComposeModal({
               style={{ padding:"5px 10px", borderRadius:8, border:`1.5px solid ${border}`,
                 background:"transparent", color:C.text3, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
               Preview ↗
+            </button>
+          )}
+
+          {/* AI toggle — email/sms write mode */}
+          {mode === "write" && (
+            <button onClick={() => setShowAiPanel(p => !p)}
+              style={{ padding:"5px 10px", borderRadius:8, border:`1.5px solid ${showAiPanel ? accent : border}`,
+                background: showAiPanel ? `${accent}12` : "transparent",
+                color: showAiPanel ? accent : C.text3,
+                fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+              ✨ AI
             </button>
           )}
 
@@ -747,8 +813,7 @@ export function ComposeModal({
           <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, padding:"16px 22px", overflowY:"auto" }}>
             {mode === "write"    && WriteArea()}
             {mode === "template" && TemplateArea()}
-            {mode === "ai"       && AIArea()}
-            {mode === "preview"  && PreviewArea()}
+                {mode === "preview"  && PreviewArea()}
           </div>
         </div>
 
