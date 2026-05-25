@@ -505,6 +505,19 @@ export function ComposeModal({
         </AITextEditor>
       ) : null}
 
+      {/* Signature preview — shown inline below body when signature is active */}
+      {type === "email" && includeSignature && activeSignature && (
+        <div style={{ borderTop:`1px dashed ${border}`, marginTop:4, paddingTop:12, opacity:0.75 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>
+            Signature
+          </div>
+          <div
+            dangerouslySetInnerHTML={{ __html: activeSignature }}
+            style={{ fontSize:13, color:C.text2, lineHeight:1.6, pointerEvents:"none" }}
+          />
+        </div>
+      )}
+
       {/* Schedule send */}
       {type === "email" && showSchedule && (
         <div style={{ borderTop:`1.5px solid ${border}`, paddingTop:10, flexShrink:0,
