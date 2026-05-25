@@ -1,7 +1,7 @@
 /**
  * EmailSettings.jsx — User email preferences section in Settings → Your Preferences
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const F = "'Geist', -apple-system, sans-serif";
 const accent = "#4361ee";
@@ -77,28 +77,105 @@ const StatusPill = ({ status }) => {
 };
 
 const FooterEditor = ({ value, onChange }) => {
-  const [mode, setMode] = useState("edit");
+  const [mode, setMode] = useState("visual"); // visual | html | preview
+  const editorRef = useRef(null);
+
+  // Sync contentEditable → state on blur
+  const handleBlur = () => {
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  };
+
+  // Toolbar command helper
+  const cmd = (command, arg = null) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, arg);
+    onChange(editorRef.current.innerHTML);
+  };
+
+  const btnStyle = (active) => ({
+    padding: "3px 8px", borderRadius: 5, border: `1px solid ${active ? accent : "#e5e7eb"}`,
+    background: active ? `${accent}15` : "white", color: active ? accent : "#374151",
+    fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: F, lineHeight: 1.4,
+  });
+
+  const ToolBtn = ({ label, title, onClick }) => (
+    <button type="button" title={title} onClick={onClick} style={btnStyle(false)}>{label}</button>
+  );
+
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        {["edit", "preview"].map(m => (
-          <button key={m} onClick={() => setMode(m)}
-            style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${mode === m ? accent : "#e5e7eb"}`, background: mode === m ? `${accent}10` : "white", color: mode === m ? accent : "#6b7280", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: F }}>
-            {m === "edit" ? "Edit" : "Preview"}
+    <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
+      {/* Mode tabs */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1.5px solid #e5e7eb", background: "#f9fafb" }}>
+        {[["visual","Visual"],["html","HTML"],["preview","Preview"]].map(([m, label]) => (
+          <button key={m} type="button" onClick={() => {
+            if (m === "html" && editorRef.current) onChange(editorRef.current.innerHTML);
+            setMode(m);
+          }} style={{ padding: "6px 14px", border: "none", borderRight: "1px solid #e5e7eb", background: mode===m ? "white" : "transparent", color: mode===m ? accent : "#6b7280", fontSize: 12, fontWeight: mode===m ? 700 : 500, cursor: "pointer", fontFamily: F }}>
+            {label}
           </button>
         ))}
       </div>
-      {mode === "edit" ? (
-        <textarea value={value || ""} onChange={e => onChange(e.target.value)}
-          placeholder={"e.g.\nBest regards,\nJames Harrington\nTalent Acquisition Manager\njames@company.com | +44 7700 000000"}
-          rows={6}
-          style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e5e7eb", fontSize: 13, fontFamily: "ui-monospace, monospace", resize: "vertical", boxSizing: "border-box", color: "#111827" }} />
-      ) : (
-        <div style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e5e7eb", minHeight: 100, fontSize: 13, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap", background: "#f9fafb" }}>
-          {value || <span style={{ color: "#9ca3af" }}>No signature set — it will appear here</span>}
+
+      {/* Visual toolbar */}
+      {mode === "visual" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 8px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
+          <ToolBtn label="B" title="Bold" onClick={() => cmd("bold")} />
+          <ToolBtn label="I" title="Italic" onClick={() => cmd("italic")} />
+          <ToolBtn label="U" title="Underline" onClick={() => cmd("underline")} />
+          <div style={{ width: 1, background: "#e5e7eb", margin: "2px 4px" }} />
+          <ToolBtn label="H1" title="Heading 1" onClick={() => cmd("formatBlock","<h1>")} />
+          <ToolBtn label="H2" title="Heading 2" onClick={() => cmd("formatBlock","<h2>")} />
+          <ToolBtn label="¶"  title="Paragraph" onClick={() => cmd("formatBlock","<p>")} />
+          <div style={{ width: 1, background: "#e5e7eb", margin: "2px 4px" }} />
+          <ToolBtn label="• List" title="Bullet list" onClick={() => cmd("insertUnorderedList")} />
+          <ToolBtn label="Link" title="Insert link" onClick={() => {
+            const url = prompt("URL:", "https://");
+            if (url) cmd("createLink", url);
+          }} />
+          <ToolBtn label="—" title="Remove formatting" onClick={() => cmd("removeFormat")} />
+          <div style={{ width: 1, background: "#e5e7eb", margin: "2px 4px" }} />
+          {/* Colour picker */}
+          <label title="Text colour" style={{ display:"flex", alignItems:"center", gap:4, cursor:"pointer", fontSize:12, color:"#374151" }}>
+            A
+            <input type="color" defaultValue="#000000" onChange={e => cmd("foreColor", e.target.value)}
+              style={{ width:18, height:18, border:"none", padding:0, cursor:"pointer", background:"none" }} />
+          </label>
         </div>
       )}
-      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Plain text only. Use line breaks to separate lines.</div>
+
+      {/* Visual editor */}
+      {mode === "visual" && (
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={handleBlur}
+          dangerouslySetInnerHTML={{ __html: value || "" }}
+          style={{ minHeight: 130, padding: "12px 14px", fontSize: 13, fontFamily: F, color: "#111827", outline: "none", lineHeight: 1.7 }}
+        />
+      )}
+
+      {/* HTML source editor */}
+      {mode === "html" && (
+        <textarea value={value || ""} onChange={e => onChange(e.target.value)}
+          rows={8}
+          placeholder="<p>Best regards,</p><p><strong>James Harrington</strong></p>"
+          style={{ width: "100%", padding: "12px 14px", border: "none", fontSize: 12, fontFamily: "ui-monospace, monospace", resize: "vertical", boxSizing: "border-box", color: "#111827", outline: "none", display: "block" }} />
+      )}
+
+      {/* Preview */}
+      {mode === "preview" && (
+        <div style={{ minHeight: 100, padding: "12px 14px", fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
+          {value
+            ? <div dangerouslySetInnerHTML={{ __html: value }} />
+            : <span style={{ color: "#9ca3af" }}>No signature set — it will appear here</span>
+          }
+        </div>
+      )}
+
+      <div style={{ padding: "4px 10px", background: "#f9fafb", borderTop: "1px solid #f0f0f0", fontSize: 11, color: "#9ca3af" }}>
+        HTML supported · Use Preview tab to check how it looks in email
+      </div>
     </div>
   );
 };
