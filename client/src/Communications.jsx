@@ -189,6 +189,7 @@ export function ComposeModal({
   const [templates,  setTemplates] = useState([]);
   const [selTpl,     setSelTpl]    = useState(null);
   const [aiLoading,  setAiLoading] = useState(false);
+  const [aiPrompt,   setAiPrompt]  = useState('');
   const [aiTone,     setAiTone]    = useState("professional");
   const [aiLength,   setAiLength]  = useState("concise");
   const [saving,     setSaving]    = useState(false);
@@ -286,9 +287,10 @@ export function ComposeModal({
     const d = record?.data || {};
     const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || "the candidate";
     const lengthInstr = aiLength === "concise" ? "Keep it to 3-4 sentences." : aiLength === "detailed" ? "Write 2-3 paragraphs with detail." : "Keep it medium length, 1 short paragraph.";
+    const extraContext = aiPrompt.trim() ? `\nAdditional context / instructions: ${aiPrompt.trim()}` : "";
     const prompt = type === "email"
-      ? `Write a ${aiTone} outreach email to ${name} (${d.current_title || "professional"} in ${d.location || "their location"}). ${lengthInstr} Personalise it. Return JSON only: {"subject":"...","body":"..."}`
-      : `Write a brief, ${aiTone} ${type} message to ${name}. Under 160 chars for SMS. Return JSON only: {"body":"..."}`;
+      ? `Write a ${aiTone} outreach email to ${name} (${d.current_title || "professional"} in ${d.location || "their location"}). ${lengthInstr} Personalise it.${extraContext} Return JSON only: {"subject":"...","body":"..."}`
+      : `Write a brief, ${aiTone} ${type} message to ${name}. Under 160 chars for SMS.${extraContext} Return JSON only: {"body":"..."}`;
     try {
       const res = await tFetch("/api/ai/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -585,6 +587,15 @@ export function ComposeModal({
             </div>
           ))}
         </div>
+        <textarea
+          value={aiPrompt}
+          onChange={e => setAiPrompt(e.target.value)}
+          placeholder="Describe what you want to say, or leave blank for a general outreach email…"
+          rows={3}
+          style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:8,
+            border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
+            resize:"vertical", color:C.text1, background:"white", lineHeight:1.6, marginBottom:4 }}
+        />
         <button onClick={handleAiCompose} disabled={aiLoading}
           style={{ width:"100%", padding:"9px", borderRadius:9, border:"none", background:accent,
             color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
@@ -636,7 +647,14 @@ export function ComposeModal({
         </div>
         <div style={{ padding:"28px 32px", background:"white", color:"#111827", lineHeight:1.8 }}>
           {subject && <div style={{ fontWeight:700, fontSize:16, marginBottom:14 }}>{subject}</div>}
-          <div style={{ whiteSpace:"pre-wrap", color:"#374151" }}>{body || <span style={{ color:"#9ca3af" }}>Your message will appear here…</span>}</div>
+          {body
+            ? <div dangerouslySetInnerHTML={{ __html: body }} style={{ color:"#374151" }}/>
+            : <span style={{ color:"#9ca3af" }}>Your message will appear here…</span>}
+          {includeSignature && activeSignature && (
+            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:20, paddingTop:16 }}>
+              <div dangerouslySetInnerHTML={{ __html: activeSignature }} style={{ fontSize:13, lineHeight:1.6 }}/>
+            </div>
+          )}
         </div>
         <div style={{ background:"#f8f9fc", padding:"12px 28px", textAlign:"center", fontSize:11, color:"#9ca3af", borderTop:`1px solid ${border}` }}>
           Sent via Vercentic · <span style={{ textDecoration:"underline", cursor:"pointer" }}>Unsubscribe</span>
@@ -682,7 +700,7 @@ export function ComposeModal({
                 ...(type === "email" ? [{ id:"preview", label:"Preview" }] : []),
               ].map(m => (
                 <button key={m.id}
-                  onClick={() => { setMode(m.id); if (m.id === "ai" && !body) handleAiCompose(); }}
+                  onClick={() => setMode(m.id)}
                   style={{ padding:"5px 12px", borderRadius:8, border:"none",
                     background: mode === m.id ? "white" : "transparent",
                     boxShadow: mode === m.id ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
