@@ -287,21 +287,40 @@ export function ComposeModal({
     setAiLoading(true);
     const d = record?.data || {};
     const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || "the candidate";
-    const lengthInstr = aiLength === "concise" ? "Keep it to 3-4 sentences." : aiLength === "detailed" ? "Write 2-3 paragraphs with detail." : "Keep it medium length, 1 short paragraph.";
-    const extraContext = aiPrompt.trim() ? `\nAdditional context / instructions: ${aiPrompt.trim()}` : "";
+
+    // Build rich person context — only when composing to a single person
+    const personContext = !isBulk ? [
+      d.current_title    && `Current role: ${d.current_title}`,
+      d.location         && `Location: ${d.location}`,
+      d.skills?.length   && `Skills: ${Array.isArray(d.skills) ? d.skills.join(", ") : d.skills}`,
+      d.years_experience && `Experience: ${d.years_experience} years`,
+      d.source           && `Source: ${d.source}`,
+      d.nationality      && `Nationality: ${d.nationality}`,
+      d.status           && `Current status: ${d.status}`,
+      d.education        && `Education: ${d.education}`,
+      d.linkedin_url     && `LinkedIn: ${d.linkedin_url}`,
+      d.summary          && `Profile summary: ${d.summary}`,
+    ].filter(Boolean).join("\n") : "";
+
+    const lengthInstr = aiLength === "concise" ? "Keep it to 3-4 sentences." : aiLength === "detailed" ? "Write 2-3 paragraphs with detail." : "Keep it to 1 short paragraph.";
+    const extraContext = aiPrompt.trim() ? `\nInstructions: ${aiPrompt.trim()}` : "";
+    const contextBlock = personContext ? `\n\nCandidate profile:\n${personContext}` : "";
+
     const prompt = type === "email"
-      ? `Write a ${aiTone} outreach email to ${name} (${d.current_title || "professional"} in ${d.location || "their location"}). ${lengthInstr} Personalise it.${extraContext} Return JSON only: {"subject":"...","body":"..."}`
-      : `Write a brief, ${aiTone} ${type} message to ${name}. Under 160 chars for SMS.${extraContext} Return JSON only: {"body":"..."}`;
+      ? `Write a ${aiTone} recruitment email to ${name}.${contextBlock}${extraContext}\n${lengthInstr} Personalise based on their profile. Return JSON only — no markdown, no code fences: {"subject":"...","body":"<p>...</p>"}`
+      : `Write a brief, ${aiTone} ${type} message to ${name}.${extraContext} Under 160 chars for SMS. Return JSON only: {"body":"..."}`;
     try {
       const data = await tFetch("/api/ai/chat", {
         method: "POST",
-        body: { messages: [{ role: "user", content: prompt }], max_tokens: 600 },
+        body: { messages: [{ role: "user", content: prompt }], max_tokens: 800 },
       });
-      const clean = (data?.content || "").replace(/```json|```/g, "").trim();
+      const raw = data?.content || "";
+      // Strip any code fences the model may have added despite instructions
+      const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       const parsed = JSON.parse(clean);
       if (parsed.subject) setSubject(parsed.subject);
       if (parsed.body)    setBody(parsed.body);
-      setShowAiPanel(false); // collapse panel after generating
+      setShowAiPanel(false);
     } catch (err) { console.error('[AI Compose]', err); }
     setAiLoading(false);
   };

@@ -11,7 +11,7 @@ import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import ReactDOM from "react-dom";
 
 // ── Colours ──────────────────────────────────────────────────────────────────
@@ -235,6 +235,17 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
     setShowImage(false);
     editor.chain().focus().setImage({ src, alt: alt || "" }).run();
   }, [editor]);
+
+  // Sync external value changes into the editor (e.g. AI-generated content)
+  // Only update if the new value is meaningfully different to avoid cursor-jump on every keystroke
+  useEffect(() => {
+    if (!editor || value === undefined) return;
+    const current = editor.getHTML();
+    if (value !== current) {
+      editor.commands.setContent(value || "", false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   if (!editor) return null;
 
