@@ -602,7 +602,9 @@ app.get('/robots.txt',  (req, res) => res.type('text/plain').send('User-agent: *
 app.get('/api/health', (req, res) => {
   if (!storeReady) return res.status(503).json({ status: 'starting' });
   const { stats } = require('./utils/cache');
+  // no-store + no compression to avoid Content-Length mismatch on keep-alive connections
   res.set('Cache-Control', 'no-store');
+  res.set('Content-Encoding', 'identity'); // tell compression middleware to skip this route
   const pg = require('./db/postgres');
   const mem = process.memoryUsage();
   res.json({

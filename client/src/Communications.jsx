@@ -189,6 +189,8 @@ export function ComposeModal({
   const [templates,  setTemplates] = useState([]);
   const [selTpl,     setSelTpl]    = useState(null);
   const [aiLoading,  setAiLoading] = useState(false);
+  const [aiPrompt,   setAiPrompt]  = useState('');
+  const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiTone,     setAiTone]    = useState("professional");
   const [aiLength,   setAiLength]  = useState("concise");
   const [saving,     setSaving]    = useState(false);
@@ -200,6 +202,9 @@ export function ComposeModal({
   const [showPreview, setShowPreview] = useState(false);
   const [scheduleAt,  setScheduleAt] = useState("");
   const [showSchedule,setShowSchedule] = useState(false);
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [userSignature,    setUserSignature]    = useState("");   // HTML from preferences
+  const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
 
   const meta = TYPE_META[type] || {};
   const bodyText = type === "email" ? htmlToText(body) : body;
@@ -210,6 +215,26 @@ export function ComposeModal({
   useEffect(() => {
     api.get('/comms/status').then(s => setProviderStatus(s)).catch(() => {});
   }, []);
+
+  // Load user signature preferences (and org fallback)
+  useEffect(() => {
+    fetch("/api/users/me/preferences", { credentials: "include" })
+      .then(r => r.json())
+      .then(prefs => {
+        if (prefs?.email_footer) {
+          setUserSignature(prefs.email_footer);
+        } else if (environment?.default_email_footer) {
+          setOrgSignature(environment.default_email_footer);
+        } else if (environment?.id) {
+          // Fetch org default from environment
+          fetch(`/api/environments/${environment.id}`, { credentials: "include" })
+            .then(r => r.json())
+            .then(env => { if (env?.default_email_footer) setOrgSignature(env.default_email_footer); })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [environment?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
@@ -262,22 +287,45 @@ export function ComposeModal({
     setAiLoading(true);
     const d = record?.data || {};
     const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || "the candidate";
-    const lengthInstr = aiLength === "concise" ? "Keep it to 3-4 sentences." : aiLength === "detailed" ? "Write 2-3 paragraphs with detail." : "Keep it medium length, 1 short paragraph.";
+
+    // Build rich person context — only when composing to a single person
+    const personContext = !isBulk ? [
+      d.current_title    && `Current role: ${d.current_title}`,
+      d.location         && `Location: ${d.location}`,
+      d.skills?.length   && `Skills: ${Array.isArray(d.skills) ? d.skills.join(", ") : d.skills}`,
+      d.years_experience && `Experience: ${d.years_experience} years`,
+      d.source           && `Source: ${d.source}`,
+      d.nationality      && `Nationality: ${d.nationality}`,
+      d.status           && `Current status: ${d.status}`,
+      d.education        && `Education: ${d.education}`,
+      d.linkedin_url     && `LinkedIn: ${d.linkedin_url}`,
+      d.summary          && `Profile summary: ${d.summary}`,
+    ].filter(Boolean).join("\n") : "";
+
+    const lengthInstr = aiLength === "concise"
+      ? "Write 2 short paragraphs."
+      : aiLength === "detailed"
+      ? "Write 3-4 well-structured paragraphs."
+      : "Write 2-3 paragraphs.";
+    const extraContext = aiPrompt.trim() ? `\nInstructions: ${aiPrompt.trim()}` : "";
+    const contextBlock = personContext ? `\n\nCandidate profile:\n${personContext}` : "";
+
     const prompt = type === "email"
-      ? `Write a ${aiTone} outreach email to ${name} (${d.current_title || "professional"} in ${d.location || "their location"}). ${lengthInstr} Personalise it. Return JSON only: {"subject":"...","body":"..."}`
-      : `Write a brief, ${aiTone} ${type} message to ${name}. Under 160 chars for SMS. Return JSON only: {"body":"..."}`;
+      ? `Write a ${aiTone} recruitment email to ${name}.${contextBlock}${extraContext}\n${lengthInstr} Personalise based on their profile. Use natural paragraph breaks — each paragraph should be a separate <p> tag. Return JSON only — no markdown, no code fences: {"subject":"...","body":"<p>paragraph one</p><p>paragraph two</p>"}`
+      : `Write a brief, ${aiTone} ${type} message to ${name}.${extraContext} Under 160 chars for SMS. Return JSON only: {"body":"..."}`;
     try {
-      const res = await tFetch("/api/ai/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens: 600 }),
+      const data = await tFetch("/api/ai/chat", {
+        method: "POST",
+        body: { messages: [{ role: "user", content: prompt }], max_tokens: 800 },
       });
-      const data = await res.json();
-      const clean = (data?.content || "").replace(/```json|```/g, "").trim();
+      const raw = data?.content || "";
+      // Strip any code fences the model may have added despite instructions
+      const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       const parsed = JSON.parse(clean);
       if (parsed.subject) setSubject(parsed.subject);
       if (parsed.body)    setBody(parsed.body);
-      setMode("write");
-    } catch { /* ignore */ }
+      setShowAiPanel(false);
+    } catch (err) { console.error('[AI Compose]', err); }
     setAiLoading(false);
   };
 
@@ -293,9 +341,9 @@ export function ComposeModal({
         record_id: rec.id, environment_id: environment?.id,
         type, direction, to: recTo || undefined,
         subject: subject || undefined,
-        body: type === "email" ? body : bodyText, // HTML for email, plain for others
-        body_html: type === "email" ? body : undefined,
-        body_text: type === "email" ? bodyText : undefined,
+        body: type === "email" ? bodyWithSignature : bodyText,
+        body_html: type === "email" ? bodyWithSignature : undefined,
+        body_text: type === "email" ? htmlToText(bodyWithSignature) : undefined,
         duration_seconds: duration ? Number(duration) : undefined,
         outcome: outcome || undefined,
         from_label: direction === "inbound" ? "External" : "Me",
@@ -310,6 +358,13 @@ export function ComposeModal({
 
   const isSimulated = providerStatus && type !== "call" && direction === "outbound" && providerStatus[type] === "simulation";
   const canSend = type === "call" ? true : !!bodyText.trim();
+
+  // Effective signature — user's own takes priority over org default
+  const activeSignature = userSignature || orgSignature;
+  // Full email body = composed body + signature separator + signature HTML
+  const bodyWithSignature = (type === "email" && includeSignature && activeSignature)
+    ? `${body}<br/><br/><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;"/>${activeSignature}`
+    : body;
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const accent = meta.color || C.accent;
@@ -456,6 +511,65 @@ export function ComposeModal({
         </div>
       )}
 
+      {/* ── Inline AI panel — appears between subject and body ── */}
+      {showAiPanel && (
+        <div style={{ borderBottom:`1.5px solid ${accent}25`, background:`${accent}06`,
+          padding:"12px 14px 14px", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:accent }}>✨ AI Compose</span>
+            <button onClick={() => setShowAiPanel(false)}
+              style={{ background:"none", border:"none", cursor:"pointer", fontSize:15, color:C.text3, lineHeight:1 }}>×</button>
+          </div>
+          {/* Tone + Length */}
+          <div style={{ display:"flex", gap:16, marginBottom:8, flexWrap:"wrap" }}>
+            {[
+              { label:"Tone", value:aiTone, setter:setAiTone, opts:[["professional","Professional"],["friendly","Friendly"],["formal","Formal"],["casual","Casual"],["persuasive","Persuasive"]] },
+              { label:"Length", value:aiLength, setter:setAiLength, opts:[["concise","Concise"],["medium","Medium"],["detailed","Detailed"]] },
+            ].map(({ label, value, setter, opts }) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                <span style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", whiteSpace:"nowrap" }}>{label}</span>
+                {opts.map(([val, lbl]) => (
+                  <button key={val} onClick={() => setter(val)}
+                    style={{ padding:"3px 8px", borderRadius:6,
+                      border:`1.5px solid ${value === val ? accent : border}`,
+                      background: value === val ? `${accent}15` : "white",
+                      color: value === val ? accent : C.text3,
+                      fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          {/* Prompt textarea */}
+          <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+            <textarea
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAiCompose(); }}
+              placeholder="Describe what to say, or leave blank for a general outreach…"
+              rows={2}
+              style={{ flex:1, padding:"7px 10px", borderRadius:7,
+                border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
+                resize:"none", color:C.text1, background:"white", lineHeight:1.5 }}
+            />
+            <button onClick={handleAiCompose} disabled={aiLoading}
+              style={{ padding:"7px 14px", borderRadius:7, border:"none",
+                background:accent, color:"white", fontSize:12, fontWeight:700,
+                cursor:aiLoading?"not-allowed":"pointer", fontFamily:"inherit",
+                display:"flex", alignItems:"center", gap:6, opacity:aiLoading?0.7:1, whiteSpace:"nowrap", flexShrink:0 }}>
+              {aiLoading ? (
+                <>
+                  <span style={{ width:11, height:11, border:"2px solid white", borderTopColor:"transparent",
+                    borderRadius:"50%", display:"inline-block", animation:"spin .7s linear infinite" }}/>
+                  Generating…
+                </>
+              ) : "✨ Generate"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Body — RichTextEditor for email, plain textarea for SMS/WhatsApp/call */}
       {type === "email" ? (
         <RichTextEditor
@@ -475,6 +589,19 @@ export function ComposeModal({
         </AITextEditor>
       ) : null}
 
+      {/* Signature preview — shown inline below body when signature is active */}
+      {type === "email" && includeSignature && activeSignature && (
+        <div style={{ borderTop:`1px dashed ${border}`, marginTop:4, paddingTop:12, opacity:0.75 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>
+            Signature
+          </div>
+          <div
+            dangerouslySetInnerHTML={{ __html: activeSignature }}
+            style={{ fontSize:13, color:C.text2, lineHeight:1.6, pointerEvents:"none" }}
+          />
+        </div>
+      )}
+
       {/* Schedule send */}
       {type === "email" && showSchedule && (
         <div style={{ borderTop:`1.5px solid ${border}`, paddingTop:10, flexShrink:0,
@@ -486,6 +613,8 @@ export function ComposeModal({
             style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.text3 }}>×</button>
         </div>
       )}
+
+
     </div>
   );
 
@@ -542,6 +671,15 @@ export function ComposeModal({
             </div>
           ))}
         </div>
+        <textarea
+          value={aiPrompt}
+          onChange={e => setAiPrompt(e.target.value)}
+          placeholder="Describe what you want to say, or leave blank for a general outreach email…"
+          rows={3}
+          style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:8,
+            border:`1.5px solid ${border}`, fontSize:12, fontFamily:"inherit", outline:"none",
+            resize:"vertical", color:C.text1, background:"white", lineHeight:1.6, marginBottom:4 }}
+        />
         <button onClick={handleAiCompose} disabled={aiLoading}
           style={{ width:"100%", padding:"9px", borderRadius:9, border:"none", background:accent,
             color:"white", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
@@ -593,7 +731,14 @@ export function ComposeModal({
         </div>
         <div style={{ padding:"28px 32px", background:"white", color:"#111827", lineHeight:1.8 }}>
           {subject && <div style={{ fontWeight:700, fontSize:16, marginBottom:14 }}>{subject}</div>}
-          <div style={{ whiteSpace:"pre-wrap", color:"#374151" }}>{body || <span style={{ color:"#9ca3af" }}>Your message will appear here…</span>}</div>
+          {body
+            ? <div dangerouslySetInnerHTML={{ __html: body }} style={{ color:"#374151" }}/>
+            : <span style={{ color:"#9ca3af" }}>Your message will appear here…</span>}
+          {includeSignature && activeSignature && (
+            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:20, paddingTop:16 }}>
+              <div dangerouslySetInnerHTML={{ __html: activeSignature }} style={{ fontSize:13, lineHeight:1.6 }}/>
+            </div>
+          )}
         </div>
         <div style={{ background:"#f8f9fc", padding:"12px 28px", textAlign:"center", fontSize:11, color:"#9ca3af", borderTop:`1px solid ${border}` }}>
           Sent via Vercentic · <span style={{ textDecoration:"underline", cursor:"pointer" }}>Unsubscribe</span>
@@ -635,11 +780,10 @@ export function ComposeModal({
               {[
                 { id:"write", label:"Write" },
                 { id:"template", label:"Template" },
-                { id:"ai", label:"✨ AI" },
                 ...(type === "email" ? [{ id:"preview", label:"Preview" }] : []),
               ].map(m => (
                 <button key={m.id}
-                  onClick={() => { setMode(m.id); if (m.id === "ai" && !body) handleAiCompose(); }}
+                  onClick={() => setMode(m.id)}
                   style={{ padding:"5px 12px", borderRadius:8, border:"none",
                     background: mode === m.id ? "white" : "transparent",
                     boxShadow: mode === m.id ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
@@ -658,6 +802,17 @@ export function ComposeModal({
               style={{ padding:"5px 10px", borderRadius:8, border:`1.5px solid ${border}`,
                 background:"transparent", color:C.text3, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
               Preview ↗
+            </button>
+          )}
+
+          {/* AI toggle — email/sms write mode */}
+          {mode === "write" && (
+            <button onClick={() => setShowAiPanel(p => !p)}
+              style={{ padding:"5px 10px", borderRadius:8, border:`1.5px solid ${showAiPanel ? accent : border}`,
+                background: showAiPanel ? `${accent}12` : "transparent",
+                color: showAiPanel ? accent : C.text3,
+                fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+              ✨ AI
             </button>
           )}
 
@@ -686,8 +841,7 @@ export function ComposeModal({
           <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, padding:"16px 22px", overflowY:"auto" }}>
             {mode === "write"    && WriteArea()}
             {mode === "template" && TemplateArea()}
-            {mode === "ai"       && AIArea()}
-            {mode === "preview"  && PreviewArea()}
+                {mode === "preview"  && PreviewArea()}
           </div>
         </div>
 
@@ -702,6 +856,15 @@ export function ComposeModal({
                 background:"transparent", color:C.text3, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
               🕐 Schedule
             </button>
+          )}
+
+          {/* Signature toggle — email only */}
+          {type === "email" && activeSignature && (
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:C.text2 }}>
+              <input type="checkbox" checked={includeSignature} onChange={e => setIncludeSignature(e.target.checked)}
+                style={{ width:14, height:14, accentColor:accent, cursor:"pointer" }}/>
+              Include signature
+            </label>
           )}
 
           <div style={{ flex:1 }}/>

@@ -1894,23 +1894,20 @@ activeNavRef.current = activeNav;
         if (d.env)     setAppEnv(d.env);
       })
       .catch(() => setApiOnline(false));
-    // Poll every 5s — detects server restarts so nav objects reload automatically
+    // Poll every 30s — detects server restarts so nav objects reload automatically
     const poll = setInterval(() => {
       fetch("/api/health")
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(() => setApiOnline(prev => {
           // Flipping false→true triggers the environments/objects reload via the useEffect below
           if (prev !== true) {
-            // Notify RecordsView (and any other subscriber) that the server came back.
-            // This lets list pages recover automatically after a nodemon restart without
-            // requiring the user to navigate away and back.
             window.dispatchEvent(new CustomEvent('talentos:server-online'));
             return true;
           }
-          return prev; // already online — no state change, no unnecessary re-render
+          return prev;
         }))
-        .catch(() => setApiOnline(prev => prev === true ? false : prev)); // silent — expected during deploy restarts
-    }, 5000);
+        .catch(() => setApiOnline(prev => prev === true ? false : prev));
+    }, 30000);
     return () => clearInterval(poll);
   }, []);
 

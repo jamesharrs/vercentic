@@ -18,6 +18,26 @@ router.get('/session/:token', (req, res) => {
   if (new Date(tr.expires_at) < new Date()) return res.status(410).json({ error: 'This interview link has expired' });
   const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  // Resolve brand kit — prefer agent's own kit, then env default, then plain fallback
+  const envId = tr.environment_id || agent.environment_id;
+  const brandKits = (store.brand_kits || []).filter(k => !k.deleted_at && k.environment_id === envId);
+  const brandKit  = brandKits.find(k => k.id === agent.brand_kit_id)
+                 || brandKits.find(k => k.is_default)
+                 || null;
+  const brand = brandKit ? {
+    company_name:  brandKit.company_name  || brandKit.name || null,
+    logo_url:      brandKit.logo_url      || null,
+    logo_dark_url: brandKit.logo_dark_url || null,
+    favicon_url:   brandKit.favicon_url   || null,
+    primary_color: brandKit.primaryColor  || '#6366f1',
+    bg_color:      brandKit.bgColor       || null,
+    text_color:    brandKit.textColor     || null,
+    font_family:   brandKit.fontFamily    || null,
+    button_style:  brandKit.buttonStyle   || 'filled',
+    button_radius: brandKit.buttonRadius  || '8px',
+  } : null;
+
   res.json({
     token: tr.token,
     candidate_name: tr.candidate_name,
@@ -27,10 +47,11 @@ router.get('/session/:token', (req, res) => {
       persona_name: agent.persona_name || agent.name || 'Alex',
       persona_description: agent.persona_description || "Hi, I'm here to learn more about you.",
       instructions: agent.description || '',
-      avatar_color: agent.avatar_color || '#6366f1',
+      avatar_color: agent.avatar_color || brand?.primary_color || '#6366f1',
       voice: agent.voice || 'en-US',
       language: agent.language || 'en-US',
     },
+    brand,
     question_count: (tr.scorecard_questions || []).length,
     status: tr.status,
   });
@@ -44,7 +65,7 @@ router.post('/chat', async (req, res) => {
   const tr = (store.agent_tokens || []).find(t => t.token === token);
   if (!tr) return res.status(404).json({ error: 'Invalid token' });
   if (tr.status === 'completed') return res.status(410).json({ error: 'Interview already completed' });
-  if (tr.status === 'pending') { tr.status = 'in_progress'; tr.started_at = new Date().toISOString(); saveStore(store); }
+  if (tr.status === 'pending') { tr.status = 'in_progress'; tr.started_at = new Date().toISOString(); saveStore(); }
 
   const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
@@ -178,8 +199,95 @@ router.post('/complete', async (req, res) => {
     }
   }
 
-  saveStore(store);
+  saveStore();
   res.json({ success:true, summary, recommendation, key_strengths:keyStrengths, concerns, questions_scored:Object.keys(scores).length });
+});
+
+// ── POST /api/ai-interview/tokens — create an interview link ─────────────────
+router.post('/tokens', (req, res) => {
+  const { agent_id, environment_id, candidate_name, candidate_email, job_title, job_department, job_id, scorecard_questions, expires_hours = 24 } = req.body;
+  if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
+  const store = getStore();
+  const agent = (store.agents || []).find(a => a.id === agent_id && !a.deleted_at);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  // Resolve environment: explicit > agent's own > fallback
+  const resolvedEnvId = environment_id || agent.environment_id || null;
+  const token = uuidv4();
+  const expires_at = new Date(Date.now() + expires_hours * 3600 * 1000).toISOString();
+  const record = { id: uuidv4(), token, agent_id, environment_id: resolvedEnvId, candidate_name: candidate_name || 'Candidate', candidate_email: candidate_email || null, job_title: job_title || null, job_department: job_department || null, job_id: job_id || null, scorecard_questions: scorecard_questions || [], status: 'pending', started_at: null, completed_at: null, expires_at, created_at: new Date().toISOString() };
+  if (!store.agent_tokens) store.agent_tokens = [];
+  store.agent_tokens.push(record);
+  saveStore();
+  res.json({ ...record, interview_url: `/interview/${token}` });
+});
+
+// ── POST /api/ai-interview/agents — create a voice interview agent ────────────
+router.post('/agents', (req, res) => {
+  const { name, persona_name, persona_description, avatar_color, language } = req.body;
+  const store = getStore();
+  const agent = { id: uuidv4(), name: name || 'AI Interviewer', persona_name: persona_name || 'Alex', persona_description: persona_description || '', avatar_color: avatar_color || '#6366f1', language: language || 'en-US', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  if (!store.agents) store.agents = [];
+  store.agents.push(agent);
+  saveStore();
+  res.json(agent);
+});
+
+// ── GET /api/ai-interview/agents — list agents ────────────────────────────────
+router.get('/agents', (req, res) => {
+  const store = getStore();
+  res.json((store.agents || []).filter(a => !a.deleted_at));
+});
+
+// ── PATCH /api/ai-interview/agents/:id — update agent ────────────────────────
+router.patch('/agents/:id', (req, res) => {
+  const store = getStore();
+  const idx = (store.agents || []).findIndex(a => a.id === req.params.id && !a.deleted_at);
+  if (idx === -1) return res.status(404).json({ error: 'Agent not found' });
+  const allowed = ['name','persona_name','persona_description','avatar_color','language','environment_id','brand_kit_id'];
+  allowed.forEach(k => { if (req.body[k] !== undefined) store.agents[idx][k] = req.body[k]; });
+  store.agents[idx].updated_at = new Date().toISOString();
+  saveStore();
+  res.json(store.agents[idx]);
+});
+
+// ── POST /api/ai-interview/tts ─────────────────────────────────────────────
+// Proxy ElevenLabs TTS so the API key stays server-side.
+// Voice ID: "Rachel" — warm, natural, professional female voice (free tier).
+const ELEVEN_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Rachel
+router.post('/tts', async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}/stream`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_turbo_v2', // lowest latency, very natural
+          voice_settings: { stability: 0.45, similarity_boost: 0.82, style: 0.15, use_speaker_boost: true },
+        }),
+      }
+    );
+    if (!response.ok) {
+      const err = await response.text();
+      return res.status(response.status).json({ error: err });
+    }
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-cache');
+    // Stream directly to client
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

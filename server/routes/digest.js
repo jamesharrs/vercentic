@@ -138,32 +138,13 @@ function buildHtml(digest, recipientName) {
 </table></td></tr></table></body></html>`;
 }
 
+// Use the central mailer service (Resend) instead of a hardcoded SendGrid call
+const mailer = require('../services/mailer');
+
 async function sendEmail(to, toName, subject, html) {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from   = process.env.SENDGRID_FROM_EMAIL;
-  const fromN  = process.env.SENDGRID_FROM_NAME || 'Vercentic';
-  if (!apiKey || !from) throw new Error('SendGrid not configured');
-
-  const payload = JSON.stringify({
-    personalizations: [{ to: [{ email: to, name: toName||'' }] }],
-    from: { email: from, name: fromN },
-    subject,
-    content: [{ type: 'text/html', value: html }],
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: 'api.sendgrid.com', path: '/v3/mail/send', method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload) },
-    }, res => {
-      let body = '';
-      res.on('data', d => { body += d; });
-      res.on('end', () => res.statusCode === 202 ? resolve({ ok: true }) : reject(new Error(`SendGrid ${res.statusCode}: ${body}`)));
-    });
-    req.on('error', reject);
-    req.write(payload); req.end();
-  });
+  const result = await mailer.sendEmail({ to, subject, html, text: html.replace(/<[^>]+>/g,'') });
+  if (!result || result.error) throw new Error(result?.error || 'Send failed');
+  return { ok: true };
 }
 
 // GET /api/digest/preview — return rendered HTML (view in browser)

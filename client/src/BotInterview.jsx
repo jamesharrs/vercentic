@@ -44,15 +44,26 @@ const InfoCard = ({ icon, label, value }) => (
   </div>
 );
 
-function Shell({ children }) {
+function Shell({ children, brand }) {
+  const primary = brand?.primary_color || '#4361ee';
+  const font = brand?.font_family
+    ? `'${brand.font_family.replace(/['"]/g,'').split(',')[0].trim()}', -apple-system, sans-serif`
+    : "'Geist', -apple-system, sans-serif";
+  const logo = brand?.logo_url || null;
+  const company = brand?.company_name || null;
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)", fontFamily: "'Geist', -apple-system, sans-serif", display: "flex", flexDirection: "column" }}>
-      <div style={{ background: "white", borderBottom: "1px solid #e5e7eb", padding: "14px 24px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #4361ee, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: "white", fontSize: 13, fontWeight: 900 }}>T</span>
-        </div>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>Vercentic Interview</span>
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9ca3af" }}>Powered by AI</span>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)", fontFamily: font, display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "white", borderBottom: "1px solid #e5e7eb", padding: "12px 24px", display: "flex", alignItems: "center", gap: 10 }}>
+        {logo ? (
+          <img src={logo} alt={company||''} style={{ height: 28, maxWidth: 120, objectFit: "contain" }} onError={e => e.target.style.display='none'} />
+        ) : (
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${primary}, ${primary}cc)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "white", fontSize: 13, fontWeight: 900 }}>{company?company[0]:'V'}</span>
+          </div>
+        )}
+        {company && <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{company}</span>}
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9ca3af" }}>Powered by Vercentic</span>
       </div>
       <div style={{ flex: 1, padding: "32px 24px", maxWidth: 720, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
         {children}
@@ -116,11 +127,11 @@ export default function BotInterview({ token }) {
 
   const handleKeyDown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitAnswer(); };
 
-  if (phase === "loading") return <Shell><div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 16 }}><div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #e5e7eb", borderTopColor: "#4361ee", animation: "spin 0.7s linear infinite" }}/><p style={{ color: "#6b7280", fontSize: 14 }}>Loading your interview session…</p><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div></Shell>;
-  if (phase === "error") return <Shell><div style={{ textAlign: "center", padding: "48px 24px" }}><h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Session not found</h2><p style={{ color: "#6b7280", fontSize: 14, lineHeight: 1.6 }}>{error || "This interview link may have expired. Please contact your recruiter."}</p></div></Shell>;
+  if (phase === "loading") return <Shell brand={null}><div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 16 }}><div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #e5e7eb", borderTopColor: "#4361ee", animation: "spin 0.7s linear infinite" }}/><p style={{ color: "#6b7280", fontSize: 14 }}>Loading your interview session…</p><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div></Shell>;
+  if (phase === "error") return <Shell brand={null}><div style={{ textAlign: "center", padding: "48px 24px" }}><h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Session not found</h2><p style={{ color: "#6b7280", fontSize: 14, lineHeight: 1.6 }}>{error || "This interview link may have expired. Please contact your recruiter."}</p></div></Shell>;
 
   if (phase === "welcome") return (
-    <Shell>
+    <Shell brand={session?.brand}>
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 32 }}>
           <BotAvatar size={64} />
@@ -147,10 +158,10 @@ export default function BotInterview({ token }) {
     </Shell>
   );
 
-  if (phase === "knocked_out") return <Shell><div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center", padding: "40px 0" }}><div style={{ fontSize: 56, marginBottom: 20 }}>🤝</div><h2 style={{ fontSize: 22, fontWeight: 800, color: "#111827", marginBottom: 12 }}>Thank you for your time</h2><p style={{ fontSize: 15, color: "#6b7280", lineHeight: 1.7 }}>Based on your responses, we aren't able to move forward at this time. We appreciate you taking the time to complete the screening and wish you the very best in your search.</p></div></Shell>;
+  if (phase === "knocked_out") return <Shell brand={session?.brand}><div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center", padding: "40px 0" }}><div style={{ fontSize: 56, marginBottom: 20 }}>🤝</div><h2 style={{ fontSize: 22, fontWeight: 800, color: "#111827", marginBottom: 12 }}>Thank you for your time</h2><p style={{ fontSize: 15, color: "#6b7280", lineHeight: 1.7 }}>Based on your responses, we aren't able to move forward at this time. We appreciate you taking the time to complete the screening and wish you the very best in your search.</p></div></Shell>;
 
   if (phase === "completed") return (
-    <Shell>
+    <Shell brand={session?.brand}>
       <div style={{ maxWidth: 520, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
         <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg, #4361ee, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", fontSize: 36, color: "white", boxShadow: "0 8px 24px rgba(67,97,238,0.3)" }}>✓</div>
         <h2 style={{ fontSize: 24, fontWeight: 800, color: "#111827", marginBottom: 12 }}>Interview Complete!</h2>
@@ -168,7 +179,7 @@ export default function BotInterview({ token }) {
 
   // in_progress
   return (
-    <Shell>
+    <Shell brand={session?.brand}>
       <div style={{ maxWidth: 620, margin: "0 auto" }}>
         {session?.config?.show_progress !== false && <ProgressBar current={progress.current} total={progress.total} />}
         {messages.slice(-4).map((m, i) => (

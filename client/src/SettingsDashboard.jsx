@@ -9,6 +9,7 @@ const DASHBOARD_GROUPS = [
       { id:"appearance",    icon:"sun",      label:"Appearance",      desc:"Theme, colour scheme, font and density" },
       { id:"language",      icon:"globe",    label:"Language",        desc:"Interface language and regional format" },
       { id:"notifications", icon:"bell",     label:"Notifications",   desc:"Manage your notification preferences" },
+      { id:"email_settings",icon:"mail",     label:"Email",           desc:"Signature, send-as address, out of office, digest frequency" },
       { id:"company_profile",icon:"building",label:"Company Profile", desc:"Logo, brand name and company details" },
     ],
   },

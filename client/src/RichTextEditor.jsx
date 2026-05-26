@@ -7,11 +7,11 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
+import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
-import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import ReactDOM from "react-dom";
 
 // ── Colours ──────────────────────────────────────────────────────────────────
@@ -202,11 +202,15 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: false,
+        underline: false,
+      }),
       Underline,
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: "rte-link" } }),
       TextStyle,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: "rte-link" } }),
       Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: "rte-img" } }),
       Placeholder.configure({ placeholder }),
     ],
@@ -231,6 +235,17 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
     setShowImage(false);
     editor.chain().focus().setImage({ src, alt: alt || "" }).run();
   }, [editor]);
+
+  // Sync external value changes into the editor (e.g. AI-generated content)
+  // Only update if the new value is meaningfully different to avoid cursor-jump on every keystroke
+  useEffect(() => {
+    if (!editor || value === undefined) return;
+    const current = editor.getHTML();
+    if (value !== current) {
+      editor.commands.setContent(value || "", false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   if (!editor) return null;
 
