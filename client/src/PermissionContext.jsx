@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { loadMyPermissions, clearPermCache } from './api';
+import api from './apiClient.js'; // use apiClient for correct session/CSRF headers
 
 const PermissionContext = createContext(null);
 
@@ -15,8 +16,18 @@ export function PermissionProvider({ userId, children }) {
     if (!userId) { setPermissions({ objects: {}, global: {} }); setLoading(false); return; }
     setLoading(true);
     try {
-      const p = await loadMyPermissions();
-      setPermissions(p);
+      // Use apiClient (credentials:include + CSRF) so permissions load correctly
+      // regardless of whether localStorage is populated yet.
+      const data = await api.get('/auth/me');
+      if (!data || data.error) {
+        // Fallback to legacy loadMyPermissions (reads from localStorage)
+        const p = await loadMyPermissions();
+        setPermissions(p);
+      } else {
+        const perms = data.permissions || { objects: {}, global: {} };
+        if (data.user?.role?.slug) perms._roleSlug = data.user.role.slug;
+        setPermissions(perms);
+      }
     } catch (err) {
       console.error('Failed to load permissions:', err);
       setPermissions({ objects: {}, global: {} }); // RBAC FIX: restrictive on failure

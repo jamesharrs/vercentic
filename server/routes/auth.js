@@ -8,7 +8,8 @@ const { getUserPermissions } = require('../middleware/rbac');
 // Returns current user profile + full permission map.
 // Called by the frontend once on load to hydrate the session context.
 router.get('/me', (req, res) => {
-  const userId = req.headers['x-user-id'];
+  // Prefer session-based userId (most reliable), fall back to X-User-Id header
+  const userId = req.session?.userId || req.headers['x-user-id'];
   if (!userId) return res.status(401).json({ error: 'No user id provided' });
 
   const user = findOne('users', u => u.id === userId && u.status !== 'deactivated');
