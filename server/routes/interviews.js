@@ -11,6 +11,11 @@ const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, getStore, saveStore } = require('../db/init');
 const { createInterviewMeeting, fireEvent } = require('../services/connectors');
 /* global setImmediate */
+const crypto = require('crypto');
+function makeRescheduleToken(interviewId, role) {
+  const secret = process.env.RESCHEDULE_SECRET || 'vercentic-resch-2026';
+  return crypto.createHmac('sha256', secret).update(`${interviewId}:${role}`).digest('hex').slice(0, 32);
+}
 
 function buildICS({ uid, summary, description, startISO, endISO, attendees = [] }) {
   const fmt = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -112,11 +117,8 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
   setImmediate(async () => {
     try {
       const appUrl = process.env.APP_URL || 'https://www.vercentic.com';
-      const rescheduleToken = uuidv4();
-      const s = getStore();
-      if (!s.reschedule_tokens) s.reschedule_tokens = [];
-      s.reschedule_tokens.push({ token: rescheduleToken, interview_id: rec.id, role: 'candidate', created_at: new Date().toISOString(), used: false });
-      saveStore();
+      // Use HMAC token — matches the /api/reschedule route's token verification
+      const rescheduleToken = makeRescheduleToken(rec.id, 'candidate');
       const rescheduleUrl = `${appUrl}/reschedule/${rec.id}/${rescheduleToken}?role=candidate`;
       const startDT = new Date(`${date}T${time || '09:00'}:00`);
       const endDT = new Date(startDT.getTime() + (duration || 30) * 60_000);
@@ -149,6 +151,7 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
   res.status(201).json(rec);
 });
 
+// ── /:id wildcards AFTER named routes ─────────────────────────────────────────
 router.patch('/:id', (req, res) => {
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
@@ -171,33 +174,6 @@ router.delete('/:id', async (req, res) => { // eslint-disable-line require-await
     });
   }
   res.json({ deleted: true });
-});
-
-router.get('/reschedule/:interviewId/:token', (req, res) => {
-  ensure();
-  const { interviewId, token } = req.params;
-  const s = getStore();
-  const tokenRec = (s.reschedule_tokens || []).find(t => t.interview_id === interviewId && t.token === token && !t.used);
-  if (!tokenRec) return res.status(404).json({ error: 'Invalid or expired reschedule link' });
-  const interview = (s.interviews || []).find(i => i.id === interviewId && !i.deleted_at);
-  if (!interview) return res.status(404).json({ error: 'Interview not found' });
-  res.json({ id: interview.id, candidate_name: interview.candidate_name, job_name: interview.job_name, date: interview.date, time: interview.time, duration: interview.duration, format: interview.format, notes: interview.notes, status: interview.status, role: tokenRec.role });
-});
-
-router.post('/reschedule/:interviewId/:token', (req, res) => {
-  ensure();
-  const { interviewId, token } = req.params;
-  const { date, time, message } = req.body;
-  const s = getStore();
-  const tokenRec = (s.reschedule_tokens || []).find(t => t.interview_id === interviewId && t.token === token && !t.used);
-  if (!tokenRec) return res.status(404).json({ error: 'Invalid or expired reschedule link' });
-  const interview = (s.interviews || []).find(i => i.id === interviewId && !i.deleted_at);
-  if (!interview) return res.status(404).json({ error: 'Interview not found' });
-  const requestNote = [`[Reschedule request]`, date ? `Proposed: ${date} ${time || ''}`.trim() : '', message || ''].filter(Boolean).join(' · ');
-  update('interviews', i => i.id === interviewId, { status: 'reschedule_requested', notes: interview.notes ? `${interview.notes}\n\n${requestNote}` : requestNote, updated_at: new Date().toISOString() });
-  tokenRec.used = true;
-  saveStore();
-  res.json({ ok: true, message: 'Reschedule request submitted. The team will confirm shortly.' });
 });
 
 module.exports = router;
