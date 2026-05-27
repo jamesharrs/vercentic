@@ -118,8 +118,46 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
 
   setImmediate(async () => {
     try {
-      const appUrl = process.env.APP_URL || 'https://www.vercentic.com';
-      // Use HMAC token — matches the /api/reschedule route's token verification
+      const appUrl = process.env.APP_URL || 'https://app.vercentic.com';
+      const store2 = getStore();
+      const candidateRecord = (store2.records || []).find(r => r.id === rec.candidate_id);
+      const candidateEmail = candidateRecord?.data?.email;
+
+      // ── AI Agent interview — send a simple "you've been invited" email ──────
+      if (isAi) {
+        if (candidateEmail) {
+          const interviewLink = `${appUrl}/interview/${rec.id}`;
+          const msg = require('../services/messaging');
+          await msg.sendEmail({
+            to: candidateEmail, toName: resolvedCandidateName,
+            subject: `You've been invited to an AI interview${job_name ? ` — ${job_name}` : ''}`,
+            text: `Hi ${resolvedCandidateName},\n\nYou've been invited to complete an AI interview${job_name ? ` for the ${job_name} position` : ''}.\n\nClick the link below to start when you're ready:\n${interviewLink}\n\nThe interview typically takes 20-30 minutes. Find a quiet place and ensure your microphone is working.\n\nGood luck!\n\nVercentic`,
+            html: `<div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:#6d28d9;padding:28px 32px;border-radius:12px 12px 0 0">
+    <h1 style="color:white;margin:0;font-size:22px;font-weight:700">AI Interview Invitation</h1>
+  </div>
+  <div style="padding:28px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+    <p style="color:#374151;font-size:15px;margin:0 0 16px;line-height:1.6">Hi ${resolvedCandidateName},</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;line-height:1.6">
+      You've been invited to complete an AI interview${job_name ? ` for the <strong>${job_name}</strong> position` : ''}. Click the button below to start when you're ready.
+    </p>
+    <div style="padding:14px 16px;background:#f5f3ff;border-radius:10px;border:1px solid #ddd6fe;margin-bottom:24px;font-size:13px;color:#6d28d9">
+      ⚡ The interview is conducted by an AI agent and typically takes 20–30 minutes. Find a quiet place and ensure your microphone is working before you begin.
+    </div>
+    <div style="text-align:center;margin-bottom:24px">
+      <a href="${interviewLink}" style="display:inline-block;padding:14px 32px;background:#6d28d9;color:white;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700">Start Interview →</a>
+    </div>
+    <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0">If the button doesn't work, copy this link: ${interviewLink}</p>
+  </div>
+</div>`,
+          });
+          console.log(`[Interviews] AI interview invite sent to ${candidateEmail}`);
+        }
+        await fireEvent(environment_id, 'interview_scheduled', { candidateName: resolvedCandidateName, jobTitle: job_name, format: 'AI Interview', interviewers: [] });
+        return;
+      }
+
+      // ── Human interview — send confirmation with date/time and .ics ─────────
       const rescheduleToken = makeRescheduleToken(rec.id, 'candidate');
       const rescheduleUrl = `${appUrl}/reschedule/${rec.id}/${rescheduleToken}?role=candidate`;
       const startDT = new Date(`${date}T${time || '09:00'}:00`);
@@ -133,9 +171,6 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
         description: [`Candidate: ${resolvedCandidateName}`, job_name ? `Role: ${job_name}` : '', `Format: ${format || 'Video Call'}`, notes ? `Notes: ${notes}` : '', `Reschedule: ${rescheduleUrl}`].filter(Boolean).join('\n'),
         startISO: startDT.toISOString(), endISO: endDT.toISOString(), attendees: interviewer_emails || [],
       });
-      const store2 = getStore();
-      const candidateRecord = (store2.records || []).find(r => r.id === rec.candidate_id);
-      const candidateEmail = candidateRecord?.data?.email;
       if (candidateEmail) {
         const msg = require('../services/messaging');
         await msg.sendEmail({
