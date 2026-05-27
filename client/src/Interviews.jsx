@@ -1069,8 +1069,8 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
                   })()
               }
             </div>
-            <div style={{position:"relative"}}>
-              <label style={labelSt}>Job (optional)</label>
+            {form.candidate_id && <div style={{position:"relative"}}>
+              <label style={labelSt}>Linked Role</label>
               {(() => {
                 // Filter jobs: prefer candidate's linked jobs, fall back to prop, then all
                 const activeFilter = candidateLinkedJobIds ?? (linkedJobIds?.length ? linkedJobIds : null);
@@ -1167,7 +1167,7 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
                   </div>
                 );
               })()}
-            </div>
+            </div>}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div>
                 <label style={labelSt}>Date {form.interviewer_mode!=="ai_agent"&&"*"}</label>
@@ -1597,7 +1597,7 @@ export default function Interviews({ environment }) {
       {showForm && <TypeFormModal type={editType} envId={envId} onSave={handleSaveType} onClose={()=>{setShowForm(false);setEditType(null);}}/>}
       {scheduleFor && <ScheduleModal interviewType={scheduleFor} envId={envId} onSave={handleSchedule} onClose={()=>setScheduleFor(null)}/>}
       {editScheduled && <ScheduleModal
-        interviewType={{ id: editScheduled.interview_type_id, name: editScheduled.interview_type_name, duration: editScheduled.duration, format: editScheduled.format, interview_format: editScheduled.interview_format, interviewers: editScheduled.interviewers }}
+        interviewType={{ id: editScheduled.interview_type_id, name: editScheduled.interview_type_name, duration: editScheduled.duration, format: editScheduled.format, interview_format: editScheduled.interview_format || 'video', interviewers: editScheduled.interviewers || [] }}
         envId={envId}
         initialValues={editScheduled}
         onSave={handleUpdateScheduled}

@@ -261,8 +261,301 @@ const CandidatePanel = ({ candidate, job, onClose, color, api, portal }) => {
   )
 }
 
+// ── Inline icons (no emoji) ──────────────────────────────────────────────────
+const Icon = ({ d, size=14, color='currentColor', stroke=2 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d}/>
+  </svg>
+)
+const ICON_SHARE   = "M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"
+const ICON_LOCK    = "M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+const ICON_CLOCK   = "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2"
+const ICON_CHECK   = "M20 6L9 17l-5-5"
+const ICON_X       = "M18 6L6 18M6 6l12 12"
+const ICON_CHEV_R  = "M9 18l6-6-6-6"
+
+// ── Share Inbox section — renders pending shares on the dashboard ────────────
+function ShareInboxSection({ shares, accent, onOpen }) {
+  return (
+    <div style={{ marginBottom:28 }}>
+      <h2 style={{ margin:'0 0 16px', fontSize:17, fontWeight:800, color:'#0F172A', display:'flex', alignItems:'center', gap:10 }}>
+        <Icon d={ICON_SHARE} size={18} color={accent}/>
+        Review Requests
+        <span style={{ fontSize:12, fontWeight:700, color:'white', background:accent, padding:'2px 10px', borderRadius:99 }}>{shares.length}</span>
+      </h2>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:14 }}>
+        {shares.map(share => {
+          const data = share.record_summary?.data || {}
+          const isAnon = share.privacy_mode === 'anonymised'
+          const displayName = isAnon
+            ? (data._anon_label || 'Anonymous Candidate')
+            : (`${data.first_name||''} ${data.last_name||''}`.trim() || 'Untitled record')
+          const subtitle = isAnon
+            ? (data.current_title || data.location || '')
+            : (data.current_title || data.email || '')
+          const ctaLabel = share.cta_type === 'form'
+            ? 'Submit feedback form'
+            : share.cta_type === 'approve_reject'
+              ? 'Approve or reject'
+              : 'Provide feedback'
+          const expiresIn = share.expires_at
+            ? Math.max(0, Math.ceil((new Date(share.expires_at).getTime() - Date.now()) / 86400000))
+            : null
+          return (
+            <div key={share.id} onClick={() => onOpen(share)}
+              style={{ background:'white', borderRadius:14, padding:'18px 20px', cursor:'pointer',
+                border:'1.5px solid #E2E8F0', borderLeft:`4px solid ${accent}`, transition:'all .15s' }}
+              onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 4px 16px ${accent}22`; e.currentTarget.style.borderColor=accent }}
+              onMouseLeave={e=>{ e.currentTarget.style.boxShadow='none'; e.currentTarget.style.borderColor='#E2E8F0' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                {isAnon && (
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:700, color:'#0E7490', background:'#ECFEFF', padding:'2px 8px', borderRadius:99, border:'1px solid #A5F3FC' }}>
+                    <Icon d={ICON_LOCK} size={10}/> Anonymised
+                  </span>
+                )}
+                <Badge color={accent}>{ctaLabel}</Badge>
+                {expiresIn !== null && expiresIn <= 3 && (
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:700, color:'#B91C1C', background:'#FEE2E2', padding:'2px 8px', borderRadius:99 }}>
+                    <Icon d={ICON_CLOCK} size={10}/> {expiresIn === 0 ? 'Expires today' : `${expiresIn}d left`}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0F172A', marginBottom:3 }}>{displayName}</div>
+              {subtitle && <div style={{ fontSize:12, color:'#64748B', marginBottom:10 }}>{subtitle}</div>}
+              {share.message && (
+                <div style={{ fontSize:12, color:'#475569', background:'#F8FAFC', padding:'8px 10px', borderRadius:8, marginBottom:10, lineHeight:1.5, fontStyle:'italic' }}>
+                  &ldquo;{share.message}&rdquo;
+                </div>
+              )}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6, fontSize:12, fontWeight:700, color:accent }}>
+                Review <Icon d={ICON_CHEV_R} size={14}/>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Share Detail Panel — slide-over for reviewing & completing a share ───────
+function ShareDetailPanel({ share, viewerEmail, accent, onClose, onCompleted, api }) {
+  const [detail, setDetail]     = useState(null)
+  const [formData, setFormData] = useState({})
+  const [feedback, setFeedback] = useState('')
+  const [decision, setDecision] = useState(null) // 'approved' | 'rejected'
+  const [busy, setBusy]         = useState(false)
+  const [err, setErr]           = useState(null)
+
+  useEffect(() => {
+    if (!share?.id || !viewerEmail) return
+    api.get(`/record-shares/${share.id}?as_email=${encodeURIComponent(viewerEmail)}`)
+      .then(d => setDetail(d))
+      .catch(() => setErr('Unable to load this review'))
+  }, [share?.id, viewerEmail, api])
+
+  const submit = async () => {
+    setBusy(true); setErr(null)
+    try {
+      let payload = { as_email: viewerEmail }
+      if (share.cta_type === 'form')               payload.response_data = formData
+      else if (share.cta_type === 'approve_reject'){ payload.decision = decision; payload.response_data = { decision, note: feedback } }
+      else if (share.cta_type === 'free_text_feedback') payload.response_data = { feedback }
+
+      const res = await fetch(`/api/record-shares/${share.id}/complete?as_email=${encodeURIComponent(viewerEmail)}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}))
+        throw new Error(e.error || `HTTP ${res.status}`)
+      }
+      onCompleted()
+    } catch (e) {
+      setErr(e.message); setBusy(false)
+    }
+  }
+
+  const canSubmit =
+    (share.cta_type === 'form' && Object.keys(formData).length > 0) ||
+    (share.cta_type === 'approve_reject' && decision) ||
+    (share.cta_type === 'free_text_feedback' && feedback.trim().length > 0)
+
+  const recordData = detail?.record?.data || share.record_summary?.data || {}
+  const isAnon = share.privacy_mode === 'anonymised'
+  const displayName = isAnon
+    ? (recordData._anon_label || 'Anonymous Candidate')
+    : (`${recordData.first_name||''} ${recordData.last_name||''}`.trim() || 'Untitled record')
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:1000,
+      display:'flex', justifyContent:'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:'min(680px, 100%)', height:'100%', background:'#F8FAFC', overflowY:'auto', boxShadow:'-8px 0 32px rgba(0,0,0,0.15)' }}>
+        {/* Header */}
+        <div style={{ position:'sticky', top:0, zIndex:2, background:'white', borderBottom:'1px solid #E2E8F0', padding:'18px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:accent, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:3 }}>Review Request</div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#0F172A' }}>{displayName}</div>
+          </div>
+          <button onClick={onClose} style={{ width:36, height:36, borderRadius:8, border:'none', background:'#F1F5F9', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Icon d={ICON_X} size={16} color="#64748B"/>
+          </button>
+        </div>
+
+        <div style={{ padding:'24px' }}>
+          {/* Message from sender */}
+          {share.message && (
+            <div style={{ background:'white', border:'1.5px solid #E2E8F0', borderRadius:12, padding:'14px 16px', marginBottom:20, fontSize:13, color:'#475569', lineHeight:1.6, fontStyle:'italic' }}>
+              &ldquo;{share.message}&rdquo;
+            </div>
+          )}
+
+          {/* Privacy badge */}
+          {isAnon && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:'#0E7490', background:'#ECFEFF', padding:'5px 12px', borderRadius:99, border:'1px solid #A5F3FC', marginBottom:20 }}>
+              <Icon d={ICON_LOCK} size={12}/> Anonymised — personal details have been hidden
+            </div>
+          )}
+
+          {/* Record fields */}
+          <div style={{ background:'white', border:'1.5px solid #E2E8F0', borderRadius:12, padding:'20px', marginBottom:20 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:14 }}>Record Details</div>
+            {Object.keys(recordData).filter(k => !k.startsWith('_')).length === 0 ? (
+              <div style={{ fontSize:13, color:'#94A3B8' }}>No details available.</div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'140px 1fr', gap:'10px 16px' }}>
+                {Object.entries(recordData).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
+                  <RecordField key={k} keyName={k} value={v}/>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* CTA */}
+          <div style={{ background:'white', border:`2px solid ${accent}`, borderRadius:12, padding:'20px', marginBottom:20 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:accent, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:14 }}>Your Response</div>
+
+            {share.cta_type === 'form' && detail?.form && (
+              <FormRunner form={detail.form} value={formData} onChange={setFormData}/>
+            )}
+            {share.cta_type === 'form' && !detail?.form && (
+              <div style={{ fontSize:13, color:'#94A3B8' }}>Loading form…</div>
+            )}
+
+            {share.cta_type === 'approve_reject' && (
+              <div>
+                {share.cta_config?.prompt && (
+                  <div style={{ fontSize:14, fontWeight:600, color:'#0F172A', marginBottom:14 }}>{share.cta_config.prompt}</div>
+                )}
+                <div style={{ display:'flex', gap:10, marginBottom:14 }}>
+                  <button onClick={() => setDecision('approved')}
+                    style={{ flex:1, padding:'12px', borderRadius:10, border:`2px solid ${decision==='approved'?'#10B981':'#E2E8F0'}`,
+                      background:decision==='approved'?'#10B981':'white', color:decision==='approved'?'white':'#475569',
+                      fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                    <Icon d={ICON_CHECK} size={14}/> Approve
+                  </button>
+                  <button onClick={() => setDecision('rejected')}
+                    style={{ flex:1, padding:'12px', borderRadius:10, border:`2px solid ${decision==='rejected'?'#EF4444':'#E2E8F0'}`,
+                      background:decision==='rejected'?'#EF4444':'white', color:decision==='rejected'?'white':'#475569',
+                      fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                    <Icon d={ICON_X} size={14}/> Reject
+                  </button>
+                </div>
+                <textarea value={feedback} onChange={e => setFeedback(e.target.value)}
+                  placeholder="Optional notes…" rows={3}
+                  style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E2E8F0', borderRadius:8, fontSize:13, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }}/>
+              </div>
+            )}
+
+            {share.cta_type === 'free_text_feedback' && (
+              <div>
+                {share.cta_config?.prompt && (
+                  <div style={{ fontSize:14, fontWeight:600, color:'#0F172A', marginBottom:10 }}>{share.cta_config.prompt}</div>
+                )}
+                <textarea value={feedback} onChange={e => setFeedback(e.target.value)}
+                  placeholder="Share your thoughts…" rows={6}
+                  style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E2E8F0', borderRadius:8, fontSize:13, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }}/>
+              </div>
+            )}
+          </div>
+
+          {err && (
+            <div style={{ background:'#FEE2E2', color:'#B91C1C', padding:'10px 14px', borderRadius:8, fontSize:12, marginBottom:14, border:'1px solid #FECACA' }}>{err}</div>
+          )}
+
+          <button onClick={submit} disabled={!canSubmit || busy}
+            style={{ width:'100%', padding:'14px', borderRadius:12, border:'none',
+              background:(!canSubmit||busy) ? '#E2E8F0' : accent,
+              color:(!canSubmit||busy) ? '#94A3B8' : 'white',
+              fontSize:14, fontWeight:700, cursor:(!canSubmit||busy)?'default':'pointer' }}>
+            {busy ? 'Submitting…' : 'Submit Response'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Display a single field key/value with sensible formatting ────────────────
+function RecordField({ keyName, value }) {
+  const label = keyName.replace(/_/g, ' ').replace(/\b\w/g, m => m.toUpperCase())
+  let display = value
+  if (value === null || value === undefined || value === '') display = '—'
+  else if (Array.isArray(value)) display = value.join(', ') || '—'
+  else if (typeof value === 'object') display = JSON.stringify(value)
+  else display = String(value)
+  return (
+    <>
+      <div style={{ fontSize:11, fontWeight:700, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'.04em', paddingTop:2 }}>{label}</div>
+      <div style={{ fontSize:13, color:'#0F172A', wordBreak:'break-word' }}>{display}</div>
+    </>
+  )
+}
+
+// ── Minimal form runner — renders a form spec & captures values ──────────────
+function FormRunner({ form, value, onChange }) {
+  const fields = form?.fields || form?.schema?.fields || []
+  if (!fields.length) {
+    return <div style={{ fontSize:13, color:'#94A3B8' }}>This form has no fields configured.</div>
+  }
+  const setField = (key, v) => onChange({ ...value, [key]: v })
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {fields.map(f => {
+        const k = f.api_key || f.key || f.id
+        const v = value[k] ?? ''
+        const label = <div style={{ fontSize:12, fontWeight:700, color:'#475569', marginBottom:5 }}>{f.name || f.label || k}{f.required && <span style={{ color:'#EF4444' }}> *</span>}</div>
+        const baseInput = { width:'100%', padding:'9px 11px', border:'1.5px solid #E2E8F0', borderRadius:8, fontSize:13, fontFamily:'inherit', boxSizing:'border-box' }
+        if (f.type === 'textarea' || f.field_type === 'textarea' || f.type === 'long_text') {
+          return <div key={k}>{label}<textarea value={v} onChange={e => setField(k, e.target.value)} rows={4} style={{ ...baseInput, resize:'vertical' }}/></div>
+        }
+        if (f.type === 'select' || f.field_type === 'select' || f.type === 'dropdown') {
+          const opts = f.options || []
+          return <div key={k}>{label}
+            <select value={v} onChange={e => setField(k, e.target.value)} style={baseInput}>
+              <option value="">— Select —</option>
+              {opts.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+            </select>
+          </div>
+        }
+        if (f.type === 'rating' || f.field_type === 'rating') {
+          return <div key={k}>{label}
+            <div style={{ display:'flex', gap:5 }}>
+              {[1,2,3,4,5].map(n => (
+                <button key={n} type="button" onClick={() => setField(k, n)}
+                  style={{ width:36, height:36, borderRadius:8, border:`1.5px solid ${v===n?'#F59E0B':'#E2E8F0'}`,
+                    background:v===n?'#F59E0B':'white', color:v===n?'white':'#94A3B8', fontSize:14, fontWeight:700, cursor:'pointer' }}>{n}</button>
+              ))}
+            </div>
+          </div>
+        }
+        return <div key={k}>{label}<input type={f.type === 'number' ? 'number' : 'text'} value={v} onChange={e => setField(k, e.target.value)} style={baseInput}/></div>
+      })}
+    </div>
+  )
+}
+
 // ── Main HMPortal ─────────────────────────────────────────────────────────────
-export default function HMPortal({ portal, objects, api }) {
+export default function HMPortal({ portal, objects, api, viewerEmail }) {
   const c   = css(portal.branding)
   const br  = portal.branding || {}
   const [reqs, setReqs]               = useState([])
@@ -273,6 +566,10 @@ export default function HMPortal({ portal, objects, api }) {
   const [view, setView]               = useState('dashboard')
   const [selected, setSelected]       = useState(null)
   const [filterStage, setFilterStage] = useState('')
+
+  // Share Inbox state (only fetched when viewerEmail is present)
+  const [shares, setShares]             = useState([])
+  const [activeShare, setActiveShare]   = useState(null)
 
   const jobObj    = objects.find(o=>o.slug==='jobs')
   const peopleObj = objects.find(o=>o.slug==='people')
@@ -290,6 +587,15 @@ export default function HMPortal({ portal, objects, api }) {
       setLoading(false)
     }).catch(()=>setLoading(false))
   },[jobObj?.id,peopleObj?.id])
+
+  // Load pending shares for this viewer
+  const reloadShares = useCallback(() => {
+    if (!viewerEmail) { setShares([]); return; }
+    api.get(`/record-shares?recipient_email=${encodeURIComponent(viewerEmail)}&environment_id=${portal.environment_id}&status=pending`)
+      .then(d => setShares(Array.isArray(d) ? d : []))
+      .catch(() => setShares([]))
+  }, [viewerEmail, portal.environment_id, api])
+  useEffect(() => { reloadShares() }, [reloadShares])
 
   // Build candidate objects from links + records
   const buildCandidate = useCallback((link)=>{
@@ -348,6 +654,14 @@ export default function HMPortal({ portal, objects, api }) {
           onClose={()=>setSelected(null)} color={c.accent} api={api} portal={portal}/>
       )}
 
+      {/* Share detail panel — opened from Share Inbox section */}
+      {activeShare && (
+        <ShareDetailPanel share={activeShare} viewerEmail={viewerEmail} accent={c.accent}
+          onClose={() => setActiveShare(null)}
+          onCompleted={() => { setActiveShare(null); reloadShares(); }}
+          api={api}/>
+      )}
+
       {/* Top nav */}
       <div style={{ background:'#0F172A', borderBottom:'1px solid #1E293B' }}>
         <Section>
@@ -404,6 +718,12 @@ export default function HMPortal({ portal, objects, api }) {
 
           {/* ── DASHBOARD ── */}
           {view==='dashboard' && (
+            <>
+            {/* Share Inbox — pending review requests sent via workflow */}
+            {viewerEmail && shares.length > 0 && (
+              <ShareInboxSection shares={shares} accent={c.accent} onOpen={s => setActiveShare(s)}/>
+            )}
+
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:28, alignItems:'start' }}>
               {/* My open reqs */}
               <div>
@@ -482,6 +802,7 @@ export default function HMPortal({ portal, objects, api }) {
                 })}
               </div>
             </div>
+            </>
           )}
 
           {/* ── PIPELINE ── */}

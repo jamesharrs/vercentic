@@ -721,6 +721,53 @@ router.post('/:id/run', async (req, res) => {
               }
             }
 
+          } else if (action.type === 'share_record') {
+            // Resolve recipients
+            const { resolveRecipients } = require('./record_shares');
+            const recipientIds = resolveRecipients(cfg, record);
+
+            if (!recipientIds.length) {
+              actionOutput = '⚠ No recipients resolved for share';
+              actionStatus = 'warning';
+            } else {
+              const expiresAt = cfg.expiry_days
+                ? new Date(Date.now() + Number(cfg.expiry_days) * 86400000).toISOString()
+                : null;
+
+              const share = {
+                id: uuidv4(),
+                record_id,
+                workflow_id: wf.id,
+                workflow_step_id: step.id,
+                environment_id: record.environment_id,
+                recipient_mode: cfg.recipient_mode || 'specific_user',
+                recipient_user_ids: recipientIds,
+                recipient_role_id: cfg.recipient_role_id || null,
+                privacy_mode: cfg.privacy_mode || 'anonymised',
+                visible_fields: cfg.visible_fields || [],
+                cta_type: cfg.cta_type || 'form',
+                cta_form_id: cfg.cta_form_id || null,
+                cta_config: cfg.cta_config || {},
+                auto_advance: cfg.auto_advance || 'none',
+                expires_at: expiresAt,
+                message: cfg.message || null,
+                status: 'pending',
+                response_data: null,
+                viewed_at: null,
+                completed_at: null,
+                created_at: new Date().toISOString(),
+                created_by: req.currentUser?.id || null,
+              };
+              insert('record_shares', share);
+
+              const userNames = recipientIds.map(uid => {
+                const u = (getStore().users || []).find(x => x.id === uid);
+                return u ? ([u.first_name, u.last_name].filter(Boolean).join(' ') || u.email) : uid.slice(0, 8);
+              }).join(', ');
+
+              actionOutput = `Shared with ${userNames} (${cfg.privacy_mode || 'anonymised'}, CTA: ${cfg.cta_type || 'form'})`;
+            }
+
           } else {
             actionOutput = `Unknown action: ${action.type}`;
             actionStatus = 'skipped';

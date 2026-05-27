@@ -1,57 +1,50 @@
-const { hasGlobalAction: _hasGA, hasPermission: _hasPerm, isSuperAdmin: _isSA } = require('../middleware/rbac');
+const { hasGlobalAction: _hasGA } = require('../middleware/rbac');
 function _checkGA(req, res, action) {
   const user = req.currentUser;
   if (!user) { res.status(401).json({ error: "Authentication required", code: "UNAUTHENTICATED" }); return false; }
-  if (!_hasGA(user, action)) {
-    res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } });
-    return false;
-  }
+  if (!_hasGA(user, action)) { res.status(403).json({ error: 'Permission denied', code: 'FORBIDDEN', required: { action } }); return false; }
   return null;
 }
 const express = require('express');
-const { makeToken } = require('./reschedule');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { query, insert, update, remove: _remove, getStore, saveStore } = require('../db/init');
+const { query, insert, update, getStore, saveStore } = require('../db/init');
 const { createInterviewMeeting, fireEvent } = require('../services/connectors');
-const { sendEmail } = require('../services/messaging');
+/* global setImmediate */
 
-let _agentEngine = null;
-const getEngine = () => { if (!_agentEngine) _agentEngine = require('../agent-engine'); return _agentEngine; };
-
-// ── ICS builder ──────────────────────────────────────────────────────────────
-function buildICS({ uid, summary, description, location, startISO, endISO, organiserEmail, organiserName, attendeeEmails, rescheduleUrl }) {
-  const fmt = (iso) => iso.replace(/[-:]/g,'').replace(/\.\d{3}/,'') + 'Z';
-  const start = fmt(startISO);
-  const end   = fmt(endISO);
-  const now   = fmt(new Date().toISOString());
-  const escape = s => (s||'').replace(/[,;\\]/g, m=>'\\'+m).replace(/\n/g,'\\n');
-  const attendees = attendeeEmails.map(e =>
-    `ATTENDEE;CN=${e};RSVP=TRUE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:${e}`
-  ).join('\r\n');
-  const reschedLine = rescheduleUrl ? `\r\nX-RESCHEDULE-URL:${rescheduleUrl}` : '';
+function buildICS({ uid, summary, description, startISO, endISO, attendees = [] }) {
+  const fmt = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = (s) => (s || '').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
   return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Vercentic//Interview//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:REQUEST',
-    'BEGIN:VEVENT',
-    `UID:${uid}@vercentic`,
-    `DTSTAMP:${now}`,
-    `DTSTART:${start}`,
-    `DTEND:${end}`,
-    `SUMMARY:${escape(summary)}`,
-    `DESCRIPTION:${escape(description)}`,
-    location ? `LOCATION:${escape(location)}` : '',
-    `ORGANIZER;CN=${escape(organiserName)}:mailto:${organiserEmail}`,
-    attendees,
-    'STATUS:CONFIRMED',
-    'SEQUENCE:0',
-    reschedLine,
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].filter(Boolean).join('\r\n');
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Vercentic//Interview//EN',
+    'CALSCALE:GREGORIAN','METHOD:REQUEST','BEGIN:VEVENT',
+    `UID:${uid}@vercentic.com`,`DTSTAMP:${fmt(new Date().toISOString())}`,
+    `DTSTART:${fmt(startISO)}`,`DTEND:${fmt(endISO)}`,
+    `SUMMARY:${esc(summary)}`,`DESCRIPTION:${esc(description)}`,
+    ...attendees.map(e => `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:${e}`),
+    'STATUS:CONFIRMED','SEQUENCE:0','BEGIN:VALARM','TRIGGER:-PT30M',
+    'ACTION:DISPLAY','DESCRIPTION:Interview reminder','END:VALARM','END:VEVENT','END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function buildEmailHtml({ candidateName, jobName, dateFormatted, timeRange, fmt, duration, notes, rescheduleUrl }) {
+  return `<div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:#4361EE;padding:28px 32px;border-radius:12px 12px 0 0">
+    <h1 style="color:white;margin:0;font-size:22px;font-weight:700">Interview Scheduled</h1>
+  </div>
+  <div style="padding:28px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;line-height:1.6">Your interview has been confirmed. Please find the calendar invite attached.</p>
+    <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:8px">
+      <tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;width:110px">Candidate</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:13px;font-weight:600">${candidateName}</td></tr>
+      ${jobName ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Role</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:13px;font-weight:600">${jobName}</td></tr>` : ''}
+      <tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Date</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:13px;font-weight:600">${dateFormatted}</td></tr>
+      <tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Time</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:13px;font-weight:600">${timeRange} · ${duration} min</td></tr>
+      <tr><td style="padding:12px 16px;${notes?'border-bottom:1px solid #e5e7eb;':''}color:#6b7280;font-size:13px">Format</td><td style="padding:12px 16px;${notes?'border-bottom:1px solid #e5e7eb;':''}color:#111827;font-size:13px;font-weight:600">${fmt}</td></tr>
+      ${notes ? `<tr><td style="padding:12px 16px;color:#6b7280;font-size:13px;vertical-align:top">Notes</td><td style="padding:12px 16px;color:#374151;font-size:13px;line-height:1.6">${notes.replace(/\n/g,'<br>')}</td></tr>` : ''}
+    </table>
+    ${rescheduleUrl ? `<div style="margin-top:24px;text-align:center"><a href="${rescheduleUrl}" style="display:inline-block;padding:12px 28px;background:#4361EE;color:white;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Need to reschedule? →</a></div>` : ''}
+  </div>
+</div>`;
 }
 
 function ensure() {
@@ -64,42 +57,18 @@ router.get('/', (req, res) => {
   const { environment_id, candidate_id, job_id } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   let rows = query('interviews', i => i.environment_id === environment_id && !i.deleted_at);
-  const { person_id } = req.query;
-  if (person_id) {
-    rows = rows.filter(i => {
-      if (i.candidate_id === person_id) return true;
-      const ivList = Array.isArray(i.interviewers) ? i.interviewers : [];
-      return ivList.some(iv => (typeof iv === 'string' ? iv : iv?.id) === person_id);
-    });
-  } else {
-    if (candidate_id) rows = rows.filter(i => i.candidate_id === candidate_id);
-  }
-  if (job_id) rows = rows.filter(i => i.job_id === job_id);
-  const _user = req.currentUser;
-  if (_user && !_isSA(_user) && !_hasPerm(_user, 'people', 'view')) rows = [];
-  res.json(rows.sort((a,b) => {
-    const da = new Date(`${a.date}T${a.time||'00:00'}`);
-    const db = new Date(`${b.date}T${b.time||'00:00'}`);
-    return da - db;
-  }));
+  if (candidate_id) rows = rows.filter(i => i.candidate_id === candidate_id);
+  if (job_id)       rows = rows.filter(i => i.job_id === job_id);
+  res.json(rows.sort((a,b) => new Date(`${a.date}T${a.time||'00:00'}`) - new Date(`${b.date}T${b.time||'00:00'}`)));
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req, res) => { // eslint-disable-line require-await
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const { environment_id, interview_type_id, interview_type_name, candidate_id, candidate_name,
-          job_id, job_name, date, time, duration, format, interviewers, notes, status,
-          interviewer_emails,
-          // AI Agent interview fields
-          interviewer_mode, ai_agent_id, ai_agent_name, ai_trigger, ai_trigger_at } = req.body;
+          job_id, job_name, date, time, duration, format, interviewers, notes, status, interviewer_emails } = req.body;
+  if (!environment_id || !date) return res.status(400).json({ error: 'environment_id and date required' });
 
-  const isAiInterview = interviewer_mode === 'ai_agent' && ai_agent_id;
-  // Date required for human interviews; optional for AI (on-demand)
-  if (!environment_id || (!isAiInterview && !date)) {
-    return res.status(400).json({ error: isAiInterview ? 'environment_id required' : 'environment_id and date required' });
-  }
-
-  // Resolve candidate name if only ID provided
   let resolvedCandidateId = candidate_id || null;
   const resolvedCandidateName = candidate_name || '';
   if (!resolvedCandidateId && candidate_name) {
@@ -107,10 +76,9 @@ router.post('/', async (req, res) => {
     const nameNorm = candidate_name.toLowerCase().trim();
     const match = (store.records || []).find(r => {
       const d = r.data || {};
-      const full = `${d.first_name||''} ${d.last_name||''}`.trim().toLowerCase();
-      return full === nameNorm || d.email?.toLowerCase() === nameNorm;
+      return `${d.first_name||''} ${d.last_name||''}`.trim().toLowerCase() === nameNorm || d.email?.toLowerCase() === nameNorm;
     });
-    if (match) resolvedCandidateId = match.id;
+    if (match) { resolvedCandidateId = match.id; }
   }
 
   const rec = insert('interviews', {
@@ -120,194 +88,62 @@ router.post('/', async (req, res) => {
     candidate_id: resolvedCandidateId,
     candidate_name: resolvedCandidateName,
     job_id: job_id || null, job_name: job_name || '',
-    date: date || null, time: time || '09:00', duration: duration || 30,
-    format: format || (isAiInterview ? 'AI Interview' : 'Video Call'),
+    date, time: time || '09:00', duration: duration || 30,
+    format: format || 'Video Call',
     interviewers: interviewers || [], notes: notes || '',
-    status: isAiInterview ? 'ai_pending' : (status || 'pending'),
-    // AI agent fields
-    interviewer_mode: interviewer_mode || 'employee',
-    ai_agent_id: ai_agent_id || null,
-    ai_agent_name: ai_agent_name || null,
-    ai_trigger: ai_trigger || null,
-    ai_trigger_at: ai_trigger_at || null,
-    ai_sent_at: null,
+    status: status || 'pending',
     meeting_link: null, meeting_provider: null,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(), deleted_at: null,
   });
 
-  // ── AI INTERVIEW: trigger agent run immediately or store for scheduler ────
-  if (isAiInterview) {
-    if (ai_trigger === 'now' || !ai_trigger) {
-      process.nextTick(async () => {
-        try {
-          const { query: q2, update: upd2 } = require('../db/init');
-          const agents = q2('agents', a => a.id === ai_agent_id);
-          const agent  = agents[0];
-          if (!agent) { console.warn(`[AI Interview] Agent ${ai_agent_id} not found`); return; }
-          if (!resolvedCandidateId) { console.warn('[AI Interview] No candidate record ID'); return; }
-
-          const agentsRouter = require('./agents');
-          const fakeReq = {
-            params: { id: ai_agent_id },
-            body: { record_id: resolvedCandidateId, environment_id, triggered_by: 'interview_scheduler' },
-            currentUser: req.currentUser,
-          };
-          const fakeRes = {
-            json: (data) => {
-              console.log(`[AI Interview] Agent run started: run_id=${data?.run_id}`);
-              upd2('interviews', i => i.id === rec.id, { ai_sent_at: new Date().toISOString(), status: 'ai_sent', updated_at: new Date().toISOString() });
-            },
-            status: (code) => ({ json: (d) => console.warn(`[AI Interview] Agent run error ${code}:`, d) }),
-          };
-
-          const runHandler = agentsRouter._runHandler;
-          if (typeof runHandler === 'function') {
-            await runHandler(fakeReq, fakeRes);
-          } else {
-            // Fallback: internal HTTP call
-            const http = require('http');
-            const port = process.env.PORT || 3001;
-            const postData = JSON.stringify({ record_id: resolvedCandidateId, environment_id, triggered_by: 'interview_scheduler' });
-            const options = { hostname: 'localhost', port, path: `/api/agents/${ai_agent_id}/run`, method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData), 'x-internal': '1' } };
-            const request = http.request(options, r => {
-              let body = '';
-              r.on('data', chunk => body += chunk);
-              r.on('end', () => {
-                try {
-                  const d = JSON.parse(body);
-                  console.log(`[AI Interview] Agent run started: run_id=${d?.run_id}`);
-                  upd2('interviews', i => i.id === rec.id, { ai_sent_at: new Date().toISOString(), status: 'ai_sent', updated_at: new Date().toISOString() });
-                } catch(e) { console.warn('[AI Interview] Parse error:', e.message); }
-              });
-            });
-            request.on('error', e => console.warn('[AI Interview] HTTP error:', e.message));
-            request.write(postData);
-            request.end();
-          }
-        } catch(e) { console.error('[AI Interview] Trigger error:', e.message); }
-      });
-    }
-    // For 'scheduled' trigger: ai_trigger_at is stored — scheduler polls for these
-    res.status(201).json({ ...rec, _ai_interview: true });
-    return;
-  }
-
-  // ── AUTO-CREATE MEETING LINK (human interviews only) ─────────────────────
-  process.nextTick(async () => {
+  setImmediate(async () => {
     try {
       const startTime = `${date}T${time || '09:00'}`;
-      const endTime   = new Date(new Date(startTime).getTime() + (duration || 30) * 60_000).toISOString();
-      const topic     = `${interview_type_name || 'Interview'}: ${resolvedCandidateName || 'Candidate'}${job_name ? ` — ${job_name}` : ''}`;
-      const emails    = interviewer_emails || [];
-      const meeting   = await createInterviewMeeting(environment_id, { topic, startTime, endTime, attendees: emails, agenda: notes || '' });
+      const endTime = new Date(new Date(startTime).getTime() + (duration || 30) * 60_000).toISOString();
+      const topic = `${interview_type_name || 'Interview'}: ${resolvedCandidateName || 'Candidate'}${job_name ? ` — ${job_name}` : ''}`;
+      const meeting = await createInterviewMeeting(environment_id, { topic, startTime, endTime, attendees: interviewer_emails || [], agenda: notes || '' });
       if (meeting) {
         const link = meeting.join_url || meeting.teams_url || meeting.meet_link || null;
         update('interviews', i => i.id === rec.id, { meeting_link: link, meeting_provider: meeting.provider, updated_at: new Date().toISOString() });
-        console.log(`[Connectors] Meeting created via ${meeting.provider} for interview ${rec.id}`);
       }
     } catch (e) { console.warn('[Connectors] Meeting creation failed:', e.message); }
   });
 
-  // ── FIRE NOTIFICATIONS + SEND ICS EMAILS ─────────────────────────────────
-  process.nextTick(async () => {
+  setImmediate(async () => {
     try {
-      await fireEvent(environment_id, 'interview_scheduled', {
-        candidateName: resolvedCandidateName, jobTitle: job_name,
-        date, time: time || '09:00', format: format || 'Video Call', interviewers: interviewers || [],
+      const appUrl = process.env.APP_URL || 'https://www.vercentic.com';
+      const rescheduleToken = uuidv4();
+      const s = getStore();
+      if (!s.reschedule_tokens) s.reschedule_tokens = [];
+      s.reschedule_tokens.push({ token: rescheduleToken, interview_id: rec.id, role: 'candidate', created_at: new Date().toISOString(), used: false });
+      saveStore();
+      const rescheduleUrl = `${appUrl}/reschedule/${rec.id}/${rescheduleToken}?role=candidate`;
+      const startDT = new Date(`${date}T${time || '09:00'}:00`);
+      const endDT = new Date(startDT.getTime() + (duration || 30) * 60_000);
+      const dateFormatted = (() => { try { return startDT.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' }); } catch { return date; } })();
+      const fmtTime = (d) => { try { return d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }); } catch { return ''; } };
+      const timeRange = `${fmtTime(startDT)} – ${fmtTime(endDT)}`;
+      const icsStr = buildICS({
+        uid: rec.id,
+        summary: `Interview: ${resolvedCandidateName}${job_name ? ` — ${job_name}` : ''}`,
+        description: [`Candidate: ${resolvedCandidateName}`, job_name ? `Role: ${job_name}` : '', `Format: ${format || 'Video Call'}`, notes ? `Notes: ${notes}` : '', `Reschedule: ${rescheduleUrl}`].filter(Boolean).join('\n'),
+        startISO: startDT.toISOString(), endISO: endDT.toISOString(), attendees: interviewer_emails || [],
       });
-    } catch (e) { console.warn('[Connectors] Notification failed:', e.message); }
-
-    // Fire agent trigger — interview_scheduled
-    try {
-      const candidateRec = resolvedCandidateId
-        ? (getStore().records || []).find(r => r.id === resolvedCandidateId)
-        : null;
-      if (candidateRec) {
-        getEngine().fireEventTrigger('interview_scheduled', candidateRec, ['status']).catch(() => {});
-      }
-    } catch (e) { console.warn('[Agents] interview_scheduled trigger error:', e.message); }
-
-    try {
-      const { getStore } = require('../db/init');
-      const store = getStore();
-      const timeStr  = time || '09:00';
-      const startISO = `${date}T${timeStr}:00.000Z`;
-      const endISO   = new Date(new Date(startISO).getTime() + (duration || 45) * 60_000).toISOString();
-      const fmt      = format || 'Video Call';
-      const attendeeEmails = [];
-
-      const candidateRec = resolvedCandidateId ? (store.records || []).find(r => r.id === resolvedCandidateId) : null;
-      const candidateEmail = candidateRec?.data?.email || null;
-      if (candidateEmail) attendeeEmails.push(candidateEmail);
-
-      const ivList = Array.isArray(interviewers) ? interviewers : [];
-      for (const iv of ivList) {
-        const ivEmail = iv.email || null;
-        const ivRec   = iv.id ? (store.records || []).find(r => r.id === iv.id) : null;
-        const resolvedEmail = ivEmail || ivRec?.data?.email || null;
-        if (resolvedEmail && !attendeeEmails.includes(resolvedEmail)) attendeeEmails.push(resolvedEmail);
-      }
-
-      if (attendeeEmails.length === 0) {
-        console.log('[Interview] No attendee emails found — skipping ICS send');
-      } else {
-        const origin = req.headers['x-app-origin'] || req.headers['origin'] || req.headers['referer'] || '';
-        const baseUrl = origin
-          ? origin.replace(/\/+$/, '').split('/').slice(0, 3).join('/')
-          : (process.env.APP_URL || 'https://client-gamma-ruddy-63.vercel.app');
-        const candToken = makeToken(rec.id, 'candidate');
-        const ivToken   = makeToken(rec.id, 'interviewer');
-        const rescheduleUrl = `${baseUrl}/reschedule/${rec.id}/${candToken}?role=candidate`;
-        const _ivRescheduleUrl = `${baseUrl}/reschedule/${rec.id}/${ivToken}?role=interviewer`;
-        const profile = (store.company_profiles || []).find(p => p.environment_id === environment_id);
-        const companyName = profile?.name || process.env.SENDGRID_FROM_NAME || 'Vercentic';
-        const fromEmail   = process.env.SENDGRID_FROM_EMAIL || 'noreply@vercentic.com';
-        const summary = job_name ? `Interview: ${resolvedCandidateName} — ${job_name}` : `Interview: ${resolvedCandidateName}`;
-        const descLines = [
-          `Interview Type: ${interview_type_name || 'Interview'}`,
-          `Format: ${fmt}`, `Duration: ${duration || 45} minutes`,
-          notes ? `Notes: ${notes}` : '', `Reschedule: ${rescheduleUrl}`,
-        ].filter(Boolean);
-
-        const ics = buildICS({
-          uid: rec.id, summary, description: descLines.join('\n'),
-          location: fmt === 'In Person' ? (notes || '') : fmt,
-          startISO, endISO, organiserEmail: fromEmail, organiserName: companyName,
-          attendeeEmails, rescheduleUrl,
+      const store2 = getStore();
+      const candidateRecord = (store2.records || []).find(r => r.id === rec.candidate_id);
+      const candidateEmail = candidateRecord?.data?.email;
+      if (candidateEmail) {
+        const msg = require('../services/messaging');
+        await msg.sendEmail({
+          to: candidateEmail, toName: resolvedCandidateName,
+          subject: `Interview: ${resolvedCandidateName}${job_name ? ` — ${job_name}` : ''}`,
+          text: `Interview confirmed.\n\nCandidate: ${resolvedCandidateName}${job_name ? `\nRole: ${job_name}` : ''}\nDate: ${dateFormatted}\nTime: ${timeRange}\nFormat: ${format || 'Video Call'}${notes ? `\n\nNotes:\n${notes}` : ''}\n\nReschedule: ${rescheduleUrl}`,
+          html: buildEmailHtml({ candidateName: resolvedCandidateName, jobName: job_name, dateFormatted, timeRange, fmt: format || 'Video Call', duration: duration || 30, notes: notes || '', rescheduleUrl }),
+          attachments: [{ filename: 'interview.ics', content: Buffer.from(icsStr).toString('base64'), type: 'text/calendar' }],
         });
-
-        const dateLabel = new Date(`${date}T${timeStr}`).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-        const htmlBody = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:#4361EE;padding:24px 32px;border-radius:12px 12px 0 0">
-    <h2 style="color:white;margin:0;font-size:20px">Interview Scheduled</h2>
-  </div>
-  <div style="background:#f8f9fc;padding:28px 32px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb">
-    <p style="font-size:15px;color:#374151;margin:0 0 20px">Your interview has been confirmed. Please find the calendar invite attached.</p>
-    <table style="width:100%;border-collapse:collapse">
-      <tr><td style="padding:10px 0;color:#6b7280;font-size:13px;width:120px">Candidate</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${resolvedCandidateName}</td></tr>
-      ${job_name ? `<tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Role</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${job_name}</td></tr>` : ''}
-      <tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Date</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${dateLabel}</td></tr>
-      <tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Time</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${timeStr}</td></tr>
-      <tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Format</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${fmt}</td></tr>
-      <tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Duration</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${duration || 45} minutes</td></tr>
-      ${ivList.length ? `<tr><td style="padding:10px 0;color:#6b7280;font-size:13px">Interviewer(s)</td><td style="padding:10px 0;color:#111827;font-size:14px;font-weight:600">${ivList.map(i=>i.name||i).join(', ')}</td></tr>` : ''}
-    </table>
-    <div style="margin-top:24px;padding-top:20px;border-top:1px solid #e5e7eb">
-      <a href="${rescheduleUrl}" style="display:inline-block;background:#4361EE;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600">Need to reschedule? →</a>
-    </div>
-  </div>
-</div>`;
-
-        for (const email of attendeeEmails) {
-          await sendEmail({
-            to: email, subject: summary, html: htmlBody, text: descLines.join('\n'),
-            attachments: [{ content: Buffer.from(ics).toString('base64'), filename: 'interview.ics', type: 'text/calendar', disposition: 'attachment' }],
-          }).catch(e => console.warn(`[Interview] Email to ${email} failed:`, e.message));
-        }
-        console.log(`[Interview] ICS sent to ${attendeeEmails.length} attendee(s):`, attendeeEmails.join(', '));
       }
-    } catch (e) { console.warn('[Interview] ICS email failed:', e.message, e.stack); }
+      await fireEvent(environment_id, 'interview_scheduled', { candidateName: resolvedCandidateName, jobTitle: job_name, date, time: time || '09:00', format: format || 'Video Call', notes: notes || '', interviewers: interviewers || [] });
+    } catch (e) { console.warn('[Interviews] Notification failed:', e.message); }
   });
 
   res.status(201).json(rec);
@@ -323,21 +159,45 @@ router.patch('/:id', (req, res) => {
   rec ? res.json(rec) : res.status(404).json({ error: 'Not found' });
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req, res) => { // eslint-disable-line require-await
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const interview = query('interviews', i => i.id === req.params.id)?.[0];
   update('interviews', i => i.id === req.params.id, { deleted_at: new Date().toISOString() });
   if (interview?.meeting_link && interview?.meeting_provider === 'zoom') {
     const { getConnector } = require('../services/connectors');
-    process.nextTick(async () => {
-      try {
-        const zoom = getConnector(interview.environment_id, 'zoom');
-        if (zoom && interview.meeting_id) await zoom.cancelMeeting(interview.meeting_id);
-      } catch (e) { console.warn('[Connectors] Meeting cancel failed:', e.message); }
+    setImmediate(async () => {
+      try { const zoom = getConnector(interview.environment_id, 'zoom'); if (zoom && interview.meeting_id) await zoom.cancelMeeting(interview.meeting_id); } catch (e) {}
     });
   }
   res.json({ deleted: true });
+});
+
+router.get('/reschedule/:interviewId/:token', (req, res) => {
+  ensure();
+  const { interviewId, token } = req.params;
+  const s = getStore();
+  const tokenRec = (s.reschedule_tokens || []).find(t => t.interview_id === interviewId && t.token === token && !t.used);
+  if (!tokenRec) return res.status(404).json({ error: 'Invalid or expired reschedule link' });
+  const interview = (s.interviews || []).find(i => i.id === interviewId && !i.deleted_at);
+  if (!interview) return res.status(404).json({ error: 'Interview not found' });
+  res.json({ id: interview.id, candidate_name: interview.candidate_name, job_name: interview.job_name, date: interview.date, time: interview.time, duration: interview.duration, format: interview.format, notes: interview.notes, status: interview.status, role: tokenRec.role });
+});
+
+router.post('/reschedule/:interviewId/:token', (req, res) => {
+  ensure();
+  const { interviewId, token } = req.params;
+  const { date, time, message } = req.body;
+  const s = getStore();
+  const tokenRec = (s.reschedule_tokens || []).find(t => t.interview_id === interviewId && t.token === token && !t.used);
+  if (!tokenRec) return res.status(404).json({ error: 'Invalid or expired reschedule link' });
+  const interview = (s.interviews || []).find(i => i.id === interviewId && !i.deleted_at);
+  if (!interview) return res.status(404).json({ error: 'Interview not found' });
+  const requestNote = [`[Reschedule request]`, date ? `Proposed: ${date} ${time || ''}`.trim() : '', message || ''].filter(Boolean).join(' · ');
+  update('interviews', i => i.id === interviewId, { status: 'reschedule_requested', notes: interview.notes ? `${interview.notes}\n\n${requestNote}` : requestNote, updated_at: new Date().toISOString() });
+  tokenRec.used = true;
+  saveStore();
+  res.json({ ok: true, message: 'Reschedule request submitted. The team will confirm shortly.' });
 });
 
 module.exports = router;
