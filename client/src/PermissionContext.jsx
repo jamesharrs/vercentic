@@ -8,9 +8,23 @@ import api from './apiClient.js'; // use apiClient for correct session/CSRF head
 
 const PermissionContext = createContext(null);
 
+// Read session role from localStorage for fast-path bypass before permissions load
+function getSessionRole() {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const reserved = ['www','app','api','admin','localhost','client','portal'];
+    const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
+      !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
+    const key = isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+    const sess = JSON.parse(localStorage.getItem(key) || 'null');
+    return sess?.role?.slug || null;
+  } catch { return null; }
+}
+
 export function PermissionProvider({ userId, children }) {
   const [permissions, setPermissions] = useState(null);
-  const [loading, setLoading]         = useState(true); // RBAC FIX: start true — restrictive until loaded
+  const [loading, setLoading]         = useState(true);
 
   const refresh = useCallback(async () => {
     if (!userId) { setPermissions({ objects: {}, global: {} }); setLoading(false); return; }
@@ -40,8 +54,9 @@ export function PermissionProvider({ userId, children }) {
 
   // Sync helpers that read from cached state
   const check = useCallback((objectSlug, action) => {
-    if (!permissions || loading) return false; // RBAC FIX: restrictive until loaded
-    // Only super_admin bypasses — admin is checked normally
+    // Fast-path: if session says super_admin, allow immediately even before async load
+    if (getSessionRole() === 'super_admin') return true;
+    if (!permissions || loading) return false;
     const slug = permissions._roleSlug;
     if (slug === 'super_admin') return true;
     if (permissions.objects['*']?.[action]) return true;
@@ -62,7 +77,8 @@ export function PermissionProvider({ userId, children }) {
   ]);
 
   const checkGlobal = useCallback((action) => {
-    if (!permissions || loading) return false; // RBAC FIX: restrictive until loaded
+    if (getSessionRole() === 'super_admin') return true;
+    if (!permissions || loading) return false;
     // Only super_admin bypasses — admin is checked normally
     const slug = permissions._roleSlug;
     if (slug === 'super_admin') return true;
