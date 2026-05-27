@@ -43,20 +43,20 @@ const Btn = ({ children, color, onClick, disabled, outline, small, style={} }) =
   }}>{children}</button>
 )
 
-const Inp = ({ label, value, onChange, placeholder, type='text', required, multiline, rows=4, hint }) => (
+const Inp = ({ id, label, value, onChange, placeholder, type='text', required, multiline, rows=4, hint, autoComplete }) => (
   <div style={{ marginBottom:20 }}>
-    <label style={{ display:'block', fontSize:13, fontWeight:700, color:'#0D0D0F', marginBottom:6 }}>
-      {label}{required && <span style={{ color:'#E03131', marginLeft:3 }}>*</span>}
+    <label htmlFor={id} style={{ display:'block', fontSize:13, fontWeight:700, color:'#0D0D0F', marginBottom:6 }}>
+      {label}{required && <><span aria-hidden="true" style={{ color:'#E03131', marginLeft:3 }}>*</span><span style={{position:'absolute',width:1,height:1,overflow:'hidden',clip:'rect(0,0,0,0)'}}> (required)</span></>}
     </label>
     {hint && <p style={{ fontSize:12, color:'#9DA8C7', margin:'0 0 8px' }}>{hint}</p>}
     {multiline
-      ? <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+      ? <textarea id={id} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} required={required} aria-required={required?'true':'false'}
           style={{ width:'100%', padding:'12px 16px', borderRadius:10, border:'1.5px solid #E8ECF8',
-            fontSize:14, fontFamily:'inherit', resize:'vertical', outline:'none', boxSizing:'border-box' }}
+            fontSize:14, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }}
           onFocus={e=>e.target.style.borderColor='#4361EE'} onBlur={e=>e.target.style.borderColor='#E8ECF8'}/>
-      : <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} required={required}
+      : <input id={id} type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} required={required} aria-required={required?'true':'false'} autoComplete={autoComplete||'off'}
           style={{ width:'100%', padding:'12px 16px', borderRadius:10, border:'1.5px solid #E8ECF8',
-            fontSize:14, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }}
+            fontSize:14, fontFamily:'inherit', boxSizing:'border-box' }}
           onFocus={e=>e.target.style.borderColor='#4361EE'} onBlur={e=>e.target.style.borderColor='#E8ECF8'}/>
     }
   </div>
@@ -86,11 +86,12 @@ const JobCard = ({ job, color, onClick }) => {
     d.department === 'Finance' ? '💰' : d.department === 'HR' ? '👥' :
     d.department === 'Sales' ? '📈' : d.department === 'Marketing' ? '📣' : '💼'
   return (
-    <div onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+    <button onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      aria-label={`View job: ${d.job_title || 'Open Role'}${d.department ? ', ' + d.department : ''}`}
       style={{ background:'white', borderRadius:16, border:`1.5px solid ${hov?color:'#E8ECF8'}`,
         padding:'22px 24px', cursor:'pointer', transition:'all .2s',
         boxShadow:hov?`0 8px 32px ${color}18`:'0 2px 8px rgba(0,0,0,0.04)',
-        transform:hov?'translateY(-2px)':'none' }}>
+        transform:hov?'translateY(-2px)':'none', width:'100%', textAlign:'left', fontFamily:'inherit' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
         <div style={{ flex:1, minWidth:200 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
@@ -121,7 +122,7 @@ const JobCard = ({ job, color, onClick }) => {
           {d.description}
         </p>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -331,13 +332,13 @@ const ApplyForm = ({ job, portal, onBack, onSuccess, api }) => {
           </p>
           {step===0 && <>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
-              <Inp label="First name" value={form.first_name} onChange={v=>set('first_name',v)} placeholder="Jane" required/>
-              <Inp label="Last name"  value={form.last_name}  onChange={v=>set('last_name',v)}  placeholder="Smith" required/>
+              <Inp id="af-first" label="First name" autoComplete="given-name" value={form.first_name} onChange={v=>set('first_name',v)} placeholder="Jane" required/>
+              <Inp id="af-last"  label="Last name"  autoComplete="family-name" value={form.last_name}  onChange={v=>set('last_name',v)}  placeholder="Smith" required/>
             </div>
-            <Inp label="Email address" type="email" value={form.email}        onChange={v=>set('email',v)}        placeholder="jane@example.com" required/>
-            <Inp label="Phone number"  type="tel"   value={form.phone}        onChange={v=>set('phone',v)}        placeholder="+1 (555) 000-0000"/>
-            <Inp label="Location"                   value={form.location}     onChange={v=>set('location',v)}     placeholder="London, UK"/>
-            <Inp label="LinkedIn URL"  type="url"   value={form.linkedin_url} onChange={v=>set('linkedin_url',v)} placeholder="https://linkedin.com/in/yourname" hint="Optional — helps us learn more about you"/>
+            <Inp id="af-email" label="Email address" type="email" autoComplete="email" value={form.email} onChange={v=>set('email',v)} placeholder="jane@example.com" required/>
+            <Inp id="af-phone" label="Phone number"  type="tel"   autoComplete="tel"   value={form.phone} onChange={v=>set('phone',v)} placeholder="+1 (555) 000-0000"/>
+            <Inp id="af-loc"   label="Location"      autoComplete="address-level2"      value={form.location} onChange={v=>set('location',v)} placeholder="London, UK"/>
+            <Inp id="af-li"    label="LinkedIn URL"  type="url"   autoComplete="url"   value={form.linkedin_url} onChange={v=>set('linkedin_url',v)} placeholder="https://linkedin.com/in/yourname" hint="Optional — helps us learn more about you"/>
           </>}
           {step===1 && <>
             <Inp label="Current job title"  value={form.current_title}   onChange={v=>set('current_title',v)}   placeholder="e.g. Senior Software Engineer" required/>

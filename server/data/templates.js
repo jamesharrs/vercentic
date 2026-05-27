@@ -43,8 +43,8 @@ const SEP = (sort, api_key, name) => F(sort, api_key, name, 'section_separator')
  */
 const PEOPLE_STARTER = [
   SEP(1,  'section_identity',    'Identity'),
-  F(3,  'first_name',       'First Name',          'text',        null, { required: true, list: true }),
-  F(4,  'last_name',        'Last Name',           'text',        null, { required: true, list: true }),
+  F(3,  'first_name',       'First Name',          'text',        null, { required: false, list: true }),
+  F(4,  'last_name',        'Last Name',           'text',        null, { required: false, list: true }),
   F(5,  'email',            'Email',               'email',       null, { list: true }),
   F(6,  'phone',            'Phone',               'phone'),
   F(7,  'current_title',    'Current Title',       'text',        null, { list: true }),
@@ -91,8 +91,8 @@ const PEOPLE_STARTER = [
  */
 const PEOPLE_STANDARD = [
   SEP(1,  'section_identity',    'Identity'),
-  F(3,  'first_name',         'First Name',           'text',        null, { required: true, list: true }),
-  F(4,  'last_name',          'Last Name',            'text',        null, { required: true, list: true }),
+  F(3,  'first_name',         'First Name',           'text',        null, { required: false, list: true }),
+  F(4,  'last_name',          'Last Name',            'text',        null, { required: false, list: true }),
   F(5,  'current_title',      'Current Title',        'text',        null, { list: true }),
   F(6,  'current_company',    'Current Company',      'text'),
   F(7,  'summary',            'Summary / Bio',        'textarea'),
@@ -164,7 +164,7 @@ const PEOPLE_STANDARD = [
  */
 const JOBS_STARTER = [
   SEP(1,  'section_overview',    'Overview'),
-  F(2,  'job_title',          'Job Title',            'text',        null, { required: true, list: true }),
+  F(2,  'job_title',          'Job Title',            'text',        null, { required: false, list: true }),
   F(3,  'department',         'Department',           'select',
     ['Engineering','Product','Design','Sales','Marketing','Finance','Operations','HR','Legal','Other'],
     { list: true }),
@@ -202,7 +202,7 @@ const JOBS_STARTER = [
  */
 const JOBS_STANDARD = [
   SEP(1,  'section_overview',    'Overview'),
-  F(2,  'job_title',          'Job Title',            'text',        null, { required: true, list: true }),
+  F(2,  'job_title',          'Job Title',            'text',        null, { required: false, list: true }),
   F(3,  'department',         'Department',           'select',
     ['Engineering','Product','Sales','Marketing','Finance','HR','Operations','Legal','Customer Success','Design','Data','Other'],
     { list: true }),
@@ -286,7 +286,7 @@ const JOBS_STANDARD = [
 // TALENT POOL SCHEMA (same for Starter and Standard)
 // ─────────────────────────────────────────────────────────────────────────────
 const TALENT_POOL_FIELDS = [
-  F(1, 'pool_name',  'Pool Name',   'text',   null, { required: true, list: true }),
+  F(1, 'pool_name',  'Pool Name',   'text',   null, { required: false, list: true }),
   F(2, 'category',   'Category',    'select',
     ['Talent Community','Alumni','Silver Medalists','Internal Mobility',
      'Graduates','Diversity','Referrals','Other'],   { list: true }),
@@ -635,7 +635,7 @@ const TEMPLATES = {
         slug: 'clients_co', name: 'Client Company', plural_name: 'Client Companies',
         icon: 'building', color: '#EF4444', is_system: false,
         fields: [
-          F(1, 'company_name',  'Company Name', 'text',   null, { required: true, list: true }),
+          F(1, 'company_name',  'Company Name', 'text',   null, { required: false, list: true }),
           F(2, 'industry',      'Industry',     'select',
             ['Technology','Finance','Healthcare','Retail','Manufacturing','Professional Services','Other'], { list: true }),
           F(3, 'status',        'Status',       'select',
@@ -649,7 +649,7 @@ const TEMPLATES = {
         slug: 'placements', name: 'Placement', plural_name: 'Placements',
         icon: 'check-circle', color: '#0CAF77', is_system: false,
         fields: [
-          F(1, 'candidate',   'Candidate',   'people',    null, { required: true, list: true }),
+          F(1, 'candidate',   'Candidate',   'people',    null, { required: false, list: true }),
           F(2, 'job_title',   'Job Title',   'text',      null, { list: true }),
           F(3, 'start_date',  'Start Date',  'date',      null, { list: true }),
           F(4, 'salary',      'Salary',      'currency',  null, { list: true }),
@@ -678,8 +678,8 @@ const TEMPLATES = {
         slug: 'employees', name: 'Employee', plural_name: 'Employees',
         icon: 'user', color: '#0891B2', is_system: false,
         fields: [
-          F(1, 'first_name',   'First Name',   'text',     null, { required: true, list: true }),
-          F(2, 'last_name',    'Last Name',    'text',     null, { required: true, list: true }),
+          F(1, 'first_name',   'First Name',   'text',     null, { required: false, list: true }),
+          F(2, 'last_name',    'Last Name',    'text',     null, { required: false, list: true }),
           F(3, 'employee_id',  'Employee ID',  'text',     null, { list: true }),
           F(4, 'job_title',    'Job Title',    'text',     null, { list: true }),
           F(5, 'department',   'Department',   'text',     null, { list: true }),

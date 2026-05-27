@@ -594,8 +594,9 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
       {pageRecords.map(r => {
         const d = r.data || {};
         return (
-          <div key={r.id} onClick={()=>setSelected(r)}
-            style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', transition:'background .1s' }}
+          <button key={r.id} onClick={()=>setSelected(r)}
+            aria-label={`View ${isJobs ? 'job' : 'record'}: ${getName(r)}`}
+            style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', transition:'background .1s', width:'100%', textAlign:'left', background:'transparent', border:'none', fontFamily:'inherit' }}
             onMouseEnter={e=>e.currentTarget.style.background=pr+'08'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
             <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
               {isPeople && <div style={{ width:36, height:36, borderRadius:'50%', background:pr+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:pr, flexShrink:0 }}>{getName(r).split(' ').map(w=>w[0]).join('').slice(0,2)}</div>}
@@ -615,8 +616,8 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
                 )}
               </div>
             </div>
-            <span style={{ fontSize:12, color:pr, fontWeight:600, flexShrink:0 }}>View →</span>
-          </div>
+            <span aria-hidden="true" style={{ fontSize:12, color:pr, fontWeight:600, flexShrink:0 }}>View →</span>
+          </button>
         );
       })}
       {fullyFiltered.length === 0 && <div style={{ textAlign:'center', padding:'40px 20px', color:tc+'60', fontSize:14 }}>{cfg.emptyText || 'No records found.'}</div>}
@@ -688,10 +689,10 @@ const FormWidget = ({ cfg, theme }) => {
         const type = typeof f === 'string' ? (f.toLowerCase() === 'email' ? 'email' : f.toLowerCase() === 'message' ? 'textarea' : 'text') : f.type;
         return (
           <div key={i} style={{ marginBottom:12 }}>
-            <label style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{label}</label>
+            <label htmlFor={`fw-${i}`} style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{label}</label>
             {type === 'textarea'
-              ? <textarea rows={3} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
-              : <input type={type||'text'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
+              ? <textarea id={`fw-${i}`} rows={3} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
+              : <input id={`fw-${i}`} type={type||'text'} autoComplete={type==='email'?'email':'off'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
             }
           </div>
         );
@@ -731,15 +732,15 @@ const MultistepFormWidget = ({ cfg, theme, portal, api, track }) => {
       <h4 style={{ fontSize:15, fontWeight:600, color:tc, margin:'0 0 14px' }}>{current.title}</h4>
       {(current.fields || []).map(f => (
         <div key={f.id} style={{ marginBottom:12 }}>
-          <label style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{f.label}{f.required && <span style={{ color:'#ef4444' }}> *</span>}</label>
+          <label htmlFor={`msf-${f.id}`} style={{ display:'block', fontSize:12, fontWeight:600, color:tc+'90', marginBottom:4 }}>{f.label}{f.required && <span aria-hidden="true" style={{ color:'#ef4444' }}> *</span>}{f.required && <span style={{position:'absolute',width:1,height:1,overflow:'hidden',clip:'rect(0,0,0,0)'}}> (required)</span>}</label>
           {f.type === 'textarea'
-            ? <textarea value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} rows={3} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
+            ? <textarea id={`msf-${f.id}`} value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} rows={3} required={!!f.required} aria-required={f.required?'true':'false'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, resize:'vertical', boxSizing:'border-box' }}/>
             : f.type === 'select' || f.type === 'radio'
-              ? <select value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, background:'white', boxSizing:'border-box' }}>
+              ? <select id={`msf-${f.id}`} value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} required={!!f.required} aria-required={f.required?'true':'false'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, background:'white', boxSizing:'border-box' }}>
                   <option value="">Select...</option>
                   {(f.options||'').split(',').map(o => o.trim()).filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
-              : <input type={f.type||'text'} value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
+              : <input id={`msf-${f.id}`} type={f.type||'text'} value={values[f.id]||''} onChange={e => setValue(f.id, e.target.value)} placeholder={f.placeholder} required={!!f.required} aria-required={f.required?'true':'false'} autoComplete={f.type==='email'?'email':f.label?.toLowerCase().includes('first')?'given-name':f.label?.toLowerCase().includes('last')?'family-name':(f.label?.toLowerCase().includes('phone')||f.type==='tel')?'tel':'off'} style={{ width:'100%', padding:'8px 12px', borderRadius:br, border:'1px solid '+pr+'25', fontSize:13, fontFamily:ff, boxSizing:'border-box' }}/>
           }
         </div>
       ))}
@@ -1081,7 +1082,9 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
           {jobs.map((job, i) => (
-            <div key={job.id||i} style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12 }}
+            <button key={job.id||i}
+              aria-label={`View job: ${job.data?.job_title||'Untitled role'}${job.data?.department ? ', '+job.data.department : ''}`}
+              style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12, textAlign:'left', fontFamily:'inherit', width:'100%' }}
               onClick={() => setSelectedJob(job)}
               onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 8px 24px ${pr}16`; e.currentTarget.style.borderColor=`${pr}40`; e.currentTarget.style.transform='translateY(-2px)' }}
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; e.currentTarget.style.borderColor='#F3F4F6'; e.currentTarget.style.transform='none' }}
@@ -1100,7 +1103,7 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
                 <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmtDate(job.created_at)}</span>
                 <span style={{ fontSize:11, fontWeight:700, color:pr }}>Apply →</span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -3016,7 +3019,7 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
   const logoOrder = alignment === 'center' ? { position:'absolute', left:'50%', transform:'translateX(-50%)' } : {}
 
   return (
-    <nav style={{ position: nav.overlay ? 'absolute' : nav.sticky !== false ? 'sticky' : 'relative', top:0, left:0, right:0, zIndex:100,
+    <nav aria-label="Main navigation" style={{ position: nav.overlay ? 'absolute' : nav.sticky !== false ? 'sticky' : 'relative', top:0, left:0, right:0, zIndex:100,
       background: nav.overlay ? 'transparent' : bg,
       borderBottom: showBorder ? `1px solid ${borderCol}` : 'none',
       boxShadow: showShadow ? '0 1px 8px rgba(0,0,0,.07)' : 'none' }}>
@@ -3430,9 +3433,13 @@ export default function PortalPageRenderer({ portal, api }) {
 
   return (
     <div style={{ background:bg, minHeight:'100vh', color:tc, fontFamily:ff }}>
+      {/* WCAG P1-5: Skip navigation link */}
+      <a href="#vc-main" style={{ position:'absolute', top:'-100vh', left:16, zIndex:10000, padding:'8px 16px', background:pr, color:'#fff', fontWeight:700, fontSize:14, borderRadius:'0 0 8px 8px', textDecoration:'none', fontFamily:ff }}
+        onFocus={e=>e.currentTarget.style.top='0'} onBlur={e=>e.currentTarget.style.top='-100vh'}>Skip to main content</a>
       <PortalNav portal={portal} theme={theme} currentPage={currentPage} onNav={setCurrentPage} pages={pages}/>
 
       {/* Hub page — renders CandidateHubWidget inside the portal layout */}
+      <main id="vc-main" tabIndex={-1} style={{outline:'none'}}>
       {currentPage?._isHub ? (
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'48px 24px' }}>
           <CandidateHubWidget cfg={portal.hub||{}} theme={theme} portal={portal} api={api}/>
@@ -3440,6 +3447,7 @@ export default function PortalPageRenderer({ portal, api }) {
       ) : (
         (currentPage?.rows||[]).map(row => <PortalRow key={row.id} row={row} theme={theme} portal={portal} api={api} track={track}/>)
       )}
+      </main>
 
       <PortalFooter portal={portal} theme={theme}/>
       <FeedbackWidget portal={portal} currentPageSlug={currentPage?.slug || "/"} api={api} forcePosition={portal.copilot?.enabled ? 'bottom-left' : undefined}/>
@@ -3447,13 +3455,18 @@ export default function PortalPageRenderer({ portal, api }) {
 
       {/* GDPR Consent Banner */}
       {showConsent && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:9999, background:gdpr.bannerBg||'#0F1729', color:gdpr.bannerText||'#F9FAFB', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, boxShadow:'0 -4px 20px rgba(0,0,0,.2)', fontFamily:ff }}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="vc-gdpr-title"
+          style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:9999, background:gdpr.bannerBg||'#0F1729', color:gdpr.bannerText||'#F9FAFB', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, boxShadow:'0 -4px 20px rgba(0,0,0,.2)', fontFamily:ff }}>
+          <span id="vc-gdpr-title" style={{position:'absolute',width:1,height:1,overflow:'hidden',clip:'rect(0,0,0,0)',whiteSpace:'nowrap'}}>Cookie consent</span>
           <p style={{ margin:0, flex:1, minWidth:200, fontSize:14, lineHeight:1.5, opacity:0.9 }}>
             {gdpr.message || 'We use cookies to improve your experience on this career site. By continuing, you agree to our use of analytics cookies.'}
             {gdpr.privacyUrl && <> <a href={gdpr.privacyUrl} target="_blank" rel="noreferrer" style={{ color:pr, marginLeft:4 }}>Privacy policy</a></>}
           </p>
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-            <button onClick={declineConsent} style={{ padding:'8px 16px', borderRadius:br, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:'inherit', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:ff }}>
+            <button onClick={declineConsent} autoFocus style={{ padding:'8px 16px', borderRadius:br, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:'inherit', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:ff }}>
               {gdpr.declineText || 'Decline'}
             </button>
             <button onClick={acceptConsent} style={{ padding:'8px 20px', borderRadius:br, border:'none', background:pr, color:'white', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:ff }}>

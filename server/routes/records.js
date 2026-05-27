@@ -119,6 +119,10 @@ function resolveAutoNumbers(objectId, data) {
 function checkPerm(req, res, objectId, action) {
   const user = req.currentUser;
   if (!user) { res.status(401).json({ error: "Authentication required", code: "UNAUTHENTICATED" }); return false; }
+  // Explicit super-admin bypass — covers both role slug AND is_super_admin flag on the user record.
+  // This prevents provisioned tenant admins from being blocked when the permissions table
+  // hasn't been seeded yet, or when the role resolution fails in an edge-case tenant context.
+  if (user.is_super_admin === true || user.role?.slug === 'super_admin') return null;
   const slug = getObjectSlug(objectId);
   if (!slug) return null; // unknown object = allow
   if (!hasPermission(user, slug, action)) {

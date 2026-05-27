@@ -48,7 +48,9 @@ function requireAuth(req, res, next) {
 }
 
 function isSuperAdmin(user) {
-  return user?.role?.slug === SUPER_ADMIN_SLUG;
+  // Check both role slug AND the is_super_admin flag set on provisioned tenant admins.
+  // The flag is a safety net when role resolution fails across tenant context boundaries.
+  return user?.role?.slug === SUPER_ADMIN_SLUG || user?.is_super_admin === true;
 }
 
 function hasPermission(user, objectSlug, action) {
@@ -206,6 +208,33 @@ function seedDefaultPermissions(store) {
     }
   }
   if (seeded > 0) console.log(`✅ Seeded ${seeded} missing permissions for non-super-admin roles`);
+
+  // Ensure ALL objects in the store have permissions for every role.
+  // This catches custom objects, provisioned templates with different slugs, etc.
+  // Super admin already handled above. For other roles: admin/recruiter get full
+  // CRUD, hiring_manager/read_only get view only on unknown objects.
+  const allObjectSlugs = new Set((store.objects || []).map(o => o.slug).filter(Boolean));
+  let extraSeeded = 0;
+  for (const role of (store.roles || [])) {
+    if (role.slug === 'super_admin') continue;
+    const isAdmin     = ['admin','recruiter'].includes(role.slug);
+    const allowedActs = isAdmin ? Object.values(ACTIONS) : ['view'];
+    for (const objSlug of allObjectSlugs) {
+      for (const action of Object.values(ACTIONS)) {
+        const exists = store.permissions.find(p =>
+          p.role_id === role.id && p.object_slug === objSlug && p.action === action
+        );
+        if (!exists) {
+          store.permissions.push({
+            id: uuidv4(), role_id: role.id, object_slug: objSlug,
+            action, allowed: allowedActs.includes(action) ? 1 : 0, created_at: now,
+          });
+          extraSeeded++;
+        }
+      }
+    }
+  }
+  if (extraSeeded > 0) console.log(`✅ Seeded ${extraSeeded} permissions for all objects`);
 }
 
 /**
