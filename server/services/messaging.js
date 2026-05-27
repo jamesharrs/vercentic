@@ -77,7 +77,7 @@ async function sendWhatsApp({ to, body }) {
 }
 
 // ─── Email ────────────────────────────────────────────────────────────────────
-async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, text, html, tags }) {
+async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, text, html, tags, attachments = [] }) {
   const textBody = text || body || '';
   const htmlBody = html || textBody.replace(/\n/g, '<br>');
 
@@ -97,6 +97,7 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
       from: from ? `${fromName || 'Vercentic'} <${from}>` : undefined,
       replyTo,
       environmentId: tags?.environment_id, // pass env so mailer picks the right domain
+      attachments,
     });
     return { messageId: result.id, status: result.simulated ? 'simulated' : 'sent', provider: 'resend' };
   }
@@ -112,12 +113,17 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
       subject, text: textBody, html: htmlBody,
     };
     if (replyTo) payload.replyTo = replyTo;
+    if (attachments.length > 0) {
+      payload.attachments = attachments.map(a => ({
+        filename: a.filename, content: a.content, type: a.type || 'application/octet-stream', disposition: 'attachment',
+      }));
+    }
     const [response] = await sgMail.send(payload);
     return { messageId: response.headers['x-message-id'], status: 'sent', provider: 'sendgrid' };
   }
 
   // ── Simulation ─────────────────────────────────────────────────────────────
-  console.log(`[email-sim] To: ${to} | Subject: ${subject} | ReplyTo: ${replyTo || 'none'}`);
+  console.log(`[email-sim] To: ${to} | Subject: ${subject} | ReplyTo: ${replyTo || 'none'}${attachments.length ? ` | Attachments: ${attachments.map(a=>a.filename).join(', ')}` : ''}`);
   return { simulated: true, messageId: `sim_${Date.now()}`, status: 'simulated' };
 }
 

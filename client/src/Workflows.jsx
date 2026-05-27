@@ -49,6 +49,10 @@ const PATHS = {
   briefcase:  "M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2",
   settings:   "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
   search:     "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
+  share:      "M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98",
+  userCheck:  "M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 11a4 4 0 100-8 4 4 0 000 8zM17 11l2 2 4-4",
+  lock:       "M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4",
+  eyeOff:     "M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22",
 };
 const Ic = ({ n, s=16, c="currentColor" }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -69,6 +73,7 @@ const AUTOMATION_TYPES = [
   { type:"ai_interview",          label:"AI Interview",         icon:"cpu",       color:"#7048e8", desc:"Send candidate an AI voice interview link using questions from their linked job" },
   { type:"create_offer",          label:"Create Offer",         icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
   { type:"assign_task_group",     label:"Assign Task Group",    icon:"check-square", color:"#7c3aed", desc:"Assign a task group template to the person" },
+  { type:"share_record",          label:"Share Record",         icon:"share",     color:"#0891b2", desc:"Share this record with a user or hiring manager for review or feedback" },
 ];
 
 // Keep STEP_TYPES as alias for display in run results etc.
@@ -910,15 +915,247 @@ function AssignTaskGroupConfig({ cfg, onChange, envId, fields }) {
   );
 }
 
+// ── Share Record config component ─────────────────────────────────────────────
+// Configures the `share_record` workflow action: who to share with, what they
+// see (privacy), what action they take (CTA), and what happens after they respond.
+function ShareRecordConfig({ cfg, onChange, envId, fields }) {
+  const [users, setUsers]               = useState([]);
+  const [roles, setRoles]               = useState([]);
+  const [forms, setForms]               = useState([]);
+  const [piiFields, setPiiFields]       = useState([]);
+  const [objectFields, setObjectFields] = useState([]);
+
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/users?environment_id=${envId}`)
+      .then(d => setUsers(Array.isArray(d) ? d : (d?.users || []))).catch(() => {});
+    api.get(`/roles?environment_id=${envId}`)
+      .then(d => setRoles(Array.isArray(d) ? d : [])).catch(() => {});
+    api.get(`/forms?environment_id=${envId}`)
+      .then(d => setForms((Array.isArray(d) ? d : []).filter(f => !f.deleted_at))).catch(() => {});
+    api.get(`/record-shares/config/pii-fields`)
+      .then(d => setPiiFields(d?.default_pii_fields || [])).catch(() => {});
+  }, [envId]);
+
+  // All field api_keys on this object — for the custom allowlist picker
+  useEffect(() => {
+    setObjectFields((fields || []).map(f => ({ key: f.api_key, name: f.name, type: f.field_type })));
+  }, [fields]);
+
+  // People-type fields on this object (for field_variable recipient mode)
+  const peopleFields = (fields || []).filter(f => f.field_type === 'people' || f.field_type === 'lookup');
+
+  const set = (patch) => onChange({ ...cfg, ...patch });
+  const setVis = (key, on) => {
+    const current = new Set(cfg.visible_fields || []);
+    if (on) current.add(key); else current.delete(key);
+    set({ visible_fields: Array.from(current) });
+  };
+
+  const recipientMode = cfg.recipient_mode || 'specific_user';
+  const privacyMode   = cfg.privacy_mode   || 'anonymised';
+  const ctaType       = cfg.cta_type       || 'form';
+  const autoAdvance   = cfg.auto_advance   || 'none';
+
+  const labelStyle  = { fontSize: 11, fontWeight: 700, color: C.text3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 };
+  const inputStyle  = { width: "100%", boxSizing: "border-box", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: F, outline: "none", background: "white", color: C.text1 };
+  const segmentBtn = (active) => ({
+    flex: 1, padding: "6px 8px", borderRadius: 8,
+    border: `1.5px solid ${active ? "#0891b2" : C.border}`,
+    background: active ? "#ecfeff" : "white",
+    color: active ? "#0891b2" : C.text3,
+    fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F, transition: "all .12s",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
+
+      {/* ── 1. RECIPIENTS ─────────────────────────────────────────────── */}
+      <div>
+        <div style={labelStyle}>Share with</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <button type="button" onClick={() => set({ recipient_mode: 'specific_user' })} style={segmentBtn(recipientMode === 'specific_user')}>Specific user</button>
+          <button type="button" onClick={() => set({ recipient_mode: 'role' })} style={segmentBtn(recipientMode === 'role')}>By role</button>
+          <button type="button" onClick={() => set({ recipient_mode: 'field_variable' })} style={segmentBtn(recipientMode === 'field_variable')}>From field</button>
+        </div>
+
+        {recipientMode === 'specific_user' && (
+          <select multiple value={cfg.recipient_user_ids || []} onChange={e => set({ recipient_user_ids: Array.from(e.target.selectedOptions).map(o => o.value) })}
+            style={{ ...inputStyle, height: 120 }}>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>
+                {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email} {u.email ? `(${u.email})` : ''}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {recipientMode === 'role' && (
+          <select value={cfg.recipient_role_id || ''} onChange={e => set({ recipient_role_id: e.target.value })} style={inputStyle}>
+            <option value="">— Select a role —</option>
+            {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        )}
+
+        {recipientMode === 'field_variable' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <select value={cfg.recipient_source || 'self'} onChange={e => set({ recipient_source: e.target.value })} style={inputStyle}>
+              <option value="self">From this record's field</option>
+              <option value="linked_job">From the linked job's field (for candidates)</option>
+            </select>
+            <select value={cfg.recipient_field_key || ''} onChange={e => set({ recipient_field_key: e.target.value })} style={inputStyle}>
+              <option value="">— Select a People field —</option>
+              {peopleFields.map(f => <option key={f.api_key} value={f.api_key}>{f.name} ({f.api_key})</option>)}
+              {peopleFields.length === 0 && (
+                <>
+                  <option value="hiring_manager">Hiring Manager</option>
+                  <option value="recruiter">Recruiter</option>
+                  <option value="interviewer">Interviewer</option>
+                </>
+              )}
+            </select>
+            <div style={{ fontSize: 10, color: C.text3, lineHeight: 1.5 }}>
+              Resolves at runtime — the user whose email matches the person record in this field will be shared with.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 2. PRIVACY ────────────────────────────────────────────────── */}
+      <div>
+        <div style={labelStyle}><Ic n="lock" s={11}/> Privacy</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <button type="button" onClick={() => set({ privacy_mode: 'full' })} style={segmentBtn(privacyMode === 'full')}>Full record</button>
+          <button type="button" onClick={() => set({ privacy_mode: 'anonymised' })} style={segmentBtn(privacyMode === 'anonymised')}>Anonymised</button>
+          <button type="button" onClick={() => set({ privacy_mode: 'custom_allowlist' })} style={segmentBtn(privacyMode === 'custom_allowlist')}>Custom fields</button>
+        </div>
+
+        {privacyMode === 'anonymised' && (
+          <div style={{ padding: "8px 12px", borderRadius: 8, background: "#ecfeff", border: "1px solid #a5f3fc", fontSize: 11, color: "#0e7490", lineHeight: 1.5 }}>
+            <strong>Auto-strips PII:</strong> name, email, phone, address, photo, DOB, social handles, ID numbers, nationality.
+            Recipient sees an anonymous label (e.g. "Candidate A37") and all other fields.
+          </div>
+        )}
+
+        {privacyMode === 'custom_allowlist' && (
+          <div>
+            <div style={{ fontSize: 10, color: C.text3, marginBottom: 6 }}>Only these fields will be shown to the recipient:</div>
+            <div style={{ maxHeight: 160, overflowY: "auto", border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 8px", background: "#fafafa" }}>
+              {objectFields.length === 0 && <div style={{ fontSize: 11, color: C.text3, padding: 4 }}>No fields available.</div>}
+              {objectFields.map(f => {
+                const checked = (cfg.visible_fields || []).includes(f.key);
+                return (
+                  <label key={f.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", fontSize: 12, color: C.text1, cursor: "pointer" }}>
+                    <input type="checkbox" checked={checked} onChange={e => setVis(f.key, e.target.checked)} />
+                    <span style={{ flex: 1 }}>{f.name}</span>
+                    <code style={{ fontSize: 10, color: C.text3, background: "#fff", padding: "1px 5px", borderRadius: 4, border: `1px solid ${C.border}` }}>{f.key}</code>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 3. CTA ───────────────────────────────────────────────────── */}
+      <div>
+        <div style={labelStyle}>What should they do?</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <button type="button" onClick={() => set({ cta_type: 'form' })} style={segmentBtn(ctaType === 'form')}>Submit a form</button>
+          <button type="button" onClick={() => set({ cta_type: 'approve_reject' })} style={segmentBtn(ctaType === 'approve_reject')}>Approve / Reject</button>
+          <button type="button" onClick={() => set({ cta_type: 'free_text_feedback' })} style={segmentBtn(ctaType === 'free_text_feedback')}>Free-text feedback</button>
+        </div>
+
+        {ctaType === 'form' && (
+          <select value={cfg.cta_form_id || ''} onChange={e => set({ cta_form_id: e.target.value })} style={inputStyle}>
+            <option value="">— Select a form —</option>
+            {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        )}
+
+        {ctaType === 'approve_reject' && (
+          <input value={cfg.cta_config?.prompt || ''} onChange={e => set({ cta_config: { ...(cfg.cta_config || {}), prompt: e.target.value } })}
+            placeholder="Question shown to the reviewer (e.g. 'Should we progress this candidate?')" style={inputStyle}/>
+        )}
+
+        {ctaType === 'free_text_feedback' && (
+          <input value={cfg.cta_config?.prompt || ''} onChange={e => set({ cta_config: { ...(cfg.cta_config || {}), prompt: e.target.value } })}
+            placeholder="Prompt shown above the feedback box (e.g. 'Share your thoughts on this candidate')" style={inputStyle}/>
+        )}
+      </div>
+
+      {/* ── 4. AFTER COMPLETION ─────────────────────────────────────── */}
+      <div>
+        <div style={labelStyle}>After they respond</div>
+        <select value={autoAdvance} onChange={e => set({ auto_advance: e.target.value })} style={inputStyle}>
+          <option value="none">Stay on this stage</option>
+          <option value="always">Advance to the next stage</option>
+          {ctaType === 'approve_reject' && <option value="on_approve">Advance only if approved</option>}
+        </select>
+        <div style={{ fontSize: 10, color: C.text3, marginTop: 4, lineHeight: 1.5 }}>
+          Auto-advance only works on people-link workflows (e.g. candidates flowing through a hiring process).
+        </div>
+      </div>
+
+      {/* ── 5. OPTIONAL EXTRAS ──────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div>
+          <div style={labelStyle}>Expires after</div>
+          <select value={cfg.expiry_days || ''} onChange={e => set({ expiry_days: e.target.value ? Number(e.target.value) : null })} style={inputStyle}>
+            <option value="">Never</option>
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div style={labelStyle}>Message to recipient <span style={{ fontWeight: 400, textTransform: "none", color: C.text3 }}>(optional)</span></div>
+        <textarea value={cfg.message || ''} onChange={e => set({ message: e.target.value })}
+          placeholder="e.g. Please review this candidate and let me know if they should progress to interview."
+          rows={3}
+          style={{ ...inputStyle, resize: "vertical", fontFamily: F, lineHeight: 1.5 }}/>
+      </div>
+
+    </div>
+  );
+}
+
+// ── AllPill — "All" pill used in expanded category stage filter row ──────────
+function AllPill({ isAll, onClick, count, C, F }) {
+  return (
+    <button onClick={onClick}
+      style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 12px",
+        borderRadius:99, border:`1.5px solid ${isAll ? "#374151" : C.border}`,
+        background: isAll ? "#374151" : "white",
+        color: isAll ? "white" : C.text2,
+        cursor:"pointer", fontFamily:F, fontSize:12, fontWeight:600, transition:"all .15s" }}>
+      All
+      <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99,
+        lineHeight:"16px",
+        background: isAll ? "rgba(255,255,255,.2)" : "#f3f4f6",
+        color: isAll ? "white" : "#6b7280" }}>{count}</span>
+    </button>
+  );
+}
+
 // ── CategoryPicker — styled dropdown for workflow stage category assignment ──
 function CategoryPicker({ categories, value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const popRef = useRef(null);
   const selCat = categories.find(c => c.id === value);
 
   useEffect(() => {
     if (!open) return;
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const h = e => {
+      const inTrigger = ref.current && ref.current.contains(e.target);
+      const inPopover = popRef.current && popRef.current.contains(e.target);
+      if (!inTrigger && !inPopover) setOpen(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
@@ -941,7 +1178,7 @@ function CategoryPicker({ categories, value, onChange }) {
         </svg>
       </button>
       {open && createPortal(
-        <div style={{
+        <div ref={popRef} style={{
           position:"fixed",
           top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0,
           left: ref.current ? ref.current.getBoundingClientRect().left : 0,
@@ -1344,6 +1581,10 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
 
                   {action.type === "assign_task_group" && (
                     <AssignTaskGroupConfig cfg={cfg} onChange={patch=>setActionConfigs(action.id, patch)} envId={envId} fields={fields}/>
+                  )}
+
+                  {action.type === "share_record" && (
+                    <ShareRecordConfig cfg={cfg} onChange={patch=>setActionConfigs(action.id, patch)} envId={envId} fields={fields}/>
                   )}
 
                 </div>
@@ -3274,57 +3515,37 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                 </button>
               )}
             </div>
-            )}
 
           {/* Expanded category: stage filter pills */}
-          {expandedCat && (() => {
-            const group = allGroups.find(g => g.cat.id === expandedCat);
-            if (!group) return null;
-            return (
-              <div style={{ padding:"8px 16px 10px", background:`${group.cat.color}08`,
-                borderBottom:`1px solid ${C.border}` }}>
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-                  {group.steps.map(step => {
-                    const count = countByStage[step.id] || 0;
-                    const isActive = selectedStage === step.id;
-                    return (
-                      <button key={step.id}
-                        onClick={() => setSelectedStage(isActive ? "__cat__" : step.id)}
-                        style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 12px",
-                          borderRadius:99, border:`1.5px solid ${isActive ? group.cat.color : C.border}`,
-                          background: isActive ? group.cat.color : "white",
-                          color: isActive ? "white" : C.text1,
-                          cursor:"pointer", fontFamily:F, fontSize:12, fontWeight:600, transition:"all .15s" }}>
-                        {step.name}
-                        <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99,
-                          lineHeight:"16px",
-                          background: isActive ? "rgba(255,255,255,.25)" : `${group.cat.color}20`,
-                          color: isActive ? "white" : group.cat.color }}>{count}</span>
-                      </button>
-                    );
-                  })}
-                  {/* All — always last, shows everyone linked across all stages */}
-                  {(() => {
-                    const isAll = selectedStage === "__all__";
-                    return (
-                      <button onClick={() => setSelectedStage(isAll ? "__cat__" : "__all__")}
-                        style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 12px",
-                          borderRadius:99, border:`1.5px solid ${isAll ? "#374151" : C.border}`,
-                          background: isAll ? "#374151" : "white",
-                          color: isAll ? "white" : C.text2,
-                          cursor:"pointer", fontFamily:F, fontSize:12, fontWeight:600, transition:"all .15s" }}>
-                        All
-                        <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99,
-                          lineHeight:"16px",
-                          background: isAll ? "rgba(255,255,255,.2)" : "#f3f4f6",
-                          color: isAll ? "white" : "#6b7280" }}>{peopleLinks.length}</span>
-                      </button>
-                    );
-                  })()}
-                </div>
+          {expandedCat && allGroups.find(g => g.cat.id === expandedCat) && (
+            <div style={{ padding:"8px 16px 10px", background:`${(allGroups.find(g => g.cat.id === expandedCat)).cat.color}08`,
+              borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                {(allGroups.find(g => g.cat.id === expandedCat)).steps.map(step => {
+                  const group = allGroups.find(g => g.cat.id === expandedCat);
+                  const count = countByStage[step.id] || 0;
+                  const isActive = selectedStage === step.id;
+                  return (
+                    <button key={step.id}
+                      onClick={() => setSelectedStage(isActive ? "__cat__" : step.id)}
+                      style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 12px",
+                        borderRadius:99, border:`1.5px solid ${isActive ? group.cat.color : C.border}`,
+                        background: isActive ? group.cat.color : "white",
+                        color: isActive ? "white" : C.text1,
+                        cursor:"pointer", fontFamily:F, fontSize:12, fontWeight:600, transition:"all .15s" }}>
+                      {step.name}
+                      <span style={{ fontSize:11, fontWeight:800, padding:"0 5px", borderRadius:99,
+                        lineHeight:"16px",
+                        background: isActive ? "rgba(255,255,255,.25)" : `${group.cat.color}20`,
+                        color: isActive ? "white" : group.cat.color }}>{count}</span>
+                    </button>
+                  );
+                })}
+                {/* All — always last, shows everyone linked across all stages */}
+                <AllPill isAll={selectedStage === "__all__"} onClick={() => setSelectedStage(selectedStage === "__all__" ? "__cat__" : "__all__")} count={peopleLinks.length} C={C} F={F}/>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
       )}
       {/* No workflow assigned */}

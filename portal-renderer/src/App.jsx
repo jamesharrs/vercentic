@@ -73,7 +73,11 @@ export default function App() {
   if (loading) return <Spinner color={portal?.branding?.primary_color}/>
   if (error || !portal) return <ErrorScreen message={error}/>
 
-  const props = { portal, objects, api }
+  // Optional viewer identity — passed via ?as=email@company.com on the URL.
+  // Used by the HM portal Share Inbox widget to identify the recipient.
+  const viewerEmail = new URLSearchParams(window.location.search).get('as') || null;
+
+  const props = { portal, objects, api, viewerEmail }
   const PortalComponent = {
     career_site:    CareerSite,
     hm_portal:      HMPortal,
