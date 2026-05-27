@@ -243,7 +243,7 @@ if (process.env.NODE_ENV !== 'production') {
       const user  = (store.users || []).find(u => u.id === uid && !u.deleted_at);
       if (!user) return res.json({ authenticated: false });
       const role  = (store.roles || []).find(r => r.id === user.role_id);
-      const perms = (store.role_permissions || []).filter(p => p.role_id === user.role_id);
+      const perms = (store.permissions || []).filter(p => p.role_id === user.role_id && p.allowed);
       // Return full session data so client can sync localStorage
       res.json({
         authenticated: true,
@@ -468,6 +468,7 @@ app.use('/api/screening',         require('./routes/screening'));
 app.use('/api/duplicates',        require('./routes/duplicates'));
 app.use('/api/data-import',       require('./routes/data_import'));
 app.use('/api/question-bank',     require('./routes/question_bank'));
+app.use('/api/record-shares',     require('./routes/record_shares'));
 app.use('/api/forms',             require('./routes/forms'));
 app.use('/api/portal-auth',       require('./routes/portal_auth'));
 app.use('/api/record-context',    require('./routes/record_context'));
