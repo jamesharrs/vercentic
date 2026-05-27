@@ -1254,8 +1254,8 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                       )}
                     </div>
 
-                    {/* Linked job + General toggle */}
-                    <div style={{ marginBottom:14 }}>
+                    {/* Linked job + General toggle — only shown after interviewee selected */}
+                    {scheduleInterviewees.length > 0 && <div style={{ marginBottom:14 }}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                         <label style={labelSt}>Linked role</label>
                         <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#6b7280', cursor:'pointer' }}>
@@ -1277,7 +1277,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                               {scheduleInterviewees.length===0 ? 'Select an interviewee first' : 'No linked roles found'}
                             </div>
                       )}
-                    </div>
+                    </div>}
 
                     {/* Date, Time, Duration, Format */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
