@@ -788,6 +788,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
     api.get(`/agents?environment_id=${environment.id}`).then(d => {
       const list = Array.isArray(d) ? d : (d.agents || []);
       const filteredAgents = list.filter(a => !a.deleted_at && (
+        !a.type ||
         (a.steps||[]).some(s => s.type === 'ai_interview') ||
         a.type === 'interview' || a.type === 'ai_interview'
       ));
