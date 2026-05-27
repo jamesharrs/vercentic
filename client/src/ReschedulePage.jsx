@@ -15,16 +15,16 @@ export default function ReschedulePage() {
 
   useEffect(() => {
     if (!interviewId || !token) { setError("Invalid link"); setLoading(false); return; }
-    fetch(`/api/interviews/reschedule/${interviewId}/${token}`)
+    fetch(`/api/reschedule/${interviewId}/${token}`)
       .then(r => r.json()).then(d => { if (d.error) setError(d.error); else setInterview(d); setLoading(false); })
       .catch(() => { setError("Failed to load interview details"); setLoading(false); });
   }, []);
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    const resp = await fetch(`/api/interviews/reschedule/${interviewId}/${token}`, {
+    const resp = await fetch(`/api/reschedule/${interviewId}/${token}/propose`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: newDate, time: newTime, message }),
+      body: JSON.stringify({ role: 'candidate', slots: newDate ? [{ date: newDate, time: newTime }] : [], message }),
     });
     const data = await resp.json();
     if (data.ok) setSubmitted(true); else setError(data.message || "Failed to submit");
