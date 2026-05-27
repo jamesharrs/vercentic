@@ -720,6 +720,35 @@ initDB().then(async () => {
   }
   if (!store.integrations) { store.integrations = {}; dirty = true; }
 
+  // ── Seed system email templates (first boot or missing) ────────────────────
+  const SYSTEM_TEMPLATES = [
+    { name:'Interview Invitation (AI)',     category:'interview',    subject:"You've been invited to an AI interview — {{job_title}}",                           tone:'professional' },
+    { name:'Interview Confirmed',           category:'interview',    subject:'Interview Confirmed: {{job_title}} — {{interview_date}}',                           tone:'professional' },
+    { name:'Interview Reminder',            category:'interview',    subject:'Reminder: Your interview is tomorrow — {{job_title}}',                              tone:'professional' },
+    { name:'Interview Rescheduled',         category:'interview',    subject:'Interview Rescheduled: {{job_title}}',                                              tone:'professional' },
+    { name:'Application Received',          category:'application',  subject:"We received your application — {{job_title}}",                                      tone:'friendly' },
+    { name:'Application Shortlisted',       category:'application',  subject:"Great news — you've been shortlisted for {{job_title}}",                            tone:'warm' },
+    { name:'Application Unsuccessful',      category:'application',  subject:'Your application for {{job_title}}',                                                tone:'professional' },
+    { name:'Offer Letter',                  category:'offer',        subject:'Your offer from {{company_name}} — {{job_title}}',                                  tone:'professional' },
+    { name:'Offer Accepted — Welcome',      category:'offer',        subject:'Welcome to {{company_name}}, {{first_name}}! 🎉',                                   tone:'warm' },
+    { name:'Candidate Outreach',            category:'outreach',     subject:'Exciting opportunity at {{company_name}} — {{job_title}}',                          tone:'friendly' },
+    { name:'Follow-up (No Response)',       category:'outreach',     subject:'Following up — {{job_title}} at {{company_name}}',                                  tone:'friendly' },
+    { name:'Pre-Start Welcome',             category:'onboarding',   subject:'Getting ready for your first day — {{company_name}}',                               tone:'warm' },
+    { name:'Reference Request',             category:'onboarding',   subject:'Reference request for {{candidate_name}}',                                          tone:'professional' },
+  ];
+  if (masterEnv) {
+    const existingSystemNames = new Set((store.email_templates || []).filter(t => t.is_system).map(t => t.name));
+    let tAdded = 0;
+    for (const tmpl of SYSTEM_TEMPLATES) {
+      if (!existingSystemNames.has(tmpl.name)) {
+        if (!store.email_templates) store.email_templates = [];
+        store.email_templates.push({ id: require('uuid').v4(), environment_id: masterEnv.id, ...tmpl, body: '', is_system: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+        tAdded++; dirty = true;
+      }
+    }
+    if (tAdded > 0) console.log(`[Templates] Seeded ${tAdded} system email templates`);
+  }
+
   // Default question bank (first boot only)
   if (!store.question_bank_v2) {
     store.question_bank_v2 = [
