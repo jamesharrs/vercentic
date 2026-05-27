@@ -72,7 +72,9 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
   ensure();
   const { environment_id, interview_type_id, interview_type_name, candidate_id, candidate_name,
           job_id, job_name, date, time, duration, format, interviewers, notes, status, interviewer_emails } = req.body;
-  if (!environment_id || !date) return res.status(400).json({ error: 'environment_id and date required' });
+  const isAi = (req.body.interviewer_mode === 'ai_agent' || req.body.status === 'ai_pending');
+  if (!environment_id) return res.status(400).json({ error: 'environment_id and date required' });
+  if (!isAi && !date) return res.status(400).json({ error: 'environment_id and date required' });
 
   let resolvedCandidateId = candidate_id || null;
   const resolvedCandidateName = candidate_name || '';
