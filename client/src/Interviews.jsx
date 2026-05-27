@@ -1590,6 +1590,7 @@ export default function Interviews({ environment }) {
       onEdit={(iv) => setEditScheduled(iv)}
       onDelete={(id) => handleDeleteScheduled(id)}
       onSchedule={() => setScheduleFor(types[0] || null)}
+      environment={environment}
     />
   </div>
 )}
