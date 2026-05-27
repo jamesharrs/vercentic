@@ -495,53 +495,62 @@ export default function EmailTemplateBuilder({ environment }) {
         </div>
       ) : (
         <div>
-        {/* System templates section */}
+        {/* System templates — grouped by category */}
         {templates.filter(t => t.is_system).length > 0 && (
           <>
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:16 }}>
               <Ic n="lock" s={13} c="#7C3AED"/>
               <span style={{ fontSize:12, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:"0.05em" }}>System Templates</span>
               <span style={{ fontSize:11, color:C.text4 }}>— sent automatically by the platform · editable but cannot be deleted</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14, marginBottom: 24 }}>
-              {templates.filter(t => t.is_system).map(t => {
-                const kit = brandKits.find(k => k.id === t.brand_kit_id);
-                const catLabel = CATEGORIES.find(c => c.value === t.category)?.label || t.category;
-                return (
-                  <div key={t.id} onClick={() => { setEditing({ ...t }); setHtmlEdited(!!t.html_override); setHtmlCode(t.html_override || ''); }} style={{
-                    background: "#FAFAFF", borderRadius: 14, border: `1.5px solid #E9D5FF`, overflow: "hidden", cursor: "pointer", transition: "all .15s",
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 20px rgba(124,58,237,.1)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; }}>
-                    {/* colour bar */}
-                    <div style={{ height: 4, background: "#7C3AED" }} />
-                    <div style={{ padding: "14px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex:1, marginRight:6 }}>{t.name}</div>
-                        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 99, background:"#F5F3FF", color:"#7C3AED", flexShrink:0 }}>{catLabel}</span>
-                      </div>
-                      {t.subject && <div style={{ fontSize: 11, color: C.text3, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.subject}</div>}
-                      <div style={{ fontSize: 11, color: C.text4, marginBottom: 6 }}>{t.description?.slice(0,80)}{t.description?.length>80?'…':''}</div>
-                      <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
-                        {t.has_ics && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#EFF6FF",color:"#3B82F6"}}>📎 ICS</span>}
-                        {t.supports_reschedule_link && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#F0FDF4",color:"#059669"}}>↩ Reschedule</span>}
-                        {t.variables?.length>0 && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#FFF7ED",color:"#EA580C"}}>{t.variables.length} variables</span>}
-                      </div>
-                      <div style={{ display: "flex", gap: 6, alignItems:"center" }} onClick={e => e.stopPropagation()}>
-                        <span style={{ display:"flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, color:"#7C3AED", background:"#F5F3FF", padding:"2px 7px", borderRadius:99 }}>
-                          <Ic n="lock" s={9} c="#7C3AED"/> System — cannot delete
-                        </span>
-                        <button onClick={() => handleDuplicate(t.id)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 8px", fontSize: 10, fontWeight: 600, cursor: "pointer", color: C.text3, fontFamily: F, marginLeft:"auto" }}>
-                          <Ic n="copy" s={10} c={C.text4} /> Copy
-                        </button>
-                      </div>
-                    </div>
+            {(() => {
+              const CATEGORY_ORDER = ['interview','application','offer','outreach','onboarding','portal','system'];
+              const CATEGORY_LABELS = { interview:'Interview', application:'Application', offer:'Offer', outreach:'Outreach', onboarding:'Onboarding', portal:'Portal', system:'System' };
+              const CATEGORY_COLORS = { interview:'#4361EE', application:'#059669', offer:'#f59e0b', outreach:'#7C3AED', onboarding:'#0891b2', portal:'#e11d48', system:'#6b7280' };
+              const sysTpls = templates.filter(t => t.is_system);
+              const grouped = CATEGORY_ORDER
+                .map(cat => ({ cat, items: sysTpls.filter(t => t.category === cat) }))
+                .filter(g => g.items.length > 0);
+              return grouped.map(({ cat, items }) => (
+                <div key={cat} style={{ marginBottom: 24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background: CATEGORY_COLORS[cat] || C.accent, flexShrink:0 }}/>
+                    <span style={{ fontSize:11, fontWeight:700, color: CATEGORY_COLORS[cat] || C.text2, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                      {CATEGORY_LABELS[cat] || cat}
+                    </span>
+                    <span style={{ fontSize:11, color:C.text4 }}>({items.length})</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:12 }}>
+                    {items.map(t => (
+                      <div key={t.id} onClick={() => { setEditing({ ...t }); setHtmlEdited(!!t.html_override); setHtmlCode(t.html_override || ''); }} style={{
+                        background:"#FAFAFF", borderRadius:12, border:`1.5px solid #E9D5FF`, overflow:"hidden", cursor:"pointer", transition:"all .15s",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.boxShadow="0 4px 20px rgba(124,58,237,.1)"; e.currentTarget.style.borderColor="#C4B5FD"; }}
+                        onMouseLeave={e => { e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor="#E9D5FF"; }}>
+                        <div style={{ height:3, background: CATEGORY_COLORS[cat] || "#7C3AED" }}/>
+                        <div style={{ padding:"12px 14px" }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:C.text1, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.name}</div>
+                          {t.subject && <div style={{ fontSize:11, color:C.text3, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.subject}</div>}
+                          {t.description && <div style={{ fontSize:11, color:C.text4, marginBottom:8, lineHeight:1.4 }}>{t.description.slice(0,90)}{t.description.length>90?'…':''}</div>}
+                          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
+                            {t.has_ics && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#EFF6FF",color:"#3B82F6"}}>📎 ICS</span>}
+                            {t.supports_reschedule_link && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#F0FDF4",color:"#059669"}}>↩ Reschedule</span>}
+                            {t.variables?.length>0 && <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:"#FFF7ED",color:"#EA580C"}}>{t.variables.length} vars</span>}
+                          </div>
+                          <div style={{ display:"flex", justifyContent:"flex-end" }} onClick={e=>e.stopPropagation()}>
+                            <button onClick={() => handleDuplicate(t.id)} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:5, padding:"2px 8px", fontSize:10, fontWeight:600, cursor:"pointer", color:C.text3, fontFamily:F }}>
+                              <Ic n="copy" s={10} c={C.text4}/> Copy
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
             {templates.filter(t => !t.is_system).length > 0 && (
-              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, marginTop:8 }}>
                 <span style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Custom Templates</span>
               </div>
             )}
