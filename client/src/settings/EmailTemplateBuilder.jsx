@@ -135,25 +135,21 @@ export default function EmailTemplateBuilder({ environment }) {
       const kit = brandKits.find(k => k.id === editing.brand_kit_id);
       if (kit) {
         // Replace brand placeholders with kit colours
+        const primary = kit.primaryColor || '#4361EE';
+        const name = kit.name || 'Vercentic';
+        const logoHtml = kit.logoUrl
+          ? `<img src="${kit.logoUrl}" alt="${name}" style="height:40px;max-width:200px;object-fit:contain;" />&nbsp;&nbsp;<span style="font-size:18px;font-weight:700;color:${primary};font-family:Arial,Helvetica,sans-serif;">${name}</span>`
+          : `<span style="font-size:18px;font-weight:700;color:${primary};font-family:Arial,Helvetica,sans-serif;">${name}</span>`;
+
         html = html
-          .replace(/\{\{brand_primary\}\}/g, kit.primaryColor || '#4361EE')
-          .replace(/#6d28d9/gi, kit.primaryColor || '#6d28d9')
-          .replace(/#4361EE/gi, kit.primaryColor || '#4361EE')
+          .replace(/%%BRAND_LOGO%%/g, logoHtml)
+          .replace(/%%BRAND_NAME%%/g, name)
+          .replace(/%%BRAND_COLOR%%/g, primary)
+          .replace(/\{\{brand_primary\}\}/g, primary)
+          .replace(/#6d28d9/gi, primary)
           .replace(/#059669/gi, kit.accentColor  || '#059669')
           .replace(/#f5f3ff/gi, kit.bgColor       || '#f5f3ff')
           .replace(/#ddd6fe/gi, kit.secondaryColor|| '#ddd6fe');
-
-        // Inject logo if kit has one — replace the text company name in header with img+name
-        if (kit.logoUrl) {
-          const logoTag = `<img src="${kit.logoUrl}" alt="${kit.name||''}" style="height:40px;max-width:200px;object-fit:contain;" />&nbsp;&nbsp;`;
-          // Replace the company name span in the header with logo+name
-          html = html.replace(
-            new RegExp(`(<td[^>]*border-bottom[^>]*>)([^<]*)`, ''),
-            `$1${logoTag}$2`
-          );
-        }
-        // Replace remaining {{company_name}} with kit name
-        html = html.replace(/\{\{company_name\}\}/g, kit.name || 'Vercentic');
       }
       setPreviewHtml(html);
       setHtmlCode(html);
