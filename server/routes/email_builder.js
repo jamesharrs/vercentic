@@ -546,21 +546,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a candidate when they are invited to complete an AI-conducted interview. Contains a link to start the interview.',
       subject: "You've been invited to an AI interview — {{job_title}}",
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">AI Interview Invitation</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>You have been invited to complete an AI interview for the <strong>{{job_title}}</strong> position. Click the button below to start when you are ready.</p></div><div style="padding:14px 16px;background:%%BRAND_COLOR%%10;border-radius:8px;border:1px solid %%BRAND_COLOR%%30;margin-bottom:20px;font-size:13px;color:%%BRAND_COLOR%%;font-family:Arial,Helvetica,sans-serif;">⚡ The interview is conducted by an AI agent and typically takes 20–30 minutes. Find a quiet place and ensure your microphone is working before you begin.</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr><td align="center"><a href="{{interview_link}}" target="_blank" style="display:inline-block;padding:14px 32px;background:%%BRAND_COLOR%%;color:#ffffff;border:none;border-radius:8px;font-size:15px;font-weight:700;font-family:Arial,Helvetica,sans-serif;text-decoration:none;">Start Interview →</a></td></tr></table>
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "7bec0033-cf00-4b92-8558-1af4301241b6", "type": "header", "content": {"text": "AI Interview Invitation"}}, {"id": "dab15290-6724-4596-ae98-c379b035c67b", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "092ddd49-5659-448e-bc85-b67e66e5976a", "type": "text", "content": {"text": "You have been invited to complete an AI interview for the **{{job_title}}** position. Click the button below to start when you are ready."}}, {"id": "99d5df04-d11e-4dd8-b5d0-08a1d7179b86", "type": "text", "content": {"text": "\u26a1 The interview is conducted by an AI agent and typically takes 20\u201330 minutes. Find a quiet place and ensure your microphone is working."}}, {"id": "8af4dd5b-92ee-477c-9560-4d7189e4fc29", "type": "button", "content": {"text": "Start Interview \u2192", "url": "{{interview_link}}", "style": "primary"}}, {"id": "22c3e997-4028-47ad-8e2a-f730a7a68f7f", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: "Hi {{first_name}},\n\nYou've been invited to complete an AI interview{{job_title ? ' for the ' + job_title + ' position' : ''}}.\n\nStart here: {{interview_link}}\n\nThe interview typically takes 20-30 minutes.",
       variables: ['first_name','job_title','interview_link','company_name'],
     },
@@ -571,21 +558,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent automatically to a candidate when their application is received.',
       subject: 'We received your application — {{job_title}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">Application Received</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>Thank you for applying for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>. We have received your application and our team will review it shortly.</p><p>We will be in touch about next steps.</p><p>{{company_name}} Talent Team</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "15e33b19-1388-4a4d-8e78-21e2cc75c1fb", "type": "header", "content": {"text": "Application Received"}}, {"id": "7f80f76c-852a-4bb5-93ea-93aa7e70d5df", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "a33a45a6-b35f-4c7e-a218-bd57dd92b8cb", "type": "text", "content": {"text": "Thank you for applying for the **{{job_title}}** position at **{{company_name}}**. We have received your application and our team will review it shortly."}}, {"id": "c848250f-2f29-4630-818e-eb20048e8a10", "type": "text", "content": {"text": "We will be in touch about next steps."}}, {"id": "ecab444a-67c3-4890-a2c4-b3ab36c2530c", "type": "text", "content": {"text": "{{company_name}} Talent Team"}}, {"id": "2905ddf1-8a4d-40c4-9664-1c618257dae3", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Hi {{first_name}},\n\nThank you for applying for the {{job_title}} position at {{company_name}}. We\'ve received your application and will be in touch.\n\n{{company_name}} Talent Team',
       variables: ['first_name','job_title','company_name'],
     },
@@ -596,21 +570,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a candidate when they have been shortlisted for a role.',
       subject: "Great news — you've been shortlisted for {{job_title}}",
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">You have been shortlisted 🎉</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>We are pleased to let you know that your application for the <strong>{{job_title}}</strong> position has been shortlisted. Congratulations!</p><p>Someone from our team will be in touch shortly to discuss next steps.</p><p>{{company_name}} Talent Team</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "5cdd1cc1-06b0-4ffc-9362-aea9c4b8cdd0", "type": "header", "content": {"text": "You have been shortlisted \ud83c\udf89"}}, {"id": "49e4f392-c755-4588-92f8-7a92ae0c202d", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "9c4eb1cd-86fe-4b8b-bb17-08b8eba21beb", "type": "text", "content": {"text": "We are pleased to let you know that your application for the **{{job_title}}** position has been shortlisted. Congratulations!"}}, {"id": "5121a149-77a8-4859-9081-68c6d5a04ce5", "type": "text", "content": {"text": "Someone from our team will be in touch shortly to discuss next steps."}}, {"id": "3ca1d12f-0d6b-4af2-87cb-d2d7c4971233", "type": "text", "content": {"text": "{{company_name}} Talent Team"}}, {"id": "f147bf84-024f-4ade-a9c0-778a55e22859", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: "Hi {{first_name}},\n\nGreat news — your application for {{job_title}} has been shortlisted! Someone will be in touch shortly.\n\n{{company_name}} Talent Team",
       variables: ['first_name','job_title','company_name'],
     },
@@ -621,21 +582,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a candidate when their application has not been successful.',
       subject: 'Your application for {{job_title}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">Application Update</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>Thank you for applying for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>. After careful consideration, we regret to inform you that we will not be moving forward with your application on this occasion.</p><p>We wish you the very best in your search.</p><p>{{company_name}} Talent Team</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "86ad5165-e92e-42eb-b73f-481ea1d0183f", "type": "header", "content": {"text": "Application Update"}}, {"id": "1d70f281-e467-489e-a5c4-d9fe6fc182cf", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "a3615491-2e3e-4db1-ac61-5a46cbad0122", "type": "text", "content": {"text": "Thank you for applying for the **{{job_title}}** position at **{{company_name}}**. After careful consideration, we regret to inform you that we will not be moving forward with your application on this occasion."}}, {"id": "b7c98a66-0604-450e-834a-ab4199266c15", "type": "text", "content": {"text": "We wish you the very best in your search."}}, {"id": "27cd8273-1183-4bdb-8a05-0bd35c538532", "type": "text", "content": {"text": "{{company_name}} Talent Team"}}, {"id": "c9b844a3-d758-4205-b624-38407c2503c3", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Hi {{first_name}},\n\nThank you for applying for {{job_title}} at {{company_name}}. After careful consideration we will not be moving forward on this occasion. We wish you the best.\n\n{{company_name}} Talent Team',
       variables: ['first_name','job_title','company_name'],
     },
@@ -646,21 +594,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Initial outreach message to a prospective candidate about a role.',
       subject: 'Exciting opportunity at {{company_name}} — {{job_title}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">An opportunity at {{company_name}}</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>I came across your profile and wanted to reach out about an exciting <strong>{{job_title}}</strong> opportunity at <strong>{{company_name}}</strong>. Would you be open to a brief conversation to find out more?</p><p>Best regards,<br>{{sender_name}}<br>{{company_name}}</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "7c2e4fa9-6ce0-418c-971f-a84c11aa13ef", "type": "header", "content": {"text": "An opportunity at {{company_name}}"}}, {"id": "fcbb518e-b63f-497e-9717-0bd4346e6ddb", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "7bbb554b-cf77-4a5e-98cd-035ea48043b6", "type": "text", "content": {"text": "I came across your profile and wanted to reach out about an exciting **{{job_title}}** opportunity at **{{company_name}}**. Would you be open to a brief conversation to find out more?"}}, {"id": "224e3df8-8a85-44ab-94a6-4391d2d2dbd3", "type": "text", "content": {"text": "Best regards,\n{{sender_name}}\n{{company_name}}"}}, {"id": "b8cdd931-4753-475e-a090-661f55de26b7", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Hi {{first_name}},\n\nI came across your profile and wanted to reach out about a {{job_title}} opportunity at {{company_name}}. Would you be open to a brief conversation?\n\n{{sender_name}}, {{company_name}}',
       variables: ['first_name','job_title','company_name','sender_name'],
     },
@@ -671,21 +606,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Follow-up message when a candidate has not responded to initial outreach.',
       subject: 'Following up — {{job_title}} at {{company_name}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">Following up</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>I wanted to follow up on my previous message about the <strong>{{job_title}}</strong> role at <strong>{{company_name}}</strong>. I understand you are busy — would any time this week work for a quick 15-minute call?</p><p>Best regards,<br>{{sender_name}}</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "e294decb-2a2f-4711-81c8-fb09cedb5f8a", "type": "header", "content": {"text": "Following up"}}, {"id": "af2d56ec-8c29-45f4-818f-7c2797b1ef62", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "9cb03927-fe5e-4523-8516-75f315dc1fef", "type": "text", "content": {"text": "I wanted to follow up on my previous message about the **{{job_title}}** role at **{{company_name}}**. Would any time this week work for a quick 15-minute call?"}}, {"id": "b6e46c2a-82fd-45c2-b5e3-566cbb8027bc", "type": "text", "content": {"text": "Best regards,\n{{sender_name}}"}}, {"id": "c4365dad-6b8d-4be5-8c74-0814e852abb8", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Hi {{first_name}},\n\nFollowing up on my previous message about {{job_title}} at {{company_name}}. Would any time this week work for a brief call?\n\n{{sender_name}}',
       variables: ['first_name','job_title','company_name','sender_name'],
     },
@@ -696,21 +618,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent before a new hire\'s start date to help them prepare for day one.',
       subject: 'Getting ready for your first day — {{company_name}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">Getting ready for day one</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Hi {{first_name}},</p><p>We are counting down to your start date of <strong>{{start_date}}</strong> and wanted to share some information to help you prepare.</p><p>Your buddy for your first week will be <strong>{{buddy_name}}</strong>, who will reach out before you start.</p><p>Looking forward to welcoming you!</p><p>{{company_name}} People Team</p></div>
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "547edd64-760a-40ff-a861-af7e226b66c4", "type": "header", "content": {"text": "Getting ready for day one"}}, {"id": "2cdec2dd-2e13-4aee-ac86-c1cf161cdfbb", "type": "text", "content": {"text": "Hi {{first_name}},"}}, {"id": "42c217c7-4633-4587-921e-b90a0c377e0d", "type": "text", "content": {"text": "We are counting down to your start date of **{{start_date}}** and wanted to share some information to help you prepare."}}, {"id": "17c5e129-44d1-41ea-9124-f53cc1a2353f", "type": "text", "content": {"text": "Your buddy for your first week will be **{{buddy_name}}**, who will reach out before you start."}}, {"id": "06194fad-042e-4989-a537-441c176bfb19", "type": "text", "content": {"text": "Looking forward to welcoming you!\n\n{{company_name}} People Team"}}, {"id": "aac80e94-fb79-4069-81e0-54452090644e", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Hi {{first_name}},\n\nWe\'re counting down to your start date of {{start_date}}! Your buddy will be {{buddy_name}} who will reach out before you start.\n\n{{company_name}} People Team',
       variables: ['first_name','start_date','buddy_name','company_name'],
     },
@@ -721,21 +630,8 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a referee to request a reference for a candidate.',
       subject: 'Reference request for {{candidate_name}}',
-      html_body: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid %%BRAND_COLOR%%20;">%%BRAND_LOGO%%</td></tr></table>
-<div style="font-size:20px;font-weight:700;color:#1A1A1A;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;">Reference Request</div>
-<div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>Dear {{referee_name}},</p><p><strong>{{candidate_name}}</strong> has applied for the position of <strong>{{job_title}}</strong> at <strong>{{company_name}}</strong> and has given your name as a reference.</p><p>We would be most grateful if you could take a few minutes to provide a reference. Your response will be kept in strict confidence.</p></div>
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr><td align="center"><a href="{{reference_link}}" target="_blank" style="display:inline-block;padding:14px 32px;background:%%BRAND_COLOR%%;color:#ffffff;border:none;border-radius:8px;font-size:15px;font-weight:700;font-family:Arial,Helvetica,sans-serif;text-decoration:none;">Provide Reference →</a></td></tr></table><div style="font-size:15px;line-height:1.7;color:#374151;font-family:Arial,Helvetica,sans-serif;margin-bottom:16px;"><p>{{company_name}} Talent Team</p></div>
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:20px;">
-<tr><td style="text-align:center;font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;line-height:1.8;">
-<div>© 2026 %%BRAND_NAME%%. All rights reserved.</div>
-<div style="margin-top:8px;"><a href="#" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Privacy Policy</a> · <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;font-size:11px;">Unsubscribe</a></div>
-</td></tr></table>
-</td></tr></table></td></tr></table></body></html>`,
+      blocks: [{"id": "db0cdbb1-7e99-4b0a-b398-ea3d3c7ba572", "type": "header", "content": {"text": "Reference Request"}}, {"id": "d01b125e-a916-49e7-91f7-2d92d8f33d30", "type": "text", "content": {"text": "Dear {{referee_name}},"}}, {"id": "619911e9-3682-4b13-ae75-456e6b01d721", "type": "text", "content": {"text": "**{{candidate_name}}** has applied for the position of **{{job_title}}** at **{{company_name}}** and has given your name as a reference."}}, {"id": "5d648785-5598-4467-8537-23461d7280c3", "type": "text", "content": {"text": "We would be most grateful if you could take a few minutes to provide a reference. Your response will be kept in strict confidence."}}, {"id": "72c51ca7-6d47-48ea-bd83-146cea9724b5", "type": "text", "content": {"text": "{{company_name}} Talent Team"}}, {"id": "09e676d6-260c-4b2f-8fe3-2e46635cfa36", "type": "button", "content": {"text": "Provide Reference \u2192", "url": "{{reference_link}}", "style": "primary"}}, {"id": "7554c1e3-c4b4-4984-b37f-6baa27bb368a", "type": "footer", "content": {}}],
+      html_body: ``,
       text_body: 'Dear {{referee_name}},\n\n{{candidate_name}} has applied for {{job_title}} at {{company_name}} and given your name as a reference. Please provide a reference here:\n{{reference_link}}\n\nThank you.\n{{company_name}} Talent Team',
       variables: ['referee_name','candidate_name','job_title','company_name','reference_link'],
     },
@@ -753,9 +649,10 @@ router.post('/seed-system', (req, res) => {
       const needsUpdate = tmpl.html_body && (
         !existing.html_body ||
         (existing.html_body && !existing.html_body.includes('%%BRAND_'))
-      );
+      ) || (tmpl.blocks?.length > 0 && !(existing.blocks?.length > 0));
       if (needsUpdate) {
-        store.email_templates_v2[idx].html_body = tmpl.html_body;
+        if (tmpl.html_body) store.email_templates_v2[idx].html_body = tmpl.html_body;
+        if (tmpl.blocks?.length > 0) store.email_templates_v2[idx].blocks = tmpl.blocks;
         store.email_templates_v2[idx].updated_at = now;
       }
     }
