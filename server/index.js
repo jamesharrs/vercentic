@@ -723,12 +723,16 @@ initDB().then(async () => {
         let changed = false;
         for (const tmpl of masterSysTemplates) {
           const exists = ts.email_templates_v2.find(e => e.slug === tmpl.slug && !e.deleted_at);
-          const needsUpdate = !exists || (tmpl.html_body && exists.html_body && !exists.html_body.includes('%%BRAND_'));
+          const needsUpdate = !exists || 
+            (tmpl.html_body && exists.html_body && !exists.html_body.includes('%%BRAND_')) ||
+            (tmpl.blocks?.length > 0 && !(exists.blocks?.length > 0));
           if (!exists) {
             ts.email_templates_v2.push({ ...tmpl });
             changed = true; backfilled++;
           } else if (needsUpdate) {
-            Object.assign(exists, { html_body: tmpl.html_body, updated_at: tmpl.updated_at });
+            if (tmpl.html_body) exists.html_body = tmpl.html_body;
+            if (tmpl.blocks?.length > 0) exists.blocks = tmpl.blocks;
+            exists.updated_at = tmpl.updated_at;
             changed = true;
           }
         }

@@ -96,6 +96,9 @@ export default function EmailTemplateBuilder({ environment }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [htmlCode, setHtmlCode] = useState(''); // generated or manually edited HTML
   const [htmlEdited, setHtmlEdited] = useState(false); // true when user has manually edited the HTML
+  const [selectedIds, setSelectedIds] = useState(new Set()); // bulk selection
+  const [bulkKit, setBulkKit] = useState(''); // bulk brand kit
+  const [bulkApplying, setBulkApplying] = useState(false);
 
   // Switch to HTML tab when opening a system template that has html_body but no blocks
   useEffect(() => {
@@ -212,6 +215,20 @@ export default function EmailTemplateBuilder({ environment }) {
   const handleDuplicate = async (id) => {
     await api.post(`/email-builder/${id}/duplicate`);
     load();
+  };
+
+  const handleBulkApplyKit = async () => {
+    if (!bulkKit || selectedIds.size === 0) return;
+    setBulkApplying(true);
+    try {
+      await Promise.all([...selectedIds].map(id =>
+        api.patch(`/email-builder/${id}`, { brand_kit_id: bulkKit })
+      ));
+      setSelectedIds(new Set());
+      setBulkKit('');
+      load();
+    } catch (e) { alert('Bulk apply failed: ' + e.message); }
+    setBulkApplying(false);
   };
 
   // ── Block operations ────────────────────────────────────────────────────────
@@ -490,7 +507,7 @@ export default function EmailTemplateBuilder({ environment }) {
               <div style={{ width: previewMode === 'mobile' ? 375 : '100%', maxWidth: 680, transition: "width .2s" }}>
                 {previewHtml ? (
                   <iframe srcDoc={previewHtml} style={{ width: "100%", height: "100%", minHeight: 500, border: `1px solid ${C.border}`, borderRadius: 8, background: "white" }}
-                    sandbox="allow-same-origin allow-scripts" title="Email Preview" />
+                    sandbox="allow-scripts" title="Email Preview" />
                 ) : (
                   <div style={{ textAlign: "center", padding: 40, color: C.text3 }}>Add blocks to see a preview</div>
                 )}
@@ -514,6 +531,28 @@ export default function EmailTemplateBuilder({ environment }) {
           <Ic n="plus" s={14} c="white" /> New Template
         </button>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:10, background:C.accentLight, border:`1.5px solid ${C.accent}`, marginBottom:16 }}>
+          <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{selectedIds.size} selected</span>
+          <span style={{ color:C.border }}>·</span>
+          <span style={{ fontSize:12, color:C.text2, fontWeight:600 }}>Apply brand kit:</span>
+          <select value={bulkKit} onChange={e => setBulkKit(e.target.value)}
+            style={{ padding:"5px 10px", borderRadius:7, border:`1px solid ${C.border}`, fontSize:12, fontFamily:F, background:"white", color:C.text1, flex:1, maxWidth:220 }}>
+            <option value="">Select brand kit…</option>
+            {brandKits.map(k => <option key={k.id} value={k.id}>{k.name}{k.is_default?' (default)':''}</option>)}
+          </select>
+          <button onClick={handleBulkApplyKit} disabled={!bulkKit || bulkApplying}
+            style={{ padding:"6px 14px", borderRadius:7, border:"none", background:C.accent, color:"white", fontSize:12, fontWeight:700, cursor: bulkKit ? "pointer":"not-allowed", fontFamily:F, opacity: bulkKit ? 1 : 0.5 }}>
+            {bulkApplying ? 'Applying…' : 'Apply to selected'}
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${C.border}`, background:"white", fontSize:12, color:C.text3, cursor:"pointer", fontFamily:F }}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {templates.length === 0 ? (
         <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 48, textAlign: "center" }}>
@@ -556,13 +595,16 @@ export default function EmailTemplateBuilder({ environment }) {
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:12 }}>
                     {items.map(t => (
                       <div key={t.id} onClick={() => { setEditing({ ...t }); setHtmlEdited(!!t.html_override); setHtmlCode(t.html_override || ''); }} style={{
-                        background:"#FAFAFF", borderRadius:12, border:`1.5px solid #E9D5FF`, overflow:"hidden", cursor:"pointer", transition:"all .15s",
+                        background: selectedIds.has(t.id) ? "#F5F3FF" : "#FAFAFF", borderRadius:12, border:`1.5px solid ${selectedIds.has(t.id) ? "#7C3AED" : "#E9D5FF"}`, overflow:"hidden", cursor:"pointer", transition:"all .15s",
                       }}
-                        onMouseEnter={e => { e.currentTarget.style.boxShadow="0 4px 20px rgba(124,58,237,.1)"; e.currentTarget.style.borderColor="#C4B5FD"; }}
-                        onMouseLeave={e => { e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor="#E9D5FF"; }}>
+                        onMouseEnter={e => { if(!selectedIds.has(t.id)){e.currentTarget.style.boxShadow="0 4px 20px rgba(124,58,237,.1)"; e.currentTarget.style.borderColor="#C4B5FD";} }}
+                        onMouseLeave={e => { if(!selectedIds.has(t.id)){e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor="#E9D5FF";} }}>
                         <div style={{ height:3, background: CATEGORY_COLORS[cat] || "#7C3AED" }}/>
                         <div style={{ padding:"12px 14px" }}>
-                          <div style={{ fontSize:13, fontWeight:700, color:C.text1, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.name}</div>
+                          <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:4 }}>
+                            <input type="checkbox" checked={selectedIds.has(t.id)} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const n=new Set(selectedIds);e.target.checked?n.add(t.id):n.delete(t.id);setSelectedIds(n);}} style={{marginTop:2,flexShrink:0,cursor:"pointer"}}/>
+                            <div style={{ fontSize:13, fontWeight:700, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{t.name}</div>
+                          </div>
                           {t.subject && <div style={{ fontSize:11, color:C.text3, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.subject}</div>}
                           {t.description && <div style={{ fontSize:11, color:C.text4, marginBottom:8, lineHeight:1.4 }}>{t.description.slice(0,90)}{t.description.length>90?'…':''}</div>}
                           <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
