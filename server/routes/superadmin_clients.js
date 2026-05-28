@@ -728,26 +728,29 @@ router.post('/:id/repair-tenant', async (req, res) => {
         }
       }
 
-      // 2. Force-seed objects + fields if tenant has none (ignore existing empty array)
-      const hasObjects = (ts.objects||[]).filter(o=>!o.deleted_at).length > 0;
-      if (!hasObjects) {
-        const now2 = new Date().toISOString();
-        const { objects: objDefs } = resolveTemplate(template || getDefaultTemplateKey());
-        ts.objects = ts.objects || [];
-        ts.fields  = ts.fields  || [];
-        for (const objDef of (objDefs||[])) {
-          const obj = { id: uuidv4(), environment_id: primaryEnv.id, slug: objDef.slug,
-            name: objDef.name, plural_name: objDef.plural_name, icon: objDef.icon||'database',
-            color: objDef.color||'#4361EE', is_system: objDef.is_system!==false,
-            sort_order: ts.objects.length, created_at: now2, updated_at: now2, deleted_at: null };
-          ts.objects.push(obj);
-          (objDef.fields||[]).forEach((fDef, i) => {
-            ts.fields.push({ id: uuidv4(), environment_id: primaryEnv.id, object_id: obj.id,
-              name: fDef.name, api_key: fDef.api_key, field_type: fDef.field_type,
-              is_required: fDef.is_required||false, show_in_list: fDef.show_in_list!==false,
-              options: fDef.options||null, placeholder:'', help_text:'', is_system:true,
-              sort_order: i, created_at: now2, updated_at: now2, deleted_at: null });
-          });
+      // 2. Force-seed objects + fields for every environment that has none
+      ts.objects = ts.objects || [];
+      ts.fields  = ts.fields  || [];
+      const now2 = new Date().toISOString();
+      const { objects: objDefs } = resolveTemplate(template || getDefaultTemplateKey());
+      for (const seedEnv of envs) {
+        const envHasObjects = ts.objects.filter(o=>o.environment_id===seedEnv.id&&!o.deleted_at).length > 0;
+        if (!envHasObjects) {
+          for (const objDef of (objDefs||[])) {
+            const obj = { id: uuidv4(), environment_id: seedEnv.id, slug: objDef.slug,
+              name: objDef.name, plural_name: objDef.plural_name, icon: objDef.icon||'database',
+              color: objDef.color||'#4361EE', is_system: objDef.is_system!==false,
+              sort_order: ts.objects.filter(o=>o.environment_id===seedEnv.id).length,
+              created_at: now2, updated_at: now2, deleted_at: null };
+            ts.objects.push(obj);
+            (objDef.fields||[]).forEach((fDef, i) => {
+              ts.fields.push({ id: uuidv4(), environment_id: seedEnv.id, object_id: obj.id,
+                name: fDef.name, api_key: fDef.api_key, field_type: fDef.field_type,
+                is_required: fDef.is_required||false, show_in_list: fDef.show_in_list!==false,
+                options: fDef.options||null, placeholder:'', help_text:'', is_system:true,
+                sort_order: i, created_at: now2, updated_at: now2, deleted_at: null });
+            });
+          }
         }
       }
 
@@ -780,14 +783,18 @@ router.post('/:id/repair-tenant', async (req, res) => {
       if (!ts.users) ts.users = [];
       const superAdminRole = ts.roles.find(r=>r.slug==='super_admin');
       for (const u of usersToAdd) {
-        if (!ts.users.find(tu=>tu.email===u.email&&!tu.deleted_at)) {
+        const existingInTenant = ts.users.find(tu=>tu.email===u.email&&!tu.deleted_at);
+        if (!existingInTenant) {
           ts.users.push({
             ...u,
-            environment_id: u.environment_id || primaryEnv.id,
+            environment_id: primaryEnv.id,  // always point to production env
             client_id: client.id,
             role_id: u.role_id || superAdminRole?.id,
             role_name: u.role_name || 'Super Admin',
           });
+        } else {
+          // Update existing user to point to production env if they're on sandbox
+          existingInTenant.environment_id = primaryEnv.id;
         }
       }
       // Also add the requested admin if provided and not already there
@@ -816,12 +823,19 @@ router.post('/:id/repair-tenant', async (req, res) => {
 
     // Return the new state
     const ts = getTenantStore(client.tenant_slug);
+    const objsPerEnv = {};
+    (ts.objects||[]).filter(o=>!o.deleted_at).forEach(o=>{
+      const env = envs.find(e=>e.id===o.environment_id);
+      const label = env ? env.name : o.environment_id.slice(0,8);
+      objsPerEnv[label] = (objsPerEnv[label]||0)+1;
+    });
     res.json({
       ok: true,
       environments_seeded: (ts.environments||[]).length,
-      objects_seeded: (ts.objects||[]).length,
-      roles_seeded: (ts.roles||[]).length,
-      users_seeded: (ts.users||[]).length,
+      objects_per_env: objsPerEnv,
+      objects_seeded: (ts.objects||[]).filter(o=>!o.deleted_at).length,
+      roles_seeded: (ts.roles||[]).filter(r=>!r.deleted_at).length,
+      users_seeded: (ts.users||[]).filter(u=>!u.deleted_at).length,
       primary_environment_id: primaryEnv.id,
     });
   } catch(err) {
