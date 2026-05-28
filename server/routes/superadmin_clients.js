@@ -804,7 +804,7 @@ router.post('/:id/repair-tenant', async (req, res) => {
         });
       }
 
-      saveStore(client.tenant_slug);
+      saveStoreNow(client.tenant_slug);
     });
 
     // Log the repair
