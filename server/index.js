@@ -710,6 +710,34 @@ initDB().then(async () => {
     console.log(`[AutoSeed] Master store has ${masterDemoCount} demo records (${masterTotalCount} total) — skipping auto-seed`);
   }
 
+  // ── Backfill system email templates into all existing tenant stores ─────────
+  try {
+    const { listTenants, loadTenantStore, saveStoreNow: saveTenant } = require('./db/init');
+    const masterSysTemplates = (store.email_templates_v2 || []).filter(t => t.is_system && !t.deleted_at);
+    if (masterSysTemplates.length > 0) {
+      const tenantSlugs = listTenants();
+      let backfilled = 0;
+      for (const slug of tenantSlugs) {
+        const ts = loadTenantStore(slug);
+        if (!ts.email_templates_v2) ts.email_templates_v2 = [];
+        let changed = false;
+        for (const tmpl of masterSysTemplates) {
+          const exists = ts.email_templates_v2.find(e => e.slug === tmpl.slug && !e.deleted_at);
+          const needsUpdate = !exists || (tmpl.html_body && exists.html_body && !exists.html_body.includes('%%BRAND_'));
+          if (!exists) {
+            ts.email_templates_v2.push({ ...tmpl });
+            changed = true; backfilled++;
+          } else if (needsUpdate) {
+            Object.assign(exists, { html_body: tmpl.html_body, updated_at: tmpl.updated_at });
+            changed = true;
+          }
+        }
+        if (changed) saveTenant(slug);
+      }
+      if (backfilled > 0) console.log(`[Templates] Backfilled system email templates into ${tenantSlugs.length} tenant(s) (${backfilled} inserted)`);
+    }
+  } catch (e) { console.warn('[Templates] Tenant backfill failed (non-fatal):', e.message); }
+
   // Ensure all store collections exist
   const COLLECTIONS = [
     'notes', 'attachments', 'portals', 'workflows', 'communications',
