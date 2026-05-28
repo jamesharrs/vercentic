@@ -15,6 +15,17 @@ function ensureCollections() {
   if (!s.provision_log)       { s.provision_log = [];       saveStore(); }
 }
 
+// Read a tenant store file directly (read-only, no context switching)
+function getTenantStore(slug) {
+  const path = require('path');
+  const fs   = require('fs');
+  const dataDir = process.env.DATA_PATH || path.join(__dirname, '../../data');
+  const tenantFile = path.join(dataDir, `tenant-${slug}.json`);
+  if (!fs.existsSync(tenantFile)) return {};
+  try { return JSON.parse(fs.readFileSync(tenantFile, 'utf8')); }
+  catch(e) { return {}; }
+}
+
 // ─── Templates (imported from data/templates.js) ──────────────────────────────
 const {
   resolveTemplate, buildStandardConfig, listTemplates, getDefaultTemplateKey, DEFAULT_ROLES,
@@ -178,10 +189,15 @@ router.get('/', (req, res) => {
   const clients = (s.clients||[]).filter(c=>!c.deleted_at).map(c => {
     const envs = (s.client_environments||[]).filter(e=>e.client_id===c.id&&!e.deleted_at);
     const logs = (s.provision_log||[]).filter(l=>l.client_id===c.id);
-    const totalRecords = (s.objects||[])
-      .filter(o=>envs.some(e=>e.id===o.environment_id)&&!o.deleted_at)
-      .reduce((acc,o) => acc+(s.records||[]).filter(r=>r.object_id===o.id&&!r.deleted_at).length, 0);
-    return { ...c, env_count: envs.length, record_count: totalRecords, latest_provision: logs[logs.length-1]||null };
+    // Pull real counts from the isolated tenant store
+    let record_count = 0, user_count = 0, object_count = 0;
+    if (c.tenant_slug) {
+      const ts = getTenantStore(c.tenant_slug);
+      record_count = (ts.records||[]).filter(r=>!r.deleted_at).length;
+      user_count   = (ts.users||[]).filter(u=>!u.deleted_at).length;
+      object_count = (ts.objects||[]).filter(o=>!o.deleted_at).length;
+    }
+    return { ...c, env_count: envs.length, record_count, user_count, object_count, latest_provision: logs[logs.length-1]||null };
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   res.json(clients);
 });
@@ -211,24 +227,26 @@ router.get('/:id/stats', (req, res) => {
   const s = getStore(); ensureCollections();
   const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
   if (!client) return res.status(404).json({ error: 'Client not found' });
-  const envs    = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
-  const users   = (s.users||[]).filter(u=>u.client_id===client.id&&!u.deleted_at);
-  const objects = (s.objects||[]).filter(o=>!o.deleted_at&&envs.some(e=>e.id===o.environment_id));
-  const records = (s.records||[]).filter(r=>!r.deleted_at&&objects.some(o=>o.id===r.object_id));
-  const logs    = (s.provision_log||[]).filter(l=>l.client_id===client.id);
-  const envsWithStats = envs.map(env => {
-    const objCount = objects.filter(o=>o.environment_id===env.id).length;
-    const recCount = records.filter(r=>objects.find(o=>o.id===r.object_id)?.environment_id===env.id).length;
-    return { ...env, object_count: objCount, record_count: recCount };
-  });
+  const envs = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
+  const logs = (s.provision_log||[]).filter(l=>l.client_id===client.id);
+  // Pull real counts from the tenant store
+  let record_count = 0, user_count = 0, object_count = 0;
+  const envsWithStats = envs.map(env => ({ ...env, object_count: 0, record_count: 0 }));
+  if (client.tenant_slug) {
+    const ts = getTenantStore(client.tenant_slug);
+    const recs  = (ts.records||[]).filter(r=>!r.deleted_at);
+    const objs  = (ts.objects||[]).filter(o=>!o.deleted_at);
+    user_count   = (ts.users||[]).filter(u=>!u.deleted_at).length;
+    object_count = objs.length;
+    record_count = recs.length;
+    envsWithStats.forEach(env => {
+      env.object_count = objs.filter(o=>o.environment_id===env.id).length;
+      env.record_count = recs.filter(r=>objs.find(o=>o.id===r.object_id)?.environment_id===env.id).length;
+    });
+  }
   res.json({
-    environment_count: envs.length,
-    record_count:      records.length,
-    user_count:        users.length,
-    object_count:      objects.length,
-    environments:      envsWithStats,
-    provision_log:     logs,
-    sandboxes:         [],
+    environment_count: envs.length, record_count, user_count, object_count,
+    environments: envsWithStats, provision_log: logs, sandboxes: [],
   });
 });
 
@@ -236,14 +254,25 @@ router.get('/:id', (req, res) => {
   const s = getStore(); ensureCollections();
   const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
   if (!client) return res.status(404).json({ error: 'Client not found' });
-  const envs  = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
-  const logs  = (s.provision_log||[]).filter(l=>l.client_id===client.id);
-  const users = (s.users||[]).filter(u=>u.client_id===client.id&&!u.deleted_at);
-  const envsWithStats = envs.map(env => {
-    const objCount = (s.objects||[]).filter(o=>o.environment_id===env.id&&!o.deleted_at).length;
-    const recCount = (s.records||[]).filter(r=>{ const o=(s.objects||[]).find(x=>x.id===r.object_id); return o&&o.environment_id===env.id&&!r.deleted_at; }).length;
-    return { ...env, object_count: objCount, record_count: recCount };
-  });
+  const envs = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
+  const logs = (s.provision_log||[]).filter(l=>l.client_id===client.id);
+  // Load users and env stats from the tenant store (not master)
+  let users = [];
+  const envsWithStats = envs.map(env => ({ ...env, object_count: 0, record_count: 0 }));
+  if (client.tenant_slug) {
+    const ts = getTenantStore(client.tenant_slug);
+    users = (ts.users||[]).filter(u=>!u.deleted_at).map(u=>({
+      id: u.id, first_name: u.first_name, last_name: u.last_name,
+      email: u.email, role_name: u.role_name || u.role_id,
+      status: u.status, last_login: u.last_login, login_count: u.login_count,
+    }));
+    const objs = (ts.objects||[]).filter(o=>!o.deleted_at);
+    const recs = (ts.records||[]).filter(r=>!r.deleted_at);
+    envsWithStats.forEach(env => {
+      env.object_count = objs.filter(o=>o.environment_id===env.id).length;
+      env.record_count = recs.filter(r=>objs.find(o=>o.id===r.object_id)?.environment_id===env.id).length;
+    });
+  }
   res.json({ ...client, environments: envsWithStats, users, provision_log: logs });
 });
 
@@ -385,6 +414,114 @@ router.post('/:id/impersonate', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── GET /:id/error-logs — was returning 404 ───────────────────────────────────
+router.get('/:id/error-logs', (req, res) => {
+  const s = getStore(); ensureCollections();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { page=1, limit=30, severity, search } = req.query;
+  const pageNum = parseInt(page), limitNum = parseInt(limit);
+  let logs = [];
+  if (client.tenant_slug) {
+    const ts = getTenantStore(client.tenant_slug);
+    logs = (ts.error_logs||[]).filter(l=>!l.deleted_at);
+  }
+  const masterLogs = (s.error_logs||[]).filter(l=>l.client_id===client.id&&!l.deleted_at);
+  logs = [...masterLogs, ...logs];
+  if (severity && severity !== 'all') logs = logs.filter(l=>(l.sev||l.severity)===severity);
+  if (search) {
+    const q = search.toLowerCase();
+    logs = logs.filter(l=>(l.message||'').toLowerCase().includes(q)||(l.url||'').toLowerCase().includes(q));
+  }
+  logs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const total = logs.length;
+  res.json({ logs: logs.slice((pageNum-1)*limitNum, pageNum*limitNum), total, page: pageNum });
+});
+
+// ── GET /:id/activity — real activity from tenant store ───────────────────────
+router.get('/:id/activity', (req, res) => {
+  const s = getStore(); ensureCollections();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { page=1, limit=100, search } = req.query;
+  const pageNum = parseInt(page), limitNum = parseInt(limit);
+  let events = [];
+  if (client.tenant_slug) {
+    const ts = getTenantStore(client.tenant_slug);
+    const actLogs = (ts.activity_log||[]).map(a=>({
+      id: a.id, type: a.action_type||a.type||'activity',
+      message: a.description||a.message||`${a.action_type||'Event'} on ${a.record_id||'record'}`,
+      user_email: a.user_email||a.performed_by||'system',
+      created_at: a.created_at, severity: 'info',
+    }));
+    events = [...actLogs];
+  }
+  const provLogs = (s.provision_log||[]).filter(l=>l.client_id===client.id).map(l=>({
+    id: l.id, type: 'provision',
+    message: l.details||l.action||`Provision: ${l.template||''}`,
+    user_email: l.performed_by||'superadmin',
+    created_at: l.provisioned_at||l.created_at, severity: 'info',
+  }));
+  events = [...events, ...provLogs];
+  if (search) {
+    const q = search.toLowerCase();
+    events = events.filter(a=>(a.message||'').toLowerCase().includes(q)||(a.user_email||'').toLowerCase().includes(q));
+  }
+  events.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const total = events.length;
+  res.json({ events: events.slice((pageNum-1)*limitNum, pageNum*limitNum), total });
+});
+
+// ── POST /:id/add-environment — add env to existing client ────────────────────
+router.post('/:id/add-environment', async (req, res) => {
+  const s = getStore(); ensureCollections();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { name, type='staging', locale='en', timezone='UTC', template } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const now = new Date().toISOString();
+  const environment = {
+    id: uuidv4(), client_id: client.id, name,
+    type, locale, timezone, is_default: 0, status: 'active',
+    created_at: now, updated_at: now, deleted_at: null,
+  };
+  s.client_environments.push(environment);
+  if (client.tenant_slug) {
+    try {
+      await tenantStorage.run(client.tenant_slug, async () => {
+        const ts = provisionTenant(client.tenant_slug);
+        if (!ts.environments) ts.environments = [];
+        ts.environments.push({ ...environment });
+        if (template) {
+          const { objects } = resolveTemplate(template);
+          if (!ts.objects) ts.objects = [];
+          if (!ts.fields)  ts.fields  = [];
+          for (const objDef of (objects||[])) {
+            const obj = { id:uuidv4(), environment_id:environment.id, slug:objDef.slug,
+              name:objDef.name, plural_name:objDef.plural_name, icon:objDef.icon||'database',
+              color:objDef.color||'#4361EE', is_system:objDef.is_system!==false,
+              sort_order:ts.objects.length, created_at:now, updated_at:now, deleted_at:null };
+            ts.objects.push(obj);
+            (objDef.fields||[]).forEach((fDef,i)=>{
+              ts.fields.push({ id:uuidv4(), environment_id:environment.id, object_id:obj.id,
+                ...fDef, sort_order:i, created_at:now, updated_at:now, deleted_at:null });
+            });
+          }
+        }
+        saveStoreNow(client.tenant_slug);
+      });
+    } catch(e) { console.error('[add-environment] tenant seed error:', e.message); }
+  }
+  s.provision_log.push({
+    id: uuidv4(), client_id: client.id, environment_id: environment.id,
+    action: 'add_environment',
+    details: `Added environment: ${name} (${type}) · ${locale} · ${timezone}`,
+    performed_by: 'superadmin', provisioned_at: now,
+  });
+  saveStore();
+  res.status(201).json({ environment, client, success: true });
+});
 
 // ── E2E cleanup: purge all E2ETest* tenants ───────────────────────────────────
 // Called by the provisioning spec's afterAll to keep the data store clean.
