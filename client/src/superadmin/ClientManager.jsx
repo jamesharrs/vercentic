@@ -655,10 +655,94 @@ function CreateClientUserModal({ client, onClose, onCreated }) {
   );
 }
 
+// ── Add Environment Modal (env details only — client already exists) ──────────
+function AddEnvironmentModal({ client, onClose, onDone }) {
+  const [form, setForm] = useState({ name:'', type:'staging', locale:'en', timezone:'Asia/Dubai', template:'' });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  useEffect(() => {
+    saFetch('/api/superadmin/clients/provision/templates').then(r=>r.json()).then(setTemplates).catch(()=>{});
+  }, []);
+  const set = (k,v) => { setForm(f=>({...f,[k]:v})); setErrors(e=>({...e,[k]:null})); };
+  const handleSave = async () => {
+    if (!form.name.trim()) { setErrors({name:'Environment name required'}); return; }
+    setSaving(true);
+    try {
+      const r = await saFetch(`/api/superadmin/clients/${client.id}/add-environment`, {
+        method:'POST', body: JSON.stringify(form),
+      });
+      const d = await r.json();
+      if (r.ok) { onDone(d); }
+      else setErrors({ name: d.error || 'Failed to create environment' });
+    } catch(e) { setErrors({ name: e.message }); }
+    setSaving(false);
+  };
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000}} onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,padding:28,width:460,fontFamily:F}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:C.text1}}>Add Environment</div>
+            <div style={{fontSize:12,color:C.text3,marginTop:2}}>Adding to: <span style={{color:C.accent}}>{client.name}</span></div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:C.text3,cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={labelSt}>Environment Name *</label>
+          <input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Staging, UAT, APAC Production"
+            style={{...inputSt,borderColor:errors.name?C.red:C.border2}} autoFocus/>
+          {errors.name && <div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.name}</div>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+          <div>
+            <label style={labelSt}>Type</label>
+            <select value={form.type} onChange={e=>set('type',e.target.value)} style={{...inputSt,background:C.surface2}}>
+              {['production','staging','uat','development','demo'].map(t=>(
+                <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelSt}>Locale</label>
+            <select value={form.locale} onChange={e=>set('locale',e.target.value)} style={{...inputSt,background:C.surface2}}>
+              {[['en','English'],['ar','Arabic'],['fr','French'],['de','German'],['es','Spanish']].map(([v,l])=>(
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={labelSt}>Timezone</label>
+          <select value={form.timezone} onChange={e=>set('timezone',e.target.value)} style={{...inputSt,background:C.surface2}}>
+            {['Asia/Dubai','UTC','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','Asia/Singapore','Asia/Tokyo'].map(tz=>(
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
+          </select>
+        </div>
+        {templates.length > 0 && (
+          <div style={{marginBottom:14}}>
+            <label style={labelSt}>Seed Template (optional)</label>
+            <select value={form.template} onChange={e=>set('template',e.target.value)} style={{...inputSt,background:C.surface2}}>
+              <option value="">— Blank environment —</option>
+              {templates.map(t=><option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
+        )}
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+          <Btn v='secondary' onClick={onClose}>Cancel</Btn>
+          <Btn onClick={handleSave} disabled={saving}>{saving ? 'Creating…' : 'Create Environment'}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
   const [client,setClient]=useState(null); const [stats,setStats]=useState(null);
   const [loading,setLoading]=useState(true); const [tab,setTab]=useState('overview');
   const [loadingTD,setLoadingTD]=useState(false); const [tdResults,setTdResults]=useState({});
+  const [showAddEnvModal, setShowAddEnvModal] = useState(false);
   const [showCreateUser,setShowCreateUser]=useState(false);
   const [deletingEnv,   setDeletingEnv]   = useState(null);  // envId currently being deleted
   const [confirmEnvDel, setConfirmEnvDel] = useState(null);  // envId awaiting confirmation
@@ -783,7 +867,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
             } catch(e) { alert('Error: ' + e.message); }
           }}>Login as client →</Btn>
         )}
-        <Btn onClick={onProvisionEnv}>+ Add Environment</Btn>
+        <Btn onClick={()=>setShowAddEnvModal(true)}>+ Add Environment</Btn>
       </div>
 
       {stats && (
@@ -866,7 +950,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
       {tab==='environments' && (
         <div style={cardSt}>
           {!(client.environments||[]).length
-            ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No environments. <span style={{color:C.accent,cursor:'pointer'}} onClick={onProvisionEnv}>Add one →</span></div>
+            ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No environments. <span style={{color:C.accent,cursor:'pointer'}} onClick={()=>setShowAddEnvModal(true)}>Add one →</span></div>
             : (client.environments||[]).map(e=>{
               // Find sandboxes belonging to this environment
               const envSandboxes = (stats.sandboxes||[]).filter(sb=>sb.production_env_id===e.id);
@@ -1186,6 +1270,19 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
         <AIDiagnosisPanel
           environmentId={(client?.environments||[])[0]?.id || client?.id}
           clientName={client?.name}
+        />
+      )}
+
+      {/* Add Environment modal */}
+      {showAddEnvModal && client && (
+        <AddEnvironmentModal
+          client={client}
+          onClose={()=>setShowAddEnvModal(false)}
+          onDone={()=>{
+            setShowAddEnvModal(false);
+            Promise.all([sa.get(`/${clientId}`),sa.get(`/${clientId}/stats`)])
+              .then(([c,s])=>{ setClient(c); setStats(s); });
+          }}
         />
       )}
     </div>

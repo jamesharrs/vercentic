@@ -335,7 +335,7 @@ const NavIcon = ({ id, size=14, color="currentColor" }) => {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
 };
 const NAV_ITEMS = [
-  { id:'env',      label:'Environment',          icon:'env',      desc:'Manage .env variables' },
+  { id:'env',      label:'Global Config (.env)',      icon:'env',      desc:'Manage server environment variables & secrets' },
   { id:'global_integrations', label:'Global Integrations', icon:'mail', desc:'Resend email, default domain & platform-wide API keys' },
   { id:'health',   label:'System Health',         icon:'health',   desc:'Server stats & uptime' },
   { id:'clients',  label:'Clients',               icon:'clients',  desc:'Manage client organisations' },

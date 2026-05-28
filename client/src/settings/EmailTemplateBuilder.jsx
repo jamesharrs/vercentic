@@ -134,26 +134,26 @@ export default function EmailTemplateBuilder({ environment }) {
       let html = editing.html_body;
       const kit = brandKits.find(k => k.id === editing.brand_kit_id);
       if (kit) {
-        // Replace hardcoded brand colours with kit colours
+        // Replace brand placeholders with kit colours
         html = html
+          .replace(/\{\{brand_primary\}\}/g, kit.primaryColor || '#4361EE')
           .replace(/#6d28d9/gi, kit.primaryColor || '#6d28d9')
           .replace(/#4361EE/gi, kit.primaryColor || '#4361EE')
           .replace(/#059669/gi, kit.accentColor  || '#059669')
           .replace(/#f5f3ff/gi, kit.bgColor       || '#f5f3ff')
           .replace(/#ddd6fe/gi, kit.secondaryColor|| '#ddd6fe');
 
-        // Prepend branded header matching block-based template style
-        const logoHtml = kit.logoUrl
-          ? `<img src="${kit.logoUrl}" alt="${kit.name || ''}" style="height:36px;max-width:160px;object-fit:contain;display:block;">`
-          : `<span style="font-size:20px;font-weight:800;color:${kit.primaryColor || '#4361EE'}">${kit.name || ''}</span>`;
-        const brandedHeader = `<div style="background:#ffffff;padding:20px 32px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;">
-  ${logoHtml}
-</div>`;
-        // Insert header before the first <div — i.e. at the very top of the body content
-        html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;padding:0;">
-  ${brandedHeader}
-  <div style="padding:0;">${html}</div>
-</div>`;
+        // Inject logo if kit has one — replace the text company name in header with img+name
+        if (kit.logoUrl) {
+          const logoTag = `<img src="${kit.logoUrl}" alt="${kit.name||''}" style="height:40px;max-width:200px;object-fit:contain;" />&nbsp;&nbsp;`;
+          // Replace the company name span in the header with logo+name
+          html = html.replace(
+            new RegExp(`(<td[^>]*border-bottom[^>]*>)([^<]*)`, ''),
+            `$1${logoTag}$2`
+          );
+        }
+        // Replace remaining {{company_name}} with kit name
+        html = html.replace(/\{\{company_name\}\}/g, kit.name || 'Vercentic');
       }
       setPreviewHtml(html);
       setHtmlCode(html);
