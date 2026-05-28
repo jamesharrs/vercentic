@@ -569,6 +569,39 @@ router.post('/purge-test-clients', (req, res) => {
 
 
 // ── POST /:id/users — add a user to a client's tenant store ──────────────────
+// ── PATCH /:id/users/:userId — update a user in tenant store ──────────────────
+router.patch('/:id/users/:userId', async (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client.tenant_slug) return res.status(400).json({ error: 'Client has no tenant store' });
+
+  const allowed = ['first_name','last_name','email','role_id','role_name','environment_id','status','password'];
+  const updates = {};
+  allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  if (updates.password) {
+    updates.password_hash = hashPassword(updates.password);
+    delete updates.password;
+  }
+
+  try {
+    let updated = null;
+    await tenantStorage.run(client.tenant_slug, async () => {
+      const ts = loadTenantStore(client.tenant_slug);
+      const user = (ts.users||[]).find(u=>u.id===req.params.userId&&!u.deleted_at);
+      if (!user) return;
+      Object.assign(user, updates, { updated_at: new Date().toISOString() });
+      updated = user;
+      saveStoreNow(client.tenant_slug);
+    });
+    if (!updated) return res.status(404).json({ error: 'User not found' });
+    res.json(updated);
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/users', async (req, res) => {
   ensureCollections();
   const s = getStore();
