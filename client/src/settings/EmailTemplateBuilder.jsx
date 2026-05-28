@@ -129,10 +129,21 @@ export default function EmailTemplateBuilder({ environment }) {
       setPreviewHtml(htmlCode);
       return;
     }
-    // If system template has html_body but no blocks, use html_body as preview
+    // If system template has html_body but no blocks, apply brand kit colours then show
     if (editing.html_body && !(editing.blocks || []).length) {
-      setPreviewHtml(editing.html_body);
-      setHtmlCode(editing.html_body);
+      let html = editing.html_body;
+      const kit = brandKits.find(k => k.id === editing.brand_kit_id);
+      if (kit) {
+        // Replace hardcoded brand colours with kit colours
+        html = html
+          .replace(/#6d28d9/gi, kit.primaryColor || '#6d28d9')
+          .replace(/#4361EE/gi, kit.primaryColor || '#4361EE')
+          .replace(/#059669/gi, kit.accentColor  || '#059669')
+          .replace(/#f5f3ff/gi, kit.bgColor       || '#f5f3ff')
+          .replace(/#ddd6fe/gi, kit.secondaryColor|| '#ddd6fe');
+      }
+      setPreviewHtml(html);
+      setHtmlCode(html);
       return;
     }
     try {
@@ -145,7 +156,7 @@ export default function EmailTemplateBuilder({ environment }) {
       setPreviewHtml(result.html || '');
       setHtmlCode(result.html || '');
     } catch (_) {}
-  }, [editing?.blocks, editing?.subject, editing?.brand_kit_id, htmlEdited, htmlCode]);
+  }, [editing?.blocks, editing?.subject, editing?.brand_kit_id, editing?.html_body, brandKits, htmlEdited, htmlCode]);
 
   useEffect(() => {
     if (editing) {
@@ -470,7 +481,7 @@ export default function EmailTemplateBuilder({ environment }) {
               <div style={{ width: previewMode === 'mobile' ? 375 : '100%', maxWidth: 680, transition: "width .2s" }}>
                 {previewHtml ? (
                   <iframe srcDoc={previewHtml} style={{ width: "100%", height: "100%", minHeight: 500, border: `1px solid ${C.border}`, borderRadius: 8, background: "white" }}
-                    sandbox="allow-same-origin" title="Email Preview" />
+                    sandbox="allow-same-origin allow-scripts" title="Email Preview" />
                 ) : (
                   <div style={{ textAlign: "center", padding: 40, color: C.text3 }}>Add blocks to see a preview</div>
                 )}
