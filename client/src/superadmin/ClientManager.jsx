@@ -1672,7 +1672,7 @@ export function Performance() {
             <StatCard label='Environments' value={stats.totals?.environments}  color={C.cyan}/>
             <StatCard label='Records'      value={stats.totals?.records}       color={C.green}/>
             <StatCard label='Users'        value={stats.totals?.users}         color={C.purple}/>
-            <StatCard label='Data Store'   value={`${stats.store_size_kb}KB`}  color={C.amber}/>
+            <StatCard label='Data Store'   value={stats.store_size_kb != null ? `${stats.store_size_kb}KB` : '—'}  color={C.amber}/>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
             <div style={cardSt}>
