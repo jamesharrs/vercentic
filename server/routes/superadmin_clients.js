@@ -147,6 +147,16 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   const { seedDefaultPermissions } = require('../middleware/rbac');
   seedDefaultPermissions(ts);
 
+  // Seed system email templates (email_templates_v2) into the tenant store
+  const masterStore = getStore();
+  const systemTemplates = (masterStore.email_templates_v2 || []).filter(t => t.is_system && !t.deleted_at);
+  if (!ts.email_templates_v2) ts.email_templates_v2 = [];
+  systemTemplates.forEach(t => {
+    if (!ts.email_templates_v2.find(e => e.slug === t.slug)) {
+      ts.email_templates_v2.push({ ...t });
+    }
+  });
+
   // Persist the tenant store
   saveStoreNow(tenantSlug);
 
