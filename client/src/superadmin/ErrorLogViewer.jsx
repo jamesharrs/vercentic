@@ -166,7 +166,7 @@ ${log.context ? '\n**Additional Context:**\n' + JSON.stringify(log.context, null
         )}
       </div>
 
-      <div style={{ display:'flex', height:'calc(100vh - 240px)' }}>
+      <div style={{ display:'flex', flexDirection:'column', minHeight:0, flex:1 }}>
         {/* List */}
         <div style={{ flex:1, display:'flex', flexDirection:'column', borderRight:`1px solid ${C.border}` }}>
           {/* Filters */}
@@ -227,9 +227,10 @@ ${log.context ? '\n**Additional Context:**\n' + JSON.stringify(log.context, null
           )}
         </div>
 
-        {/* Detail panel */}
+        {/* Detail panel — modal overlay */}
         {selected && (
-          <div style={{ width:400, overflowY:'auto', padding:'18px 22px' }}>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>setSelected(null)}>
+          <div style={{ width:600, maxHeight:'88vh', overflowY:'auto', padding:'24px 28px', background:'#1A2540', borderRadius:16, border:'1px solid #2D3F6B', boxShadow:'0 24px 64px rgba(0,0,0,.8)' }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14 }}>
               <div>
                 <code style={{ fontSize:11, padding:'3px 7px', borderRadius:6, background:'#0F1729', color:C.text2, fontFamily:'monospace', display:'block', marginBottom:8 }}>{selected.code}</code>
@@ -336,6 +337,7 @@ ${log.context ? '\n**Additional Context:**\n' + JSON.stringify(log.context, null
               </div>
             )}
             <button onClick={()=>handleDelete(selected)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px solid #3F1F1F', background:'transparent', color:'#EF4444', fontSize:12, cursor:'pointer', fontFamily:F }}>Delete log</button>
+          </div>
           </div>
         )}
       </div>

@@ -96,8 +96,20 @@ router.get('/master', (req, res) => {
   ensure();
   const s = getStore();
   // Gather environments from master + all tenant stores with proper naming
-  const allClients    = s.clients || [];
-  const allClientEnvs = s.client_environments || [];
+  const allClients    = (s.clients || []).filter(c => !c.deleted_at);
+  const allClientEnvIds = new Set();
+  const allClientEnvs = (s.client_environments || []).filter(e => {
+    if (e.deleted_at) return false;
+    if (allClientEnvIds.has(e.id)) return false;
+    // Skip template environments (provisioning artefacts)
+    const nm = (e.name || '').toLowerCase();
+    const client = (s.clients || []).find(c => c.id === e.client_id);
+    if (!client || client.deleted_at) return false;
+    const cn = (client.name || '').toLowerCase();
+    if (cn.includes('template') || cn.includes('vercentic template') || cn.includes('starter template')) return false;
+    allClientEnvIds.add(e.id);
+    return true;
+  });
   const masterEnvs = s.environments || [];
   const allAllocs = s.ai_credit_allocations || [];
   const totalAllocated = allAllocs.filter(a => !a.deleted_at).reduce((sum, a) => sum + (a.monthly_budget_usd || 0), 0);
