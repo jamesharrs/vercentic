@@ -688,10 +688,18 @@ router.post('/seed-system', (req, res) => {
   ];
 
   for (const tmpl of SYSTEM_TEMPLATES) {
-    const exists = (store.email_templates_v2 || []).find(t => t.slug === tmpl.slug && !t.deleted_at);
-    if (!exists) {
+    const idx = (store.email_templates_v2 || []).findIndex(t => t.slug === tmpl.slug && !t.deleted_at);
+    if (idx < 0) {
+      // New template — insert
       store.email_templates_v2.push({ ...tmpl, id: uuidv4(), created_at: now, updated_at: now });
       added++;
+    } else {
+      // Existing — update html_body if empty (backfill)
+      const existing = store.email_templates_v2[idx];
+      if (tmpl.html_body && !existing.html_body) {
+        store.email_templates_v2[idx].html_body = tmpl.html_body;
+        store.email_templates_v2[idx].updated_at = now;
+      }
     }
   }
   saveStore();
