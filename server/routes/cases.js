@@ -69,6 +69,9 @@ router.get('/', (req, res) => {
       c.client_domain === client_domain ||
       c.reporter_email?.endsWith('@' + client_domain)
     );
+    // Exact reporter_email filter — used by the client portal (never domain-wide)
+    const { reporter_email } = req.query;
+    if (reporter_email) cases = cases.filter(c => c.reporter_email === reporter_email);
     if (search) {
       const q = search.toLowerCase();
       cases = cases.filter(c =>
@@ -238,6 +241,90 @@ router.post('/:id/assign', (req, res) => {
     store.cases = cases;
     saveStore(store);
     res.json(cases[idx]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ── POST /api/cases/magic-send ─────────────────────────────────────────────
+// Generates a 6-digit code + URL token, bound to the caller's tenant.
+// Magic link tokens are stored in the MASTER store so they survive across tenant
+// store lookups on verify. The token carries tenant_slug so there is no ambiguity.
+router.post('/magic-send', (req, res) => {
+  try {
+    const { email, tenant_slug } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Valid email required' });
+    const emailLower = email.trim().toLowerCase();
+    const domain     = emailLower.split('@')[1] || '';
+    const code       = String(Math.floor(100000 + Math.random() * 900000));
+    const token      = require('crypto').randomBytes(24).toString('hex');
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    // Write to master store regardless of current tenant context
+    const { getStore, saveStore, tenantStorage } = require('../db/init');
+    tenantStorage.run('master', () => {
+      const store = getStore();
+      if (!store.portal_magic_links) store.portal_magic_links = [];
+      // Invalidate existing unused links for this email+tenant
+      store.portal_magic_links = store.portal_magic_links.filter(
+        l => !(l.email === emailLower && l.tenant_slug === (tenant_slug || null) && !l.used)
+      );
+      store.portal_magic_links.push({
+        id: require('crypto').randomUUID(),
+        email: emailLower, domain,
+        tenant_slug: tenant_slug || null,
+        token, code, expires_at, used: false,
+        created_at: new Date().toISOString(),
+      });
+      saveStore(store);
+    });
+
+    const appUrl   = process.env.APP_URL || 'https://app.vercentic.com';
+    const tenantQs = tenant_slug ? `&tenant=${tenant_slug}` : '';
+    const magicUrl = `${appUrl}/client-hub?magic_token=${token}${tenantQs}`;
+
+    // TODO: Replace console.log with SendGrid send in production
+    console.log(`[MAGIC LINK] email=${emailLower} tenant=${tenant_slug||'master'} code=${code} url=${magicUrl}`);
+
+    res.json({ success: true, message: `Magic link sent to ${email}`, _dev_code: code, _dev_token: token, _dev_url: magicUrl });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/cases/magic-verify ───────────────────────────────────────────
+// Verifies token (clicked link) OR email+code (manual entry).
+// Returns a lightweight portal session: { email, domain, name, tenant_slug }.
+// A token from tenant A cannot be used on the portal for tenant B.
+router.post('/magic-verify', (req, res) => {
+  try {
+    const { token, email, code, tenant_slug } = req.body;
+    if (!token && (!email || !code)) return res.status(400).json({ error: 'token or (email + code) required' });
+
+    const { getStore, saveStore, tenantStorage } = require('../db/init');
+    let result;
+    tenantStorage.run('master', () => {
+      const store = getStore();
+      const links = store.portal_magic_links || [];
+      let link;
+      if (token) {
+        link = links.find(l =>
+          l.token === token && !l.used &&
+          (l.tenant_slug === (tenant_slug || null) || l.tenant_slug === null || tenant_slug === null)
+        );
+      } else {
+        const el = email.trim().toLowerCase();
+        link = links.find(l =>
+          l.email === el && l.code === code.trim() && !l.used &&
+          (l.tenant_slug === (tenant_slug || null) || l.tenant_slug === null || tenant_slug === null)
+        );
+      }
+      if (!link)                                    { result = { status:401, body:{ error:'Invalid or already-used link. Please request a new one.' } }; return; }
+      if (new Date(link.expires_at) < new Date())   { result = { status:401, body:{ error:'This link has expired. Please request a new one.' } }; return; }
+      link.used = true; link.used_at = new Date().toISOString();
+      store.portal_magic_links = links.map(l => l.id === link.id ? link : l);
+      saveStore(store);
+      const name = link.email.split('@')[0].replace(/[._\-+]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+      result = { status:200, body:{ email:link.email, domain:link.domain, name, tenant_slug:link.tenant_slug, authenticated_at:new Date().toISOString() } };
+    });
+    res.status(result.status).json(result.body);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

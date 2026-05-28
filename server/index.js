@@ -313,6 +313,8 @@ const AUTH_EXEMPT = [
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal
   '/screening/job',      // wizard fetches screening rules for portal screening block
   '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
+  '/cases/magic-send',
+  '/cases/magic-verify',
   '/signup',        // public self-serve signup — no auth needed
   '/setup-status',  // polled before first login to check if provisioning is complete
   '/error-logs', '/ai', '/translate', '/linkedin-search',
