@@ -718,20 +718,23 @@ router.post('/:id/repair-tenant', async (req, res) => {
     await tenantStorage.run(client.tenant_slug, async () => {
       const ts = loadTenantStore(client.tenant_slug);
 
-      // 1. Seed all environments into tenant store if missing
+      // 1. Seed all environments into tenant store — strip client_id so /api/environments returns them
       if (!ts.environments) ts.environments = [];
       for (const env of envs) {
         if (!ts.environments.find(e=>e.id===env.id)) {
-          ts.environments.push({ ...env });
+          // eslint-disable-next-line no-unused-vars
+          const { client_id: _cid, tenant_slug: _ts, ...envClean } = env;
+          ts.environments.push({ ...envClean });
         }
       }
 
-      // 2. Seed objects + fields from template if tenant has none
-      if (!(ts.objects||[]).length) {
+      // 2. Force-seed objects + fields if tenant has none (ignore existing empty array)
+      const hasObjects = (ts.objects||[]).filter(o=>!o.deleted_at).length > 0;
+      if (!hasObjects) {
         const now2 = new Date().toISOString();
-        const { objects: objDefs, roles: roleDefs } = resolveTemplate(template || getDefaultTemplateKey());
-        if (!ts.objects) ts.objects = [];
-        if (!ts.fields)  ts.fields  = [];
+        const { objects: objDefs } = resolveTemplate(template || getDefaultTemplateKey());
+        ts.objects = ts.objects || [];
+        ts.fields  = ts.fields  || [];
         for (const objDef of (objDefs||[])) {
           const obj = { id: uuidv4(), environment_id: primaryEnv.id, slug: objDef.slug,
             name: objDef.name, plural_name: objDef.plural_name, icon: objDef.icon||'database',
@@ -748,8 +751,9 @@ router.post('/:id/repair-tenant', async (req, res) => {
         }
       }
 
-      // 3. Seed roles if missing
-      if (!(ts.roles||[]).length) {
+      // 3. Force-seed roles if none exist
+      const hasRoles = (ts.roles||[]).filter(r=>!r.deleted_at).length > 0;
+      if (!hasRoles) {
         if (!ts.roles) ts.roles = [];
         const now = new Date().toISOString();
         const defaultRoles = [
