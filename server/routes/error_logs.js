@@ -127,4 +127,39 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Bulk resolve ─────────────────────────────────────────────────────────────
+router.patch('/bulk-resolve', (req, res) => {
+  const store = getStore();
+  if (!store.error_logs) return res.json({ resolved: 0 });
+  let count = 0;
+  store.error_logs.forEach(l => {
+    if (!l.resolved) {
+      l.resolved = true;
+      l.resolution_note = 'Bulk resolved via super admin';
+      l.resolved_at = new Date().toISOString();
+      count++;
+    }
+  });
+  const { saveStore } = require('../db/init');
+  saveStore();
+  res.json({ resolved: count });
+});
+
+// ── Bulk delete ──────────────────────────────────────────────────────────────
+router.delete('/bulk', (req, res) => {
+  const { mode = 'resolved' } = req.body || {};
+  const store = getStore();
+  if (!store.error_logs) return res.json({ deleted: 0 });
+  const before = store.error_logs.length;
+  if (mode === 'all') {
+    store.error_logs = [];
+  } else if (mode === 'resolved') {
+    store.error_logs = store.error_logs.filter(l => !l.resolved);
+  }
+  const deleted = before - store.error_logs.length;
+  const { saveStore } = require('../db/init');
+  saveStore();
+  res.json({ deleted, remaining: store.error_logs.length });
+});
+
 module.exports = router;

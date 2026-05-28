@@ -148,6 +148,10 @@ ${log.context ? '\n**Additional Context:**\n' + JSON.stringify(log.context, null
             <p style={{ margin:'4px 0 0', fontSize:13, color:C.text2 }}>All application errors reported across environments</p>
           </div>
           <button onClick={load} style={{ padding:'8px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:12, cursor:'pointer', fontFamily:F }}>↻ Refresh</button>
+          <button onClick={async()=>{ if(!confirm('Mark all unresolved errors as resolved?')) return; await saFetch('/api/error-logs/bulk-resolve',{method:'PATCH',headers:{'Content-Type':'application/json'},body:'{}'}); load(); }}
+            style={{ padding:'8px 14px', borderRadius:8, border:`1px solid ${C.success}40`, background:`${C.success}10`, color:C.success, fontSize:12, cursor:'pointer', fontFamily:F }}>✓ Resolve All</button>
+          <button onClick={async()=>{ if(!confirm('Permanently delete all resolved errors?')) return; await saFetch('/api/error-logs/bulk',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'resolved'})}); load(); }}
+            style={{ padding:'8px 14px', borderRadius:8, border:`1px solid ${C.danger}40`, background:`${C.danger}10`, color:C.danger, fontSize:12, cursor:'pointer', fontFamily:F }}>🗑 Clear Resolved</button>
         </div>
         {/* Stat cards */}
         {stats && (

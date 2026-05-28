@@ -49,7 +49,7 @@ function NewCaseModal({clients,onSave,onClose}){
         <label style={lbl}>CLIENT</label>
         <select value={form.client_id} onChange={e=>set('client_id',e.target.value)} style={{...inp,marginBottom:14}}>
           <option value=''>— Select client —</option>
-          {clients.map(c=><option key={c.id} value={c.id}>{c.name} ({c.plan_tier})</option>)}
+          {clients.map(c=><option key={c.id} value={c.id}>{c.name} ({c.plan||c.plan_tier||'—'})</option>)}
         </select>
         <label style={lbl}>SUBJECT *</label>
         <input value={form.subject} onChange={e=>set('subject',e.target.value)} placeholder="Brief description" style={{...inp,marginBottom:14}}/>

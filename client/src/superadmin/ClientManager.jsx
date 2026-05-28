@@ -1542,7 +1542,7 @@ export function Performance() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      saFetch('/api/superadmin/clients/stats/platform').then(x=>x.json()).catch(()=>null),
+      saFetch('/api/superadmin/clients/stats/overview').then(x=>x.json()).catch(()=>null),
       saFetch('/api/superadmin/perf/response-times').then(x=>x.json()).catch(()=>null),
       saFetch('/api/superadmin/perf/ai-usage').then(x=>x.json()).catch(()=>null),
     ]).then(([s,r,a]) => { setStats(s); setRt(r); setAi(a); setLoading(false); });

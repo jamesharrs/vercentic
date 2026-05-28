@@ -212,12 +212,29 @@ router.get('/stats/overview', (req, res) => {
   const byStatus   = clients.reduce((a,c)=>{ a[c.status]=(a[c.status]||0)+1; return a; },{});
   const byPlan     = clients.reduce((a,c)=>{ a[c.plan]=(a[c.plan]||0)+1; return a; },{});
   const totalEnvs  = (s.client_environments||[]).filter(e=>!e.deleted_at).length;
-  const totalUsers = (s.users||[]).filter(u=>!u.deleted_at&&u.client_id).length;
-  const totalRecs  = (s.records||[]).filter(r=>!r.deleted_at).length;
   const fileSizeKB = Math.round(JSON.stringify(s).length/1024);
+  // Aggregate records/users across all tenant stores for accurate counts
+  const { listTenants } = require('../db/init');
+  let totalRecs = 0, totalUsers = 0;
+  try {
+    const tenants = listTenants ? listTenants() : [];
+    for (const slug of tenants) {
+      try {
+        const ts = getTenantStore(slug);
+        totalRecs  += (ts.records||[]).filter(r=>!r.deleted_at).length;
+        totalUsers += (ts.users||[]).filter(u=>!u.deleted_at).length;
+      } catch(e) { /* skip */ }
+    }
+  } catch(e) {}
+  // Also count master records (non-tenant)
+  totalRecs  += (s.records||[]).filter(r=>!r.deleted_at).length;
+  totalUsers += (s.users||[]).filter(u=>!u.deleted_at&&!u.client_id).length;
   const topEnvs = (s.client_environments||[]).filter(e=>!e.deleted_at).map(env => {
     const cl = clients.find(c=>c.id===env.client_id);
-    const rc = (s.records||[]).filter(r=>{ const o=(s.objects||[]).find(x=>x.id===r.object_id); return o&&o.environment_id===env.id&&!r.deleted_at; }).length;
+    let rc = 0;
+    if (cl?.tenant_slug) {
+      try { rc = (getTenantStore(cl.tenant_slug).records||[]).filter(r=>r.environment_id===env.id&&!r.deleted_at).length; } catch(e){}
+    }
     return { env_name: env.name, client_name: cl?.name||'—', record_count: rc };
   }).sort((a,b)=>b.record_count-a.record_count).slice(0,5);
   res.json({ total_clients: clients.length, by_status: byStatus, by_plan: byPlan, total_environments: totalEnvs, total_client_users: totalUsers, total_records: totalRecs, data_store_kb: fileSizeKB, top_environments: topEnvs });

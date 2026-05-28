@@ -36,7 +36,7 @@ const SEQUENCE_GOALS = [
 router.get('/milestones', (req,res) => res.json({ milestones:MILESTONES, goals:SEQUENCE_GOALS }));
 
 // ── Templates ────────────────────────────────────────────────────────────────
-router.get('/templates', (req,res) => res.json(getCol('email_templates').filter(t=>!t.deleted_at)));
+router.get('/templates', (req,res) => res.json(getCol('email_templates').filter(t=>!t.deleted_at && !t.environment_id)));
 
 router.post('/templates', (req,res) => {
   const { name, subject, body_html, body_text, from_name, from_email, tags } = req.body;
