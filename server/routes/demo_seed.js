@@ -647,8 +647,10 @@ function findTenantForEnv(environmentId) {
 router.get('/environments', (req, res) => {
   try {
     const s    = getStore();
+    const allClients = s.clients || [];
+    const allClientEnvs = s.client_environments || [];
     const envs = (s.environments || []).map(e => ({
-      id: e.id, name: e.name, slug: e.slug, client_name: null,
+      id: e.id, name: e.name, slug: e.slug, client_name: null, tenant_slug: null,
       record_count: (s.records || []).filter(r => r.environment_id === e.id && !r.deleted_at).length,
       demo_count:   (s.records || []).filter(r => r.environment_id === e.id && r._demo && !r.deleted_at).length,
     }));
@@ -658,10 +660,18 @@ router.get('/environments', (req, res) => {
       for (const slug of tenants) {
         try {
           const ts = loadTenantStore(slug);
+          // Find client name from master store using tenant_slug
+          const client = allClients.find(c => c.tenant_slug === slug);
+          const clientName = client?.name || null;
           (ts.environments || []).forEach(e => {
             if (!envs.find(ev => ev.id === e.id)) {
+              // Also check client_environments for the env name
+              const clientEnv = allClientEnvs.find(ce => ce.id === e.id);
+              const envLabel = clientEnv?.name || e.name;
               envs.push({
-                id: e.id, name: e.name, slug: e.slug, client_name: slug,
+                id: e.id,
+                name: clientName ? `${clientName} — ${envLabel}` : envLabel,
+                slug: e.slug, client_name: clientName, tenant_slug: slug,
                 record_count: (ts.records || []).filter(r => r.environment_id === e.id && !r.deleted_at).length,
                 demo_count:   (ts.records || []).filter(r => r.environment_id === e.id && r._demo && !r.deleted_at).length,
               });

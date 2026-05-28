@@ -1,8 +1,8 @@
 // server/routes/superadmin_perf.js
-// Superadmin performance metrics — response times + AI usage
+// Superadmin performance metrics — response times + AI usage (cross-tenant)
 const express = require('express');
 const router = express.Router();
-const { getStore } = require('../db/init');
+const { getStore, listTenants, loadTenantStore } = require('../db/init');
 
 // Cost per million tokens (must match admin_dashboard.js)
 const CPM = { input: 3.0, output: 15.0 };
@@ -79,8 +79,20 @@ router.get('/response-times', (req, res) => {
 // ── GET /api/superadmin/perf/ai-usage ────────────────────────────────────────
 router.get('/ai-usage', (req, res) => {
   try {
-    const store = getStore();
-    const logs = store.ai_usage_log || [];
+    // Aggregate across master store + all tenant stores
+    let logs = [];
+    const addLogs = (store, tenantSlug) => {
+      const sl = store.ai_usage_log || [];
+      sl.forEach(l => logs.push({ ...l, tenant_slug: tenantSlug }));
+    };
+    addLogs(getStore(), 'master');
+    try {
+      const tenants = listTenants ? listTenants() : [];
+      for (const slug of tenants) {
+        try { addLogs(loadTenantStore(slug), slug); } catch(e) { /* skip */ }
+      }
+    } catch(e) {}
+
     const now = Date.now();
     const nowIso = new Date().toISOString();
     const d30ago = new Date(now - 30 * 86400000).toISOString();
@@ -127,12 +139,23 @@ router.get('/ai-usage', (req, res) => {
       .map(f => ({ ...f, cost: calcCost(f.tokens_in, f.tokens_out) }))
       .sort((a, b) => b.calls - a.calls);
 
+    // By tenant
+    const tenantMap = {};
+    recent30.forEach(l => {
+      const slug = l.tenant_slug || 'master';
+      if (!tenantMap[slug]) tenantMap[slug] = { tenant: slug, calls: 0, tokens_in: 0, tokens_out: 0 };
+      tenantMap[slug].calls++;
+      tenantMap[slug].tokens_in  += l.tokens_in  || 0;
+      tenantMap[slug].tokens_out += l.tokens_out || 0;
+    });
+
     res.json({
       this_month: totals(thisMonth),
       last_7d:    totals(recent7),
       last_30d:   totals(recent30),
       daily,
       by_feature,
+      by_tenant: Object.values(tenantMap).sort((a,b)=>b.calls-a.calls),
       generated_at: nowIso,
     });
   } catch (err) {

@@ -95,21 +95,66 @@ module.exports.CLIENT_MARGIN = CLIENT_MARGIN;
 router.get('/master', (req, res) => {
   ensure();
   const s = getStore();
-  const envs = s.environments || [];
+  // Gather environments from master + all tenant stores with proper naming
+  const allClients    = s.clients || [];
+  const allClientEnvs = s.client_environments || [];
+  const masterEnvs = s.environments || [];
   const allAllocs = s.ai_credit_allocations || [];
   const totalAllocated = allAllocs.filter(a => !a.deleted_at).reduce((sum, a) => sum + (a.monthly_budget_usd || 0), 0);
   const now  = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const allLogs = (s.ai_usage_log || []).filter(l => l.created_at >= from);
+  // Aggregate ai_usage_log across tenant stores
+  let allLogs = (s.ai_usage_log || []).filter(l => l.created_at >= from);
+  try {
+    const { listTenants, loadTenantStore } = require('../db/init');
+    const tenants = listTenants ? listTenants() : [];
+    for (const slug of tenants) {
+      try {
+        const ts = loadTenantStore(slug);
+        const tl = (ts.ai_usage_log||[]).filter(l=>l.created_at>=from);
+        allLogs = [...allLogs, ...tl];
+      } catch(e) {}
+    }
+  } catch(e) {}
   const totalTi  = allLogs.reduce((a, l) => a + (l.tokens_in  || 0), 0);
   const totalTo  = allLogs.reduce((a, l) => a + (l.tokens_out || 0), 0);
   const pool = s.ai_master_pool;
   const usedUsd = calcCost(totalTi, totalTo, ANTHROPIC_CPM);
   const clientRevUsd = calcCost(totalTi, totalTo, CLIENT_CPM);
+
+  // Build environment list: client envs (with proper names) + master envs
+  const enrichedEnvs = [];
+  // Client environments
+  allClientEnvs.filter(e=>!e.deleted_at).forEach(env => {
+    const client = allClients.find(c=>c.id===env.client_id);
+    const displayName = client ? `${client.name} — ${env.name}` : env.name;
+    const alloc = allAllocs.find(a => a.environment_id === env.id && !a.deleted_at);
+    const usage = envUsageThisMonth(env.id);
+    enrichedEnvs.push({
+      environment_id: env.id, environment_name: displayName,
+      client_name: client?.name || null, is_default: env.is_default,
+      allocation: alloc || null, usage,
+      status: alloc ? checkCredits(env.id) : { allowed: true, uncapped: true },
+    });
+  });
+  // Master environments not in client_environments
+  masterEnvs.forEach(env => {
+    if (!enrichedEnvs.find(e=>e.environment_id===env.id)) {
+      const alloc = allAllocs.find(a => a.environment_id === env.id && !a.deleted_at);
+      const usage = envUsageThisMonth(env.id);
+      enrichedEnvs.push({
+        environment_id: env.id, environment_name: `${env.name} (master)`,
+        client_name: null, is_default: env.is_default,
+        allocation: alloc || null, usage,
+        status: alloc ? checkCredits(env.id) : { allowed: true, uncapped: true },
+      });
+    }
+  });
+
   res.json({
     pool,
     stats: {
-      total_environments: envs.length,
+      total_environments: enrichedEnvs.length,
       environments_with_cap: allAllocs.filter(a => !a.deleted_at).length,
       total_allocated_usd: totalAllocated,
       used_usd_anthropic: usedUsd,
@@ -118,15 +163,7 @@ router.get('/master', (req, res) => {
       total_requests: allLogs.length,
       tokens_in: totalTi, tokens_out: totalTo,
     },
-    environments: envs.map(env => {
-      const alloc = allAllocs.find(a => a.environment_id === env.id && !a.deleted_at);
-      const usage = envUsageThisMonth(env.id);
-      return {
-        environment_id: env.id, environment_name: env.name, is_default: env.is_default,
-        allocation: alloc || null, usage,
-        status: alloc ? checkCredits(env.id) : { allowed: true, uncapped: true },
-      };
-    }),
+    environments: enrichedEnvs,
   });
 });
 
