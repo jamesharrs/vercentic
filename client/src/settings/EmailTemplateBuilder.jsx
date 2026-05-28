@@ -141,6 +141,19 @@ export default function EmailTemplateBuilder({ environment }) {
           .replace(/#059669/gi, kit.accentColor  || '#059669')
           .replace(/#f5f3ff/gi, kit.bgColor       || '#f5f3ff')
           .replace(/#ddd6fe/gi, kit.secondaryColor|| '#ddd6fe');
+
+        // Prepend branded header matching block-based template style
+        const logoHtml = kit.logoUrl
+          ? `<img src="${kit.logoUrl}" alt="${kit.name || ''}" style="height:36px;max-width:160px;object-fit:contain;display:block;">`
+          : `<span style="font-size:20px;font-weight:800;color:${kit.primaryColor || '#4361EE'}">${kit.name || ''}</span>`;
+        const brandedHeader = `<div style="background:#ffffff;padding:20px 32px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;">
+  ${logoHtml}
+</div>`;
+        // Insert header before the first <div — i.e. at the very top of the body content
+        html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;padding:0;">
+  ${brandedHeader}
+  <div style="padding:0;">${html}</div>
+</div>`;
       }
       setPreviewHtml(html);
       setHtmlCode(html);
