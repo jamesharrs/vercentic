@@ -15,14 +15,10 @@ function ensureCollections() {
   if (!s.provision_log)       { s.provision_log = [];       saveStore(); }
 }
 
-// Read a tenant store file directly (read-only, no context switching)
+// Read a tenant store — uses PG-backed loadTenantStore so it works on Railway
 function getTenantStore(slug) {
-  const path = require('path');
-  const fs   = require('fs');
-  const dataDir = process.env.DATA_PATH || path.join(__dirname, '../../data');
-  const tenantFile = path.join(dataDir, `tenant-${slug}.json`);
-  if (!fs.existsSync(tenantFile)) return {};
-  try { return JSON.parse(fs.readFileSync(tenantFile, 'utf8')); }
+  if (!slug) return {};
+  try { return loadTenantStore(slug) || {}; }
   catch(e) { return {}; }
 }
 
@@ -497,7 +493,8 @@ router.get('/:id/activity', (req, res) => {
   }
   events.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const total = events.length;
-  res.json({ events: events.slice((pageNum-1)*limitNum, pageNum*limitNum), total });
+  const sliced = events.slice((pageNum-1)*limitNum, pageNum*limitNum);
+  res.json({ events: sliced, items: sliced, total });
 });
 
 // ── POST /:id/add-environment — add env to existing client ────────────────────
@@ -569,6 +566,76 @@ router.post('/purge-test-clients', (req, res) => {
     res.json({ ok: true, removed_count: removed });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+
+// ── POST /:id/users — add a user to a client's tenant store ──────────────────
+router.post('/:id/users', async (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client.tenant_slug) return res.status(400).json({ error: 'Client has no tenant store — provision first' });
+
+  const { first_name='', last_name='', email, password, role_id, role_name, environment_id, status='active' } = req.body;
+  if (!email) return res.status(400).json({ error: 'email required' });
+
+  const ts = getTenantStore(client.tenant_slug);
+
+  // Duplicate email check
+  if ((ts.users||[]).find(u=>u.email===email&&!u.deleted_at))
+    return res.status(409).json({ error: 'Email already exists in this environment' });
+
+  // Resolve role
+  let resolvedRoleId = role_id, resolvedRoleName = role_name;
+  if (!resolvedRoleId && resolvedRoleName) {
+    const r = (ts.roles||[]).find(r=>r.name===resolvedRoleName||r.slug===resolvedRoleName);
+    resolvedRoleId = r?.id || null;
+  }
+  if (!resolvedRoleName && resolvedRoleId) {
+    const r = (ts.roles||[]).find(r=>r.id===resolvedRoleId);
+    resolvedRoleName = r?.name || null;
+  }
+
+  const envId = environment_id || (ts.environments||[])[0]?.id || null;
+  const now = new Date().toISOString();
+  const plainPassword = password || _genTempPassword();
+  const user = {
+    id: uuidv4(), environment_id: envId, client_id: client.id,
+    first_name, last_name, email,
+    password_hash: hashPassword(plainPassword),
+    role_id: resolvedRoleId, role_name: resolvedRoleName || 'Recruiter',
+    status, is_super_admin: resolvedRoleName==='Super Admin',
+    must_change_password: password ? 0 : 1,
+    mfa_enabled: 0, last_login: null, login_count: 0,
+    created_at: now, updated_at: now, deleted_at: null,
+  };
+
+  // Write into tenant store via AsyncLocalStorage context
+  try {
+    await tenantStorage.run(client.tenant_slug, async () => {
+      const tenantStore = loadTenantStore(client.tenant_slug);
+      if (!tenantStore.users) tenantStore.users = [];
+      tenantStore.users.push(user);
+      saveStore(client.tenant_slug);
+    });
+  } catch(e) {
+    return res.status(500).json({ error: 'Failed to save user: ' + e.message });
+  }
+
+  // Log to master provision_log
+  s.provision_log = s.provision_log || [];
+  s.provision_log.push({ id: uuidv4(), client_id: client.id, action: 'add_user',
+    details: `Added user: ${first_name} ${last_name} <${email}> (${resolvedRoleName||'Recruiter'})`,
+    performed_by: 'superadmin', provisioned_at: now, created_at: now });
+  saveStore();
+
+  res.status(201).json({ ...user, password_hash: undefined, temp_password: password ? undefined : plainPassword });
+});
+
+function _genTempPassword() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
+  return Array.from({length:12}, ()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
 
 module.exports = router;
 module.exports.buildTemplate = resolveTemplate; // backward compat alias

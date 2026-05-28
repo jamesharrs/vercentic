@@ -778,32 +778,26 @@ initDB().then(async () => {
   }
 
   // ── Seed Vercentic onboarding email templates (sequencer — no environment_id) ─
-  const VERCENTIC_SEQUENCER_TEMPLATES = [
-    { name:'Welcome to Vercentic', subject:'Welcome to Vercentic, {{admin_first_name}}! 🎉', category:'onboarding', trigger:'account_created', tags:['onboarding'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>Welcome to Vercentic! We're thrilled to have <strong>{{client_name}}</strong> on board.</p><p>Your account is ready. <a href="{{login_url}}">Log in here</a>.</p><p>The Vercentic Team</p>` },
-    { name:'Day 3 Check-in', subject:"How's your first week with Vercentic, {{admin_first_name}}?", category:'onboarding', trigger:'day_3', tags:['onboarding'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>A few days in — how are things going at {{client_name}}?</p><p>Here's what our new customers find most useful in week 1:</p><ul><li>Set up your data model</li><li>Create your first workflow</li><li>Try the AI Copilot</li></ul><p>The Vercentic Team</p>` },
-    { name:'Trial Ending — 3 Days', subject:'Your Vercentic trial ends in 3 days', category:'trial', trigger:'trial_ending_3d', tags:['trial'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>Your Vercentic trial for {{client_name}} ends in 3 days.</p><p><a href="{{upgrade_url}}">Upgrade now</a> to continue without interruption.</p><p>The Vercentic Team</p>` },
-    { name:'Trial Ended', subject:'Your Vercentic trial has ended', category:'trial', trigger:'trial_ended', tags:['trial'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>Your trial has ended. Your data is safe for 30 days.</p><p><a href="{{upgrade_url}}">Reactivate your account</a>.</p><p>The Vercentic Team</p>` },
-    { name:'30-Day Check-in', subject:"One month with Vercentic — here's your summary", category:'engagement', trigger:'day_30', tags:['engagement'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>You've been using Vercentic for a month! Have you tried CV Parsing, the Portal Builder, or Offer Management yet?</p><p>The Vercentic Team</p>` },
-    { name:'Feature Announcement', subject:'New in Vercentic: {{feature_name}}', category:'product', trigger:'manual', tags:['product'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>We've just shipped: <strong>{{feature_name}}</strong>.</p><p>{{feature_description}}</p><p>The Vercentic Team</p>` },
-    { name:'Re-engagement', subject:"We miss you — what's new in Vercentic", category:'engagement', trigger:'inactive_30d', tags:['engagement'],
-      body_html:`<p>Hi {{admin_first_name}},</p><p>We noticed you haven't logged in recently. Your account and data are still here.</p><p><a href="{{login_url}}">Log back in</a>.</p><p>The Vercentic Team</p>` },
-  ];
-  const existingSeqNames = new Set((store.email_templates||[]).filter(t=>!t.environment_id&&t.tags?.includes('onboarding')||t.tags?.includes('trial')||t.tags?.includes('engagement')||t.tags?.includes('product')).map(t=>t.name));
-  let seqAdded = 0;
+  const { buildSequencerTemplates } = require('./services/emailTemplate');
+  const VERCENTIC_SEQUENCER_TEMPLATES = buildSequencerTemplates();
+  // Force-update existing templates that have stale plain HTML bodies
+  const existingSeqIds = new Set((store.email_templates||[]).filter(t=>t.is_vercentic&&!t.environment_id).map(t=>t.id));
+  let seqAdded = 0, seqUpdated = 0;
   for (const tmpl of VERCENTIC_SEQUENCER_TEMPLATES) {
-    if (!existingSeqNames.has(tmpl.name)) {
+    const existing = (store.email_templates||[]).find(t=>t.id===tmpl.id||(t.name===tmpl.name&&t.is_vercentic&&!t.environment_id));
+    if (!existing) {
       store.email_templates = store.email_templates || [];
-      store.email_templates.push({ id:require('uuid').v4(), ...tmpl, body_text:'', from_name:'Vercentic', from_email:process.env.SENDGRID_FROM_EMAIL||'hello@vercentic.com', is_vercentic:true, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
+      store.email_templates.push({ ...tmpl, body_text: tmpl.body_text||'', from_name:'Vercentic', from_email:process.env.SENDGRID_FROM_EMAIL||'hello@vercentic.com', is_vercentic:true, created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
       seqAdded++; dirty = true;
+    } else if (existing.body_html !== tmpl.body_html) {
+      existing.body_html = tmpl.body_html;
+      existing.body_text = tmpl.body_text || existing.body_text || '';
+      existing.subject = tmpl.subject || existing.subject;
+      existing.updated_at = new Date().toISOString();
+      seqUpdated++; dirty = true;
     }
   }
-  if (seqAdded > 0) console.log(`[Sequencer] Seeded ${seqAdded} Vercentic onboarding email templates`);
+  if (seqAdded > 0 || seqUpdated > 0) console.log(`[Sequencer] Seeded ${seqAdded} new, updated ${seqUpdated} Vercentic email templates`);
 
   // Default question bank (first boot only)
   if (!store.question_bank_v2) {
