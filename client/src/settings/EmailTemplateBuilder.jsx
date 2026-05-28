@@ -96,6 +96,13 @@ export default function EmailTemplateBuilder({ environment }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [htmlCode, setHtmlCode] = useState(''); // generated or manually edited HTML
   const [htmlEdited, setHtmlEdited] = useState(false); // true when user has manually edited the HTML
+
+  // Switch to HTML tab when opening a system template that has html_body but no blocks
+  useEffect(() => {
+    if (editing?.html_body && !(editing.blocks || []).length && !editing.html_override) {
+      setActivePanel('html');
+    }
+  }, [editing?.id]);
   const htmlFileRef = useRef(null);
 
   const envId = environment?.id;
@@ -120,6 +127,12 @@ export default function EmailTemplateBuilder({ environment }) {
     // If user has manually edited/uploaded HTML, use that directly
     if (htmlEdited && htmlCode) {
       setPreviewHtml(htmlCode);
+      return;
+    }
+    // If system template has html_body but no blocks, use html_body as preview
+    if (editing.html_body && !(editing.blocks || []).length) {
+      setPreviewHtml(editing.html_body);
+      setHtmlCode(editing.html_body);
       return;
     }
     try {
