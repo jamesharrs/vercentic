@@ -728,13 +728,24 @@ router.post('/:id/repair-tenant', async (req, res) => {
 
       // 2. Seed objects + fields from template if tenant has none
       if (!(ts.objects||[]).length) {
-        const tplKey = template;
-        const tpl = TEMPLATES[tplKey] || TEMPLATES['core_recruitment'];
-        const { createdObjects, createdFields } = resolveTemplate(tpl, primaryEnv.id);
+        const now2 = new Date().toISOString();
+        const { objects: objDefs, roles: roleDefs } = resolveTemplate(template || getDefaultTemplateKey());
         if (!ts.objects) ts.objects = [];
         if (!ts.fields)  ts.fields  = [];
-        createdObjects.forEach(o => ts.objects.push(o));
-        createdFields.forEach(f => ts.fields.push(f));
+        for (const objDef of (objDefs||[])) {
+          const obj = { id: uuidv4(), environment_id: primaryEnv.id, slug: objDef.slug,
+            name: objDef.name, plural_name: objDef.plural_name, icon: objDef.icon||'database',
+            color: objDef.color||'#4361EE', is_system: objDef.is_system!==false,
+            sort_order: ts.objects.length, created_at: now2, updated_at: now2, deleted_at: null };
+          ts.objects.push(obj);
+          (objDef.fields||[]).forEach((fDef, i) => {
+            ts.fields.push({ id: uuidv4(), environment_id: primaryEnv.id, object_id: obj.id,
+              name: fDef.name, api_key: fDef.api_key, field_type: fDef.field_type,
+              is_required: fDef.is_required||false, show_in_list: fDef.show_in_list!==false,
+              options: fDef.options||null, placeholder:'', help_text:'', is_system:true,
+              sort_order: i, created_at: now2, updated_at: now2, deleted_at: null });
+          });
+        }
       }
 
       // 3. Seed roles if missing
