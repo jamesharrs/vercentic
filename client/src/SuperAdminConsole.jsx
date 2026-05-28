@@ -223,7 +223,15 @@ function EnvSection() {
   useEffect(() => { load(); }, [load]);
 
   const handleSave = async (key, value) => {
-    await api.patch('/env', { updates: [{ key, value }] });
+    const res = await fetch('/api/superadmin/env', {
+      credentials: 'include', method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates: [{ key, value }] }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || res.status);
+    }
     setVars(v => v.map(vr => vr.key === key ? { ...vr, value } : vr));
   };
 
@@ -268,6 +276,14 @@ function EnvSection() {
       )}
 
       {loading && <div style={{ color:C.text3, fontSize:13, padding:20 }}>Loading…</div>}
+
+      {/* Railway warning */}
+      <div style={{ padding:'12px 16px', borderRadius:10, border:`1px solid ${C.amber}30`, background:`${C.amber}08`, marginBottom:20, display:'flex', alignItems:'flex-start', gap:10 }}>
+        <NavIcon id="errors" size={15} color={C.amber}/>
+        <div style={{ fontSize:12, color:C.amber, lineHeight:1.5 }}>
+          <strong>Railway environment:</strong> changes are applied to the running process immediately and persist in Railway's variable store. To make permanent changes, update variables directly in the Railway dashboard.
+        </div>
+      </div>
 
       {/* Groups */}
       {groups.map(group => (

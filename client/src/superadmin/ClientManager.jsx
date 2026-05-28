@@ -443,7 +443,9 @@ function ClientErrorLogsTab({ clientId }) {
   const [logs, setLogs] = useState([]); const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true); const [search, setSearch] = useState('');
   const [severity, setSeverity] = useState(''); const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState(null);
   const LIMIT = 30;
+  const SEV_COLOR = { error:'#ef4444', warning:'#F59E0B', info:C.accent };
 
   const load = () => {
     setLoading(true);
@@ -454,47 +456,100 @@ function ClientErrorLogsTab({ clientId }) {
   };
   useEffect(()=>{ load(); },[clientId,page,severity]);
   useEffect(()=>{ setPage(1); },[search,severity]);
-  const SEV_COLOR = { error:'#ef4444', warning:'#F59E0B', info:C.accent };
 
   return (
-    <div style={cardSt}>
-      <div style={{display:'flex',gap:8,padding:'12px 18px',borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&load()} placeholder="Search errors…"
-          style={{flex:1,padding:'7px 11px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text1,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
-        <select value={severity} onChange={e=>setSeverity(e.target.value)}
-          style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text2,fontSize:12,fontFamily:'inherit'}}>
-          <option value="">All severities</option>
-          <option value="error">Error</option>
-          <option value="warning">Warning</option>
-          <option value="info">Info</option>
-        </select>
-        <span style={{fontSize:11,color:C.text3,whiteSpace:'nowrap'}}>{total} total</span>
-      </div>
-      {loading ? <div style={{padding:40,textAlign:'center',color:C.text3}}>Loading…</div>
-      : !logs.length ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No error logs found.</div>
-      : logs.map(l=>(
-        <div key={l.id} style={{padding:'12px 18px',borderBottom:`1px solid ${C.border}`}}>
-          <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-            <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:`${SEV_COLOR[l.severity]||C.accent}20`,color:SEV_COLOR[l.severity]||C.accent,border:`1px solid ${SEV_COLOR[l.severity]||C.accent}40`,flexShrink:0,marginTop:1}}>{l.severity||'error'}</span>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,color:l.resolved?C.text3:C.text1,fontWeight:600,marginBottom:2,textDecoration:l.resolved?'line-through':undefined}}>{l.message}</div>
-              <div style={{fontSize:10,color:C.text3,display:'flex',gap:12,flexWrap:'wrap'}}>
-                {l.code&&<span style={{fontFamily:'monospace'}}>{l.code}</span>}
-                {l.user_email&&<span>👤 {l.user_email}</span>}
-                {l.url&&<span style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>🔗 {l.url}</span>}
-                <span>{new Date(l.created_at).toLocaleString()}</span>
-              </div>
-              {l.component&&<div style={{fontSize:10,color:C.text3,marginTop:2,fontFamily:'monospace',opacity:.7}}>{l.component}</div>}
-            </div>
-            {l.resolved&&<span style={{fontSize:10,color:'#0CAF77',fontWeight:700,flexShrink:0}}>✓ Resolved</span>}
-          </div>
+    <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+      {/* Log list */}
+      <div style={{...cardSt,flex:1,minWidth:0}}>
+        <div style={{display:'flex',gap:8,padding:'12px 18px',borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&load()} placeholder="Search errors…"
+            style={{flex:1,padding:'7px 11px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text1,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+          <select value={severity} onChange={e=>setSeverity(e.target.value)}
+            style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text2,fontSize:12,fontFamily:'inherit'}}>
+            <option value="">All severities</option>
+            <option value="error">Error</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+          </select>
+          <span style={{fontSize:11,color:C.text3,whiteSpace:'nowrap'}}>{total} total</span>
         </div>
-      ))}
-      {total>LIMIT&&(
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 18px'}}>
-          <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page>1?'pointer':'default',fontFamily:'inherit'}}>← Prev</button>
-          <span style={{fontSize:11,color:C.text3}}>Page {page} of {Math.ceil(total/LIMIT)}</span>
-          <button disabled={page>=Math.ceil(total/LIMIT)} onClick={()=>setPage(p=>p+1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page<Math.ceil(total/LIMIT)?'pointer':'default',fontFamily:'inherit'}}>Next →</button>
+        {loading ? <div style={{padding:40,textAlign:'center',color:C.text3}}>Loading…</div>
+        : !logs.length ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No error logs found.</div>
+        : logs.map(l=>{
+          const isActive = selected?.id===l.id;
+          return (
+            <div key={l.id} onClick={()=>setSelected(isActive?null:l)} style={{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',background:isActive?`${C.accent}10`:undefined,transition:'background .1s'}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:`${SEV_COLOR[l.severity]||C.accent}20`,color:SEV_COLOR[l.severity]||C.accent,border:`1px solid ${SEV_COLOR[l.severity]||C.accent}40`,flexShrink:0,marginTop:1}}>{l.severity||'error'}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:l.resolved?C.text3:C.text1,fontWeight:600,marginBottom:2,textDecoration:l.resolved?'line-through':undefined}}>{l.message}</div>
+                  <div style={{fontSize:10,color:C.text3,display:'flex',gap:12,flexWrap:'wrap'}}>
+                    {l.code&&<span style={{fontFamily:'monospace'}}>{l.code}</span>}
+                    {l.user_email&&<span>{l.user_email}</span>}
+                    <span>{new Date(l.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                  {l.resolved&&<span style={{fontSize:10,color:'#0CAF77',fontWeight:700}}>✓ Resolved</span>}
+                  <span style={{fontSize:11,color:C.text3,opacity:isActive?1:.4}}>{isActive?'▲':'▼'}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {total>LIMIT&&(
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 18px'}}>
+            <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page>1?'pointer':'default',fontFamily:'inherit'}}>← Prev</button>
+            <span style={{fontSize:11,color:C.text3}}>Page {page} of {Math.ceil(total/LIMIT)}</span>
+            <button disabled={page>=Math.ceil(total/LIMIT)} onClick={()=>setPage(p=>p+1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page<Math.ceil(total/LIMIT)?'pointer':'default',fontFamily:'inherit'}}>Next →</button>
+          </div>
+        )}
+      </div>
+
+      {/* Detail panel */}
+      {selected && (
+        <div style={{width:360,flexShrink:0,...cardSt,position:'sticky',top:0}}>
+          <div style={{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{fontSize:13,fontWeight:700,color:C.text1}}>Error Detail</span>
+            <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',color:C.text3,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:'16px 18px'}}>
+            {/* Severity + timestamp */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+              <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:99,background:`${SEV_COLOR[selected.severity]||C.accent}20`,color:SEV_COLOR[selected.severity]||C.accent,border:`1px solid ${SEV_COLOR[selected.severity]||C.accent}40`}}>{selected.severity||'error'}</span>
+              {selected.resolved&&<span style={{fontSize:11,color:'#0CAF77',fontWeight:700}}>✓ Resolved</span>}
+              <span style={{fontSize:10,color:C.text3,marginLeft:'auto'}}>{new Date(selected.created_at).toLocaleString()}</span>
+            </div>
+            {/* Message */}
+            <div style={{fontSize:13,fontWeight:600,color:C.text1,marginBottom:12,lineHeight:1.5}}>{selected.message}</div>
+            {/* Meta rows */}
+            {[
+              ['Error code', selected.code],
+              ['URL', selected.url],
+              ['Component', selected.component],
+              ['User', selected.user_email],
+              ['Environment', selected.environment_id],
+            ].filter(([,v])=>v).map(([label,val])=>(
+              <div key={label} style={{marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>{label}</div>
+                <div style={{fontSize:12,color:C.text2,fontFamily:label==='URL'||label==='Component'||label==='Error code'?'monospace':'inherit',wordBreak:'break-all',background:C.surface2,padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`}}>{val}</div>
+              </div>
+            ))}
+            {/* Stack trace */}
+            {selected.stack_trace && (
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Stack trace</div>
+                <pre style={{fontSize:10,color:C.text3,background:C.surface2,padding:'10px 12px',borderRadius:6,border:`1px solid ${C.border}`,overflow:'auto',maxHeight:200,margin:0,fontFamily:'monospace',lineHeight:1.5,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>{selected.stack_trace}</pre>
+              </div>
+            )}
+            {/* Raw data (anything extra) */}
+            {selected.metadata && (
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Metadata</div>
+                <pre style={{fontSize:10,color:C.text3,background:C.surface2,padding:'10px 12px',borderRadius:6,border:`1px solid ${C.border}`,overflow:'auto',maxHeight:150,margin:0,fontFamily:'monospace',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{JSON.stringify(selected.metadata,null,2)}</pre>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
