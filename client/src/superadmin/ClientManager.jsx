@@ -458,9 +458,9 @@ function ClientErrorLogsTab({ clientId }) {
   useEffect(()=>{ setPage(1); },[search,severity]);
 
   return (
-    <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+    <div>
       {/* Log list */}
-      <div style={{...cardSt,flex:1,minWidth:0}}>
+      <div style={cardSt}>
         <div style={{display:'flex',gap:8,padding:'12px 18px',borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&load()} placeholder="Search errors…"
             style={{flex:1,padding:'7px 11px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text1,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
@@ -506,9 +506,10 @@ function ClientErrorLogsTab({ clientId }) {
         )}
       </div>
 
-      {/* Detail panel */}
+      {/* Detail panel — modal overlay */}
       {selected && (
-        <div style={{width:360,flexShrink:0,...cardSt,position:'sticky',top:0}}>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.65)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'flex-end'}} onClick={()=>setSelected(null)}>
+        <div style={{width:520,maxHeight:'100vh',overflowY:'auto',background:C.surface,borderLeft:`1px solid ${C.border}`,padding:'20px 22px',boxShadow:'-16px 0 40px rgba(0,0,0,.5)'}} onClick={e=>e.stopPropagation()}>
           <div style={{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <span style={{fontSize:13,fontWeight:700,color:C.text1}}>Error Detail</span>
             <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',color:C.text3,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
@@ -550,6 +551,7 @@ function ClientErrorLogsTab({ clientId }) {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>

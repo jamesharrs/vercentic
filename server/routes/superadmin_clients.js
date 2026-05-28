@@ -637,5 +637,69 @@ function _genTempPassword() {
   return Array.from({length:12}, ()=>c[Math.floor(Math.random()*c.length)]).join('');
 }
 
+// ── GET /reports/activity-summary — cross-tenant activity aggregation ─────────
+router.get('/reports/activity-summary', (req, res) => {
+  const { days = 30 } = req.query;
+  const since = new Date(Date.now() - parseInt(days) * 86400000).toISOString();
+  const s = getStore();
+  const clients = (s.clients || []).filter(c => !c.deleted_at);
+  let totalEvents = 0, byType = {}, byClient = [], dailyMap = {};
+  // Build 30 empty days
+  for (let i = parseInt(days) - 1; i >= 0; i--) {
+    const key = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    dailyMap[key] = 0;
+  }
+  for (const client of clients) {
+    if (!client.tenant_slug) continue;
+    try {
+      const ts = getTenantStore(client.tenant_slug);
+      const acts = (ts.activity || ts.activity_log || []).filter(a => (a.created_at || '') >= since);
+      totalEvents += acts.length;
+      byClient.push({ client_id: client.id, client_name: client.name, event_count: acts.length });
+      acts.forEach(a => {
+        const type = a.action || a.action_type || 'activity';
+        byType[type] = (byType[type] || 0) + 1;
+        const day = (a.created_at || '').slice(0, 10);
+        if (dailyMap[day] !== undefined) dailyMap[day]++;
+      });
+    } catch(e) {}
+  }
+  byClient.sort((a, b) => b.event_count - a.event_count);
+  res.json({
+    total_events: totalEvents,
+    days: parseInt(days),
+    by_type: Object.entries(byType).map(([type, count]) => ({ type, count })).sort((a,b) => b.count - a.count),
+    by_client: byClient,
+    daily_trend: Object.entries(dailyMap).map(([date, count]) => ({ date, count })),
+  });
+});
+
+// ── GET /:id/activity-report — per-client activity detail ─────────────────────
+router.get('/:id/activity-report', (req, res) => {
+  const s = getStore(); ensureCollections();
+  const client = (s.clients || []).find(c => c.id === req.params.id && !c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { days = 30, environment_id } = req.query;
+  const since = new Date(Date.now() - parseInt(days) * 86400000).toISOString();
+  let events = [];
+  if (client.tenant_slug) {
+    const ts = getTenantStore(client.tenant_slug);
+    let acts = (ts.activity || ts.activity_log || []).filter(a => (a.created_at || '') >= since);
+    if (environment_id) acts = acts.filter(a => a.environment_id === environment_id);
+    events = acts.map(a => ({
+      id: a.id, type: a.action || a.action_type || 'activity',
+      message: a.description || a.message || `${a.action || 'event'} on ${a.record_id || 'record'}`,
+      user_email: a.user_email || a.performed_by || 'system',
+      entity_type: a.entity_type || a.object_name || null,
+      record_id: a.record_id || null,
+      environment_id: a.environment_id || null,
+      created_at: a.created_at,
+    }));
+  }
+  events.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json({ items: events, events, total: events.length });
+});
+
+
 module.exports = router;
 module.exports.buildTemplate = resolveTemplate; // backward compat alias

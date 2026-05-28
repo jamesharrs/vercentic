@@ -123,13 +123,31 @@ export default function AIUsageReport() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dash, logData] = await Promise.all([
-        api.get('/admin/dashboard'),
-        api.get(`/admin/ai-usage?page=${logPage}&limit=50${featureFilter ? '&feature='+featureFilter : ''}`),
+      // Use superadmin cross-tenant AI usage endpoint (not tenant-scoped admin/dashboard)
+      const [perfData, logData] = await Promise.all([
+        fetch('/api/superadmin/perf/ai-usage').then(r => r.json()),
+        fetch(`/api/superadmin/perf/ai-usage?detail=true&page=${logPage}&limit=50${featureFilter ? '&feature='+featureFilter : ''}`).then(r => r.json()),
       ]);
-      setData(dash);
-      setLogs(logData.logs || []);
-      setLogTotal(logData.total || 0);
+      // Map perf response to the shape the component expects from admin/dashboard
+      setData({
+        ai: {
+          totals: {
+            this_month: perfData.this_month?.calls || 0,
+            last_month: perfData.last_month?.calls || 0,
+            tokens_in:  perfData.this_month?.tokens_in || 0,
+            tokens_out: perfData.this_month?.tokens_out || 0,
+            estimated_cost: perfData.this_month?.cost || 0,
+            trend_pct: perfData.last_month?.calls > 0
+              ? Math.round(((perfData.this_month?.calls - perfData.last_month?.calls) / perfData.last_month?.calls) * 100)
+              : null,
+          },
+          by_feature: perfData.by_feature || [],
+          by_user:    perfData.by_user    || [],
+          daily_trend: perfData.daily     || [],
+        }
+      });
+      setLogs(perfData.recent_logs || logData.logs || []);
+      setLogTotal(perfData.total_logs || logData.total || 0);
     } catch (e) { console.error('AI usage load:', e); }
     setLoading(false);
   }, [logPage, featureFilter]);

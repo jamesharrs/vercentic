@@ -149,13 +149,37 @@ router.get('/ai-usage', (req, res) => {
       tenantMap[slug].tokens_out += l.tokens_out || 0;
     });
 
+    // By user
+    const userMap = {};
+    recent30.forEach(l => {
+      const u = l.user_email || l.user_id || 'system';
+      if (!userMap[u]) userMap[u] = { user: u, calls: 0, tokens_in: 0, tokens_out: 0 };
+      userMap[u].calls++;
+      userMap[u].tokens_in  += l.tokens_in  || 0;
+      userMap[u].tokens_out += l.tokens_out || 0;
+    });
+
+    // Last month totals
+    const lastMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString();
+    const lastMonthEnd   = monthStart;
+    const lastMonthLogs  = logs.filter(l => l.created_at >= lastMonthStart && l.created_at < lastMonthEnd);
+
+    // Recent logs (most recent 50)
+    const recentLogs = logs
+      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 50);
+
     res.json({
       this_month: totals(thisMonth),
+      last_month: totals(lastMonthLogs),
       last_7d:    totals(recent7),
       last_30d:   totals(recent30),
       daily,
       by_feature,
+      by_user:    Object.values(userMap).sort((a,b)=>b.calls-a.calls),
       by_tenant: Object.values(tenantMap).sort((a,b)=>b.calls-a.calls),
+      recent_logs: recentLogs,
+      total_logs: logs.length,
       generated_at: nowIso,
     });
   } catch (err) {
