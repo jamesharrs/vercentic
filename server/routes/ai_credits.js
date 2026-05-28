@@ -149,19 +149,7 @@ router.get('/master', (req, res) => {
       status: alloc ? checkCredits(env.id) : { allowed: true, uncapped: true },
     });
   });
-  // Master environments not in client_environments
-  masterEnvs.forEach(env => {
-    if (!enrichedEnvs.find(e=>e.environment_id===env.id)) {
-      const alloc = allAllocs.find(a => a.environment_id === env.id && !a.deleted_at);
-      const usage = envUsageThisMonth(env.id);
-      enrichedEnvs.push({
-        environment_id: env.id, environment_name: `${env.name} (master)`,
-        client_name: null, is_default: env.is_default,
-        allocation: alloc || null, usage,
-        status: alloc ? checkCredits(env.id) : { allowed: true, uncapped: true },
-      });
-    }
-  });
+  // masterEnvs loop removed — orphaned provisioning artefacts excluded
 
   res.json({
     pool,

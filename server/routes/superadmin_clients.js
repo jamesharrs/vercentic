@@ -701,5 +701,171 @@ router.get('/:id/activity-report', (req, res) => {
 });
 
 
+// ── POST /:id/repair-tenant — re-seed empty tenant store ─────────────────────
+router.post('/:id/repair-tenant', async (req, res) => {
+  ensureCollections();
+  const s = getStore();
+  const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client.tenant_slug) return res.status(400).json({ error: 'Client has no tenant_slug' });
+
+  const { template = 'core_recruitment', admin_email, admin_password } = req.body;
+  const envs = (s.client_environments||[]).filter(e=>e.client_id===client.id&&!e.deleted_at);
+  if (!envs.length) return res.status(400).json({ error: 'No environments found for client' });
+  const primaryEnv = envs.find(e=>e.type==='production'||e.is_default) || envs[0];
+
+  try {
+    await tenantStorage.run(client.tenant_slug, async () => {
+      const ts = loadTenantStore(client.tenant_slug);
+
+      // 1. Seed all environments into tenant store if missing
+      if (!ts.environments) ts.environments = [];
+      for (const env of envs) {
+        if (!ts.environments.find(e=>e.id===env.id)) {
+          ts.environments.push({ ...env });
+        }
+      }
+
+      // 2. Seed objects + fields from template if tenant has none
+      if (!(ts.objects||[]).length) {
+        const tplKey = template;
+        const tpl = TEMPLATES[tplKey] || TEMPLATES['core_recruitment'];
+        const { createdObjects, createdFields } = resolveTemplate(tpl, primaryEnv.id);
+        if (!ts.objects) ts.objects = [];
+        if (!ts.fields)  ts.fields  = [];
+        createdObjects.forEach(o => ts.objects.push(o));
+        createdFields.forEach(f => ts.fields.push(f));
+      }
+
+      // 3. Seed roles if missing
+      if (!(ts.roles||[]).length) {
+        if (!ts.roles) ts.roles = [];
+        const now = new Date().toISOString();
+        const defaultRoles = [
+          { id: uuidv4(), name:'Super Admin', slug:'super_admin', description:'Full access', color:'#e03131', is_system:1, created_at:now, updated_at:now },
+          { id: uuidv4(), name:'Admin',       slug:'admin',       description:'Manage users and settings', color:'#e67700', is_system:1, created_at:now, updated_at:now },
+          { id: uuidv4(), name:'Recruiter',   slug:'recruiter',   description:'Manage candidates and jobs', color:'#0b7285', is_system:1, created_at:now, updated_at:now },
+          { id: uuidv4(), name:'Hiring Manager', slug:'hiring_manager', description:'View and feedback on candidates', color:'#2b8a3e', is_system:1, created_at:now, updated_at:now },
+          { id: uuidv4(), name:'Read Only',   slug:'read_only',   description:'View only', color:'#495057', is_system:1, created_at:now, updated_at:now },
+        ];
+        defaultRoles.forEach(r => ts.roles.push(r));
+      }
+
+      // 4. If an admin_email was provided (or found in master store), add that user
+      const existingUsers = (s.users||[]).filter(u=>u.client_id===client.id&&!u.deleted_at);
+      const masterOrphanUsers = (s.users||[]).filter(u=>{
+        if (u.deleted_at) return false;
+        // Orphaned users without client_id that were created around the same time as the client
+        return !u.client_id && u.email && (
+          (admin_email && u.email===admin_email) ||
+          existingUsers.find(eu=>eu.email===u.email)
+        );
+      });
+      const usersToAdd = [...existingUsers, ...masterOrphanUsers];
+      if (!ts.users) ts.users = [];
+      const superAdminRole = ts.roles.find(r=>r.slug==='super_admin');
+      for (const u of usersToAdd) {
+        if (!ts.users.find(tu=>tu.email===u.email&&!tu.deleted_at)) {
+          ts.users.push({
+            ...u,
+            environment_id: u.environment_id || primaryEnv.id,
+            client_id: client.id,
+            role_id: u.role_id || superAdminRole?.id,
+            role_name: u.role_name || 'Super Admin',
+          });
+        }
+      }
+      // Also add the requested admin if provided and not already there
+      if (admin_email && !ts.users.find(u=>u.email===admin_email&&!u.deleted_at)) {
+        const plainPw = admin_password || 'Admin1234!';
+        ts.users.push({
+          id: uuidv4(), environment_id: primaryEnv.id, client_id: client.id,
+          first_name: 'Admin', last_name: '', email: admin_email,
+          password_hash: require('bcryptjs').hashSync(plainPw, 12),
+          role_id: superAdminRole?.id, role_name: 'Super Admin',
+          status: 'active', is_super_admin: 1, must_change_password: 0,
+          mfa_enabled: 0, last_login: null, login_count: 0,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(), deleted_at: null,
+        });
+      }
+
+      saveStore(client.tenant_slug);
+    });
+
+    // Log the repair
+    s.provision_log = s.provision_log || [];
+    s.provision_log.push({ id: uuidv4(), client_id: client.id, action: 'repair_tenant',
+      details: `Repaired tenant store: seeded ${envs.length} env(s), objects, roles, users`, 
+      performed_by: 'superadmin', provisioned_at: new Date().toISOString(), created_at: new Date().toISOString() });
+    saveStore();
+
+    // Return the new state
+    const ts = getTenantStore(client.tenant_slug);
+    res.json({
+      ok: true,
+      environments_seeded: (ts.environments||[]).length,
+      objects_seeded: (ts.objects||[]).length,
+      roles_seeded: (ts.roles||[]).length,
+      users_seeded: (ts.users||[]).length,
+      primary_environment_id: primaryEnv.id,
+    });
+  } catch(err) {
+    console.error('[repair-tenant]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /platform-logs — aggregate system events across all tenants ────────────
+router.get('/platform-logs', (req, res) => {
+  const { limit = 300 } = req.query;
+  const s = getStore(); ensureCollections();
+  const clients = (s.clients || []).filter(c => !c.deleted_at);
+  let events = [];
+  (s.provision_log || []).forEach(l => {
+    events.push({
+      id: l.id || `pl-${Math.random().toString(36).slice(2)}`,
+      type: l.action || 'provision',
+      message: l.details || l.action || 'Provision event',
+      client_id: l.client_id,
+      client_name: clients.find(c => c.id === l.client_id)?.name || 'system',
+      user_email: l.performed_by || 'superadmin',
+      created_at: l.provisioned_at || l.created_at,
+      severity: 'info',
+    });
+  });
+  for (const client of clients) {
+    if (!client.tenant_slug) continue;
+    try {
+      const ts = getTenantStore(client.tenant_slug);
+      (ts.activity_log || []).forEach(a => {
+        events.push({ id: a.id, type: a.action_type || a.type || 'activity',
+          message: a.description || a.message || `${a.action_type || 'activity'} event`,
+          client_id: client.id, client_name: client.name,
+          user_email: a.user_email || a.performed_by || 'system',
+          created_at: a.created_at, severity: 'info',
+        });
+      });
+      (ts.error_logs || ts.error_log || []).filter(e => !e.deleted_at).slice(-30).forEach(e => {
+        events.push({ id: e.id, type: 'error', message: e.message,
+          client_id: client.id, client_name: client.name,
+          user_email: e.user_email || 'system',
+          created_at: e.created_at, severity: e.severity || 'error',
+        });
+      });
+    } catch (err) { /* skip */ }
+  }
+  events.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json({ events: events.slice(0, parseInt(limit)), total: events.length });
+});
+
+// ── GET /templates — alias for /provision/templates ───────────────────────────
+router.get('/templates', (req, res) => {
+  res.json(Object.entries(TEMPLATES).map(([key, tpl]) => ({
+    key, label: tpl.label, description: tpl.description, icon: tpl.icon,
+    object_count: (tpl.objects || []).length + ((tpl.extra_objects || []).length),
+  })));
+});
+
+
 module.exports = router;
 module.exports.buildTemplate = resolveTemplate; // backward compat alias
