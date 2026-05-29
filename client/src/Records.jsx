@@ -10745,7 +10745,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="job_tasks") return <JobTasksPanel record={record} environment={environment}/>;
     if (id==="bias_scan") return <BiasScanner record={record} environment={environment}/>;
-    if (id==="share")    return <SharingPanel record={record} object={object} environment={environment} canRecord={canRecord}/>;
+    if (id==="share")    return <SharingPanel record={record} environment={environment} canRecord={canRecord}/>;
     if (id==="fraud")    return <FraudPanel   record={record} fields={fields}  environment={environment} canRecord={canRecord}/>;
     // interview_plan and scorecard are handled earlier with ff.interviews gate
 
