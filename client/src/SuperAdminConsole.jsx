@@ -602,7 +602,7 @@ function TemplateEnvironments() {
     setLoading(true);
     try {
       const [tmpl, clients] = await Promise.all([
-        api.get('/clients/templates'),
+        api.get('/clients/provision/templates'),
         api.get('/clients/'),
       ]);
       setTemplates(Array.isArray(tmpl) ? tmpl : []);

@@ -44,6 +44,7 @@ const CSRF_EXEMPT_PREFIXES = [
   '/api/superadmin/clients/provision', // called from super admin console
   '/api/superadmin/clients/',          // SA console — uses X-SA-Token header auth, not cookies
   '/api/superadmin/',                  // all SA routes use token auth
+  '/api/sequencer',                    // email sequencer — called from SA console (no cookie session)
   '/api/chrome-import',
   '/api/hub/',
   '/api/candidate-hub/',   // candidate hub — token-based, no cookie session
