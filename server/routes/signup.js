@@ -269,6 +269,7 @@ router.post('/', async (req, res) => {
       try {
         const { fireMilestone } = require('./email_sequencer');
         await fireMilestone('client_provisioned', {
+          client_id:   clientId,
           email:       email.toLowerCase(),
           client_name: company,
           admin_name:  [firstName, lastName].filter(Boolean).join(' ') || email.toLowerCase(),
