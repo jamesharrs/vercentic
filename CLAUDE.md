@@ -41,6 +41,13 @@ bash deploy.sh "commit message"     # Deploy both
 - Icons: custom SVG path `Ic` component — no external icon library
 - Theme: CSS variables (`var(--t-accent)`, `var(--t-bg)` etc.) via ThemeProvider
 - i18n: `client/src/i18n/` — AI-generated translations, Arabic RTL supported
+- **Permissions cache**: `server/middleware/rbac.js` keeps a tenant-scoped LRU
+  of resolved users (60s TTL, max 500). Per-request memo on `req._resolvedUser`
+  avoids re-resolving across middleware. Invalidate via `invalidateUserCache(userId)`
+  on user mutations or `invalidateRoleCache()` on any role/permission change.
+- **Frontend API client**: `client/src/apiClient.js` is the single source of truth
+  — CSRF, credentials:include, 503/401 event handling, and now `loadMyPermissions`
+  + `clearPermCache`. Never use bare `fetch()` and never reintroduce `api.js`.
 
 ## Copilot action blocks
 Claude returns tagged JSON blocks that the client parses:
