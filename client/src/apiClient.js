@@ -123,6 +123,25 @@ const api = {
   delete: (path)       => fetch(`${API_ORIGIN}/api${path}`, { credentials:'include', method: 'DELETE', headers: mutationHeaders() }).then(r => handleMutationResponse(r, path)),
 };
 
+// Permission cache helpers — migrated from legacy ./api.js so all session-aware
+// calls go through this client (CSRF + credentials:include + 401/503 handling).
+let _permCache = null;
+
+export async function loadMyPermissions() {
+  const session = getSession();
+  const uid = session?.userId || session?.user?.id;
+  if (!uid) { _permCache = { objects: {}, global: {} }; return _permCache; }
+  try {
+    const data = await api.get('/auth/me');
+    const perms = data?.permissions || { objects: {}, global: {} };
+    if (data?.user?.role?.slug) perms._roleSlug = data.user.role.slug;
+    _permCache = perms;
+    return _permCache;
+  } catch { _permCache = { objects: {}, global: {} }; return _permCache; }
+}
+
+export function clearPermCache() { _permCache = null; }
+
 export default api;
 export { authHeaders, jsonHeaders, getTenantSlug, getSession, API_ORIGIN };
 

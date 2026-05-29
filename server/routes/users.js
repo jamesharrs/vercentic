@@ -1,7 +1,7 @@
 const express = require('express');
 const { validate } = require('../middleware/validate');
 const { createUserSchema, patchUserSchema, resetPasswordSchema, loginSchema } = require('../validation/schemas');
-const { hasGlobalAction } = require('../middleware/rbac');
+const { hasGlobalAction, invalidateUserCache } = require('../middleware/rbac');
 const crypto = require('crypto');
 const { query, findOne, insert, update, remove, getStore, saveStore, saveStoreNow, getCurrentTenant,
         listTenants, loadTenantStore, tenantStorage } = require('../db/init');
@@ -185,6 +185,7 @@ router.patch('/:id', validate(patchUserSchema), (req, res) => {
   if (password        !== undefined && password.length >= 8) updates.password_hash = hashPassword(password);
   const u = update('users', x => x.id === req.params.id, updates);
   if (!u) return res.status(404).json({ error: 'Not found' });
+  invalidateUserCache(req.params.id);
   insert('audit_log', { id:uuidv4(), action:'user.updated', actor:'system', target_id:u.id, target_type:'user', details:updates, created_at:new Date().toISOString() });
   res.json({ ...u, password_hash: undefined });
 });
@@ -194,6 +195,7 @@ router.post('/:id/reset-password', validate(resetPasswordSchema), (req, res) => 
   const { password } = req.body;
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   update('users', x => x.id === req.params.id, { password_hash: hashPassword(password), must_change_password: 0 });
+  invalidateUserCache(req.params.id);
   insert('audit_log', { id:uuidv4(), action:'user.password_reset', actor:'system', target_id:req.params.id, target_type:'user', details:{}, created_at:new Date().toISOString() });
   res.json({ success: true });
 });
@@ -204,6 +206,7 @@ router.delete('/:id', (req, res) => {
   const u = findOne('users', x => x.id === req.params.id);
   if (!u) return res.status(404).json({ error: 'Not found' });
   update('users', x => x.id === req.params.id, { status: 'deactivated' });
+  invalidateUserCache(req.params.id);
   insert('audit_log', { id:uuidv4(), action:'user.deactivated', actor:'system', target_id:req.params.id, target_type:'user', details:{}, created_at:new Date().toISOString() });
   res.json({ deactivated: true });
 });

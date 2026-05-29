@@ -3,8 +3,7 @@
 // Wrap your App with <PermissionProvider userId={session.userId}>.
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { loadMyPermissions, clearPermCache } from './api';
-import api from './apiClient.js'; // use apiClient for correct session/CSRF headers
+import api, { loadMyPermissions } from './apiClient.js';
 
 const PermissionContext = createContext(null);
 
