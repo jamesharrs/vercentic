@@ -27,7 +27,7 @@ function detectMilestones(client) {
   const env   = (store.client_environments||[]).find(e=>e.client_id===client.id&&!e.deleted_at);
   const envId = env?.id || client.environment_id || null;
   const pLog  = (store.provision_log||[]).slice().reverse().find(l=>l.client_id===client.id&&l.admin_email);
-  const resolvedAdminEmail = pLog?.admin_email || client.primary_contact_email || client.admin_email || '';
+  const resolvedAdminEmail = pLog?.admin_email || client.primary_contact_email || client.primary_email || client.admin_email || '';
 
   const users    = (store.users    || []).filter(u=>u.environment_id===envId);
   const adminUser = users.find(u=>u.email===resolvedAdminEmail);
@@ -114,9 +114,11 @@ async function runSequencerCycle() {
 
   for (const client of clients) {
     if(client.status==='suspended') continue;
-    // Resolve admin email once per client — stored in provision_log, not on the client object
+    // Resolve admin email once per client.
+    // SA-provisioned clients store it in provision_log[].admin_email.
+    // Signup-created clients store it in client.primary_email (not primary_contact_email).
     const clientLog = (store.provision_log||[]).slice().reverse().find(l=>l.client_id===client.id&&l.admin_email);
-    const adminEmail = clientLog?.admin_email || client.primary_contact_email || '';
+    const adminEmail = clientLog?.admin_email || client.primary_contact_email || client.primary_email || '';
     const newMilestones = detectMilestones(client);
     if(newMilestones.length) {
       client.milestones_hit = [...(client.milestones_hit||[]), ...newMilestones];
