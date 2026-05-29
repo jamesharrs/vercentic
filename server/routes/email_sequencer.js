@@ -7,7 +7,7 @@ const { getStore, saveStore } = require('../db/init');
 
 const now = () => new Date().toISOString();
 function getCol(col) { const s=getStore(); if(!s[col])s[col]=[]; return s[col]; }
-function saveCol(col,data) { const s=getStore(); s[col]=data; saveStore(s); }
+function saveCol(col,data) { const s=getStore(); s[col]=data; saveStore(); }
 
 const MILESTONES = [
   { id:'client_provisioned',    label:'Client provisioned' },
