@@ -181,6 +181,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
       const { fireMilestone } = require('./email_sequencer');
       console.log('[Provision] fireMilestone loaded:', typeof fireMilestone);
       await fireMilestone('client_provisioned', {
+        client_id:   client.id,
         email:       adminUser.email,
         client_name: client.name,
         admin_name:  `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || adminUser.email,

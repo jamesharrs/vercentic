@@ -211,7 +211,8 @@ function applyMerge(str,data) { return (str||'').replace(/\{\{(\w+)\}\}/g,(_,k)=
 
 // ── fireMilestone — called from other server routes to trigger enrolled sequences
 // Always runs in the master store context — sequences are global, not per-tenant.
-async function fireMilestone(milestoneId, { email, client_name, admin_name, env_name } = {}) {
+// Pass client_id so we can create a proper enrolment record and avoid duplicate sends.
+async function fireMilestone(milestoneId, { client_id, email, client_name, admin_name, env_name } = {}) {
   await tenantStorage.run('master', async () => {
     const sequences = getCol('email_sequences').filter(s =>
       s.trigger === milestoneId && s.active && !s.deleted_at
@@ -220,8 +221,44 @@ async function fireMilestone(milestoneId, { email, client_name, admin_name, env_
       console.log(`[Sequencer] No active sequences for milestone: ${milestoneId}`);
       return;
     }
+
+    // Mark the milestone as hit on the client record so the hourly cycle does not
+    // re-detect it and create duplicate enrolments on the next tick.
+    if (client_id) {
+      const clients = getCol('clients');
+      const cidx = clients.findIndex(c => c.id === client_id);
+      if (cidx !== -1 && !(clients[cidx].milestones_hit || []).includes(milestoneId)) {
+        clients[cidx].milestones_hit = [...(clients[cidx].milestones_hit || []), milestoneId];
+        clients[cidx].updated_at = now();
+        saveCol('clients', clients);
+        console.log(`[Sequencer] Marked milestone ${milestoneId} on client ${client_id}`);
+      }
+    }
+
     const messaging = require('../services/messaging');
     for (const seq of sequences) {
+      // ── Dedup: skip if already enrolled (prevents double-fire from signup + superadmin) ──
+      if (client_id) {
+        const existing = getCol('email_enrolments').find(e =>
+          e.client_id === client_id && e.sequence_id === seq.id &&
+          (e.status === 'active' || e.status === 'completed')
+        );
+        if (existing) {
+          console.log(`[Sequencer] ${seq.name} already enrolled for client ${client_id} — skipping`);
+          continue;
+        }
+        // Create the enrolment record so the cycle knows this client is enrolled
+        // and won't re-fire step 0 when it runs.
+        const enrolments = getCol('email_enrolments');
+        enrolments.push({
+          id: uuidv4(), client_id, sequence_id: seq.id,
+          status: 'active', current_step: 0, goal_met: false,
+          enrolled_at: now(), updated_at: now(),
+        });
+        saveCol('email_enrolments', enrolments);
+        console.log(`[Sequencer] Enrolled client ${client_id} → ${seq.name}`);
+      }
+
       const steps = getCol('email_sequence_steps')
         .filter(s => s.sequence_id === seq.id && !s.deleted_at)
         .sort((a, b) => a.sort_order - b.sort_order);
@@ -230,9 +267,9 @@ async function fireMilestone(milestoneId, { email, client_name, admin_name, env_
         continue;
       }
       const firstStep = steps[0];
-      // Only send immediately if step has no delay
+      // Only send immediately if step has no delay; otherwise the hourly cycle handles it.
       if (firstStep.delay_days > 0 || firstStep.delay_hours > 0) {
-        console.log(`[Sequencer] ${seq.name} step 0 has delay (${firstStep.delay_days}d ${firstStep.delay_hours}h) — skipping immediate send`);
+        console.log(`[Sequencer] ${seq.name} step 0 has delay (${firstStep.delay_days}d ${firstStep.delay_hours}h) — hourly cycle will send`);
         continue;
       }
       const template = getCol('email_templates').find(t => t.id === firstStep.template_id);
@@ -254,18 +291,36 @@ async function fireMilestone(milestoneId, { email, client_name, admin_name, env_
           fromName: template.from_name,
           from:     template.from_email,
         });
-        // Log the send
+        // Look up the enrolment we just created so we can attach enrolment_id to the
+        // log entry — this lets the cycle's dedup check (sendLog.find by enrolment_id)
+        // skip step 0 instead of re-sending it.
+        const enr = client_id
+          ? getCol('email_enrolments').find(e => e.client_id === client_id && e.sequence_id === seq.id)
+          : null;
         const log = getCol('email_send_log');
         log.push({
-          id:          uuidv4(),
-          sequence_id: seq.id,
-          step_id:     firstStep.id,
-          to_email:    email,
-          subject:     interpolate(firstStep.subject_override || template.subject),
-          status:      result.simulated ? 'simulated' : 'sent',
-          sent_at:     now(),
+          id:           uuidv4(),
+          enrolment_id: enr?.id || null,
+          client_id:    client_id || null,
+          sequence_id:  seq.id,
+          step_id:      firstStep.id,
+          to_email:     email,
+          subject:      interpolate(firstStep.subject_override || template.subject),
+          status:       result.simulated ? 'simulated' : 'sent',
+          sent_at:      now(),
         });
         saveCol('email_send_log', log);
+        // Advance current_step past step 0 so the cycle picks up from step 1 onwards.
+        if (enr) {
+          const enrolments = getCol('email_enrolments');
+          const eidx = enrolments.findIndex(e => e.id === enr.id);
+          if (eidx !== -1) {
+            enrolments[eidx].current_step = 1;
+            enrolments[eidx].last_sent_at = now();
+            enrolments[eidx].updated_at   = now();
+            saveCol('email_enrolments', enrolments);
+          }
+        }
         console.log(`[Sequencer] ${seq.name} → ${email}: ${result.simulated ? 'simulated (no SendGrid creds)' : 'sent OK'}`);
       } catch (e) {
         console.error(`[Sequencer] Failed to send for ${seq.name} → ${email}:`, e.message);
