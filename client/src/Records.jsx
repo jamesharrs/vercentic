@@ -9,6 +9,7 @@ import CommunicationsPanel, { ComposeModal as CommsComposeModal } from "./Commun
 const StableCommunicationsPanel = memo(CommunicationsPanel);
 import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
+import { SharingPanel, FraudPanel } from "./SharingFraud.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
 
 // Set PDF.js worker once at module load — prevents CDN fallback
@@ -145,6 +146,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     listChecks:"M3 7l2 2 4-4M3 12l2 2 4-4M3 17l2 2 4-4M13 8h8M13 13h8M13 18h8",
     clipboardCheck:"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM9 12l2 2 4-4",
     shield:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+    share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13",
     message:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
     phone:"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6 6l.93-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16a2 2 0 0 1 .27.92z",
     phoneCall:"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6 6l.93-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16a2 2 0 0 1 .27.92zM15 2s3 1 3 4M18 2s3 2 3 4",
@@ -7727,6 +7729,8 @@ export const PANEL_META = {
   insights:     { icon:"barChart",      label:"Insights",            defaultOpen:true,  jobOnly:true },
   engagement:   { icon:"activity",      label:"Engagement Score",    defaultOpen:true,  personOnly:true },
   bias_scan:    { icon:"shield",        label:"Bias Scanner",        defaultOpen:false, jobOnly:true },
+  share:        { icon:"share",         label:"Share & Promote",     defaultOpen:false, jobOnly:true },
+  fraud:        { icon:"shield",        label:"AI Verification",     defaultOpen:false, personOnly:true },
 };
 
 export const getDefaultPanelOrder = (objectName) => {
@@ -9397,6 +9401,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     }
     if (id === 'match') return ff.ai_matching;
 
+    // Feature flag gates for sharing and fraud panels
+    if (id === 'share') return canRecord('record_share_job');
+    if (id === 'fraud') return canRecord('record_fraud_analysis');
+
     // Check field-value conditions set in admin Settings → Feature Flags → Record Panels
     const conditions = ff._panelConditions?.[PANEL_FLAGS[id]] || ff._panelConditions?.[id];
     if (conditions) {
@@ -10736,6 +10744,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="job_tasks") return <JobTasksPanel record={record} environment={environment}/>;
     if (id==="bias_scan") return <BiasScanner record={record} environment={environment}/>;
+    if (id==="share")    return <SharingPanel record={record} object={object} environment={environment} canRecord={canRecord}/>;
+    if (id==="fraud")    return <FraudPanel   record={record} fields={fields}  environment={environment} canRecord={canRecord}/>;
     // interview_plan and scorecard are handled earlier with ff.interviews gate
 
     if (id==="match") {

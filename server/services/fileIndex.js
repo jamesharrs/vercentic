@@ -8,11 +8,43 @@
 const fs   = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore } = require('../db/init');
+const { getStore, saveStore, saveStoreNow } = require('../db/init');
 
 const UPLOAD_DIR = process.env.DATA_PATH
   ? path.join(process.env.DATA_PATH, 'uploads')
   : path.join(__dirname, '../../data/uploads');
+
+// Extracted file text is stored in sidecar files on disk — NOT inside the
+// tenant store. Keeping multi-KB raw text inside the store made every
+// saveStore() serialise (and on Railway, fully rewrite to Postgres) megabytes
+// of text on every write, which blocked the event loop and caused outages.
+// The store now holds only lightweight metadata; full text lives here.
+const TEXT_DIR = path.join(UPLOAD_DIR, '.textindex');
+
+function sidecarPath(attachmentId) {
+  return path.join(TEXT_DIR, `${attachmentId}.txt`);
+}
+async function writeSidecar(attachmentId, text) {
+  await fs.promises.mkdir(TEXT_DIR, { recursive: true });
+  await fs.promises.writeFile(sidecarPath(attachmentId), text || '', 'utf8');
+}
+function readSidecar(attachmentId) {
+  try { return fs.readFileSync(sidecarPath(attachmentId), 'utf8'); }
+  catch { return ''; }
+}
+function deleteSidecar(attachmentId) {
+  try { fs.unlinkSync(sidecarPath(attachmentId)); } catch { /* missing is fine */ }
+}
+// Resolve full text for an index entry: prefer the sidecar, fall back to a
+// legacy in-store raw_text (entries written before this change).
+function getEntryText(entry) {
+  if (!entry) return '';
+  if (entry.raw_text != null) return entry.raw_text;   // legacy, pre-migration
+  return readSidecar(entry.attachment_id);
+}
+function snippetOf(text) {
+  return (text || '').slice(0, 280).replace(/\s+/g, ' ').trim();
+}
 
 // File types that are worth indexing for content search
 const INDEXABLE_EXTS = new Set(['.pdf','.docx','.doc','.txt','.csv','.rtf']);
@@ -83,6 +115,9 @@ async function indexAttachment(att) {
     const rawText = await extractText(filePath, ext);
     if (!rawText.trim()) return;
 
+    // Full text → sidecar file on disk (keeps the store small)
+    await writeSidecar(att.id, rawText);
+
     const category = categoryFromTypeName(att.file_type_name);
     const entry = {
       id:            uuidv4(),
@@ -92,8 +127,9 @@ async function indexAttachment(att) {
       file_type_name:att.file_type_name || 'Other',
       category,
       filename:      att.name || att.filename,
-      raw_text:      rawText,
       word_count:    rawText.split(/\s+/).filter(Boolean).length,
+      char_count:    rawText.length,
+      snippet:       snippetOf(rawText),
       extracted_at:  new Date().toISOString(),
       status:        'done',
     };
@@ -111,6 +147,13 @@ async function indexAttachment(att) {
  * Called on server startup (async, non-blocking).
  */
 async function backfillAll() {
+  // Disabled by default. Re-indexing every attachment on every boot caused a
+  // full-store write per file — a storm that saturated the event loop.
+  // Enable deliberately for a one-off rebuild: FILEINDEX_BACKFILL=on
+  if (process.env.FILEINDEX_BACKFILL !== 'on') {
+    console.log('[fileIndex] Backfill skipped (set FILEINDEX_BACKFILL=on to enable)');
+    return;
+  }
   const s = getStore();
   if (!s.file_text_index) s.file_text_index = [];
   const indexed = new Set((s.file_text_index || []).map(x => x.attachment_id));
@@ -153,7 +196,8 @@ function searchIndex({ term, recordIds, categories, environmentId, limit = 100 }
     if (catSet && !catSet.has(entry.category)) continue;
     if (environmentId && entry.environment_id && entry.environment_id !== environmentId) continue;
 
-    const text = (entry.raw_text || '').toLowerCase();
+    const fullText = getEntryText(entry);
+    const text     = fullText.toLowerCase();
 
     // Score: count how many search terms appear
     let score = 0;
@@ -167,7 +211,7 @@ function searchIndex({ term, recordIds, categories, environmentId, limit = 100 }
     const firstIdx = text.indexOf(terms[0]);
     const start    = Math.max(0, firstIdx - 60);
     const end      = Math.min(text.length, firstIdx + 120);
-    const snippet  = entry.raw_text.slice(start, end).replace(/\s+/g, ' ').trim();
+    const snippet  = fullText.slice(start, end).replace(/\s+/g, ' ').trim();
 
     results.push({
       record_id:     entry.record_id,
@@ -175,7 +219,7 @@ function searchIndex({ term, recordIds, categories, environmentId, limit = 100 }
       filename:      entry.filename,
       category:      entry.category,
       file_type_name:entry.file_type_name,
-      snippet:       (start > 0 ? '...' : '') + snippet + (end < entry.raw_text.length ? '...' : ''),
+      snippet:       (start > 0 ? '...' : '') + snippet + (end < fullText.length ? '...' : ''),
       score,
       word_count:    entry.word_count,
     });
@@ -210,4 +254,37 @@ function getStats() {
   };
 }
 
-module.exports = { indexAttachment, backfillAll, searchIndex, getStats, categoryFromTypeName };
+/**
+ * One-shot maintenance: re-home any legacy in-store `raw_text` to sidecar
+ * files and strip it from the store, shrinking the tenant store back down to
+ * lightweight metadata. Uses the text already in the store — no re-extraction
+ * (no pdf-parse), so it is fast and CPU-light. Operates on whatever tenant
+ * getStore() resolves to for the current request context.
+ * Safe: raw_text is only removed AFTER its sidecar write succeeds, so an
+ * interrupted run never loses searchable text.
+ */
+async function compactIndex() {
+  const s = getStore();
+  const idx = s.file_text_index || [];
+  let migrated = 0, freed = 0;
+  for (const entry of idx) {
+    if (entry.raw_text == null) continue;          // already compacted
+    const text = entry.raw_text;
+    try {
+      await writeSidecar(entry.attachment_id, text);
+    } catch (e) {
+      console.error('[fileIndex] compact sidecar write failed:', entry.attachment_id, e.message);
+      continue;                                    // keep raw_text if we can't persist sidecar
+    }
+    if (entry.char_count == null) entry.char_count = text.length;
+    if (entry.snippet == null)    entry.snippet    = snippetOf(text);
+    freed += text.length;
+    delete entry.raw_text;
+    migrated++;
+  }
+  if (migrated > 0) saveStoreNow();
+  console.log(`[fileIndex] compactIndex: migrated ${migrated}/${idx.length} entries, freed ~${Math.round(freed/1024)}KB of in-store text`);
+  return { migrated, total: idx.length, freed_chars: freed };
+}
+
+module.exports = { indexAttachment, backfillAll, searchIndex, getStats, categoryFromTypeName, compactIndex, deleteSidecar };
