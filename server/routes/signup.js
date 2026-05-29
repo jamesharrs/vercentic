@@ -274,6 +274,7 @@ router.post('/', async (req, res) => {
           client_name: company,
           admin_name:  [firstName, lastName].filter(Boolean).join(' ') || email.toLowerCase(),
           env_name:    'Production',
+          login_url:   `https://${tenantSlug}.vercentic.com`,
         });
         console.log(`[Signup] Sequencer fire complete for ${tenantSlug}`);
       } catch (e) {

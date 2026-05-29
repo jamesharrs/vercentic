@@ -186,6 +186,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
         client_name: client.name,
         admin_name:  `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || adminUser.email,
         env_name:    environment.name,
+        login_url:   `https://${tenantSlug}.vercentic.com`,
       });
       console.log('[Provision] Sequencer fire complete');
     } catch (e) {
