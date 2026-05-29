@@ -175,16 +175,19 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 
   // Fire client_provisioned email sequences (non-blocking — runs after response)
   setImmediate(async () => {
+    console.log('[Provision] Starting sequencer fire for', adminUser.email);
     try {
       const { fireMilestone } = require('./email_sequencer');
+      console.log('[Provision] fireMilestone loaded:', typeof fireMilestone);
       await fireMilestone('client_provisioned', {
         email:       adminUser.email,
         client_name: client.name,
         admin_name:  `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || adminUser.email,
         env_name:    environment.name,
       });
+      console.log('[Provision] Sequencer fire complete');
     } catch (e) {
-      console.error('[Provision] Sequencer fire failed:', e.message);
+      console.error('[Provision] Sequencer fire failed:', e.message, e.stack);
     }
   });
 
