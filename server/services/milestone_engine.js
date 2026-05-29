@@ -11,7 +11,7 @@ const daysBetween  = (a,b) => Math.floor((new Date(b)-new Date(a))/86400000);
 const hoursBetween = (a,b) => Math.floor((new Date(b)-new Date(a))/3600000);
 
 function getCol(col) { const s=getStore(); if(!s[col])s[col]=[]; return s[col]; }
-function saveCol(col,data) { const s=getStore(); s[col]=data; saveStore(s); }
+function saveCol(col,data) { const s=getStore(); s[col]=data; saveStore(); }
 
 // ── Detect new milestones for a client ───────────────────────────────────────
 function detectMilestones(client) {
@@ -92,7 +92,7 @@ async function sendStepEmail(enrolment, step, template, client) {
 async function runSequencerCycle() {
   console.log('[Sequencer] Cycle started', now());
   const store = getStore();
-  const clients   = store.superadmin_clients || [];
+  const clients   = store.clients || [];
   const sequences = (store.email_sequences||[]).filter(s=>s.active&&!s.deleted_at);
   const steps     = store.email_sequence_steps || [];
   const templates = store.email_templates || [];
@@ -139,7 +139,7 @@ async function runSequencerCycle() {
     }
   }
 
-  if(changes) { store.superadmin_clients=clients; store.email_enrolments=enrolments; saveStore(store); }
+  if(changes) { store.clients=clients; store.email_enrolments=enrolments; saveStore(); }
   console.log('[Sequencer] Cycle complete', now());
 }
 
