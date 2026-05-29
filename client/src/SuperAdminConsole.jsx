@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useIsMobile } from './MobileApp.jsx';
 import { ClientList, ClientDetail, ProvisionWizard, Performance } from './superadmin/ClientManager.jsx';
 import AiCreditsManager from './superadmin/AiCreditsManager.jsx';
 import ActivityReport from './superadmin/ActivityReport.jsx';
@@ -68,7 +69,7 @@ function LoginScreen({ onAuth }) {
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:F }}>
-      <div style={{ width:360, padding:'36px 32px', background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, boxShadow:'0 24px 60px rgba(0,0,0,.5)' }}>
+      <div style={{ width:'min(360px,calc(100vw - 32px))', padding:'36px 32px', background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, boxShadow:'0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ textAlign:'center', marginBottom:28 }}>
           <div style={{ width:52, height:52, borderRadius:14, background:`${C.purple}20`, border:`1px solid ${C.purple}40`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -98,6 +99,7 @@ function EnvRow({ variable, onSave }) {
   const [revealed, setRevealed] = useState(false);
   const [saving,  setSaving]    = useState(false);
   const [saved,   setSaved]     = useState(false);
+  const isMobile = useIsMobile();
   const secret = isSecret(variable.key);
   const isEmpty = !variable.value || variable.value.startsWith('YOUR_');
 
@@ -115,15 +117,15 @@ function EnvRow({ variable, onSave }) {
   };
 
   return (
-    <div style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:12 }}>
+    <div style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, display:'flex', flexDirection:isMobile?'column':'row', alignItems:isMobile?'flex-start':'center', gap:isMobile?8:12 }}>
       {/* Key */}
-      <div style={{ width:240, flexShrink:0 }}>
-        <code style={{ fontSize:12, fontWeight:700, color: isEmpty ? C.amber : C.accent, fontFamily:'monospace' }}>{variable.key}</code>
+      <div style={{ width:isMobile?'100%':240, flexShrink:isMobile?1:0 }}>
+        <code style={{ fontSize:12, fontWeight:700, color: isEmpty ? C.amber : C.accent, fontFamily:'monospace', wordBreak:'break-all' }}>{variable.key}</code>
         {isEmpty && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, padding:'2px 5px', borderRadius:4, background:`${C.amber}20`, color:C.amber }}>UNSET</span>}
       </div>
 
       {/* Value */}
-      <div style={{ flex:1, minWidth:0 }}>
+      <div style={{ flex:1, minWidth:0, width:isMobile?'100%':'auto' }}>
         {editing ? (
           <input value={draft} onChange={e=>setDraft(e.target.value)}
             autoFocus onKeyDown={e=>{ if(e.key==='Enter') handleSave(); if(e.key==='Escape') setEditing(false); }}
@@ -136,7 +138,7 @@ function EnvRow({ variable, onSave }) {
       </div>
 
       {/* Actions */}
-      <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+      <div style={{ display:'flex', gap:4, flexShrink:0, alignSelf:isMobile?'flex-end':'center' }}>
         {secret && !editing && (
           <button onClick={()=>setRevealed(r=>!r)} title={revealed?'Hide':'Reveal'}
             style={{ padding:'4px 8px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text3, fontSize:11, cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center' }}>
@@ -145,17 +147,17 @@ function EnvRow({ variable, onSave }) {
         )}
         {!editing ? (
           <button onClick={()=>{ setDraft(variable.value); setEditing(true); }}
-            style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, cursor:'pointer', fontFamily:F }}>
+            style={{ padding:isMobile?'8px 14px':'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, cursor:'pointer', fontFamily:F, minHeight:isMobile?36:undefined }}>
             Edit
           </button>
         ) : (
           <>
             <button onClick={()=>setEditing(false)}
-              style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text3, fontSize:11, cursor:'pointer', fontFamily:F }}>
+              style={{ padding:isMobile?'8px 14px':'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.text3, fontSize:11, cursor:'pointer', fontFamily:F, minHeight:isMobile?36:undefined }}>
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving}
-              style={{ padding:'4px 10px', borderRadius:6, border:'none', background: saved?C.green:C.accent, color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+              style={{ padding:isMobile?'8px 14px':'4px 10px', borderRadius:6, border:'none', background: saved?C.green:C.accent, color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F, minHeight:isMobile?36:undefined }}>
               {saving?'…':saved?'✓':'Save'}
             </button>
           </>
@@ -211,6 +213,7 @@ function EnvSection() {
   const [adding,  setAdding]  = useState(false);
   const [newKey,  setNewKey]  = useState('');
   const [newVal,  setNewVal]  = useState('');
+  const isMobile = useIsMobile();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -303,14 +306,16 @@ function EnvSection() {
       {/* Add new */}
       <div style={{ background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden', marginBottom:20 }}>
         {adding ? (
-          <div style={{ padding:'16px 18px', display:'flex', gap:10, alignItems:'center' }}>
+          <div style={{ padding:'16px 18px', display:'flex', flexDirection:isMobile?'column':'row', gap:isMobile?8:10, alignItems:isMobile?'stretch':'center' }}>
             <input value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="VARIABLE_NAME"
               style={{ flex:1, padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`, background:C.surface2, color:C.text1, fontSize:12, fontFamily:'monospace', outline:'none' }}/>
-            <span style={{ color:C.text3 }}>=</span>
+            {!isMobile && <span style={{ color:C.text3 }}>=</span>}
             <input value={newVal} onChange={e=>setNewVal(e.target.value)} placeholder="value"
-              style={{ flex:2, padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`, background:C.surface2, color:C.text1, fontSize:12, fontFamily:'monospace', outline:'none' }}/>
-            <button onClick={()=>setAdding(false)} style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.text3, fontSize:12, cursor:'pointer', fontFamily:F }}>Cancel</button>
-            <button onClick={handleAdd} disabled={!newKey.trim()} style={{ padding:'7px 14px', borderRadius:7, border:'none', background:C.green, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>Add</button>
+              style={{ flex:isMobile?undefined:2, padding:'8px 12px', borderRadius:8, border:`1.5px solid ${C.border}`, background:C.surface2, color:C.text1, fontSize:12, fontFamily:'monospace', outline:'none' }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={()=>setAdding(false)} style={{ flex:1, padding:'9px 12px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.text3, fontSize:12, cursor:'pointer', fontFamily:F, minHeight:44 }}>Cancel</button>
+              <button onClick={handleAdd} disabled={!newKey.trim()} style={{ flex:1, padding:'9px 14px', borderRadius:7, border:'none', background:C.green, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F, minHeight:44 }}>Add</button>
+            </div>
           </div>
         ) : (
           <button onClick={()=>setAdding(true)}
@@ -394,6 +399,7 @@ function PlatformEvents() {
   const [search,   setSearch]   = useState('');
   const [expanded, setExpanded] = useState(null);
   const [clearing, setClearing] = useState(false);
+  const isMobile = useIsMobile();
 
 
   const load = async () => {
@@ -426,16 +432,16 @@ function PlatformEvents() {
   const fmtTs = iso => iso ? new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
 
   return (
-    <div style={{padding:'28px 32px',fontFamily:F,minHeight:'100vh',background:C.bg,color:C.text1}}>
+    <div style={{padding:isMobile?'0':'28px 32px',fontFamily:F,minHeight:'100vh',background:C.bg,color:C.text1}}>
       {/* Header */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+      <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:20}}>
         <div>
-          <div style={{fontSize:18,fontWeight:800,color:C.text1}}>Platform Events</div>
+          <div style={{fontSize:isMobile?15:18,fontWeight:800,color:C.text1}}>Platform Events</div>
           <div style={{fontSize:12,color:C.text3,marginTop:2}}>{total} events captured · live monitoring</div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={load} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F}}>↻ Refresh</button>
-          <button onClick={clearLogs} disabled={clearing} style={{padding:'7px 14px',borderRadius:8,border:`1px solid #F87171`,background:'transparent',color:'#F87171',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F}}>Clear logs</button>
+          <button onClick={load} style={{padding:isMobile?'9px 14px':'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text2,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F,minHeight:isMobile?44:undefined}}>↻ Refresh</button>
+          <button onClick={clearLogs} disabled={clearing} style={{padding:isMobile?'9px 14px':'7px 14px',borderRadius:8,border:`1px solid #F87171`,background:'transparent',color:'#F87171',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F,minHeight:isMobile?44:undefined}}>Clear logs</button>
         </div>
       </div>
 
@@ -473,49 +479,51 @@ function PlatformEvents() {
           <div style={{color:C.text3,fontSize:12,marginTop:6}}>Digest sends, scheduler checks, SSE connections and more are captured automatically.</div>
         </div>
       ) : (
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-          {logs.map((log, i) => {
-            const catM = CATEGORY_META[log.category] || { label: log.category, color: C.text3 };
-            const isExp = expanded === log.id;
-            const hasMeta = log.meta && Object.keys(log.meta).length > 0;
-            return (
-              <div key={log.id}
-                style={{borderBottom: i < logs.length-1 ? `1px solid ${C.border}` : 'none',
-                  background: i%2===0 ? C.surface : C.surface2}}>
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',cursor:hasMeta?'pointer':'default'}}
-                  onClick={()=>hasMeta&&setExpanded(isExp?null:log.id)}>
-                  {/* Level dot */}
-                  <div style={{width:7,height:7,borderRadius:'50%',background:LEVEL_COLOR[log.level]||C.text3,flexShrink:0}}/>
-                  {/* Timestamp */}
-                  <span style={{fontSize:11,color:C.text3,width:150,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtTs(log.ts)}</span>
-                  {/* Category pill */}
-                  <span style={{padding:'2px 8px',borderRadius:99,fontSize:10,fontWeight:700,
-                    background:`${catM.color}18`,color:catM.color,flexShrink:0,minWidth:70,textAlign:'center'}}>
-                    {catM.label}
-                  </span>
-                  {/* Event name */}
-                  <span style={{fontSize:11,color:C.purple,fontWeight:600,width:160,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.event}</span>
-                  {/* Message */}
-                  <span style={{fontSize:12,color:C.text2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.message}</span>
-                  {/* Expand */}
-                  {hasMeta && <span style={{fontSize:10,color:C.text3,flexShrink:0}}>{isExp?'▲':'▼'}</span>}
-                </div>
-                {/* Meta panel */}
-                {isExp && hasMeta && (
-                  <div style={{background:`${C.purple}08`,borderTop:`1px solid ${C.border}`,padding:'10px 14px 10px 44px'}}>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'8px 24px'}}>
-                      {Object.entries(log.meta).map(([k,v])=>(
-                        <div key={k} style={{fontSize:11}}>
-                          <span style={{color:C.text3,fontWeight:600}}>{k}: </span>
-                          <span style={{color:C.text1,fontFamily:'monospace'}}>{String(v)}</span>
-                        </div>
-                      ))}
-                    </div>
+        <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+          <div style={{minWidth:isMobile?700:'auto',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            {logs.map((log, i) => {
+              const catM = CATEGORY_META[log.category] || { label: log.category, color: C.text3 };
+              const isExp = expanded === log.id;
+              const hasMeta = log.meta && Object.keys(log.meta).length > 0;
+              return (
+                <div key={log.id}
+                  style={{borderBottom: i < logs.length-1 ? `1px solid ${C.border}` : 'none',
+                    background: i%2===0 ? C.surface : C.surface2}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',cursor:hasMeta?'pointer':'default'}}
+                    onClick={()=>hasMeta&&setExpanded(isExp?null:log.id)}>
+                    {/* Level dot */}
+                    <div style={{width:7,height:7,borderRadius:'50%',background:LEVEL_COLOR[log.level]||C.text3,flexShrink:0}}/>
+                    {/* Timestamp */}
+                    <span style={{fontSize:11,color:C.text3,width:150,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtTs(log.ts)}</span>
+                    {/* Category pill */}
+                    <span style={{padding:'2px 8px',borderRadius:99,fontSize:10,fontWeight:700,
+                      background:`${catM.color}18`,color:catM.color,flexShrink:0,minWidth:70,textAlign:'center'}}>
+                      {catM.label}
+                    </span>
+                    {/* Event name */}
+                    <span style={{fontSize:11,color:C.purple,fontWeight:600,width:160,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.event}</span>
+                    {/* Message */}
+                    <span style={{fontSize:12,color:C.text2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.message}</span>
+                    {/* Expand */}
+                    {hasMeta && <span style={{fontSize:10,color:C.text3,flexShrink:0}}>{isExp?'▲':'▼'}</span>}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {/* Meta panel */}
+                  {isExp && hasMeta && (
+                    <div style={{background:`${C.purple}08`,borderTop:`1px solid ${C.border}`,padding:'10px 14px 10px 44px'}}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:'8px 24px'}}>
+                        {Object.entries(log.meta).map(([k,v])=>(
+                          <div key={k} style={{fontSize:11}}>
+                            <span style={{color:C.text3,fontWeight:600}}>{k}: </span>
+                            <span style={{color:C.text1,fontFamily:'monospace'}}>{String(v)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -526,6 +534,7 @@ function EnvDiagnoseSection() {
   const [envs,    setEnvs]    = useState([]);
   const [selEnv,  setSelEnv]  = useState('');
   const [selName, setSelName] = useState('');
+  const isMobile = useIsMobile();
   useEffect(() => {
     fetch('/api/environments').then(r=>r.json()).then(data => {
       const list = Array.isArray(data) ? data : [];
@@ -535,11 +544,11 @@ function EnvDiagnoseSection() {
   }, []);
   return (
     <div>
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+      <div style={{display:'flex',flexDirection:isMobile?'column':'row',alignItems:isMobile?'stretch':'center',gap:12,marginBottom:20}}>
         <select value={selEnv} onChange={e=>{
           setSelEnv(e.target.value);
           setSelName(envs.find(v=>v.id===e.target.value)?.name||'');
-        }} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text1,fontFamily:F,fontSize:13,minWidth:240}}>
+        }} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text1,fontFamily:F,fontSize:13,minWidth:isMobile?'100%':240,minHeight:isMobile?44:undefined}}>
           {envs.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
         <span style={{fontSize:12,color:C.text3}}>{envs.length} environment{envs.length!==1?'s':''} available</span>
@@ -679,7 +688,7 @@ function TemplateEnvironments() {
           )}
           <div style={{display:'flex', flexDirection:'column', gap:10}}>
             {templates.map(t => (
-              <div key={t.id} style={{background:C.card, borderRadius:10, border:`1px solid ${C.border}`, padding:'14px 18px', display:'flex', alignItems:'center', gap:16}}>
+              <div key={t.id} style={{background:C.card, borderRadius:10, border:`1px solid ${C.border}`, padding:'14px 18px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:12}}>
                 <div style={{width:40, height:40, borderRadius:10, background:'#312E81', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0}}>🏛</div>
                 <div style={{flex:1, minWidth:0}}>
                   <div style={{fontWeight:700, fontSize:14}}>{t.template_name || t.name}</div>
@@ -687,13 +696,13 @@ function TemplateEnvironments() {
                     {t.client_name} · {t.tenant_slug} · {t.object_count} objects · {t.field_count} fields · {t.workflow_count} workflows
                   </div>
                 </div>
-                <div style={{display:'flex', gap:8}}>
+                <div style={{display:'flex', gap:8, flexShrink:0}}>
                   <button onClick={()=>{ setCopyTarget(''); setCopyResult(null); setShowCopyModal(t); }}
-                    style={{padding:'6px 14px', borderRadius:8, border:`1px solid ${C.accent}`, background:'transparent', color:C.accent, fontSize:12, fontWeight:600, cursor:'pointer'}}>
+                    style={{padding:'8px 14px', borderRadius:8, border:`1px solid ${C.accent}`, background:'transparent', color:C.accent, fontSize:12, fontWeight:600, cursor:'pointer', minHeight:40}}>
                     Copy to →
                   </button>
                   <button onClick={()=>flagAsTemplate(t, false)} disabled={flagging===t.id}
-                    style={{padding:'6px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:12, cursor:'pointer'}}>
+                    style={{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:12, cursor:'pointer', minHeight:40}}>
                     Unflag
                   </button>
                 </div>
@@ -898,11 +907,22 @@ export default function SuperAdminConsole() {
   const [section, setSection] = useState('clients');
   const [clientView,       setClientView]       = useState('list');
   const [selectedClientId, setSelectedClientId] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   // Reset client detail view whenever we navigate away from the clients section
   useEffect(() => {
     if (section !== 'clients') { setClientView('list'); setSelectedClientId(null); }
   }, [section]);
+
+  // Close mobile nav when switching to desktop
+  useEffect(() => { if (!isMobile) setMobileNavOpen(false); }, [isMobile]);
+
+  const navTo = (id) => {
+    if (id === 'clients') { setClientView('list'); setSelectedClientId(null); }
+    setSection(id);
+    setMobileNavOpen(false);
+  };
 
   if (!authed) return <LoginScreen onAuth={(token, userId) => {
     sessionStorage.setItem('sa_token', token);
@@ -910,59 +930,94 @@ export default function SuperAdminConsole() {
     setAuthed(true);
   }}/>;
 
-  return (
-    <div style={{ minHeight:'100vh', background:C.bg, display:'flex', fontFamily:F, color:C.text1 }}>
-      {/* Sidebar */}
-      <div style={{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:'flex', flexDirection:'column' }}>
-        {/* Logo */}
-        <div style={{ padding:'20px 18px 16px', borderBottom:`1px solid ${C.border}` }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <div style={{ width:28, height:28, borderRadius:8, background:`${C.purple}25`, border:`1px solid ${C.purple}40`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:800, color:C.text1 }}>Super Admin</div>
-              <div style={{ fontSize:10, color:C.text3 }}>Vercentic Internal</div>
-            </div>
+  const SidebarContents = ({ onClose }) => (
+    <>
+      {/* Logo */}
+      <div style={{ padding:'20px 18px 16px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ width:28, height:28, borderRadius:8, background:`${C.purple}25`, border:`1px solid ${C.purple}40`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:800, color:C.text1 }}>Super Admin</div>
+            <div style={{ fontSize:10, color:C.text3 }}>Vercentic Internal</div>
           </div>
         </div>
-
-        {/* Nav */}
-        <div style={{ flex:1, padding:'10px 10px' }}>
-          <div style={{ fontSize:9, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.1em', padding:'4px 8px 8px' }}>Console</div>
-          {NAV_ITEMS.map(item => (
-            <button key={item.id} onClick={()=>{ if(item.id==='clients'){ setClientView('list'); setSelectedClientId(null); } setSection(item.id); }}
-              style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'9px 10px', borderRadius:8, border:'none',
-                background: section===item.id ? `${C.purple}18` : 'transparent',
-                color: section===item.id ? C.purple : C.text2,
-                fontSize:12, fontWeight: section===item.id ? 700 : 500, cursor:'pointer', fontFamily:F, textAlign:'left', transition:'all .12s' }}>
-              <NavIcon id={item.id} size={14} color={section===item.id ? C.purple : C.text2}/>
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding:'12px 18px', borderTop:`1px solid ${C.border}` }}>
-          <button onClick={()=>{ sessionStorage.removeItem('sa_token'); sessionStorage.removeItem('sa_uid'); setAuthed(false); }}
-            style={{ fontSize:11, color:C.text3, background:'none', border:'none', cursor:'pointer', fontFamily:F, padding:0 }}>
-            → Sign out
-          </button>
-        </div>
+        {onClose && (
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.text3, cursor:'pointer', padding:'4px 8px', fontSize:18, lineHeight:1 }}>✕</button>
+        )}
       </div>
 
+      {/* Nav */}
+      <div style={{ flex:1, padding:'10px 10px', overflowY:'auto' }}>
+        <div style={{ fontSize:9, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.1em', padding:'4px 8px 8px' }}>Console</div>
+        {NAV_ITEMS.map(item => (
+          <button key={item.id} onClick={()=>navTo(item.id)}
+            style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding: onClose ? '11px 10px' : '9px 10px', borderRadius:8, border:'none',
+              background: section===item.id ? `${C.purple}18` : 'transparent',
+              color: section===item.id ? C.purple : C.text2,
+              fontSize: onClose ? 13 : 12, fontWeight: section===item.id ? 700 : 500, cursor:'pointer', fontFamily:F, textAlign:'left', transition:'all .12s',
+              minHeight: onClose ? 44 : undefined }}>
+            <NavIcon id={item.id} size={14} color={section===item.id ? C.purple : C.text2}/>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding:'12px 18px', borderTop:`1px solid ${C.border}` }}>
+        <button onClick={()=>{ sessionStorage.removeItem('sa_token'); sessionStorage.removeItem('sa_uid'); setAuthed(false); setMobileNavOpen(false); }}
+          style={{ fontSize:11, color:C.text3, background:'none', border:'none', cursor:'pointer', fontFamily:F, padding:0, minHeight:44 }}>
+          → Sign out
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <div style={{ minHeight:'100vh', background:C.bg, display:'flex', fontFamily:F, color:C.text1 }}>
+      {/* Sidebar — desktop only */}
+      {!isMobile && (
+        <div style={{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:'flex', flexDirection:'column' }}>
+          <SidebarContents onClose={null}/>
+        </div>
+      )}
+
+      {/* Mobile nav overlay */}
+      {isMobile && mobileNavOpen && (
+        <div style={{ position:'fixed', inset:0, zIndex:300, display:'flex' }}>
+          {/* Backdrop */}
+          <div onClick={()=>setMobileNavOpen(false)}
+            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.65)' }}/>
+          {/* Drawer */}
+          <div style={{ position:'relative', width:270, background:C.surface, borderRight:`1px solid ${C.border}`, display:'flex', flexDirection:'column', zIndex:1, overflowY:'auto' }}>
+            <SidebarContents onClose={()=>setMobileNavOpen(false)}/>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
-      <div style={{ flex:1, padding:'28px 32px', overflowY:'auto' }}>
+      <div style={{ flex:1, padding:isMobile?'16px 16px':'28px 32px', overflowY:'auto', minWidth:0 }}>
         {/* Header */}
-        <div style={{ marginBottom:24 }}>
-          <h1 style={{ margin:'0 0 4px', fontSize:22, fontWeight:800, color:C.text1 }}>
-            {section==='clients' && clientView==='detail'
-              ? <span onClick={()=>{ setClientView('list'); setSelectedClientId(null); }} style={{cursor:'pointer'}}>← Clients</span>
-              : NAV_ITEMS.find(n=>n.id===section)?.label}
-          </h1>
-          <p style={{ margin:0, fontSize:13, color:C.text3 }}>
-            {NAV_ITEMS.find(n=>n.id===section)?.desc}
-          </p>
+        <div style={{ marginBottom:isMobile?16:24, display:'flex', alignItems:'center', gap:12 }}>
+          {isMobile && (
+            <button onClick={()=>setMobileNavOpen(true)}
+              style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, color:C.text2, cursor:'pointer', padding:'9px 10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, minWidth:44, minHeight:44 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          )}
+          <div style={{ minWidth:0 }}>
+            <h1 style={{ margin:'0 0 4px', fontSize:isMobile?17:22, fontWeight:800, color:C.text1, lineHeight:1.2 }}>
+              {section==='clients' && clientView==='detail'
+                ? <span onClick={()=>{ setClientView('list'); setSelectedClientId(null); }} style={{cursor:'pointer'}}>← Clients</span>
+                : NAV_ITEMS.find(n=>n.id===section)?.label}
+            </h1>
+            {!isMobile && (
+              <p style={{ margin:0, fontSize:13, color:C.text3 }}>
+                {NAV_ITEMS.find(n=>n.id===section)?.desc}
+              </p>
+            )}
+          </div>
         </div>
 
         {section === 'env'                && <EnvSection/>}
