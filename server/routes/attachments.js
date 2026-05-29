@@ -5,7 +5,7 @@ const fs        = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, remove, getStore } = require('../db/init');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
-const { indexAttachment } = require('../services/fileIndex');
+const { indexAttachment, deleteSidecar } = require('../services/fileIndex');
 
 // Ensure persistent-volume upload dir exists (Railway: /data/uploads)
 const ATTACH_DIR = process.env.DATA_PATH
@@ -111,6 +111,12 @@ router.delete('/:id', (req, res) => {
   if (att?.filename) {
     const filePath = path.join(UPLOAD_DIR, att.filename);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+  if (att) {
+    try { deleteSidecar(att.id); } catch {}
+    if (Array.isArray(s.file_text_index)) {
+      s.file_text_index = s.file_text_index.filter(x => x.attachment_id !== att.id);
+    }
   }
   remove('attachments', x => x.id === req.params.id);
   res.json({ deleted: true });
