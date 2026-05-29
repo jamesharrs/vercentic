@@ -212,7 +212,7 @@ function applyMerge(str,data) { return (str||'').replace(/\{\{(\w+)\}\}/g,(_,k)=
 // ── fireMilestone — called from other server routes to trigger enrolled sequences
 // Always runs in the master store context — sequences are global, not per-tenant.
 // Pass client_id so we can create a proper enrolment record and avoid duplicate sends.
-async function fireMilestone(milestoneId, { client_id, email, client_name, admin_name, env_name } = {}) {
+async function fireMilestone(milestoneId, { client_id, email, client_name, admin_name, env_name, login_url } = {}) {
   await tenantStorage.run('master', async () => {
     const sequences = getCol('email_sequences').filter(s =>
       s.trigger === milestoneId && s.active && !s.deleted_at
@@ -281,7 +281,8 @@ async function fireMilestone(milestoneId, { client_id, email, client_name, admin
         .replace(/\{\{client_name\}\}/g, client_name || '')
         .replace(/\{\{admin_name\}\}/g, admin_name || '')
         .replace(/\{\{env_name\}\}/g, env_name || '')
-        .replace(/\{\{email\}\}/g, email || '');
+        .replace(/\{\{email\}\}/g, email || '')
+        .replace(/\{\{login_url\}\}/g, login_url || '');
       try {
         const result = await messaging.sendEmail({
           to:       email,
