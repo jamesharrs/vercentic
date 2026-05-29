@@ -45,7 +45,14 @@ router.post('/upload', upload.single('file'), verifyMime, (req, res) => {
   });
   res.status(201).json(att);
   // Index in background — don't block the response
-  process.nextTick(() => indexAttachment(att).catch(e => console.warn('[fileIndex] upload index error:', e.message)));
+  // KILL-SWITCH: in-process pdf-parse/mammoth extraction can OOM-kill the box on
+  // large/complex files. Disabled unless FILEINDEX_LIVE=on while we move extraction
+  // to a sandboxed child process. Upload + file storage are unaffected.
+  if (process.env.FILEINDEX_LIVE === 'on') {
+    process.nextTick(() => indexAttachment(att).catch(e => console.warn('[fileIndex] upload index error:', e.message)));
+  } else {
+    console.log('[fileIndex] upload indexing skipped (set FILEINDEX_LIVE=on to enable)');
+  }
 });
 
 // ── Serve file ────────────────────────────────────────────────────────────────
