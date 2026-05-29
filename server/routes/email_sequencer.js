@@ -270,6 +270,9 @@ async function fireMilestone(milestoneId, { email, client_name, admin_name, env_
       } catch (e) {
         console.error(`[Sequencer] Failed to send for ${seq.name} → ${email}:`, e.message);
       }
+      // Brief pause between sequence sends — prevents provider rate-limit errors when
+      // multiple sequences fire at once (e.g. several active client_provisioned sequences).
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
   });
 }
