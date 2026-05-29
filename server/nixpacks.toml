@@ -2,7 +2,8 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm ci --omit=dev"]
+cacheDirectories = ["/root/.npm"]
 
 [start]
 cmd = "node index.js"
