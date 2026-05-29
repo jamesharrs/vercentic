@@ -687,6 +687,38 @@ initDB().then(async () => {
     require('./services/fileIndex').backfillAll()
       .catch(e => console.error('[fileIndex] startup backfill error:', e.message));
   }, 5000); // wait 5s for store to fully settle
+
+  // ── File text index: one-time compaction sweep (per tenant, stamped) ──────
+  // Re-homes legacy in-store raw_text into on-disk sidecars so the tenant
+  // store stops carrying megabytes of CV text through every saveStore().
+  setTimeout(async () => {
+    try {
+      const { compactIndex } = require('./services/fileIndex');
+      const { tenantStorage, getStore: _gs, loadTenantStore, listTenants, saveStoreNow } = require('./db/init');
+      const compactCurrent = async (slug) => {
+        const st = _gs();
+        if (st._fileindex_compacted) return;
+        await compactIndex();
+        const stillBloated = (st.file_text_index || []).some(e => e.raw_text != null);
+        if (!stillBloated) {
+          st._fileindex_compacted = true;
+          saveStoreNow(slug || 'master');
+          console.log('[fileIndex] compaction stamped for ' + (slug || 'master'));
+        } else {
+          console.warn('[fileIndex] ' + (slug || 'master') + ' still has un-compacted entries; will retry next boot');
+        }
+      };
+      await compactCurrent(null);
+      let slugs = [];
+      try { slugs = listTenants() || []; } catch (e) {}
+      for (const slug of slugs) {
+        try { loadTenantStore(slug); await tenantStorage.run(slug, () => compactCurrent(slug)); }
+        catch (e) { console.error('[fileIndex] compact tenant ' + slug + ' failed:', e.message); }
+      }
+    } catch (e) {
+      console.error('[fileIndex] compaction sweep error:', e.message);
+    }
+  }, 8000);
   const store = getStore();
   const fs   = require('fs');
   const path = require('path');
