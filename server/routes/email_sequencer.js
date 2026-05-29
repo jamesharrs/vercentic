@@ -241,8 +241,8 @@ async function fireMilestone(milestoneId, { email, client_name, admin_name, env_
         subject:    interpolate(firstStep.subject_override || template.subject),
         html:       interpolate(template.body_html),
         text:       interpolate(template.body_text || ''),
-        from_name:  template.from_name,
-        from_email: template.from_email,
+        fromName: template.from_name,
+        from:     template.from_email,
       });
       // Log the send
       const log = getCol('email_send_log');
