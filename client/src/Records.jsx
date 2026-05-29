@@ -9841,6 +9841,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [docExtractAtt,      setDocExtractAtt]      = useState(null);
   const [docExtractMappings, setDocExtractMappings] = useState([]);
 
+  // Cleanup preview portal on unmount so it doesn't persist in document.body
+  useEffect(() => {
+    return () => { setPreviewAtt(null); };
+  }, []);
+
   useEffect(() => {
     api.get(`/file-types?object_slug=${currentObject.slug||'people'}`).then(d => {
       if (Array.isArray(d)) setFileTypes(d);
@@ -10616,11 +10621,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             const iconName = ['jpg','jpeg','png','gif','webp'].includes(ext)?'image':['pdf'].includes(ext)?'file-text':'file';
             return (
               <div key={att.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'#f8f9fc', borderRadius:10, marginBottom:6, border:`1px solid ${C.border}` }}>
-                <div onClick={()=> fileUrl ? setPreviewAtt({...att, url:fileUrl}) : null} title={att.url&&att.url!=='#'?'Preview':undefined} style={{ width:32, height:32, borderRadius:8, background:C.accentLight, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, cursor:(att.url&&att.url!=='#')?'pointer':'default' }}>
+                <div onClick={()=> fileUrl ? setPreviewAtt({...att, url:fileUrl}) : null} title={fileUrl?'Preview':undefined} style={{ width:32, height:32, borderRadius:8, background:C.accentLight, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, cursor:fileUrl?'pointer':'default' }}>
                   <Ic n={iconName} s={14} c={C.accent}/>
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div onClick={()=> fileUrl ? setPreviewAtt({...att, url:fileUrl}) : null} style={{ fontSize:12, fontWeight:600, color:(att.url&&att.url!=='#')?C.accent:C.text1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:(att.url&&att.url!=='#')?'pointer':'default', textDecorationLine:(att.url&&att.url!=='#')?'underline':'none', textDecorationColor:`${C.accent}40` }}>{att.name}</div>
+                  <div onClick={()=> fileUrl ? setPreviewAtt({...att, url:fileUrl}) : null} style={{ fontSize:12, fontWeight:600, color:fileUrl?C.accent:C.text1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:fileUrl?'pointer':'default', textDecorationLine:fileUrl?'underline':'none', textDecorationColor:`${C.accent}40` }}>{att.name}</div>
                   <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:2 }}>
                     {att.file_type_name && <span style={{ fontSize:10, fontWeight:700, padding:'1px 5px', borderRadius:4, background:`${C.accent}14`, color:C.accent }}>{att.file_type_name}</span>}
                     <span style={{ fontSize:10, color:C.text3 }}>{att.size ? `${Math.round(att.size/1024)}KB · ` : ''}{new Date(att.created_at).toLocaleDateString()}</span>
@@ -10659,12 +10664,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               </div>
             );
           })}
-
-        {/* File Preview Modal */}
-        {previewAtt && ReactDOM.createPortal(
-          <AttachmentPreviewModal att={previewAtt} onClose={()=>setPreviewAtt(null)}/>,
-          document.body
-        )}
 
         {/* CV Parse Modal */}
         {cvParseResult && ReactDOM.createPortal(
@@ -10864,6 +10863,11 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           {tab!=="fields"  && renderPanel({id:tab})}
         </div>
       </div>
+      {/* File Preview Modal in slide-out mode */}
+      {previewAtt && ReactDOM.createPortal(
+        <AttachmentPreviewModal att={previewAtt} onClose={()=>setPreviewAtt(null)}/>,
+        document.body
+      )}
     </>
   );
 
@@ -11386,6 +11390,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           onSave={()=>{ setComposeType(null); }}
           onClose={()=>{ setComposeType(null); }}
         />
+      )}
+
+      {/* File Preview Modal — rendered at top level so it's not inside a memo */}
+      {previewAtt && ReactDOM.createPortal(
+        <AttachmentPreviewModal att={previewAtt} onClose={()=>setPreviewAtt(null)}/>,
+        document.body
       )}
     </div>
   );
