@@ -324,8 +324,18 @@ const AUTH_EXEMPT = [
   '/cohort-auth', // candidate portal auth — no main app session
   '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
 ];
+// Pre-compute Set for O(1) exact-match lookup. Prefix matching still O(n) on the
+// list, but most requests hit exact paths (/auth/me, /health, etc.) which now
+// resolve without iteration.
+const AUTH_EXEMPT_SET = new Set(AUTH_EXEMPT);
+const AUTH_EXEMPT_PREFIXES = AUTH_EXEMPT.map(p => p + '/');
+
 app.use('/api', (req, res, next) => {
-  if (AUTH_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+  const path = req.path;
+  if (AUTH_EXEMPT_SET.has(path)) return next();
+  for (let i = 0; i < AUTH_EXEMPT_PREFIXES.length; i++) {
+    if (path.startsWith(AUTH_EXEMPT_PREFIXES[i])) return next();
+  }
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/check-email$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/send-otp$/)) return next();

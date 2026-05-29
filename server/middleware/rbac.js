@@ -1,8 +1,62 @@
 'use strict';
-const { findOne, query } = require('../db/init');
+const { findOne, query, getCurrentTenant } = require('../db/init');
 const { logAccessDenied } = require('./security-audit');
 
 const ACTIONS = { VIEW:'view', CREATE:'create', EDIT:'edit', DELETE:'delete', EXPORT:'export' };
+
+// ── User resolution cache ────────────────────────────────────────────────────
+// `attachUser` runs on EVERY authenticated request and does a full scan of the
+// users + roles arrays. With ~100 users that's 100+ array scans per page load.
+//
+// We cache resolved {user, role} by tenant+userId with a short TTL.
+// Per-request memo (req._resolvedUser) prevents re-resolving inside a single
+// request when multiple middlewares (attachUser, requirePermission, etc.) all
+// call resolveUser.
+//
+// Invalidation hooks: invalidateUserCache(userId) and invalidateRoleCache(roleId)
+// must be called by users.js and roles.js routes when those records change.
+const USER_CACHE_TTL_MS = 60_000;     // 60 seconds — short enough that stale data isn't a real problem
+const USER_CACHE_MAX    = 500;        // bound memory — evict oldest if over
+const _userCache = new Map();         // key: `${tenant}:${userId}` → { value, ts }
+
+function _cacheGet(key) {
+  const hit = _userCache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.ts > USER_CACHE_TTL_MS) {
+    _userCache.delete(key);
+    return undefined;
+  }
+  // LRU bump
+  _userCache.delete(key);
+  _userCache.set(key, hit);
+  return hit.value;
+}
+
+function _cacheSet(key, value) {
+  if (_userCache.size >= USER_CACHE_MAX) {
+    // Evict oldest
+    const oldest = _userCache.keys().next().value;
+    if (oldest) _userCache.delete(oldest);
+  }
+  _userCache.set(key, { value, ts: Date.now() });
+}
+
+function invalidateUserCache(userId) {
+  if (!userId) return;
+  for (const k of _userCache.keys()) {
+    if (k.endsWith(`:${userId}`)) _userCache.delete(k);
+  }
+}
+
+function invalidateRoleCache(roleId) {
+  if (!roleId) { _userCache.clear(); return; }
+  // Role change invalidates any user attached to that role. Cheaper to clear all.
+  _userCache.clear();
+}
+
+function _tenantKey() {
+  try { return getCurrentTenant() || 'master'; } catch { return 'master'; }
+}
 
 const GLOBAL_ACTIONS = [
   // ── Admin / config ──────────────────────────────────────────────────────────
@@ -25,15 +79,38 @@ const GLOBAL_ACTIONS = [
 const SUPER_ADMIN_SLUG = 'super_admin';
 
 function resolveUser(req) {
+  // Per-request memo — multiple middlewares (attachUser, requirePermission, etc.)
+  // all call this. Short-circuit if already resolved on this request.
+  if (req && req._resolvedUser !== undefined) return req._resolvedUser;
+
   // Session cookie takes priority; fall back to X-User-Id header (mobile app / Chrome extension)
   const userId = req.session?.userId || req.headers['x-user-id'];
-  if (!userId) return null;
+  if (!userId) {
+    if (req) req._resolvedUser = null;
+    return null;
+  }
+
+  // Cache lookup — tenant-scoped so a userId in one tenant can't pollute another
+  const cacheKey = `${_tenantKey()}:${userId}`;
+  const cached = _cacheGet(cacheKey);
+  if (cached !== undefined) {
+    if (req) req._resolvedUser = cached;
+    return cached;
+  }
+
+  // Cache miss — resolve from store
+  let resolved = null;
   try {
     const user = findOne('users', u => u.id === userId && u.status !== 'deactivated');
-    if (!user) return null;
-    const role = findOne('roles', r => r.id === user.role_id);
-    return { ...user, role };
-  } catch { return null; }
+    if (user) {
+      const role = findOne('roles', r => r.id === user.role_id);
+      resolved = { ...user, role };
+    }
+  } catch { /* leave resolved=null */ }
+
+  _cacheSet(cacheKey, resolved);
+  if (req) req._resolvedUser = resolved;
+  return resolved;
 }
 
 function attachUser(req, res, next) {
@@ -339,4 +416,5 @@ module.exports = {
   seedPermissionsForNewObject,
   isSuperAdmin, ACTIONS, GLOBAL_ACTIONS,
   applyFieldVisibility, applyFieldVisibilityBulk, getHiddenFieldKeys,
+  invalidateUserCache, invalidateRoleCache,
 };

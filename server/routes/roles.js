@@ -1,4 +1,4 @@
-const { hasGlobalAction } = require("../middleware/rbac");
+const { hasGlobalAction, invalidateRoleCache } = require("../middleware/rbac");
 const { logSecurityEvent, logPermissionChange, SEC_EVENT, SEVERITY, auditContext } = require('../middleware/security-audit');
 function checkGlobal(req,res,action){const u=req.currentUser;if(!u)return null;if(!hasGlobalAction(u,action)){res.status(403).json({error:"Permission denied",code:"FORBIDDEN",required:{action}});return false;}return null;}
 const express = require('express');
@@ -52,6 +52,7 @@ router.post('/', (req, res) => {
     target_type: 'role', target_id: id, action: 'create_role',
     details: { name, slug, clone_from_role_id: clone_from_role_id || null } });
   invalidatePath('roles');
+  invalidateRoleCache();
   res.status(201).json(role);
 });
 
@@ -63,6 +64,7 @@ router.patch('/:id', (req, res) => {
   if (role.is_system) return res.status(403).json({ error: 'Cannot modify system roles' });
   const updated = update('roles', r => r.id === req.params.id, req.body);
   invalidatePath('roles');
+  invalidateRoleCache();
   res.json(updated);
 });
 
@@ -79,6 +81,7 @@ router.delete('/:id', (req, res) => {
   remove('roles', r => r.id === req.params.id);
   remove('permissions', p => p.role_id === req.params.id);
   invalidatePath('roles');
+  invalidateRoleCache();
   res.json({ deleted: true });
 });
 
@@ -103,6 +106,7 @@ router.put('/:id/permissions', (req, res) => {
     permissions_count: permissions.length,
     summary: permissions.slice(0, 5).map(p => `${p.object_slug}:${p.action}=${p.allowed}`)
   });
+  invalidateRoleCache();
   res.json(query('permissions', p => p.role_id === req.params.id));
 });
 

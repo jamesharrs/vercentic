@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { loadMyPermissions } from "./api.js";
+import { loadMyPermissions } from "./apiClient.js";
 import { setSession } from "./usePermissions.js";
 
 const api = {
