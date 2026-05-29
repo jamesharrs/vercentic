@@ -204,6 +204,14 @@ router.post('/', async (req, res) => {
         source:     'self_serve',
         created_at: now,
       });
+      // provision_log entry — milestone_engine uses this to resolve admin_email per client
+      if (!ms.provision_log) ms.provision_log = [];
+      ms.provision_log.push({
+        id: uuidv4(), client_id: clientId, environment_id: envId,
+        action: 'signup', admin_email: email.toLowerCase(),
+        template: 'recruitment_starter', source: 'self_serve',
+        provisioned_at: now, created_at: now,
+      });
       saveStore('master');
     });
 
@@ -255,6 +263,22 @@ router.post('/', async (req, res) => {
     try { require('../middleware/tenant').invalidateTenantCache(); } catch {}
 
     console.log(`[Signup] ✅ ${tenantSlug} provisioned for ${email} (${plan})`);
+
+    // Fire client_provisioned email sequences (non-blocking — runs after response)
+    setImmediate(async () => {
+      try {
+        const { fireMilestone } = require('./email_sequencer');
+        await fireMilestone('client_provisioned', {
+          email:       email.toLowerCase(),
+          client_name: company,
+          admin_name:  [firstName, lastName].filter(Boolean).join(' ') || email.toLowerCase(),
+          env_name:    'Production',
+        });
+        console.log(`[Signup] Sequencer fire complete for ${tenantSlug}`);
+      } catch (e) {
+        console.error('[Signup] Sequencer fire failed:', e.message, e.stack);
+      }
+    });
 
     // Generate a single-use impersonation token so the first load auto-logs the user in.
     // Without this the browser has no session and hits 401 on every API call.
