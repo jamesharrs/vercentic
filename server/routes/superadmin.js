@@ -7,6 +7,18 @@ const dotenv  = require('dotenv');
 const ENV_PATH = path.join(__dirname, '../.env');
 const SA_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'talentos-internal-2026';
 
+// ── Force master store context for every superadmin request ──────────────────
+// Fixes the case where a user's browser session was scoped to a tenant
+// (from logging into the main app) but they re-open the SA console using
+// a cached sa_token in sessionStorage without hitting /auth again.
+// Without this, sequencer API calls and store reads/writes end up in the
+// tenant store instead of the master store.
+router.use((req, res, next) => {
+  req.session.tenantSlug = 'master';
+  const { tenantStorage } = require('../db/init');
+  tenantStorage.run('master', next);
+});
+
 // ── Auth check ────────────────────────────────────────────────────────────────
 router.post('/auth', (req, res) => {
   const { password } = req.body;

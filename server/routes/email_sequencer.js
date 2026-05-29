@@ -3,11 +3,19 @@
 const express  = require('express');
 const router   = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore } = require('../db/init');
+const { getStore, saveStore, tenantStorage } = require('../db/init');
 
 const now = () => new Date().toISOString();
 function getCol(col) { const s=getStore(); if(!s[col])s[col]=[]; return s[col]; }
 function saveCol(col,data) { const s=getStore(); s[col]=data; saveStore(); }
+
+// ── Force master store context for all sequencer routes ───────────────────────
+// Sequences are global (not per-tenant). This guards against a browser session
+// that was scoped to a tenant store — reads and writes always hit master.
+router.use((req, res, next) => {
+  req.session.tenantSlug = 'master';
+  tenantStorage.run('master', next);
+});
 
 const MILESTONES = [
   { id:'client_provisioned',    label:'Client provisioned' },
@@ -202,65 +210,68 @@ router.get('/unsubscribe', (req,res) => {
 function applyMerge(str,data) { return (str||'').replace(/\{\{(\w+)\}\}/g,(_,k)=>data[k]??`{{${k}}}`); }
 
 // ── fireMilestone — called from other server routes to trigger enrolled sequences
+// Always runs in the master store context — sequences are global, not per-tenant.
 async function fireMilestone(milestoneId, { email, client_name, admin_name, env_name } = {}) {
-  const sequences = getCol('email_sequences').filter(s =>
-    s.trigger === milestoneId && s.active && !s.deleted_at
-  );
-  if (!sequences.length) {
-    console.log(`[Sequencer] No active sequences for milestone: ${milestoneId}`);
-    return;
-  }
-  const messaging = require('../services/messaging');
-  for (const seq of sequences) {
-    const steps = getCol('email_sequence_steps')
-      .filter(s => s.sequence_id === seq.id && !s.deleted_at)
-      .sort((a, b) => a.sort_order - b.sort_order);
-    if (!steps.length) {
-      console.log(`[Sequencer] ${seq.name} has no steps — skipping`);
-      continue;
+  await tenantStorage.run('master', async () => {
+    const sequences = getCol('email_sequences').filter(s =>
+      s.trigger === milestoneId && s.active && !s.deleted_at
+    );
+    if (!sequences.length) {
+      console.log(`[Sequencer] No active sequences for milestone: ${milestoneId}`);
+      return;
     }
-    const firstStep = steps[0];
-    // Only send immediately if step has no delay
-    if (firstStep.delay_days > 0 || firstStep.delay_hours > 0) {
-      console.log(`[Sequencer] ${seq.name} step 0 has delay (${firstStep.delay_days}d ${firstStep.delay_hours}h) — skipping immediate send`);
-      continue;
+    const messaging = require('../services/messaging');
+    for (const seq of sequences) {
+      const steps = getCol('email_sequence_steps')
+        .filter(s => s.sequence_id === seq.id && !s.deleted_at)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      if (!steps.length) {
+        console.log(`[Sequencer] ${seq.name} has no steps — skipping`);
+        continue;
+      }
+      const firstStep = steps[0];
+      // Only send immediately if step has no delay
+      if (firstStep.delay_days > 0 || firstStep.delay_hours > 0) {
+        console.log(`[Sequencer] ${seq.name} step 0 has delay (${firstStep.delay_days}d ${firstStep.delay_hours}h) — skipping immediate send`);
+        continue;
+      }
+      const template = getCol('email_templates').find(t => t.id === firstStep.template_id);
+      if (!template) {
+        console.log(`[Sequencer] Template ${firstStep.template_id} not found — skipping`);
+        continue;
+      }
+      const interpolate = str => (str || '')
+        .replace(/\{\{client_name\}\}/g, client_name || '')
+        .replace(/\{\{admin_name\}\}/g, admin_name || '')
+        .replace(/\{\{env_name\}\}/g, env_name || '')
+        .replace(/\{\{email\}\}/g, email || '');
+      try {
+        const result = await messaging.sendEmail({
+          to:       email,
+          subject:  interpolate(firstStep.subject_override || template.subject),
+          html:     interpolate(template.body_html),
+          text:     interpolate(template.body_text || ''),
+          fromName: template.from_name,
+          from:     template.from_email,
+        });
+        // Log the send
+        const log = getCol('email_send_log');
+        log.push({
+          id:          uuidv4(),
+          sequence_id: seq.id,
+          step_id:     firstStep.id,
+          to_email:    email,
+          subject:     interpolate(firstStep.subject_override || template.subject),
+          status:      result.simulated ? 'simulated' : 'sent',
+          sent_at:     now(),
+        });
+        saveCol('email_send_log', log);
+        console.log(`[Sequencer] ${seq.name} → ${email}: ${result.simulated ? 'simulated (no SendGrid creds)' : 'sent OK'}`);
+      } catch (e) {
+        console.error(`[Sequencer] Failed to send for ${seq.name} → ${email}:`, e.message);
+      }
     }
-    const template = getCol('email_templates').find(t => t.id === firstStep.template_id);
-    if (!template) {
-      console.log(`[Sequencer] Template ${firstStep.template_id} not found — skipping`);
-      continue;
-    }
-    const interpolate = str => (str || '')
-      .replace(/\{\{client_name\}\}/g, client_name || '')
-      .replace(/\{\{admin_name\}\}/g, admin_name || '')
-      .replace(/\{\{env_name\}\}/g, env_name || '')
-      .replace(/\{\{email\}\}/g, email || '');
-    try {
-      const result = await messaging.sendEmail({
-        to:         email,
-        subject:    interpolate(firstStep.subject_override || template.subject),
-        html:       interpolate(template.body_html),
-        text:       interpolate(template.body_text || ''),
-        fromName: template.from_name,
-        from:     template.from_email,
-      });
-      // Log the send
-      const log = getCol('email_send_log');
-      log.push({
-        id:          uuidv4(),
-        sequence_id: seq.id,
-        step_id:     firstStep.id,
-        to_email:    email,
-        subject:     interpolate(firstStep.subject_override || template.subject),
-        status:      result.simulated ? 'simulated' : 'sent',
-        sent_at:     now(),
-      });
-      saveCol('email_send_log', log);
-      console.log(`[Sequencer] ${seq.name} → ${email}: ${result.simulated ? 'simulated (no SendGrid creds)' : 'sent OK'}`);
-    } catch (e) {
-      console.error(`[Sequencer] Failed to send for ${seq.name} → ${email}:`, e.message);
-    }
-  }
+  });
 }
 
 module.exports = { router, MILESTONES, fireMilestone, applyMerge };
