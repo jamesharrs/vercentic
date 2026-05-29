@@ -21,10 +21,16 @@ function detectMilestones(client) {
   const daysSince  = daysBetween(provisionedAt, nowTs);
   const hoursSince = hoursBetween(provisionedAt, nowTs);
   const store = getStore();
-  const envId = client.environment_id;
+
+  // client.environment_id and client.admin_email are not stored on the client object —
+  // resolve them from client_environments and provision_log respectively.
+  const env   = (store.client_environments||[]).find(e=>e.client_id===client.id&&!e.deleted_at);
+  const envId = env?.id || client.environment_id || null;
+  const pLog  = (store.provision_log||[]).slice().reverse().find(l=>l.client_id===client.id&&l.admin_email);
+  const resolvedAdminEmail = pLog?.admin_email || client.primary_contact_email || client.admin_email || '';
 
   const users    = (store.users    || []).filter(u=>u.environment_id===envId);
-  const adminUser = users.find(u=>u.email===client.admin_email);
+  const adminUser = users.find(u=>u.email===resolvedAdminEmail);
   const hasLoggedIn  = adminUser && (adminUser.login_count||0) > 0;
   const lastLoginDays = adminUser?.last_login ? daysBetween(adminUser.last_login, nowTs) : 999;
 
@@ -55,13 +61,19 @@ function isGoalMet(goal, client) {
 
 
 // ── Send one step email ──────────────────────────────────────────────────────
-async function sendStepEmail(enrolment, step, template, client) {
+// adminEmail must be pre-resolved from provision_log — it is not stored on the
+// client object directly (the client record uses primary_contact_email instead).
+async function sendStepEmail(enrolment, step, template, client, adminEmail) {
+  if (!adminEmail) {
+    console.warn('[Sequencer] sendStepEmail: no admin email resolved for client', client.id, '— skipping send');
+    return false;
+  }
   const appUrl = process.env.APP_URL || 'https://app.vercentic.com';
   const mergeData = {
-    client_name:       client.company_name || 'there',
-    admin_first_name:  client.admin_first_name || client.admin_name?.split(' ')[0] || 'there',
-    admin_email:       client.admin_email || '',
-    environment_name:  client.environment_name || client.company_name || '',
+    client_name:       client.name || client.company_name || 'there',
+    admin_first_name:  adminEmail.split('@')[0] || 'there',
+    admin_email:       adminEmail,
+    environment_name:  client.name || '',
     login_url:         appUrl,
     days_since_signup: String(daysBetween(client.created_at, now())),
     unsubscribe_url:   `${appUrl}/api/sequencer/unsubscribe?token=${Buffer.from(enrolment.id).toString('base64')}`,
@@ -76,13 +88,13 @@ async function sendStepEmail(enrolment, step, template, client) {
   try {
     const { sendEmail } = require('../services/messaging');
     await sendEmail({
-      to:      client.admin_email,
+      to:      adminEmail,
       subject,
       html:    htmlFinal,
       text,
     });
     const log = getCol('email_send_log');
-    log.push({ id:uuidv4(), enrolment_id:enrolment.id, client_id:enrolment.client_id, sequence_id:enrolment.sequence_id, step_id:step.id, template_id:template.id, to_email:client.admin_email, subject, sent_at:now(), opened:false, clicked:false });
+    log.push({ id:uuidv4(), enrolment_id:enrolment.id, client_id:enrolment.client_id, sequence_id:enrolment.sequence_id, step_id:step.id, template_id:template.id, to_email:adminEmail, subject, sent_at:now(), opened:false, clicked:false });
     saveCol('email_send_log', log);
     return true;
   } catch(e) { console.error('[Sequencer] Send failed:', e.message); return false; }
@@ -102,6 +114,9 @@ async function runSequencerCycle() {
 
   for (const client of clients) {
     if(client.status==='suspended') continue;
+    // Resolve admin email once per client — stored in provision_log, not on the client object
+    const clientLog = (store.provision_log||[]).slice().reverse().find(l=>l.client_id===client.id&&l.admin_email);
+    const adminEmail = clientLog?.admin_email || client.primary_contact_email || '';
     const newMilestones = detectMilestones(client);
     if(newMilestones.length) {
       client.milestones_hit = [...(client.milestones_hit||[]), ...newMilestones];
@@ -134,7 +149,7 @@ async function runSequencerCycle() {
       if(step.condition==='goal_not_met'&&enr.goal_met) continue;
       const template = templates.find(t=>t.id===step.template_id&&!t.deleted_at);
       if(!template) { enr.current_step=idx+1; enr.updated_at=now(); changes=true; continue; }
-      const sent = await sendStepEmail(enr,step,template,client);
+      const sent = await sendStepEmail(enr, step, template, client, adminEmail);
       if(sent) { enr.current_step=idx+1; enr.last_sent_at=now(); enr.updated_at=now(); changes=true; sendLog=getCol('email_send_log'); }
     }
   }
