@@ -45,6 +45,7 @@ const PATHS={
   refresh:"M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   trash:"M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2",
   lock:"M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M17 11V7a5 5 0 0 0-10 0v4",
+  users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
 };
 const Ic=({n,s=16,c="currentColor"})=>(
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -357,7 +358,7 @@ export function FraudPanel({record,fields,environment,canRecord=()=>true}){
         style={{background:C.purple,color:C.white,padding:"8px 18px",fontSize:13}}>
         {analysing?"Analysing…":"Run verification check"}
       </Btn>
-      <div style={{fontSize:11,color:C.text3,marginTop:10}}>Powered by Claude · Results are advisory only</div>
+      <div style={{fontSize:11,color:C.text3,marginTop:10}}>AI powered · Results are advisory only</div>
     </div>
   );
 
@@ -365,6 +366,7 @@ export function FraudPanel({record,fields,environment,canRecord=()=>true}){
   const rCfg=RISK_CFG[a.risk_level]||RISK_CFG.low;
   const recCfg=REC_CFG[a.overall_recommendation]||REC_CFG.review;
   const flags=a.flags||[];
+  const similars=a.similar_candidates||[];
   const positives=a.positive_indicators||[];
 
   return(
@@ -450,6 +452,35 @@ export function FraudPanel({record,fields,environment,canRecord=()=>true}){
                     )}
                   </div>
                 )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Similar candidates */}
+      {similars.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,marginBottom:8,
+            textTransform:"uppercase",letterSpacing:"0.06em",display:"flex",alignItems:"center",gap:6}}>
+            <Ic n="users" s={12} c={C.text3}/>{similars.length} similar candidate{similars.length!==1?"s":""}
+          </div>
+          {similars.map((s,i)=>{
+            const sev=SEV_DOT[s.severity]||SEV_DOT.medium;
+            return(
+              <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,
+                padding:"10px 12px",borderRadius:8,border:`1px solid ${sev.bg}`,
+                background:sev.bg+"80",marginBottom:6}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:sev.bg,
+                  border:`2px solid ${sev.color}`,flexShrink:0,marginTop:3}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text1,marginBottom:2}}>{s.name}</div>
+                  <div style={{fontSize:11,color:C.text2,lineHeight:1.5}}>{s.similarity}</div>
+                </div>
+                <div style={{fontSize:10,padding:"2px 6px",borderRadius:4,
+                  background:sev.bg,color:sev.color,fontWeight:700,textTransform:"uppercase",flexShrink:0}}>
+                  {s.severity}
+                </div>
               </div>
             );
           })}

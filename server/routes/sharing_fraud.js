@@ -4,7 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
-const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+// fetch is a native Node.js 18+ global — no import needed
 
 const ts = () => new Date().toISOString();
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -107,6 +107,46 @@ router.post('/fraud/analyse', async (req, res) => {
   const d = record_data;
   const name = [d.first_name, d.last_name].filter(Boolean).join(' ') || 'Unknown';
 
+  // ── Pull peer candidates for similarity check ──────────────────────────────
+  // Gather up to 30 other people records from the same environment for comparison
+  const s0 = getStore();
+  const peerRecords = (s0.records || [])
+    .filter(r => r.environment_id === environment_id && r.id !== record_id && r.object_id)
+    .slice(0, 30);
+
+  // Build compact peer summaries (name, title, skills, location, bio snippet)
+  const peerSummaries = peerRecords
+    .map(r => {
+      const pd = r.data || {};
+      const pName = [pd.first_name, pd.last_name].filter(Boolean).join(' ');
+      if (!pName && !pd.email) return null;
+      return {
+        id: r.id,
+        name: pName || pd.email || 'Unknown',
+        title: pd.current_title || pd.job_title || '',
+        location: pd.location || '',
+        skills: Array.isArray(pd.skills) ? pd.skills.join(', ') : (pd.skills || ''),
+        bio: (pd.bio || pd.summary || '').slice(0, 200),
+        email_domain: pd.email ? pd.email.split('@')[1] || '' : '',
+      };
+    })
+    .filter(Boolean);
+
+  // Also pull CV attachment text for this candidate if available
+  const cvAttachment = (s0.attachments || []).find(a =>
+    a.record_id === record_id && (a.file_type === 'cv_resume' || (a.name || '').toLowerCase().includes('cv') || (a.name || '').toLowerCase().includes('resume'))
+  );
+  const cvText = cvAttachment?.extracted_text || '';
+
+  const peerBlock = peerSummaries.length > 0
+    ? `\nOTHER CANDIDATES IN SYSTEM (${peerSummaries.length} total — use for similarity comparison):\n` +
+      peerSummaries.map((p, i) => `${i + 1}. ${p.name} | ${p.title} | ${p.location} | Skills: ${p.skills || 'none'} | Bio: ${p.bio || 'none'}`).join('\n')
+    : '\nNO OTHER CANDIDATES in system for comparison.';
+
+  const cvBlock = cvText
+    ? `\nCANDIDATE CV TEXT (first 800 chars):\n${cvText.slice(0, 800)}`
+    : '';
+
   const prompt = `You are a recruitment fraud analyst. Analyse this candidate record for inconsistencies, red flags, or indicators of potential misrepresentation. Be fair, balanced, and factual — your job is to flag things worth verifying, not to make accusations.
 
 CANDIDATE RECORD:
@@ -128,17 +168,20 @@ Skills: ${Array.isArray(d.skills) ? d.skills.join(', ') : (d.skills || '—')}
 LinkedIn: ${d.linkedin_url || d.linkedin || '—'}
 Summary/Bio: ${d.bio || d.summary || '—'}
 Additional fields: ${JSON.stringify(fields_context || {}).slice(0, 500)}
+${cvBlock}
+${peerBlock}
 
 ANALYSE FOR:
 1. Employment timeline gaps or overlaps (if dates provided)
 2. Claimed experience vs stated age/graduation dates (if available)
 3. Location inconsistencies
-4. Email domain red flags
+4. Email domain red flags (free email for senior role, domain mismatch)
 5. Skills mismatch with claimed seniority
 6. Missing expected data for person type
 7. Unusual patterns in the source
-8. Duplicate risk signals
-9. Anything else that seems inconsistent or worth verifying
+8. Generic duplicate-identity signals (no contact info, no specifics)
+9. CV/PROFILE SIMILARITY — compare this candidate's skills, bio, job titles and location against the other candidates listed above. Flag if the profile looks suspiciously similar to another candidate (possible duplicate submission, copied CV, or candidate farm). Name the specific candidate(s) if similar.
+10. Anything else that seems inconsistent or worth verifying
 
 RESPOND ONLY with valid JSON in exactly this format:
 {
@@ -154,17 +197,26 @@ RESPOND ONLY with valid JSON in exactly this format:
       "recommendation": "What to do to verify or resolve this"
     }
   ],
+  "similar_candidates": [
+    {
+      "name": "candidate name",
+      "similarity": "Brief description of what is suspiciously similar",
+      "severity": "low|medium|high"
+    }
+  ],
   "positive_indicators": ["list of things that look genuine or positive"],
   "overall_recommendation": "approve|review|investigate"
 }
 
-Risk score guide: 0-25 = routine candidate, 26-50 = a few things to check, 51-75 = warrants attention, 76-100 = significant concerns.`;
+Risk score guide: 0-25 = routine candidate, 26-50 = a few things to check, 51-75 = warrants attention, 76-100 = significant concerns.
+If the profile has very little data, note that but keep score moderate — incomplete ≠ fraudulent.
+For similarity: only flag if the resemblance is genuinely suspicious, not just same industry.`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
     });
     if (!response.ok) {
       const err = await response.text();
