@@ -95,14 +95,22 @@ function saveStore(slugOverride) {
   if (_batchMode) return; // suppress during batch — caller will call saveStoreNow at end
   const key = slugOverride || getCurrentTenant();
   if (_saveTimers[key]) clearTimeout(_saveTimers[key]);
-  _saveTimers[key] = setTimeout(() => {
+  _saveTimers[key] = setTimeout(async () => {
     delete _saveTimers[key];
     const store = storeCache[key];
     if (!store) return;
-    // JSON fallback (always write locally too — good for dev & backup)
+    // JSON fallback (always write locally too — good for dev & backup).
+    // Async + atomic: write to a unique temp file then rename. This keeps the
+    // disk flush off the event loop AND guarantees a reader never sees a
+    // partially-written file (a torn read used to throw in loadTenantStore and
+    // fall back to an EMPTY store — the "dashboard shows zeros" outage).
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(tenantDbPath(key === 'master' ? null : key), JSON.stringify(store, null, 2));
+      const file = tenantDbPath(key === 'master' ? null : key);
+      await fs.promises.mkdir(DATA_DIR, { recursive: true });
+      const json = JSON.stringify(store, null, 2);
+      const tmp  = `${file}.${process.pid}.${Date.now()}.tmp`;
+      await fs.promises.writeFile(tmp, json);
+      await fs.promises.rename(tmp, file);   // atomic on same filesystem
     } catch(e) { /* ignore fs errors in read-only environments */ }
     // Postgres write (non-blocking)
     if (pg.isEnabled()) {

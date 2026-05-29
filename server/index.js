@@ -427,6 +427,7 @@ app.use('/api/ai',                aiCreditsMiddleware, require('./routes/ai-prox
 app.use('/api/translate',         require('./routes/translate'));
 app.use('/api/cv-parse',          require('./routes/cv_parse'));
 app.use('/api/bias-scan',         require('./routes/bias_scan'));
+app.use('/api/sharing',           require('./routes/sharing_fraud'));
 app.use('/api/doc-extract',       require('./routes/doc_extract'));
 app.use('/api/test-scripts',      require('./routes/test_scripts'));
 app.use('/api/linkedin-search',   require('./routes/linkedin_search'));

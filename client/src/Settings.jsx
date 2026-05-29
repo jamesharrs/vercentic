@@ -3328,6 +3328,8 @@ const FEATURE_FLAGS_LIST = [
   { id:'record_schedule_interview',label:'Schedule Interview',    group:'Record Actions' },
   { id:'record_create_offer',     label:'Create Offer',           group:'Record Actions' },
   { id:'record_bias_scan',        label:'Bias Scanner (AI)',      group:'Record Actions' },
+  { id:'record_share_job',        label:'Share Job (social links)', group:'Record Actions' },
+  { id:'record_fraud_analysis',   label:'AI Verification Check',  group:'Record Actions' },
 ];
 const FEATURE_GROUPS_LIST = [...new Set(FEATURE_FLAGS_LIST.map(f => f.group))];
 
