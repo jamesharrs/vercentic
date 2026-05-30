@@ -9,6 +9,7 @@ const { initDB, getStore } = require('./db/init');
 const tenantMiddleware = require('./middleware/tenant');
 const { attachUser, seedDefaultPermissions } = require('./middleware/rbac');
 const { auditResponseMiddleware } = require('./middleware/security-audit');
+const { secureHeaders, apiLimiter } = require('./middleware/security');
 const { attachCsrfCookie, verifyCsrf } = require('./middleware/csrf');
 
 const app = express();
