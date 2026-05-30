@@ -15,6 +15,16 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // (and the master store) to find the token, then run subsequent operations
 // inside tenantStorage.run(slug) so getStore() returns the right data.
 function findInterviewToken(tokenValue) {
+  // 0. Check master store index (fast, works on Railway with PG)
+  const masterStore = tenantStorage.run('master', () => getStore());
+  const indexed = (masterStore.interview_token_index || []).find(t => t.token === tokenValue);
+  if (indexed) {
+    // Load the actual token record from the correct tenant
+    const tenantStore = tenantStorage.run(indexed.tenant_slug, () => getStore());
+    const tr = (tenantStore.agent_tokens || []).find(t => t.token === tokenValue);
+    if (tr) return { tr, tenantSlug: indexed.tenant_slug };
+  }
+
   // 1. Try current context (works for authenticated/tenant-aware requests)
   const cur = getCurrentTenant();
   const curStore = getStore();
