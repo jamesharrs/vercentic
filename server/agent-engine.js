@@ -61,7 +61,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
     case 'add_to_pool': {
       if (!record_id || !action.pool_name) break;
       const poolStore = getStore();
-      const poolObj = (poolStore.object_definitions||[]).find(o=>o.name==='Talent Pool'||o.name==='TalentPool'||o.slug==='talent-pools');
+      const poolObj = (poolStore.objects||[]).find(o=>o.name==='Talent Pool'||o.name==='TalentPool'||o.slug==='talent-pools');
       if (!poolObj) break;
       let pool = (poolStore.records||[]).find(r=>r.object_id===poolObj.id&&(r.data?.pool_name||r.data?.name||'').toLowerCase()===action.pool_name.toLowerCase()&&!r.deleted_at);
       if (!pool) {

@@ -415,7 +415,8 @@ router.post('/runs/:run_id/approve', async (req, res) => {
   pendingAction.reviewed_at = new Date().toISOString();
   if (approved) {
     try {
-      await executeAction(pendingAction.action, run.record_id, run.environment_id, run.ai_output, modifier_note);
+      const freshOutput = await executeAction(pendingAction.action, run.record_id, run.environment_id, run.ai_output, modifier_note);
+      if (freshOutput !== undefined) { run.ai_output = freshOutput; }
       pendingAction.executed = true;
       run.steps.push({ step: `Approved action executed: ${pendingAction.action.type}`, timestamp: new Date().toISOString() });
     } catch(err) { pendingAction.error = err.message; }
@@ -651,7 +652,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       if (!record_id || !action.pool_name) break;
       const s2 = getStore();
       // Find a talent pool record matching the name
-      const poolObj = (s2.object_definitions || []).find(o => o.name === 'Talent Pool' || o.name === 'TalentPool' || o.slug === 'talent-pools');
+      const poolObj = (s2.objects || []).find(o => o.name === 'Talent Pool' || o.name === 'TalentPool' || o.slug === 'talent-pools');
       if (!poolObj) { addStep('⚠ add_to_pool: Talent Pool object not found'); break; }
       let pool = (s2.records || []).find(r =>
         r.object_id === poolObj.id &&
@@ -839,6 +840,27 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         addStep(result.logs?.join(' | ') || '✓ Interview coordination started');
       } catch(e) { addStep(`⚠ Coordinator error: ${e.message}`); }
       break;
+    }
+    case 'ai_analyse':
+    case 'ai_summarise':
+    case 'ai_score': {
+      // Handles ai_analyse/summarise/score when called directly (e.g. approved human_review queue)
+      if (!record_id) break;
+      const aiRec = (s.records || []).find(r => r.id === record_id);
+      if (!aiRec) break;
+      const aiFields = (s.fields || []).filter(f => f.object_id === aiRec.object_id);
+      const aiLines = aiFields.map(f => {
+        const v = aiRec.data?.[f.api_key];
+        if (v == null || v === '') return null;
+        return `${f.name}: ${Array.isArray(v) ? v.join(', ') : v}`;
+      }).filter(Boolean);
+      const aiContext = aiLines.join('\n') || Object.entries(aiRec.data || {})
+        .filter(([, v]) => v != null && v !== '')
+        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${Array.isArray(v) ? v.join(', ') : v}`)
+        .join('\n') || `Record ID: ${record_id}`;
+      const freshOutput = await runAiAction(action, aiContext, aiRec, aiFields, aiOutput);
+      addStep('AI analysis completed', { type: 'ai', output_preview: freshOutput?.slice(0, 200) });
+      return freshOutput;
     }
   }
 }
