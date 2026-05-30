@@ -326,6 +326,8 @@ const AUTH_EXEMPT = [
   '/reschedule',
   '/cohort-auth', // candidate portal auth — no main app session
   '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
+  '/ai-interview/session', // public token-authenticated interview sessions
+  '/interview-coordinator/token', // public availability response pages
 ];
 // Pre-compute Set for O(1) exact-match lookup. Prefix matching still O(n) on the
 // list, but most requests hit exact paths (/auth/me, /health, etc.) which now
