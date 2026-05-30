@@ -49,6 +49,7 @@ const CSRF_EXEMPT_PREFIXES = [
   '/api/hub/',
   '/api/candidate-hub/',   // candidate hub — token-based, no cookie session
   '/api/reschedule',
+  '/api/interview-coordinator/token', // public token-authenticated availability submission — no cookie session
   '/api/bot',
   '/api/linkedin-search',
   '/api/test-scripts',     // document generation — admin-only, safe to exempt
