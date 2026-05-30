@@ -64,6 +64,8 @@ app.use((req, res, next) => {
   corsMiddleware(req, res, next);
 });
 app.use(express.json({ limit: '10mb' }));
+app.use(secureHeaders);
+app.use('/api', apiLimiter);
 
 // ── Security headers (helmet) ─────────────────────────────────────────────────
 app.use(helmet({
@@ -634,6 +636,12 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+app.use(function(err, req, res, next) {
+  const isProd = process.env.NODE_ENV === 'production';
+  console.error('[ERROR]', err.message, isProd ? '' : err.stack);
+  res.status(err.status || 500).json({ error: isProd ? 'Internal server error' : err.message });
+});
+
 const PORT = process.env.PORT || 3001;
 
 // Don't start the HTTP server when loaded by the test suite (supertest handles transport)
