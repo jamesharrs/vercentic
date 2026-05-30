@@ -5,65 +5,103 @@
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore } = require('../db/init');
+const { getStore, saveStore, tenantStorage, getCurrentTenant, listTenants, storeCache } = require('../db/init');
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ── Token → tenant resolution ─────────────────────────────────────────────────
+// Candidates open interview links with no session, so the tenant middleware
+// cannot resolve their store from a cookie. We scan all loaded tenant stores
+// (and the master store) to find the token, then run subsequent operations
+// inside tenantStorage.run(slug) so getStore() returns the right data.
+function findInterviewToken(tokenValue) {
+  // 1. Try current context (works for authenticated/tenant-aware requests)
+  const cur = getCurrentTenant();
+  const curStore = getStore();
+  const trCur = (curStore.agent_tokens || []).find(t => t.token === tokenValue);
+  if (trCur) return { tr: trCur, tenantSlug: cur };
+
+  // 2. Search every tenant store already in the in-memory cache
+  for (const [slug, store] of Object.entries(storeCache || {})) {
+    if (slug === cur) continue;
+    const found = (store.agent_tokens || []).find(t => t.token === tokenValue);
+    if (found) return { tr: found, tenantSlug: slug };
+  }
+
+  // 3. Try any known tenants not yet cached (listTenants returns persisted slugs)
+  const known = listTenants ? listTenants() : [];
+  for (const slug of known) {
+    if (storeCache[slug]) continue; // already searched above
+    // Load lazily — tenantStorage.run ensures getStore() returns this tenant
+    const found = tenantStorage.run(slug, () => {
+      const s = getStore();
+      return (s.agent_tokens || []).find(t => t.token === tokenValue) || null;
+    });
+    if (found) return { tr: found, tenantSlug: slug };
+  }
+
+  return { tr: null, tenantSlug: null };
+}
+
 // ── GET /api/ai-interview/session/:token ──────────────────────────────────────
 router.get('/session/:token', (req, res) => {
-  const store = getStore();
-  const tr = (store.agent_tokens || []).find(t => t.token === req.params.token);
+  const { tr, tenantSlug } = findInterviewToken(req.params.token);
   if (!tr) return res.status(404).json({ error: 'Invalid or expired link' });
   if (tr.status === 'completed') return res.status(410).json({ error: 'This interview has already been completed' });
   if (new Date(tr.expires_at) < new Date()) return res.status(410).json({ error: 'This interview link has expired' });
-  const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
-  if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  // Resolve brand kit — prefer agent's own kit, then env default, then plain fallback
-  const envId = tr.environment_id || agent.environment_id;
-  const brandKits = (store.brand_kits || []).filter(k => !k.deleted_at && k.environment_id === envId);
-  const brandKit  = brandKits.find(k => k.id === agent.brand_kit_id)
-                 || brandKits.find(k => k.is_default)
-                 || null;
-  const brand = brandKit ? {
-    company_name:  brandKit.company_name  || brandKit.name || null,
-    logo_url:      brandKit.logo_url      || null,
-    logo_dark_url: brandKit.logo_dark_url || null,
-    favicon_url:   brandKit.favicon_url   || null,
-    primary_color: brandKit.primaryColor  || '#6366f1',
-    bg_color:      brandKit.bgColor       || null,
-    text_color:    brandKit.textColor     || null,
-    font_family:   brandKit.fontFamily    || null,
-    button_style:  brandKit.buttonStyle   || 'filled',
-    button_radius: brandKit.buttonRadius  || '8px',
-  } : null;
+  tenantStorage.run(tenantSlug, () => {
+    const store = getStore();
+    const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  res.json({
-    token: tr.token,
-    candidate_name: tr.candidate_name,
-    job_title: tr.job_title,
-    job_department: tr.job_department,
-    agent: {
-      persona_name: agent.persona_name || 'Alex',
-      persona_description: agent.persona_description || "Hi, I'm here to learn more about you.",
-      instructions: agent.description || '',
-      avatar_color: agent.avatar_color || brand?.primary_color || '#6366f1',
-      voice: agent.voice || 'en-US',
-      language: agent.language || 'en-US',
-    },
-    brand,
-    question_count: (tr.scorecard_questions || []).length,
-    status: tr.status,
-  });
+    // Resolve brand kit — prefer agent's own kit, then env default, then plain fallback
+    const envId = tr.environment_id || agent.environment_id;
+    const brandKits = (store.brand_kits || []).filter(k => !k.deleted_at && k.environment_id === envId);
+    const brandKit  = brandKits.find(k => k.id === agent.brand_kit_id)
+                   || brandKits.find(k => k.is_default)
+                   || null;
+    const brand = brandKit ? {
+      company_name:  brandKit.company_name  || brandKit.name || null,
+      logo_url:      brandKit.logo_url      || null,
+      logo_dark_url: brandKit.logo_dark_url || null,
+      favicon_url:   brandKit.favicon_url   || null,
+      primary_color: brandKit.primaryColor  || '#6366f1',
+      bg_color:      brandKit.bgColor       || null,
+      text_color:    brandKit.textColor     || null,
+      font_family:   brandKit.fontFamily    || null,
+      button_style:  brandKit.buttonStyle   || 'filled',
+      button_radius: brandKit.buttonRadius  || '8px',
+    } : null;
+
+    res.json({
+      token: tr.token,
+      candidate_name: tr.candidate_name,
+      job_title: tr.job_title,
+      job_department: tr.job_department,
+      agent: {
+        persona_name: agent.persona_name || 'Alex',
+        persona_description: agent.persona_description || "Hi, I'm here to learn more about you.",
+        instructions: agent.description || '',
+        avatar_color: agent.avatar_color || brand?.primary_color || '#6366f1',
+        voice: agent.voice || 'en-US',
+        language: agent.language || 'en-US',
+      },
+      brand,
+      question_count: (tr.scorecard_questions || []).length,
+      status: tr.status,
+    });
+  }); // end tenantStorage.run
 });
 
 // ── POST /api/ai-interview/chat ───────────────────────────────────────────────
 router.post('/chat', async (req, res) => {
   const { token, history = [], candidate_message } = req.body;
   if (!token || !candidate_message) return res.status(400).json({ error: 'token and candidate_message required' });
-  const store = getStore();
-  const tr = (store.agent_tokens || []).find(t => t.token === token);
+  const { tr, tenantSlug: chatTenantSlug } = findInterviewToken(token);
   if (!tr) return res.status(404).json({ error: 'Invalid token' });
+  return tenantStorage.run(chatTenantSlug, async () => {
+  const store = getStore();
   if (tr.status === 'completed') return res.status(410).json({ error: 'Interview already completed' });
   if (tr.status === 'pending') { tr.status = 'in_progress'; tr.started_at = new Date().toISOString(); saveStore(); }
 
@@ -114,15 +152,17 @@ RULES:
     console.error('AI interview chat error:', err.message);
     res.status(500).json({ error: 'AI response failed' });
   }
+  }); // end tenantStorage.run
 });
 
 // ── POST /api/ai-interview/complete ──────────────────────────────────────────
 router.post('/complete', async (req, res) => {
   const { token, transcript = [] } = req.body;
   if (!token) return res.status(400).json({ error: 'token required' });
-  const store = getStore();
-  const tr = (store.agent_tokens || []).find(t => t.token === token);
+  const { tr, tenantSlug: completeTenantSlug } = findInterviewToken(token);
   if (!tr) return res.status(404).json({ error: 'Invalid token' });
+  return tenantStorage.run(completeTenantSlug, async () => {
+  const store = getStore();
   const agent = (store.agents || []).find(a => a.id === tr.agent_id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
@@ -201,6 +241,7 @@ router.post('/complete', async (req, res) => {
 
   saveStore();
   res.json({ success:true, summary, recommendation, key_strengths:keyStrengths, concerns, questions_scored:Object.keys(scores).length });
+  }); // end tenantStorage.run
 });
 
 // ── POST /api/ai-interview/tokens — create an interview link ─────────────────
