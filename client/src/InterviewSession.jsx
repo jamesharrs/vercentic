@@ -42,29 +42,44 @@ function MicBars({ active, color = '#6366f1' }) {
 }
 
 function useSpeech() {
-  const audioRef   = useRef(null);
-  // iOS Safari blocks audio autoplay until a user gesture triggers an Audio.play().
-  // We "unlock" by playing a silent clip synchronously inside the gesture handler,
-  // so subsequent async play() calls (after fetch) are permitted for the session.
-  const unlockedRef = useRef(false);
+  const audioCtxRef = useRef(null);
+  const sourceRef   = useRef(null);
 
+  // Must be called SYNCHRONOUSLY inside a user-gesture handler.
+  //
+  // Why AudioContext instead of new Audio().play():
+  // The previous approach played a silent <audio> element in the gesture, which
+  // unlocks that one element but the unlock expires once async code runs (e.g.
+  // after await fetch(...)). iOS then rejects the next new Audio().play() call
+  // with NotAllowedError, the Web Speech fallback fires silently without an
+  // onerror, onEnd never gets called, and agentState sticks at "speaking" forever.
+  //
+  // AudioContext.resume() inside a gesture grants permission that persists for
+  // the entire browser session — subsequent createBufferSource().start() calls
+  // work even after long async operations.
   const unlock = useCallback(() => {
-    if (unlockedRef.current) return;
+    if (audioCtxRef.current) return;
     try {
-      // ~44 bytes of valid silence in WAV format — just enough to prime Safari
-      const silent = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-      silent.volume = 0;
-      silent.play().then(() => { unlockedRef.current = true; }).catch(() => {});
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      // Play a 1-frame silent buffer synchronously — this is the gesture "proof"
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      ctx.resume().catch(() => {});
+      audioCtxRef.current = ctx;
     } catch { /* ignore */ }
   }, []);
 
   const speak = useCallback(async (text, onEnd) => {
     // Stop anything currently playing
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    if (sourceRef.current) {
+      try { sourceRef.current.stop(); } catch {}
+      sourceRef.current = null;
     }
-    window.speechSynthesis?.cancel();
 
     try {
       const res = await fetch('/api/ai-interview/tts', {
@@ -72,29 +87,39 @@ function useSpeech() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) throw new Error('TTS failed');
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.playsInline = true; // required for iOS inline playback
-      audioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
-      await audio.play();
-    } catch {
-      // Fallback to browser TTS if ElevenLabs unavailable
-      if (!window.speechSynthesis) { onEnd?.(); return; }
-      window.speechSynthesis.cancel();
-      const u = new window.SpeechSynthesisUtterance(text);
-      u.rate = 0.95; u.pitch = 1.05;
-      u.onend = () => onEnd?.(); u.onerror = () => onEnd?.();
-      window.speechSynthesis.speak(u);
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      // Fetch as ArrayBuffer — required for AudioContext.decodeAudioData()
+      const arrayBuf = await res.arrayBuffer();
+
+      // Ensure we have a running AudioContext
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { onEnd?.(); return; }
+      if (!audioCtxRef.current) audioCtxRef.current = new AC();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const audioBuf = await ctx.decodeAudioData(arrayBuf);
+      const source   = ctx.createBufferSource();
+      source.buffer  = audioBuf;
+      source.connect(ctx.destination);
+      sourceRef.current = source;
+      source.onended = () => { sourceRef.current = null; onEnd?.(); };
+      source.start(0);
+    } catch (err) {
+      // TTS unavailable — the text is already displayed on screen, so just
+      // advance the flow. Do NOT fall back to Web Speech API: on iOS it is
+      // also gesture-restricted and fails silently (no onerror), which would
+      // leave agentState stuck at "speaking" indefinitely.
+      console.warn('[TTS]', err.message);
+      onEnd?.();
     }
   }, []);
 
   const stop = useCallback(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-    window.speechSynthesis?.cancel();
+    if (sourceRef.current) {
+      try { sourceRef.current.stop(); } catch {}
+      sourceRef.current = null;
+    }
   }, []);
 
   return { speak, stop, unlock };
@@ -158,6 +183,15 @@ export default function InterviewSession() {
       })
       .catch(() => { setError('Could not connect.'); setPhase('error'); });
   }, [token]);
+
+  // Safety timeout: if agentState gets stuck at "speaking" (e.g. audio fails
+  // silently on iOS without firing onended/onerror), reset to idle after 30 s
+  // so the candidate can continue typing or re-tapping the mic.
+  useEffect(() => {
+    if (agentState !== 'speaking') return;
+    const t = setTimeout(() => setAgentState(s => s === 'speaking' ? 'idle' : s), 30000);
+    return () => clearTimeout(t);
+  }, [agentState]);
 
   const sendToAI = useCallback(async (msg) => {
     setAgentState('thinking'); setCurrentText('');
