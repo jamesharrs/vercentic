@@ -232,6 +232,23 @@ async function initDB() {
         const base = { ...EMPTY_STORE() };
         storeCache['master'] = { ...base, ...pgStore };
         console.log('[PG] Master store loaded from PostgreSQL');
+
+      // Pre-load all tenant stores from PG so token/agent lookups work without filesystem
+      const tenantSlugs = listTenants();
+      if (tenantSlugs.length > 0) {
+        console.log(`[PG] Pre-loading ${tenantSlugs.length} tenant store(s) from PostgreSQL...`);
+        await Promise.all(tenantSlugs.map(async (slug) => {
+          try {
+            const ts = await pg.loadTenant(slug);
+            if (ts && Object.keys(ts).length > 0) {
+              storeCache[slug] = { ...EMPTY_STORE(), ...ts };
+            }
+          } catch (e) {
+            console.error(`[PG] Failed to pre-load tenant ${slug}:`, e.message);
+          }
+        }));
+        console.log('[PG] Tenant stores pre-loaded');
+      }
       } else {
         // PG is empty — try JSON migration first, then fresh seed if no JSON either
         const jsonExists = require('fs').existsSync(require('path').join(DATA_DIR, 'talentos.json'));
