@@ -42,7 +42,21 @@ function MicBars({ active, color = '#6366f1' }) {
 }
 
 function useSpeech() {
-  const audioRef = useRef(null);
+  const audioRef   = useRef(null);
+  // iOS Safari blocks audio autoplay until a user gesture triggers an Audio.play().
+  // We "unlock" by playing a silent clip synchronously inside the gesture handler,
+  // so subsequent async play() calls (after fetch) are permitted for the session.
+  const unlockedRef = useRef(false);
+
+  const unlock = useCallback(() => {
+    if (unlockedRef.current) return;
+    try {
+      // ~44 bytes of valid silence in WAV format — just enough to prime Safari
+      const silent = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+      silent.volume = 0;
+      silent.play().then(() => { unlockedRef.current = true; }).catch(() => {});
+    } catch { /* ignore */ }
+  }, []);
 
   const speak = useCallback(async (text, onEnd) => {
     // Stop anything currently playing
@@ -62,6 +76,7 @@ function useSpeech() {
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      audio.playsInline = true; // required for iOS inline playback
       audioRef.current = audio;
       audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
       audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd?.(); };
@@ -70,7 +85,7 @@ function useSpeech() {
       // Fallback to browser TTS if ElevenLabs unavailable
       if (!window.speechSynthesis) { onEnd?.(); return; }
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
+      const u = new window.SpeechSynthesisUtterance(text);
       u.rate = 0.95; u.pitch = 1.05;
       u.onend = () => onEnd?.(); u.onerror = () => onEnd?.();
       window.speechSynthesis.speak(u);
@@ -82,7 +97,7 @@ function useSpeech() {
     window.speechSynthesis?.cancel();
   }, []);
 
-  return { speak, stop };
+  return { speak, stop, unlock };
 }
 
 function useSpeechRec(language = 'en-US') {
@@ -114,7 +129,7 @@ export default function InterviewSession() {
   const [result, setResult]     = useState(null);
   const historyRef = useRef([]);
 
-  const { speak, stop: stopSpeaking } = useSpeech();
+  const { speak, stop: stopSpeaking, unlock: unlockAudio } = useSpeech();
   const { startListening, stopListening } = useSpeechRec(session?.agent?.language || 'en-US');
 
   useEffect(() => {
@@ -179,6 +194,8 @@ export default function InterviewSession() {
   }, [startListening, sendToAI]);
 
   const startInterview = useCallback(() => {
+    // Unlock audio for mobile Safari — must happen synchronously inside a gesture handler
+    unlockAudio();
     setPhase('live');
     const intro = session.agent.persona_description ||
       `Hi ${session.candidate_name||'there'}, I'm ${session.agent.persona_name}. Thanks for joining today's interview for the ${session.job_title} role. To begin, could you tell me a bit about yourself?`;
@@ -187,7 +204,7 @@ export default function InterviewSession() {
     setTranscript([{ role:'assistant', content:intro, timestamp:new Date().toISOString() }]);
     setAgentState('speaking');
     speak(intro, () => { if (!useTextMode) listenFlow(); else setAgentState('idle'); });
-  }, [session, speak, listenFlow, useTextMode]);
+  }, [session, speak, listenFlow, useTextMode, unlockAudio]);
 
   const handleComplete = useCallback(async () => {
     setPhase('processing'); stopSpeaking(); stopListening();
@@ -308,9 +325,9 @@ export default function InterviewSession() {
 
       <div style={{padding:'16px 20px',borderTop:'1px solid rgba(255,255,255,0.06)',background:'rgba(0,0,0,0.3)'}}>
         <div style={{maxWidth:600,margin:'0 auto',display:'flex',gap:10}}>
-          <input value={candidateInput} onChange={e=>setCandidateInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleTextSubmit();}}} placeholder={useTextMode?'Type your response…':'Or type your answer here…'} disabled={agentState==='thinking'||agentState==='speaking'}
-            style={{flex:1,padding:'11px 16px',borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:'#f1f5f9',fontSize:14,fontFamily:F,outline:'none'}}/>
-          <button onClick={handleTextSubmit} disabled={!candidateInput.trim()||agentState==='thinking'||agentState==='speaking'}
+          <input value={candidateInput} onChange={e=>setCandidateInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleTextSubmit();}}} placeholder={useTextMode?'Type your response…':'Or type your answer here…'} disabled={agentState==='thinking'}
+            style={{flex:1,padding:'11px 16px',borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:'#f1f5f9',fontSize:16,fontFamily:F,outline:'none',WebkitAppearance:'none'}}/>
+          <button onClick={handleTextSubmit} disabled={!candidateInput.trim()||agentState==='thinking'}
             style={{padding:'11px 16px',borderRadius:12,border:'none',background:candidateInput.trim()?brandPrimary:'#334155',color:'#fff',cursor:'pointer',fontFamily:brandFont,transition:'background .15s',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <Ic n="send" s={18} c="white"/>
           </button>

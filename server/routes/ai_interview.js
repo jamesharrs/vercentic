@@ -44,7 +44,7 @@ router.get('/session/:token', (req, res) => {
     job_title: tr.job_title,
     job_department: tr.job_department,
     agent: {
-      persona_name: agent.persona_name || agent.name || 'Alex',
+      persona_name: agent.persona_name || 'Alex',
       persona_description: agent.persona_description || "Hi, I'm here to learn more about you.",
       instructions: agent.description || '',
       avatar_color: agent.avatar_color || brand?.primary_color || '#6366f1',
@@ -70,7 +70,7 @@ router.post('/chat', async (req, res) => {
   const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const personaName = agent.persona_name || agent.name || 'Alex';
+  const personaName = agent.persona_name || 'Alex';
   const questions   = tr.scorecard_questions || [];
   const totalQ      = questions.length;
   const currentEx   = history.filter(h => h.role === 'user').length + 1;
@@ -129,7 +129,7 @@ router.post('/complete', async (req, res) => {
   tr.status = 'completed';
   tr.completed_at = new Date().toISOString();
 
-  const personaName   = agent.persona_name || agent.name || 'Alex';
+  const personaName   = agent.persona_name || 'Alex';
   const questions     = tr.scorecard_questions || [];
   const transcriptTxt = transcript.map(t => `${t.role === 'assistant' ? personaName : tr.candidate_name}: ${t.content}`).join('\n\n');
 
