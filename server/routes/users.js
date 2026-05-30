@@ -158,7 +158,7 @@ router.post('/', validate(createUserSchema), (req, res) => {
   const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
   const user = insert('users', {
     id: uuidv4(), email, first_name, last_name, role_id,
-    password_hash: await hashPassword(tempPassword),
+    password_hash: hashPassword(tempPassword),
     status: 'invited', auth_provider,
     mfa_enabled: 0, must_change_password: 1,
     last_login: null, last_login_ip: null, login_count: 0,
@@ -194,7 +194,7 @@ router.patch('/:id', validate(patchUserSchema), (req, res) => {
 router.post('/:id/reset-password', validate(resetPasswordSchema), (req, res) => {
   const { password } = req.body;
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  update('users', x => x.id === req.params.id, { password_hash: await hashPassword(password), must_change_password: 0 });
+  update('users', x => x.id === req.params.id, { password_hash: hashPassword(password), must_change_password: 0 });
   invalidateUserCache(req.params.id);
   insert('audit_log', { id:uuidv4(), action:'user.password_reset', actor: (req.currentUser && req.currentUser.id) || 'system', target_id:req.params.id, target_type:'user', details:{}, created_at:new Date().toISOString() });
   res.json({ success: true });
