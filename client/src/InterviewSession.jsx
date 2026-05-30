@@ -45,7 +45,9 @@ function useSpeech() {
   const audioCtxRef = useRef(null);
   const sourceRef   = useRef(null);
 
-  // Must be called SYNCHRONOUSLY inside a user-gesture handler.
+  // Must be called SYNCHRONOUSLY inside a user-gesture handler, then awaited
+  // before any subsequent speak() call so the AudioContext is guaranteed to be
+  // in the 'running' state before we try to decode and play audio.
   //
   // Why AudioContext instead of new Audio().play():
   // The previous approach played a silent <audio> element in the gesture, which
@@ -57,7 +59,7 @@ function useSpeech() {
   // AudioContext.resume() inside a gesture grants permission that persists for
   // the entire browser session — subsequent createBufferSource().start() calls
   // work even after long async operations.
-  const unlock = useCallback(() => {
+  const unlock = useCallback(async () => {
     if (audioCtxRef.current) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -69,7 +71,8 @@ function useSpeech() {
       src.buffer = buf;
       src.connect(ctx.destination);
       src.start(0);
-      ctx.resume().catch(() => {});
+      // Await resume so the context is fully running before speak() is called
+      await ctx.resume();
       audioCtxRef.current = ctx;
     } catch { /* ignore */ }
   }, []);
@@ -132,8 +135,13 @@ function useSpeechRec(language = 'en-US') {
     if (!SR) { onEnd?.(''); return; }
     const rec = new SR();
     rec.lang = language; rec.continuous = false; rec.interimResults = false;
+    // Guard: onerror always fires before onend on mobile Safari — ensure onEnd
+    // is called at most once so we don't double-set state or double-start listening.
+    let finished = false;
+    const finish = () => { if (!finished) { finished = true; onEnd?.(); } };
     rec.onresult = e => onResult(e.results[0]?.[0]?.transcript || '');
-    rec.onend = () => onEnd?.(); rec.onerror = () => onEnd?.();
+    rec.onerror = () => finish();
+    rec.onend   = () => finish();
     rec.start(); recRef.current = rec;
   }, [language]);
   const stopListening = useCallback(() => recRef.current?.stop(), []);
@@ -214,9 +222,16 @@ export default function InterviewSession() {
         speak(data.reply, () => { setAgentState('idle'); handleComplete(); });
       } else {
         setAgentState('speaking');
-        speak(data.reply, () => { if (!useTextMode) listenFlow(); else setAgentState('idle'); });
+        // Go idle after speaking — don't auto-start listening. See startInterview
+        // comment: auto-starting SpeechRecognition causes the mic permission loop
+        // on mobile Safari. User taps the mic button explicitly when ready.
+        speak(data.reply, () => setAgentState('idle'));
       }
-    } catch { setAgentState('idle'); setCurrentText("I had a technical issue — could you repeat that?"); }
+    } catch (err) {
+      console.error('[sendToAI]', err);
+      setAgentState('idle');
+      setCurrentText("I had a technical issue — could you repeat that?");
+    }
   }, [token, exchangeCount, useTextMode]);
 
   const listenFlow = useCallback(() => {
@@ -227,9 +242,12 @@ export default function InterviewSession() {
     );
   }, [startListening, sendToAI]);
 
-  const startInterview = useCallback(() => {
-    // Unlock audio for mobile Safari — must happen synchronously inside a gesture handler
-    unlockAudio();
+  const startInterview = useCallback(async () => {
+    // Await the AudioContext unlock so it's fully running before speak() fires.
+    // On mobile Safari, speak() must play audio into an already-running context
+    // — if ctx.resume() hasn't resolved yet, decodeAudioData / source.start()
+    // silently fail and the greeting never plays.
+    await unlockAudio();
     setPhase('live');
     const intro = session.agent.persona_description ||
       `Hi ${session.candidate_name||'there'}, I'm ${session.agent.persona_name}. Thanks for joining today's interview for the ${session.job_title} role. To begin, could you tell me a bit about yourself?`;
@@ -237,8 +255,12 @@ export default function InterviewSession() {
     historyRef.current = [{ role:'assistant', content:intro }];
     setTranscript([{ role:'assistant', content:intro, timestamp:new Date().toISOString() }]);
     setAgentState('speaking');
-    speak(intro, () => { if (!useTextMode) listenFlow(); else setAgentState('idle'); });
-  }, [session, speak, listenFlow, useTextMode, unlockAudio]);
+    // After the greeting, go idle — don't auto-start listening.
+    // On mobile Safari, SpeechRecognition.start() outside a direct user gesture
+    // triggers a fresh permission prompt on every call, causing an infinite loop.
+    // The user taps the mic button explicitly when ready to speak.
+    speak(intro, () => setAgentState('idle'));
+  }, [session, speak, unlockAudio]);
 
   const handleComplete = useCallback(async () => {
     setPhase('processing'); stopSpeaking(); stopListening();

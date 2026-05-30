@@ -18,7 +18,7 @@ function findInterviewToken(tokenValue) {
   // 1. Try current context (works for authenticated/tenant-aware requests)
   const cur = getCurrentTenant();
   const curStore = getStore();
-  const trCur = (curStore.agent_tokens || []).find(t => t.token === tokenValue);
+  const trCur = (curStore?.agent_tokens || []).find(t => t.token === tokenValue);
   if (trCur) return { tr: trCur, tenantSlug: cur };
 
   // 2. Search every tenant store already in the in-memory cache
@@ -98,7 +98,13 @@ router.get('/session/:token', (req, res) => {
 router.post('/chat', async (req, res) => {
   const { token, history = [], candidate_message } = req.body;
   if (!token || !candidate_message) return res.status(400).json({ error: 'token and candidate_message required' });
-  const { tr, tenantSlug: chatTenantSlug } = findInterviewToken(token);
+  let tr, chatTenantSlug;
+  try {
+    ({ tr, tenantSlug: chatTenantSlug } = findInterviewToken(token));
+  } catch (findErr) {
+    console.error('[ai-interview /chat] findInterviewToken threw:', findErr);
+    return res.status(500).json({ error: 'Session lookup failed' });
+  }
   if (!tr) return res.status(404).json({ error: 'Invalid token' });
   return tenantStorage.run(chatTenantSlug, async () => {
   const store = getStore();
@@ -141,16 +147,26 @@ RULES:
 - Never mention that you have a structured question list.`;
 
   try {
+    // Build message list for Anthropic.
+    // The client-side history always starts with the assistant greeting
+    // (role: 'assistant'). Anthropic requires the first message to be
+    // role: 'user' — sending an assistant-first list causes a 400 error.
+    // Strip any leading assistant turns before appending the current user message.
+    const apiMessages = history.map(h => ({ role: h.role, content: h.content }));
+    while (apiMessages.length && apiMessages[0].role !== 'user') apiMessages.shift();
+    apiMessages.push({ role: 'user', content: candidate_message });
+
     const resp = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6', max_tokens: 350, system,
-      messages: [...history.map(h => ({ role: h.role, content: h.content })), { role: 'user', content: candidate_message }],
+      messages: apiMessages,
     });
     const reply = resp.content[0]?.text || '';
     const isComplete = reply.includes('INTERVIEW_COMPLETE');
     res.json({ reply: reply.replace('INTERVIEW_COMPLETE', '').trim(), is_complete: isComplete, exchange_count: currentEx, questions_total: totalQ });
   } catch (err) {
-    console.error('AI interview chat error:', err.message);
-    res.status(500).json({ error: 'AI response failed' });
+    console.error('[ai-interview /chat] Anthropic error — status:', err?.status, '| message:', err?.message);
+    if (err?.error) console.error('[ai-interview /chat] Anthropic error body:', JSON.stringify(err.error));
+    res.status(500).json({ error: 'AI response failed', detail: err?.message });
   }
   }); // end tenantStorage.run
 });
