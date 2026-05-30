@@ -1,7 +1,7 @@
 // server/routes/agents.js
 const express = require('express');
 const router = express.Router();
-const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
+const { query, insert, update, remove, getStore, saveStore, tenantStorage, getCurrentTenant } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
 
 // ── Markdown → HTML converter (lightweight, no dependencies) ─────────────────
@@ -787,6 +787,22 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       });
 
       saveStore();
+
+      // Also index in master store so findInterviewToken works cross-tenant (Railway PG fix)
+      const _currentTenantSlug = getCurrentTenant();
+      tenantStorage.run('master', () => {
+        const masterStore = getStore();
+        if (!masterStore.interview_token_index) masterStore.interview_token_index = [];
+        masterStore.interview_token_index.push({
+          token,
+          tenant_slug: _currentTenantSlug,
+          agent_id: action.agent_id || null,
+          created_at: new Date().toISOString(),
+          expires_at: expiresAt,
+        });
+        saveStore();
+      });
+
       addStep(`✓ AI Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}. Link: /interview/${token}`);
       logAiActivity({ record_id, environment_id, agent_name: 'AI Interview Agent', action_type: 'ai_interview', summary: `Interview link generated — ${scorecardQuestions.length} questions from ${sourceLabel}` });
       break;
