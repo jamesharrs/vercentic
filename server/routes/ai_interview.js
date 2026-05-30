@@ -61,8 +61,18 @@ router.get('/session/:token', (req, res) => {
   if (new Date(tr.expires_at) < new Date()) return res.status(410).json({ error: 'This interview link has expired' });
 
   tenantStorage.run(tenantSlug, () => {
-    const store = getStore();
-    const agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+    let store = getStore();
+    let agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+
+    // Fallback: if agent not in tenant store (e.g. Railway filesystem vs PG mismatch),
+    // search all cached stores — the agent must exist somewhere
+    if (!agent) {
+      for (const [slug, s] of Object.entries(storeCache || {})) {
+        const found = (s.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+        if (found) { agent = found; store = s; break; }
+      }
+    }
+
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
     // Resolve brand kit — prefer agent's own kit, then env default, then plain fallback
