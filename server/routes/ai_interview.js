@@ -5,7 +5,8 @@
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { getStore, saveStore, tenantStorage, getCurrentTenant, listTenants, storeCache } = require('../db/init');
+const { getStore, saveStore, tenantStorage, getCurrentTenant, listTenants, storeCache, loadTenantStore } = require('../db/init');
+const pg = require('../db/postgres');
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -54,26 +55,47 @@ function findInterviewToken(tokenValue) {
 }
 
 // ── GET /api/ai-interview/session/:token ──────────────────────────────────────
-router.get('/session/:token', (req, res) => {
+router.get('/session/:token', async (req, res) => {
   const { tr, tenantSlug } = findInterviewToken(req.params.token);
   if (!tr) return res.status(404).json({ error: 'Invalid or expired link' });
   if (tr.status === 'completed') return res.status(410).json({ error: 'This interview has already been completed' });
   if (new Date(tr.expires_at) < new Date()) return res.status(410).json({ error: 'This interview link has expired' });
 
-  tenantStorage.run(tenantSlug, () => {
-    let store = getStore();
-    let agent = (store.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+  // Load tenant store — try memory first, then PG directly if not found
+  let agent = null;
+  let store = null;
 
-    // Fallback: if agent not in tenant store (e.g. Railway filesystem vs PG mismatch),
-    // search all cached stores — the agent must exist somewhere
-    if (!agent) {
-      for (const [slug, s] of Object.entries(storeCache || {})) {
-        const found = (s.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
-        if (found) { agent = found; store = s; break; }
-      }
+  const tryFindAgent = (s) => (s?.agents || []).find(a => a.id === tr.agent_id && !a.deleted_at);
+
+  // 1. Try tenant store from memory
+  store = tenantSlug ? tenantStorage.run(tenantSlug, () => getStore()) : getStore();
+  agent = tryFindAgent(store);
+
+  // 2. Search all other cached stores
+  if (!agent) {
+    for (const [, s] of Object.entries(storeCache || {})) {
+      agent = tryFindAgent(s);
+      if (agent) { store = s; break; }
     }
+  }
 
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  // 3. Load directly from PG — the definitive fallback on Railway
+  if (!agent && tenantSlug && pg.isEnabled()) {
+    try {
+      const pgStore = await pg.loadTenant(tenantSlug);
+      if (pgStore) {
+        storeCache[tenantSlug] = { ...pgStore };
+        store = storeCache[tenantSlug];
+        agent = tryFindAgent(store);
+      }
+    } catch (e) {
+      console.error('[ai-interview] PG tenant load failed:', e.message);
+    }
+  }
+
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  await tenantStorage.run(tenantSlug, async () => {
 
     // Resolve brand kit — prefer agent's own kit, then env default, then plain fallback
     const envId = tr.environment_id || agent.environment_id;
