@@ -206,7 +206,9 @@ export function ComposeModal({
   const [userSignature,    setUserSignature]    = useState("");   // HTML from preferences
   const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
   // Template context picker — shown when template needs job/object data
-  const [tplCtxPicker, setTplCtxPicker] = useState(null); // { tpl, missingVars, allJobs }
+  const [brandKits,      setBrandKits]      = useState([]);
+  const [selectedKitId,  setSelectedKitId]  = useState(null);  // brand kit override for this compose
+  const [tplCtxPicker,   setTplCtxPicker]   = useState(null);  // { tpl, missingVars, allJobs }
   const [tplCtxSearch, setTplCtxSearch] = useState("");
   const [tplCtxLoading, setTplCtxLoading] = useState(false);
   const [tplCtxAllJobs, setTplCtxAllJobs] = useState([]);
@@ -251,6 +253,14 @@ export function ComposeModal({
     if (type === "email" && environment?.id) {
       api.get(`/email-templates?environment_id=${environment.id}`)
         .then(r => setTemplates(Array.isArray(r) ? r : []));
+      api.get(`/brand-kits?environment_id=${environment.id}`)
+        .then(r => {
+          const kits = Array.isArray(r) ? r : [];
+          setBrandKits(kits);
+          // Auto-select default kit if one is marked
+          const def = kits.find(k => k.is_default);
+          if (def) setSelectedKitId(def.id);
+        }).catch(() => {});
     }
   }, [type, environment?.id]);
 
@@ -315,6 +325,8 @@ export function ComposeModal({
     setSelTpl(tpl);
     setSubject(substitute(tpl.subject || ""));
     setBody(substitute(tpl.body || ""));
+    // Auto-select the template's brand kit if it has one
+    if (tpl.brand_kit_id) setSelectedKitId(tpl.brand_kit_id);
     setMode("write");
   };
 
@@ -397,6 +409,20 @@ export function ComposeModal({
 
   const save = async () => {
     setSaving(true);
+
+    // If a brand kit is selected for email, wrap the body in the branded template
+    let finalHtml = bodyWithSignature;
+    if (type === "email" && selectedKitId) {
+      try {
+        const wrapped = await api.post("/email-builder/preview", {
+          blocks: [{ type: "html", content: bodyWithSignature }],
+          brand_kit_id: selectedKitId,
+          subject,
+        });
+        if (wrapped?.html) finalHtml = wrapped.html;
+      } catch (_) { /* fall back to plain body */ }
+    }
+
     const targets = isBulk ? recipients : [record];
     await Promise.all(targets.map(rec => {
       const d = rec?.data || rec || {};
@@ -407,8 +433,8 @@ export function ComposeModal({
         record_id: rec.id, environment_id: environment?.id,
         type, direction, to: recTo || undefined,
         subject: subject || undefined,
-        body: type === "email" ? bodyWithSignature : bodyText,
-        body_html: type === "email" ? bodyWithSignature : undefined,
+        body: type === "email" ? finalHtml : bodyText,
+        body_html: type === "email" ? finalHtml : undefined,
         body_text: type === "email" ? htmlToText(bodyWithSignature) : undefined,
         duration_seconds: duration ? Number(duration) : undefined,
         outcome: outcome || undefined,
@@ -685,7 +711,50 @@ export function ComposeModal({
   );
 
   const TemplateArea = () => (
-    <div style={{ flex:1, overflowY:"auto" }}>
+    <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:12 }}>
+
+      {/* ── Brand Kit selector ── */}
+      {brandKits.length > 0 && (
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", marginBottom:7 }}>
+            Brand Kit
+          </div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            <button
+              onClick={() => setSelectedKitId(null)}
+              style={{ padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                border: !selectedKitId ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
+                background: !selectedKitId ? `${C.accent}12` : "#f9fafc",
+                color: !selectedKitId ? C.accent : C.text2 }}>
+              None
+            </button>
+            {brandKits.map(kit => {
+              const active = selectedKitId === kit.id;
+              const dot = kit.primaryColor || kit.primary_color || "#4361EE";
+              return (
+                <button key={kit.id} onClick={() => setSelectedKitId(active ? null : kit.id)}
+                  style={{ padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                    display:"flex", alignItems:"center", gap:6,
+                    border: active ? `1.5px solid ${dot}` : `1px solid ${C.border}`,
+                    background: active ? `${dot}12` : "#f9fafc",
+                    color: active ? dot : C.text2 }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:dot, flexShrink:0 }}/>
+                  {kit.name}
+                  {active && <span style={{ fontSize:9, fontWeight:800 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+          {selectedKitId && (
+            <div style={{ marginTop:6, fontSize:11, color:C.text3 }}>
+              Emails will be wrapped in this brand kit's template when sent.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Templates ── */}
+      <div style={{ flex:1 }}>
       {templates.length === 0 ? (
         <div style={{ textAlign:"center", color:C.text3, fontSize:13, padding:"40px 0" }}>
           <div style={{ fontSize:28, marginBottom:8 }}>📝</div>
@@ -702,7 +771,21 @@ export function ComposeModal({
                 cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
                 <span style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{tpl.name}</span>
-                {selTpl?.id === tpl.id && <span style={{ fontSize:10, color:accent, fontWeight:700 }}>Selected ✓</span>}
+                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  {tpl.brand_kit_id && (() => {
+                    const kit = brandKits.find(k => k.id === tpl.brand_kit_id);
+                    const dot = kit?.primaryColor || kit?.primary_color || "#4361EE";
+                    return kit ? (
+                      <span style={{ fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:10,
+                        background:`${dot}15`, color:dot, border:`1px solid ${dot}30`,
+                        display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ width:5, height:5, borderRadius:"50%", background:dot }}/>
+                        {kit.name}
+                      </span>
+                    ) : null;
+                  })()}
+                  {selTpl?.id === tpl.id && <span style={{ fontSize:10, color:accent, fontWeight:700 }}>Selected ✓</span>}
+                </div>
               </div>
               {tpl.subject && <div style={{ fontSize:11, color:C.text3, marginBottom:2 }}>Subject: {tpl.subject}</div>}
               {tpl.body && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{tpl.body}</div>}
@@ -710,6 +793,7 @@ export function ComposeModal({
           ))}
         </div>
       )}
+      </div>{/* end templates inner */}
     </div>
   );
 
