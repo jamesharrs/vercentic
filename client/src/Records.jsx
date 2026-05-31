@@ -5,6 +5,7 @@ import RichTextEditor from "./RichTextEditor.jsx";
 import AITextEditor from "./AITextEditor.jsx";
 import { MatchingEngine } from "./AI.jsx";
 import CommunicationsPanel, { ComposeModal as CommsComposeModal } from "./Communications.jsx";
+import ApprovalsPanel from "./ApprovalsPanel.jsx";
 // Stable wrapper — prevents remounting when parent re-renders (fixes input focus loss)
 const StableCommunicationsPanel = memo(CommunicationsPanel);
 import StyledSelect from "./components/StyledSelect.jsx";
@@ -10531,6 +10532,9 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
           </div>
         </div>
       );
+    }
+    if (id==="approvals") {
+      return <ApprovalsPanel record={record} object={currentObject} environment={environment}/>;
     }
     if (id==="comms") {
       if (!ff.communications_panel) return null;

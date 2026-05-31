@@ -466,6 +466,7 @@ app.use('/api/interview-plans',   require('./routes/interview_plans'));
 app.use('/api/interview-coordinator', require('./routes/interview_coordinator'));
 app.use('/api/badges',            require('./routes/badges'));
 app.use('/api/offers',            require('./routes/offers'));
+app.use('/api/approvals',         require('./routes/approvals'));
 app.use('/api/candidate-hub',     require('./routes/candidate_hub'));
 app.use('/api/cohorts',          require('./routes/cohorts'));
 app.use('/api/cohort-messages',  require('./routes/cohort_messages'));

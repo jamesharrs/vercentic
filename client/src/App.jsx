@@ -73,6 +73,7 @@ const SourcingHub     = lazyWithRetry(() => import("./SourcingHub.jsx"));
 const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
 const Campaigns       = lazyWithRetry(() => import("./Campaigns.jsx"));
 const SuperAdminConsole = lazyWithRetry(() => import("./SuperAdminConsole.jsx"));
+const ApprovalPortal = lazyWithRetry(() => import("./portals/ApprovalPortal.jsx"));
 const AgentsModule      = lazyWithRetry(() => import("./Agents.jsx"));
 const AvailabilityPickerPage = lazyWithRetry(() => import("./AvailabilityPicker.jsx"));
 const IntegrationsPage  = lazyWithRetry(() => import("./IntegrationsSettings.jsx"));
@@ -3330,6 +3331,7 @@ export default function AppRoot() {
   if (_path.startsWith('/hub'))           return <CandidateHub />;
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
   if (_path === '/superadmin')            return <SuperAdminConsole />;
+  if (_path.startsWith('/approval/'))      return <ApprovalPortal />;
 
   const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
   if (botToken) return <BotInterview token={botToken} />;
