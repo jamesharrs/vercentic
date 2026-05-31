@@ -63,6 +63,7 @@ const BLOCK_TYPES = [
   { type: 'spacer', label: 'Spacer', icon: 'minus', description: 'Vertical spacing' },
   { type: 'two_column', label: 'Two Columns', icon: 'columns', description: 'Side-by-side layout' },
   { type: 'footer', label: 'Footer', icon: 'type', description: 'Auto-generated from brand kit' },
+  { type: 'ai_content', label: '✦ AI Content', icon: 'zap', description: 'AI-generated personalised content — write a prompt, Claude fills it in at send time using the candidate and job data' },
 ];
 
 const MERGE_TAGS = {
@@ -800,6 +801,26 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
           )}
           {block.type === 'divider' && (
             <div style={{ fontSize: 11, color: C.text3, fontStyle: "italic" }}>Horizontal divider line</div>
+          )}
+          {block.type === 'ai_content' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ padding: "8px 12px", borderRadius: 8, background: "#f5f3ff", border: "1px solid #ddd6fe", fontSize: 11, color: "#5b21b6", lineHeight: 1.5 }}>
+                <strong>✦ AI Content Block</strong> — Write a prompt below. At send time, Claude will generate this section using the recipient's profile, the job details, and match scores as context.
+                <br/>You can use {{merge_tags}} in the prompt too.
+              </div>
+              <textarea
+                value={block.prompt || block.config?.prompt || ''}
+                onChange={e => {
+                  onUpdate({ ...block, prompt: e.target.value, config: { ...(block.config || {}), prompt: e.target.value } });
+                }}
+                placeholder="e.g. Write 2-3 sentences explaining why {{job_title}} is a great match for this candidate based on their background. Be specific and warm."
+                rows={4}
+                style={{ width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontFamily: "inherit", resize: "vertical", lineHeight: 1.5, outline: "none", boxSizing: "border-box" }}
+              />
+              <div style={{ fontSize: 10, color: C.text3 }}>
+                Supports HTML output for rich formatting. Available context: candidate profile, job record(s), match score &amp; reasons, company info.
+              </div>
+            </div>
           )}
         </div>
       )}

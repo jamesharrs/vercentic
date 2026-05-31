@@ -1,0 +1,46 @@
+═══════════════════════════════════════════════════════════════
+ AGENT & WORKFLOW TEST REPORT
+ Run: 2026-05-30 02:31 UTC
+ Duration: 9.7s
+═══════════════════════════════════════════════════════════════
+
+AGENTS (17/17)
+✅ ai_analyse                       — run=completed (28ms)
+✅ ai_summarise                     — run=completed (23ms)
+✅ ai_score                         — run=completed (24ms)
+✅ ai_draft_email                   — run=completed (26ms)
+✅ send_email                       — run=completed (28ms)
+✅ update_field                     — run=completed (29ms)
+✅ add_note                         — run=completed (29ms)
+✅ add_to_pool                      — run=completed (31ms)
+✅ create_task                      — run=completed (45ms)
+✅ notify_user                      — run=completed (34ms)
+✅ webhook                          — run=completed (67ms)
+✅ human_review                     — run=pending_approval (28ms)
+✅ ai_interview                     — run=completed (29ms)
+✅ interview_coordinator            — run=completed (30ms)
+✅ move_stage                       — run=completed (51ms)
+✅ link_to_object                   — run=completed (33ms)
+✅ run_agent (chain)                — run=completed (536ms)
+
+WORKFLOWS (16/16)
+✅ Stage: Applied → Interview       — auto-action: update_field (338ms)
+✅ Stage: Interview → Offer         — moved to Offer (322ms)
+✅ Workflow: manual run             — 3 step(s) executed (12ms)
+✅ Stage Action: send_email         — action executed correctly (57ms)
+✅ Stage Action: stage_change       — action executed correctly (261ms)
+✅ Stage Action: run_agent          — action executed correctly (93ms)
+✅ Stage Action: send_invitation_email — action executed correctly (81ms)
+✅ Stage Action: ai_prompt (queued) — action executed correctly (66ms)
+✅ Manual Action: send_email        — action executed correctly (25ms)
+✅ Manual Action: stage_change      — action executed correctly (225ms)
+✅ Manual Action: ai_prompt         — action executed correctly (43ms)
+✅ Manual Action: webhook           — action executed correctly (60ms)
+✅ Manual Action: schedule_interview — action executed correctly (233ms)
+✅ Manual Action: create_offer      — action executed correctly (237ms)
+✅ Manual Action: assign_task_group — action executed correctly (233ms)
+✅ Manual Action: share_record      — action executed correctly (38ms)
+
+═══════════════════════════════════════════════════════════════
+PASSED: 33/33   FAILED: 0/33   SKIPPED: 0/33
+═══════════════════════════════════════════════════════════════

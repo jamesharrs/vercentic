@@ -452,6 +452,7 @@ app.use('/api/feature-packs',     require('./routes/feature_packs'));
 app.use('/api/availability',      require('./routes/availability'));
 app.use('/api/live-chat',         require('./routes/live_chat'));
 app.use('/api/email-templates',   require('./routes/email-templates'));
+app.use('/api/match-notify',      require('./routes/match_notify'));
 app.use('/api/email-builder',     require('./routes/email_builder'));
 app.use('/api/notifications',     require('./routes/notifications'));
 

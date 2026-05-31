@@ -2,6 +2,7 @@ import { usePermissions as _usePermCtxAI } from "./PermissionContext.jsx";
 // RBAC: permission-aware copilot actions
 const _COPILOT_PERM_SLUG_MAP = { person:'people', job:'jobs', pool:'talent_pools', talent_pool:'talent_pools' };
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
+import ReactDOM from "react-dom";
 import { buildHelpContext } from "./helpContent";
 import ScoreExplainer, { ScoreBadge } from "./ScoreExplainer";
 
@@ -74,6 +75,9 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     "git-branch":"M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6z",
     users:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M9 11a4 4 0 100-8 4 4 0 000 8z",
     form:"M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
+    eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+    chevL:"M15 18l-6-6 6-6",
+    chevR:"M9 18l6-6-6-6",
   };
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -292,7 +296,7 @@ const itemIcon  = (type) => type==="person" ? "user" : type==="job" ? "briefcase
 const itemColor = (type) => type==="person" ? "#3b5bdb" : type==="job" ? "#0ca678" : "#7c3aed";
 
 // ── Compact match results list with 5-item limit + expand ─────────────────────
-const MatchResultsList = ({ matches, onNavigate }) => {
+const MatchResultsList = ({ matches, onNavigate, selectable=false, selectedIds=new Set(), onToggleSelect }) => {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? matches : matches.slice(0, 5);
 
@@ -310,16 +314,28 @@ const MatchResultsList = ({ matches, onNavigate }) => {
             : d.category || "";
           const scoreCol = m.score>=75?"#0ca678":m.score>=50?"#f59f00":"#ef4444";
           const allTags = [...(m.reasons||[]).map(r=>({text:r,ok:true})), ...(m.gaps||[]).map(g=>({text:g,ok:false}))];
+          const isChecked = selectedIds.has(m.item.id);
 
           return (
             <div key={m.item.id}
-              onClick={() => window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:m.item.id,objectId:m.item.object_id}}))}
-              style={{background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",minHeight:48,transition:"box-shadow .12s",cursor:"pointer",position:"relative"}}
-              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)";e.currentTarget.style.borderColor=C.accent+"44";}}
-              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}>
+              onClick={() => {
+                if (selectable) { onToggleSelect?.(m.item.id); return; }
+                window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:m.item.id,objectId:m.item.object_id}}));
+              }}
+              style={{background:C.surface,borderRadius:8,border:`1.5px solid ${selectable&&isChecked?C.accent:C.border}`,display:"flex",alignItems:"center",minHeight:48,transition:"all .12s",cursor:"pointer",position:"relative",
+                background:selectable&&isChecked?C.accentLight:C.surface}}
+              onMouseEnter={e=>{if(!selectable){e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)";e.currentTarget.style.borderColor=C.accent+"44";}}}
+              onMouseLeave={e=>{if(!selectable){e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}}>
 
               {/* Score bar */}
               <div style={{width:3,alignSelf:"stretch",background:scoreCol,flexShrink:0,borderRadius:"8px 0 0 8px"}}/>
+
+              {/* Checkbox (selectable mode) */}
+              {selectable && (
+                <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isChecked?C.accent:C.border}`,background:isChecked?C.accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,margin:"0 8px 0 10px",transition:"all .12s"}}>
+                  {isChecked && <Ic n="check" s={10} c="white"/>}
+                </div>
+              )}
 
               {/* Icon chip */}
               <div style={{width:24,height:24,borderRadius:6,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,margin:"0 8px 0 10px"}}>
@@ -367,6 +383,308 @@ const MatchResultsList = ({ matches, onNavigate }) => {
   );
 };
 
+// ── Notify Modal — portal picker, template picker, async preview, send ────────
+const NotifyModal = ({ environment, mode, lockedRecord, selectedItems, allMatches, onClose }) => {
+  // mode: "job" (notify selected candidates about this job)
+  //        "person" (notify this candidate about selected jobs)
+  const [portals,    setPortals]    = useState([]);
+  const [templates,  setTemplates]  = useState([]);
+  const [portalId,   setPortalId]   = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [step,       setStep]       = useState('config'); // config | preparing | preview | sending | done
+  const [emails,     setEmails]     = useState([]);
+  const [emailIdx,   setEmailIdx]   = useState(0);
+  const [editBody,   setEditBody]   = useState({}); // per-email override: { [i]: html }
+  const [sendResults,setSendResults]= useState([]);
+  const [error,      setError]      = useState('');
+
+  const envId = environment?.id;
+
+  useEffect(() => {
+    if (!envId) return;
+    Promise.all([
+      api.get(`/match-notify/portals?environment_id=${envId}`),
+      api.get(`/email-builder?environment_id=${envId}`),
+    ]).then(([p, t]) => {
+      const pArr = Array.isArray(p) ? p : [];
+      setPortals(pArr);
+      if (pArr.length === 1) setPortalId(pArr[0].id);
+      const tArr = (Array.isArray(t) ? t : []).filter(x => !x.deleted_at);
+      setTemplates(tArr);
+      if (tArr.length === 1) setTemplateId(tArr[0].id);
+    }).catch(console.error);
+  }, [envId]);
+
+  const canProceed = templateId && (portals.length === 0 || portalId);
+
+  const handleGenerate = async () => {
+    if (!canProceed) return;
+    setStep('preparing');
+    setError('');
+    try {
+      // Build match_data for AI context: per-person, per-job scores
+      const matchData = {};
+      if (mode === 'job') {
+        // locked = job, items = candidates
+        selectedItems.forEach(personId => {
+          const m = allMatches.find(x => x.item.id === personId);
+          if (m) matchData[personId] = [{ job_id: lockedRecord.id, score: m.score, reasons: m.reasons, gaps: m.gaps }];
+        });
+      } else {
+        // locked = person, items = jobs
+        const personId = lockedRecord.id;
+        matchData[personId] = selectedItems.map(jobId => {
+          const m = allMatches.find(x => x.item.id === jobId);
+          return { job_id: jobId, score: m?.score, reasons: m?.reasons || [], gaps: m?.gaps || [] };
+        });
+      }
+
+      const body = {
+        environment_id: envId,
+        template_id:    templateId,
+        portal_id:      portalId || undefined,
+        match_data:     matchData,
+        mode,
+        ...(mode === 'job'
+          ? { people_ids: selectedItems, job_ids: [lockedRecord.id] }
+          : { people_ids: [lockedRecord.id], job_ids: selectedItems }
+        ),
+      };
+
+      const result = await api.post('/match-notify/preview', body);
+      if (result.error) { setError(result.error); setStep('config'); return; }
+      setEmails(result.emails || []);
+      setStep('preview');
+    } catch (e) {
+      setError(e.message || 'Failed to generate emails');
+      setStep('config');
+    }
+  };
+
+  const handleSend = async () => {
+    setStep('sending');
+    try {
+      const toSend = emails.map((em, i) => ({
+        ...em,
+        html_body: editBody[i] !== undefined ? editBody[i] : em.html_body,
+      }));
+      const result = await api.post('/match-notify/send', { emails: toSend, environment_id: envId });
+      setSendResults(result.results || []);
+      setStep('done');
+    } catch (e) {
+      setError(e.message || 'Send failed');
+      setStep('preview');
+    }
+  };
+
+  const cur = emails[emailIdx] || {};
+  const curHtml = editBody[emailIdx] !== undefined ? editBody[emailIdx] : cur.html_body || '';
+
+  const appBase = window.location.origin;
+  const selectedPortal = portals.find(p => p.id === portalId);
+  const portalSlug = selectedPortal?.slug?.replace(/^\//, '') || '';
+  const previewDeepLink = cur.jobs?.[0]?.id ? `${appBase}/${portalSlug}?job=${cur.jobs[0].id}` : '';
+
+  // Overlay
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,.45)',backdropFilter:'blur(2px)',fontFamily:F}}>
+      <div style={{background:'white',borderRadius:16,width:'min(780px, 96vw)',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 60px rgba(0,0,0,.22)',overflow:'hidden'}}>
+
+        {/* Header */}
+        <div style={{padding:'18px 24px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+          <div style={{width:34,height:34,borderRadius:8,background:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ic n="send" s={15} c="white"/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:700,color:C.text1}}>
+              {mode==='job' ? `Notify ${selectedItems.length} candidate${selectedItems.length!==1?'s':''} about this role` : `Notify candidate about ${selectedItems.length} matched role${selectedItems.length!==1?'s':''}`}
+            </div>
+            <div style={{fontSize:12,color:C.text3}}>
+              {step==='config' ? 'Choose a template and portal' : step==='preparing' ? 'Generating personalised emails…' : step==='preview' ? `Preview ${emails.length} email${emails.length!==1?'s':''}` : step==='sending' ? 'Sending…' : 'All sent!'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',padding:4,borderRadius:6,color:C.text3,display:'flex'}}>
+            <Ic n="x" s={18}/>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{flex:1,overflow:'auto',padding:'20px 24px',display:'flex',flexDirection:'column',gap:16}}>
+
+          {/* ── STEP: Config ── */}
+          {step === 'config' && (<>
+            {/* Portal picker */}
+            {portals.length > 1 && (
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:8}}>Career site / Portal</div>
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {portals.map(p => (
+                    <label key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:8,border:`1.5px solid ${portalId===p.id?C.accent:C.border}`,cursor:'pointer',background:portalId===p.id?C.accentLight:'white',transition:'all .12s'}}>
+                      <input type="radio" checked={portalId===p.id} onChange={()=>setPortalId(p.id)} style={{accentColor:C.accent}}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{p.name}</div>
+                        <div style={{fontSize:11,color:C.text3}}>{p.slug} · {p.status}</div>
+                      </div>
+                      {p.status==='published' && <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:'#f0fdf4',color:'#0ca678'}}>Live</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            {portals.length === 0 && (
+              <div style={{padding:'12px 14px',borderRadius:8,background:'#fffbeb',border:'1px solid #fde68a',fontSize:12,color:'#92400e'}}>
+                No career sites found. Job links will point to the main app. <strong>Publish a career site portal first</strong> for candidate-facing deep links.
+              </div>
+            )}
+
+            {/* Template picker */}
+            <div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2}}>Email template</div>
+                <a href="/settings?section=email_templates" target="_blank" style={{fontSize:11,color:C.accent,textDecoration:'none'}}>Manage templates →</a>
+              </div>
+              {templates.length === 0 ? (
+                <div style={{padding:'14px',borderRadius:8,background:'#f8f9fc',border:`1px solid ${C.border}`,fontSize:12,color:C.text3,textAlign:'center'}}>
+                  No email templates yet. <a href="/settings?section=email_templates" target="_blank" style={{color:C.accent}}>Create one in Settings →</a>
+                </div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {templates.map(t => (
+                    <label key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:8,border:`1.5px solid ${templateId===t.id?C.accent:C.border}`,cursor:'pointer',background:templateId===t.id?C.accentLight:'white',transition:'all .12s'}}>
+                      <input type="radio" checked={templateId===t.id} onChange={()=>setTemplateId(t.id)} style={{accentColor:C.accent}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{t.name}</div>
+                        {t.category && <div style={{fontSize:11,color:C.text3,textTransform:'capitalize'}}>{t.category}</div>}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {error && <div style={{padding:'10px 14px',borderRadius:8,background:'#fef2f2',border:'1px solid #fecaca',fontSize:12,color:'#dc2626'}}>{error}</div>}
+          </>)}
+
+          {/* ── STEP: Preparing ── */}
+          {step === 'preparing' && (
+            <div style={{textAlign:'center',padding:'40px 0',color:C.text3}}>
+              <div style={{animation:'spin 1s linear infinite',display:'inline-flex',marginBottom:12}}><Ic n="loader" s={28} c={C.accent}/></div>
+              <div style={{fontSize:14,fontWeight:600,color:C.text1,marginBottom:6}}>Generating personalised emails</div>
+              <div style={{fontSize:12}}>AI is drafting {selectedItems.length} email{selectedItems.length!==1?'s':''}. This may take a moment.</div>
+            </div>
+          )}
+
+          {/* ── STEP: Preview ── */}
+          {step === 'preview' && emails.length > 0 && (<>
+            {/* Navigator */}
+            {emails.length > 1 && (
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,background:'#f8f9fc',border:`1px solid ${C.border}`}}>
+                <button onClick={()=>setEmailIdx(i=>Math.max(0,i-1))} disabled={emailIdx===0} style={{background:'none',border:'none',cursor:emailIdx===0?'not-allowed':'pointer',padding:4,opacity:emailIdx===0?.3:1,display:'flex'}}>
+                  <Ic n="chevL" s={16} c={C.text2}/>
+                </button>
+                <span style={{flex:1,textAlign:'center',fontSize:12,fontWeight:600,color:C.text1}}>
+                  {emailIdx+1} of {emails.length} — {cur.person_name}
+                </span>
+                <button onClick={()=>setEmailIdx(i=>Math.min(emails.length-1,i+1))} disabled={emailIdx===emails.length-1} style={{background:'none',border:'none',cursor:emailIdx===emails.length-1?'not-allowed':'pointer',padding:4,opacity:emailIdx===emails.length-1?.3:1,display:'flex'}}>
+                  <Ic n="chevR" s={16} c={C.text2}/>
+                </button>
+              </div>
+            )}
+
+            {/* Email meta */}
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+                <span style={{color:C.text3,width:56,flexShrink:0}}>To:</span>
+                <span style={{fontWeight:600,color:C.text1}}>{cur.person_name}</span>
+                <span style={{color:C.text3}}>〈{cur.email}〉</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+                <span style={{color:C.text3,width:56,flexShrink:0}}>Subject:</span>
+                <span style={{fontWeight:600,color:C.text1}}>{cur.subject}</span>
+              </div>
+              {previewDeepLink && (
+                <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+                  <span style={{color:C.text3,width:56,flexShrink:0}}>Job link:</span>
+                  <a href={previewDeepLink} target="_blank" rel="noreferrer" style={{color:C.accent,fontWeight:600,wordBreak:'break-all'}}>{previewDeepLink}</a>
+                </div>
+              )}
+              {cur.jobs?.length > 0 && <div style={{display:'flex',gap:6,flexWrap:'wrap',paddingLeft:64}}>
+                {cur.jobs.map(j=>(
+                  <span key={j.id} style={{fontSize:11,padding:'3px 8px',borderRadius:99,background:'#f0fdf4',color:'#0ca678',fontWeight:600}}>
+                    ✓ {j.title} {j.score!=null?`(${j.score}%)`:''}</span>
+                ))}
+              </div>}
+            </div>
+
+            {/* Email HTML preview */}
+            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:'#f8f9fc',borderBottom:`1px solid ${C.border}`}}>
+                <Ic n="eye" s={13} c={C.text3}/>
+                <span style={{fontSize:11,fontWeight:600,color:C.text3}}>Email preview</span>
+                <span style={{fontSize:10,color:C.text4,marginLeft:'auto'}}>Rendered HTML</span>
+              </div>
+              <iframe
+                srcDoc={curHtml}
+                style={{width:'100%',height:340,border:'none',display:'block'}}
+                sandbox="allow-same-origin"
+              />
+            </div>
+
+            {error && <div style={{padding:'10px 14px',borderRadius:8,background:'#fef2f2',border:'1px solid #fecaca',fontSize:12,color:'#dc2626'}}>{error}</div>}
+          </>)}
+
+          {/* ── STEP: Done ── */}
+          {step === 'done' && (
+            <div style={{textAlign:'center',padding:'32px 0'}}>
+              <div style={{width:56,height:56,borderRadius:'50%',background:'#f0fdf4',border:'2px solid #0ca678',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+                <Ic n="check" s={24} c="#0ca678"/>
+              </div>
+              <div style={{fontSize:16,fontWeight:700,color:C.text1,marginBottom:6}}>
+                {sendResults.length} email{sendResults.length!==1?'s':''} sent!
+              </div>
+              <div style={{fontSize:13,color:C.text3,marginBottom:20}}>
+                {sendResults.filter(r=>r.status==='simulated').length > 0
+                  ? 'Emails saved (simulation mode — configure SendGrid to send live emails)'
+                  : 'All emails dispatched successfully'
+                }
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,maxWidth:320,margin:'0 auto'}}>
+                {sendResults.map(r=>(
+                  <div key={r.person_id} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 12px',borderRadius:6,background:'#f8f9fc'}}>
+                    <Ic n="check" s={12} c="#0ca678"/>
+                    <span style={{flex:1,textAlign:'left',color:C.text2}}>{r.email}</span>
+                    <span style={{color:r.status==='simulated'?'#d97706':'#0ca678',fontWeight:600,fontSize:11}}>{r.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div style={{padding:'14px 24px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
+          {step === 'config' && (<>
+            <button onClick={onClose} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'white',color:C.text2,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F}}>Cancel</button>
+            <button onClick={handleGenerate} disabled={!canProceed} style={{padding:'8px 20px',borderRadius:8,border:'none',background:canProceed?C.accent:'#e5e7eb',color:'white',fontSize:13,fontWeight:700,cursor:canProceed?'pointer':'not-allowed',fontFamily:F,display:'flex',alignItems:'center',gap:6}}>
+              <Ic n="sparkles" s={13} c="white"/> Generate emails
+            </button>
+          </>)}
+          {step === 'preview' && (<>
+            <button onClick={()=>setStep('config')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'white',color:C.text2,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F}}>← Back</button>
+            <button onClick={handleSend} style={{padding:'8px 20px',borderRadius:8,border:'none',background:'#0ca678',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F,display:'flex',alignItems:'center',gap:6}}>
+              <Ic n="send" s={13} c="white"/> Send {emails.length} email{emails.length!==1?'s':''}
+            </button>
+          </>)}
+          {step === 'done' && (
+            <button onClick={onClose} style={{padding:'8px 20px',borderRadius:8,border:'none',background:C.accent,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F}}>Done</button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 export const MatchingEngine = memo(({ environment, initialObject, initialRecord, onNavigate }) => {
   const mode = initialObject?.slug === "jobs" ? "job" : "person"; // "job" = rank candidates, "person" = rank jobs
   const [objects,setObjects]   = useState([]);
@@ -378,6 +696,21 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
   const [loading,setLoading]   = useState(false);
   const [minScore,setMinScore] = useState(getMinScoreThreshold);
   const [matchTarget,setMatchTarget] = useState("jobs"); // for person mode: "jobs" | "pools"
+
+  // Notify state
+  const [selectMode,  setSelectMode]  = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [notifyOpen,  setNotifyOpen]  = useState(false);
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const handleNotifyOpen = () => { setSelectMode(true); setSelectedIds(new Set()); };
+  const handleNotifyCancel = () => { setSelectMode(false); setSelectedIds(new Set()); };
+  const handleNotifyAll = () => setSelectedIds(new Set(filtered.map(m => m.item.id)));
+
 
   // Re-sync minScore when the AI matching settings are saved or another tab updates them
   useEffect(() => {
@@ -520,11 +853,48 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
         )}
       </div>
 
-      {/* ── Summary bar ── */}
+      {/* ── Summary bar + Notify button ── */}
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:8,background:`${C.ai}08`,border:`1px solid ${C.ai}18`,marginBottom:12}}>
         <Ic n="sparkles" s={14} c={C.ai}/>
         <span style={{fontSize:12,fontWeight:700,color:C.text1}}>{filtered.length} match{filtered.length!==1?"es":""}</span>
         <span style={{fontSize:11,color:C.text3}}>scoring {minScore}+ out of {matches.length} total</span>
+        <div style={{flex:1}}/>
+        {/* Notify button — only shown when job is Open (job mode) or always for person mode */}
+        {!selectMode && filtered.length > 0 && lockedRecord && (
+          (() => {
+            const d = lockedRecord.data || {};
+            const canNotify = mode === 'person' || d.status === 'Open' || !d.status;
+            return canNotify ? (
+              <button onClick={handleNotifyOpen}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:`1px solid ${C.accent}`,background:C.accentLight,color:C.accent,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:F,transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background=C.accent;e.currentTarget.style.color="white";}}
+                onMouseLeave={e=>{e.currentTarget.style.background=C.accentLight;e.currentTarget.style.color=C.accent;}}>
+                <Ic n="send" s={11} c="inherit"/>
+                {mode==="job" ? "Notify candidates" : "Notify about jobs"}
+              </button>
+            ) : (
+              <span style={{fontSize:11,color:C.text3,fontStyle:'italic'}}>Job must be Open to notify</span>
+            );
+          })()
+        )}
+        {/* Select mode toolbar */}
+        {selectMode && (<>
+          <button onClick={handleNotifyAll} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"white",color:C.text2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+            Select all ({filtered.length})
+          </button>
+          <button onClick={()=>setSelectedIds(new Set())} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"white",color:C.text2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+            Clear
+          </button>
+          <button onClick={handleNotifyCancel} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"white",color:C.text2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+            Cancel
+          </button>
+          <button onClick={()=>{ if(selectedIds.size>0) setNotifyOpen(true); }}
+            disabled={selectedIds.size===0}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,border:"none",background:selectedIds.size>0?C.accent:"#e5e7eb",color:"white",fontSize:11,fontWeight:700,cursor:selectedIds.size>0?"pointer":"not-allowed",fontFamily:F,transition:"all .12s"}}>
+            <Ic n="send" s={11} c="white"/>
+            Notify {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+          </button>
+        </>)}
       </div>
 
       {/* ── Results: full width ── */}
@@ -536,8 +906,26 @@ export const MatchingEngine = memo(({ environment, initialObject, initialRecord,
           </div>
         : filtered.length===0
           ? <div style={{textAlign:"center",padding:"32px 0",color:C.text3,fontSize:13}}>No matches above {minScore}</div>
-          : <MatchResultsList matches={filtered} onNavigate={onNavigate} />
+          : <MatchResultsList
+              matches={filtered}
+              onNavigate={onNavigate}
+              selectable={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+            />
       }
+
+      {/* Notify modal */}
+      {notifyOpen && (
+        <NotifyModal
+          environment={environment}
+          mode={mode}
+          lockedRecord={lockedRecord}
+          selectedItems={[...selectedIds]}
+          allMatches={matches}
+          onClose={()=>{ setNotifyOpen(false); setSelectMode(false); setSelectedIds(new Set()); }}
+        />
+      )}
     </div>
   );
 }, (prev, next) =>

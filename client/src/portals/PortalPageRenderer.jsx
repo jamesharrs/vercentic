@@ -390,12 +390,21 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
     const handler = (e) => {
       const job = e.detail;
       if (!job) return;
-      // Use the job directly from the event (may not be in filtered view)
       setSelected(job);
     };
     window.addEventListener('vrc:openJob', handler);
     return () => window.removeEventListener('vrc:openJob', handler);
   }, [isJobs]);
+
+  // Deep-link: ?job=<record_id> — auto-open a specific job when records have loaded
+  useEffect(() => {
+    if (!isJobs || !records.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get('job');
+    if (!jobId) return;
+    const match = records.find(r => r.id === jobId);
+    if (match) setSelected(match);
+  }, [isJobs, records]);
   const depts = [...new Set(records.map(r => r.data?.department).filter(Boolean))];
   const locs = [...new Set(records.map(r => r.data?.location).filter(Boolean))];
   const filtered = records.filter(r => {
