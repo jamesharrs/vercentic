@@ -205,6 +205,11 @@ export function ComposeModal({
   const [includeSignature, setIncludeSignature] = useState(true);
   const [userSignature,    setUserSignature]    = useState("");   // HTML from preferences
   const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
+  // Template context picker — shown when template needs job/object data
+  const [tplCtxPicker, setTplCtxPicker] = useState(null); // { tpl, missingVars, allJobs }
+  const [tplCtxSearch, setTplCtxSearch] = useState("");
+  const [tplCtxLoading, setTplCtxLoading] = useState(false);
+  const [tplCtxAllJobs, setTplCtxAllJobs] = useState([]);
 
   const meta = TYPE_META[type] || {};
   const bodyText = type === "email" ? htmlToText(body) : body;
@@ -277,10 +282,71 @@ export function ComposeModal({
   const substitute = (text) =>
     (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => { const v = buildVars(); return v[k] !== undefined ? v[k] : m; });
 
-  const applyTemplate = (tpl) => {
+  const applyTemplate = async (tpl) => {
     if (!tpl) return;
-    setSelTpl(tpl); setSubject(substitute(tpl.subject || "")); setBody(substitute(tpl.body || ""));
+    // Detect which variable groups the template needs
+    const JOB_VARS = ["job_title","job_location","job_department","job_salary_min","job_salary_max","job_work_type","job_name","job_description","interview_date","interview_time","interview_format","interview_location","offer_salary","offer_start_date","offer_expiry_date","offer_url","feedback_url","reschedule_url","interview_link"];
+    const templateText = (tpl.subject || "") + " " + (tpl.body || "") + " " +
+      (tpl.html_body || "") + " " +
+      (tpl.blocks || []).map(b => {
+        const ct = typeof b.content === "object" ? (b.content?.text || "") : (b.content || "");
+        const pr = b.prompt || b.config?.prompt || "";
+        return ct + " " + pr;
+      }).join(" ");
+    const usedVars = (templateText.match(/\{\{(\w+)\}\}/g) || []).map(m => m.slice(2,-2));
+    const needsJob = usedVars.some(v => JOB_VARS.includes(v));
+
+    // If template needs job data and none is selected yet — show picker
+    if (needsJob && !relatedRecordId) {
+      setTplCtxLoading(true);
+      setTplCtxSearch("");
+      setTplCtxAllJobs([]);
+      setTplCtxPicker({ tpl, missingVars: usedVars.filter(v => JOB_VARS.includes(v)) });
+      // Load all jobs in background for the "search all" fallback
+      try {
+        const allRecs = await api.get(`/records?object_slug=jobs&environment_id=${environment?.id}&limit=100`);
+        setTplCtxAllJobs(Array.isArray(allRecs?.records) ? allRecs.records : []);
+      } catch (_) {}
+      setTplCtxLoading(false);
+      return; // wait for picker confirmation
+    }
+
+    // Apply immediately if no job vars needed or job already selected
+    setSelTpl(tpl);
+    setSubject(substitute(tpl.subject || ""));
+    setBody(substitute(tpl.body || ""));
     setMode("write");
+  };
+
+  // Called when user confirms job selection in the context picker
+  const confirmTplContext = (jobId) => {
+    const tpl = tplCtxPicker?.tpl;
+    if (!tpl) return;
+    setRelated(jobId || "");
+    setTplCtxPicker(null);
+    // Re-run applyTemplate with the job now set — use a microtask so state settles
+    setTimeout(() => {
+      setSelTpl(tpl);
+      // Rebuild vars with the newly selected job
+      const selectedJob = linkedJobs.find(j => j.id === jobId) || tplCtxAllJobs.find(j => j.id === jobId);
+      const d = record?.data || {};
+      const jd = selectedJob?.data || {};
+      const vars = {
+        candidate_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
+        first_name: d.first_name || "Candidate", last_name: d.last_name || "",
+        full_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
+        email: d.email || d.email_address || "", phone: d.phone || d.mobile || "",
+        current_title: d.current_title || d.job_title || "", location: d.location || "",
+        job_title: jd.job_title || jd.title || jd.name || jd.job_title || "",
+        job_location: jd.location || jd.job_location || "",
+        department: jd.department || "", company_name: jd.company || jd.entity || "",
+        recruiter_name: "",
+      };
+      const sub = (text) => (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => vars[k] !== undefined ? vars[k] : m);
+      setSubject(sub(tpl.subject || ""));
+      setBody(sub(tpl.body || ""));
+      setMode("write");
+    }, 0);
   };
 
   const handleAiCompose = async () => {
@@ -749,6 +815,7 @@ export function ComposeModal({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return ReactDOM.createPortal(
+    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(10,12,26,0.55)", zIndex:9000,
       display:"flex", alignItems:"center", justifyContent:"center",
       backdropFilter:"blur(3px)", padding:20 }}
@@ -887,7 +954,143 @@ export function ComposeModal({
           </button>
         </div>
       </div>
-    </div>,
+    </div>
+
+    {/* ── Template Context Picker overlay ── */}
+    {tplCtxPicker && (
+      <div style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(10,12,26,0.65)",
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+        backdropFilter:"blur(4px)" }}
+        onClick={e => { if (e.target === e.currentTarget) setTplCtxPicker(null); }}>
+        <div style={{ background:"white", borderRadius:18, width:"100%", maxWidth:520,
+          boxShadow:"0 24px 80px rgba(0,0,0,0.22)", overflow:"hidden" }}
+          onMouseDown={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div style={{ padding:"20px 24px 16px", borderBottom:"1.5px solid #f0f1f5" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:"#0f1729", marginBottom:4 }}>
+              This template needs job details
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+              <strong>{tplCtxPicker.tpl.name}</strong> uses{" "}
+              <code style={{ background:"#f3f4f6", padding:"1px 5px", borderRadius:4, fontSize:11 }}>
+                {"{{"}{tplCtxPicker.missingVars.slice(0,3).join("}}, {{")}{tplCtxPicker.missingVars.length>3 ? `}} +${tplCtxPicker.missingVars.length-3} more` : "}}"}
+              </code>
+              {" "}— select the role this email is about.
+            </div>
+          </div>
+
+          <div style={{ padding:"16px 24px", maxHeight:380, overflowY:"auto" }}>
+            {/* Linked jobs section */}
+            {linkedJobs.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
+                  letterSpacing:".06em", marginBottom:8 }}>Linked roles</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {linkedJobs.map(j => {
+                    const jd = j.data || {};
+                    const title = jd.job_title || jd.title || jd.name || "Untitled role";
+                    const dept  = jd.department || jd.job_department || "";
+                    const loc   = jd.location || jd.job_location || "";
+                    return (
+                      <button key={j.id} onClick={() => confirmTplContext(j.id)}
+                        style={{ textAlign:"left", padding:"11px 14px", borderRadius:10,
+                          border:`1.5px solid ${accent}30`, background:`${accent}05`,
+                          cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.background = `${accent}10`; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = `${accent}30`; e.currentTarget.style.background = `${accent}05`; }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#0f1729" }}>{title}</div>
+                        {(dept || loc) && <div style={{ fontSize:11, color:"#6b7280", marginTop:2 }}>
+                          {[dept, loc].filter(Boolean).join(" · ")}
+                        </div>}
+                        <div style={{ fontSize:10, color:accent, fontWeight:600, marginTop:3 }}>✓ Linked</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Search all jobs */}
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
+                letterSpacing:".06em", marginBottom:8 }}>
+                {linkedJobs.length > 0 ? "Or search all roles" : "Select a role"}
+              </div>
+              <input
+                placeholder="Search roles…"
+                value={tplCtxSearch}
+                onChange={e => setTplCtxSearch(e.target.value)}
+                autoFocus={linkedJobs.length === 0}
+                style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:9,
+                  border:"1.5px solid #e5e7eb", fontSize:13, fontFamily:"inherit", outline:"none",
+                  marginBottom:8, background:"#fafafa" }}
+              />
+              {tplCtxLoading ? (
+                <div style={{ textAlign:"center", padding:16, color:"#9ca3af", fontSize:12 }}>Loading roles…</div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:5, maxHeight:200, overflowY:"auto" }}>
+                  {tplCtxAllJobs
+                    .filter(j => {
+                      const q = tplCtxSearch.toLowerCase();
+                      if (!q) return true;
+                      const jd = j.data || {};
+                      return [jd.job_title, jd.title, jd.name, jd.department, jd.location]
+                        .some(v => v && String(v).toLowerCase().includes(q));
+                    })
+                    .slice(0, 20)
+                    .map(j => {
+                      const jd = j.data || {};
+                      const title = jd.job_title || jd.title || jd.name || "Untitled role";
+                      const dept  = jd.department || "";
+                      const loc   = jd.location || "";
+                      const alreadyLinked = linkedJobs.some(lj => lj.id === j.id);
+                      if (alreadyLinked) return null; // already shown above
+                      return (
+                        <button key={j.id} onClick={() => confirmTplContext(j.id)}
+                          style={{ textAlign:"left", padding:"9px 12px", borderRadius:9,
+                            border:"1.5px solid #e5e7eb", background:"white",
+                            cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.background = `${accent}06`; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "white"; }}>
+                          <div style={{ fontSize:13, fontWeight:600, color:"#0f1729" }}>{title}</div>
+                          {(dept || loc) && <div style={{ fontSize:11, color:"#6b7280", marginTop:1 }}>
+                            {[dept, loc].filter(Boolean).join(" · ")}
+                          </div>}
+                        </button>
+                      );
+                    })
+                  }
+                  {tplCtxAllJobs.length === 0 && !tplCtxLoading && (
+                    <div style={{ textAlign:"center", padding:12, color:"#9ca3af", fontSize:12 }}>
+                      No roles found. You can still use this template without job data.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ display:"flex", gap:8, padding:"14px 24px", borderTop:"1.5px solid #f0f1f5",
+            background:"#fafafa", justifyContent:"flex-end" }}>
+            <button onClick={() => setTplCtxPicker(null)}
+              style={{ padding:"8px 18px", borderRadius:9, border:"1.5px solid #e5e7eb",
+                background:"transparent", fontSize:13, fontWeight:600, color:"#6b7280",
+                cursor:"pointer", fontFamily:"inherit" }}>
+              Cancel
+            </button>
+            <button onClick={() => confirmTplContext("")}
+              style={{ padding:"8px 18px", borderRadius:9, border:"none",
+                background:"#f3f4f6", fontSize:13, fontWeight:600, color:"#374151",
+                cursor:"pointer", fontFamily:"inherit" }}>
+              Use without job data
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>,
     document.body
   );
 }
