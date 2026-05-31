@@ -97,7 +97,7 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
     </div>`;
     html   = notice + (html || textBody.replace(/\n/g, '<br>'));
     text   = `[REDIRECT] Original recipient: ${originalTo}\n\n${textBody}`;
-    console.log(\`[messaging] EMAIL REDIRECTED: \${originalTo} → \${redirectTo.trim()} | Subject: \${subject}\`);
+    console.log(`[messaging] EMAIL REDIRECTED: ${originalTo} → ${redirectTo.trim()} | Subject: ${subject}`);
   }
 
   // ── MailerSend (primary) ──────────────────────────────────────────────────
