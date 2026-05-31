@@ -284,31 +284,38 @@ function renderBlock(block, data, brandKit) {
   const btnRadius = bk.buttonRadius || '8px';
   const btnStyle = bk.buttonStyle || 'filled';
 
+  // Normalise content — some system templates store content as { text: '...' } objects
+  const rawContent = typeof block.content === 'object' && block.content !== null
+    ? block.content.text || ''
+    : (block.content || '');
+  // Normalise config — system templates sometimes embed config inside content object
+  const cfg = block.config && Object.keys(block.config).length > 0
+    ? block.config
+    : (typeof block.content === 'object' && block.content !== null ? block.content : {});
+
   switch (block.type) {
     case 'header': {
-      const cfg = block.config || {};
       const logoHtml = bk.logo_url ? `<img src="${bk.logo_url}" alt="${bk.company_name || ''}" style="height:40px;max-width:200px;object-fit:contain;" />` : '';
       const nameHtml = (cfg.showCompanyName !== false && bk.company_name) ? `<span style="font-size:18px;font-weight:700;color:${primary};font-family:${headingFont};">${bk.company_name}</span>` : '';
       return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid ${primary}10;">${logoHtml}${logoHtml && nameHtml ? '&nbsp;&nbsp;' : ''}${nameHtml}</td></tr></table>`;
     }
 
     case 'text': {
-      const content = resolveTags(block.content || '', data);
+      const content = resolveTags(rawContent, data);
       return `<div style="font-size:15px;line-height:1.7;color:${textColor};font-family:${fontFamily};margin-bottom:16px;">${content}</div>`;
     }
 
     case 'heading': {
-      const content = resolveTags(block.content || '', data);
-      const level = block.config?.level || 2;
+      const content = resolveTags(rawContent, data);
+      const level = cfg.level || 2;
       const sizes = { 1: '24px', 2: '20px', 3: '16px' };
       return `<div style="font-size:${sizes[level] || '20px'};font-weight:${bk.headingWeight || 700};color:${textColor};font-family:${headingFont};margin-bottom:12px;">${content}</div>`;
     }
 
     case 'button': {
-      const cfg = block.config || {};
-      const text = resolveTags(cfg.text || 'Click here', data);
+      const text = resolveTags(cfg.text || rawContent || 'Click here', data);
       const url = resolveTags(cfg.url || '#', data);
-      const isFilled = (cfg.style || btnStyle) === 'filled';
+      const isFilled = (cfg.style || btnStyle) !== 'outline';
       const bg = isFilled ? primary : 'transparent';
       const color = isFilled ? '#ffffff' : primary;
       const border = isFilled ? 'none' : `2px solid ${primary}`;
@@ -317,7 +324,6 @@ function renderBlock(block, data, brandKit) {
     }
 
     case 'image': {
-      const cfg = block.config || {};
       const src = resolveTags(cfg.src || '', data);
       const alt = resolveTags(cfg.alt || '', data);
       const width = cfg.width || '100%';
@@ -328,7 +334,7 @@ function renderBlock(block, data, brandKit) {
       return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td style="border-top:1px solid #e5e7eb;"></td></tr></table>`;
 
     case 'spacer':
-      return `<table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:${block.config?.height || 20}px;"></td></tr></table>`;
+      return `<table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:${cfg.height || block.config?.height || 20}px;"></td></tr></table>`;
 
     case 'two_column': {
       const left = (block.left || []).map(b => renderBlock(b, data, brandKit)).join('');
