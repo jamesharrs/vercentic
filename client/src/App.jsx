@@ -1,3 +1,4 @@
+import StyledSelect from './components/StyledSelect.jsx';
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, startTransition } from "react";
 import { useTour } from "./GuidedTour.jsx";
 import api, { getTenantSlug } from "./apiClient.js";
@@ -302,15 +303,8 @@ const Select = ({ label, value, onChange, options, required }) => (
     {label && <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", letterSpacing: "0.02em" }}>
       {label}{required && <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span>}
     </label>}
-    <select value={value} onChange={e => onChange(e.target.value)} style={{
-      padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e5ea",
-      fontSize: 13, fontFamily: "inherit", outline: "none", background: "white",
-      color: "var(--t-text1)", cursor: "pointer"
-    }}>
-      {options.map(opt => (
-        <option key={opt.value || opt} value={opt.value || opt}>{opt.label || opt}</option>
-      ))}
-    </select>
+    <StyledSelect value={value} onChange={onChange} style={{width:"100%"}}
+      options={options.map(opt=>({value:opt.value||opt,label:opt.label||opt}))}/>
   </div>
 );
 

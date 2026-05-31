@@ -89,9 +89,8 @@ const Inp = ({label,value,onChange,placeholder,type="text",required,help,disable
 const Sel = ({label,value,onChange,options}) => (
   <div style={{display:"flex",flexDirection:"column",gap:4}}>
     {label&&<label style={{fontSize:12,fontWeight:600,color:C.text2}}>{label}</label>}
-    <select value={value||""} onChange={e=>onChange(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-      {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
-    </select>
+    <StyledSelect value={value||""} onChange={onChange} style={{width:"100%"}}
+      options={options.map(o=>({value:o.value??o,label:o.label??o}))}/>
   </div>
 );
 
@@ -1148,20 +1147,12 @@ const AuditLogSection = () => {
         <div>
           {/* Filters */}
           <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-            <select value={severityFilter} onChange={e=>{setSeverityFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-              <option value="">All severities</option>
-              <option value="critical">Critical</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-            </select>
-            <select value={eventFilter} onChange={e=>{setEventFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-              <option value="">All event types</option>
-              <option value="access_denied">Access Denied</option>
-              <option value="permissions_changed">Permissions Changed</option>
-              <option value="role_created">Role Created</option>
-              <option value="role_deleted">Role Deleted</option>
-              <option value="field_visibility_changed">Field Visibility</option>
-            </select>
+            <StyledSelect value={severityFilter} onChange={v=>{setSeverityFilter(v);setPage(1);}} size="sm"
+              allowClear placeholder="All severities"
+              options={[{value:"critical",label:"Critical"},{value:"warn",label:"Warning"},{value:"info",label:"Info"}]}/>
+            <StyledSelect value={eventFilter} onChange={v=>{setEventFilter(v);setPage(1);}} size="sm"
+              allowClear placeholder="All event types"
+              options={[{value:"access_denied",label:"Access Denied"},{value:"permissions_changed",label:"Permissions Changed"},{value:"role_created",label:"Role Created"},{value:"role_deleted",label:"Role Deleted"},{value:"field_visibility_changed",label:"Field Visibility"}]}/>
           </div>
 
           {loading ? <div style={{padding:24,textAlign:"center",color:C.text3}}>Loading…</div> : items.length === 0 ? (

@@ -1,3 +1,4 @@
+import StyledSelect from './components/StyledSelect.jsx';
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { usePermissions as _usePermCtx } from "./PermissionContext.jsx";
 import { createPortal } from "react-dom";
@@ -948,27 +949,22 @@ function ApprovalRequestConfig({ cfg, onChange, fields, users: allUsers }) {
             padding:"8px 10px", borderRadius:8, background:C.surface, border:`1px solid ${C.border}` }}>
             <div style={{ width:18, height:18, borderRadius:"50%", background:"#ede9fe",
               display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:"#7c3aed", flexShrink:0 }}>{i+1}</div>
-            <select value={a.type} onChange={e=>updateApprover(i,{type:e.target.value,name:"",email:"",user_id:"",field_key:"",label:""})}
-              style={{ ...inp, width:"auto" }}>
-              <option value="named">Named person</option>
-              <option value="user">Platform user</option>
-              {peopleFields.length>0 && <option value="field">From record field</option>}
-            </select>
+            <StyledSelect value={a.type} onChange={v=>updateApprover(i,{type:v,name:"",email:"",user_id:"",field_key:"",label:""})}
+              style={{ width:"auto" }}
+              options={[{value:"named",label:"Named person"},{value:"user",label:"Platform user"},...(peopleFields.length>0?[{value:"field",label:"From record field"}]:[])]}/>
             {a.type==="named" && <>
               <input placeholder="Name" value={a.name||""} onChange={e=>updateApprover(i,{name:e.target.value})} style={{ ...inp, flex:1 }}/>
               <input placeholder="Email" value={a.email||""} onChange={e=>updateApprover(i,{email:e.target.value})} style={{ ...inp, flex:1 }}/>
             </>}
             {a.type==="user" && (
-              <select value={a.user_id||""} onChange={e=>updateApprover(i,{user_id:e.target.value})} style={{ ...inp, flex:1 }}>
-                <option value="">Select user…</option>
-                {users.map(u=><option key={u.id} value={u.id}>{[u.first_name,u.last_name].filter(Boolean).join(" ")} ({u.email})</option>)}
-              </select>
+              <StyledSelect value={a.user_id||""} onChange={v=>updateApprover(i,{user_id:v})} style={{flex:1}}
+                placeholder="Select user…" searchable
+                options={users.map(u=>({value:u.id,label:[u.first_name,u.last_name].filter(Boolean).join(" ")+" ("+u.email+")"}))}/>
             )}
             {a.type==="field" && (
-              <select value={a.field_key||""} onChange={e=>{const f=peopleFields.find(f2=>f2.api_key===e.target.value); updateApprover(i,{field_key:e.target.value,label:f?.name||e.target.value});}} style={{ ...inp, flex:1 }}>
-                <option value="">Select field…</option>
-                {peopleFields.map(f=><option key={f.api_key} value={f.api_key}>{f.name}</option>)}
-              </select>
+              <StyledSelect value={a.field_key||""} onChange={v=>{const f=peopleFields.find(f2=>f2.api_key===v); updateApprover(i,{field_key:v,label:f?.name||v});}} style={{flex:1}}
+                placeholder="Select field…"
+                options={peopleFields.map(f=>({value:f.api_key,label:f.name}))}/>
             )}
             <button onClick={()=>removeApprover(i)} style={{ background:"none", border:"none", cursor:"pointer", color:"#ef4444", padding:2, flexShrink:0 }}>✕</button>
           </div>
@@ -1001,11 +997,8 @@ function ApprovalRequestConfig({ cfg, onChange, fields, users: allUsers }) {
       {/* On decline */}
       <div>
         <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>If declined</div>
-        <select value={cfg.on_declined||"stop"} onChange={e=>onChange({...cfg,on_declined:e.target.value})} style={inp}>
-          <option value="stop">Stop workflow</option>
-          <option value="continue">Continue anyway</option>
-          <option value="notify_requester">Notify requester and stop</option>
-        </select>
+        <StyledSelect value={cfg.on_declined||"stop"} onChange={v=>onChange({...cfg,on_declined:v})} style={{width:"100%"}}
+          options={[{value:"stop",label:"Stop workflow"},{value:"continue",label:"Continue anyway"},{value:"notify_requester",label:"Notify requester and stop"}]}/>
       </div>
 
       {approvers.length===0 && (
@@ -1586,11 +1579,9 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
                         {(()=>{
                           const fld = fields.find(ff=>ff.api_key===(cfg.field_key||"status"));
                           if (fld?.field_type==="select" && fld.options?.length) return (
-                            <select value={cfg.to_stage||""} onChange={e=>setActionConfig(action.id,"to_stage",e.target.value)}
-                              style={{ width:"100%", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
-                              <option value="">Select value…</option>
-                              {fld.options.map(o=><option key={o} value={o}>{o}</option>)}
-                            </select>
+                            <StyledSelect value={cfg.to_stage||""} onChange={v=>setActionConfig(action.id,"to_stage",v)}
+                              style={{width:"100%"}} placeholder="Select value…"
+                              options={fld.options.map(o=>({value:o,label:o}))}/>
                           );
                           return <input value={cfg.to_stage||""} onChange={e=>setActionConfig(action.id,"to_stage",e.target.value)} placeholder="e.g. Interview, Offer, Rejected"
                             style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>;
@@ -1601,11 +1592,9 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
 
                   {action.type === "update_field" && (
                     <div style={{ display:"flex", gap:10 }}>
-                      <select value={cfg.field||""} onChange={e=>setActionConfig(action.id,"field",e.target.value)}
-                        style={{ flex:1, padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", background:"white", color:C.text1 }}>
-                        <option value="">Select field…</option>
-                        {fields.map(f => <option key={f.api_key} value={f.api_key}>{f.name}</option>)}
-                      </select>
+                      <StyledSelect value={cfg.field||""} onChange={v=>setActionConfig(action.id,"field",v)}
+                        style={{flex:1}} placeholder="Select field…" searchable
+                        options={fields.map(f=>({value:f.api_key,label:f.name}))}/>
                       <input value={cfg.value||""} onChange={e=>setActionConfig(action.id,"value",e.target.value)} placeholder="New value"
                         style={{ flex:1, boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
                     </div>
