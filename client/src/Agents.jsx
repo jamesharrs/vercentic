@@ -944,7 +944,6 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
   const [tab, setTab] = useState('trigger');
   const [meta, setMeta] = useState({ trigger_types: {}, action_types: {} });
   const [fields, setFields] = useState([]);
-  const [agentUsers, setAgentUsers] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -965,8 +964,6 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
     if(objId) api.get(`/fields?object_id=${objId}`).then(d=>setFields(Array.isArray(d)?d:[])).catch(()=>{});
     else setFields([]);
   },[form.target_object_id, form.scope_object_id]);
-
-  useEffect(()=>{ api.get('/users').then(d=>{ if(Array.isArray(d)) setAgentUsers(d); }).catch(()=>{}); },[]);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const addCondition = () => set('conditions',[...form.conditions,{field:'',operator:'equals',value:''}]);
@@ -1179,82 +1176,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                         />
                       )}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
-                      {a.type==='human_review'&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                          <div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>
-                            ⏸ Agent pauses here. Configure approvers below — each gets an email with Approve/Decline links. The approval also appears on the record's Approvals panel.
-                          </div>
-                          {/* Title */}
-                          <div>
-                            <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:4}}>Approval title</div>
-                            <input value={a.config?.title||""} onChange={e=>updateAction(i,'config',{...a.config,title:e.target.value})}
-                              placeholder="e.g. Approve candidate — {{first_name}} {{last_name}}"
-                              style={{width:"100%",boxSizing:"border-box",padding:"7px 10px",border:`1.5px solid ${C.border}`,borderRadius:8,fontSize:12,fontFamily:F}}/>
-                          </div>
-                          {/* Mode */}
-                          <div>
-                            <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:4}}>Mode</div>
-                            <div style={{display:"flex",gap:6}}>
-                              {[{v:"sequential",l:"Sequential"},{v:"parallel",l:"Parallel"},{v:"majority",l:"Majority"}].map(m=>(
-                                <button key={m.v} onClick={()=>updateAction(i,'config',{...a.config,mode:m.v})}
-                                  style={{flex:1,padding:"5px",borderRadius:7,border:"none",cursor:"pointer",
-                                    background:(a.config?.mode||"sequential")===m.v?"#7c3aed":"#f3f4f6",
-                                    color:(a.config?.mode||"sequential")===m.v?"white":"#374151",
-                                    fontSize:11,fontWeight:700,fontFamily:F}}>
-                                  {m.l}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Approvers */}
-                          <div>
-                            <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:5}}>Approvers</div>
-                            {(a.config?.approver_configs||[]).map((ac,ai)=>(
-                              <div key={ai} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,padding:"7px 9px",borderRadius:8,background:C.surface,border:`1px solid ${C.border}`}}>
-                                <select value={ac.type} onChange={e=>{const newCfgs=[...(a.config?.approver_configs||[])];newCfgs[ai]={...ac,type:e.target.value,name:"",email:"",user_id:""};updateAction(i,'config',{...a.config,approver_configs:newCfgs});}}
-                                  style={{padding:"5px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F,outline:"none",background:"white"}}>
-                                  <option value="named">Named</option>
-                                  <option value="user">User</option>
-                                </select>
-                                {ac.type==="named"&&<>
-                                  <input placeholder="Name" value={ac.name||""} onChange={e=>{const c=[...(a.config?.approver_configs||[])];c[ai]={...ac,name:e.target.value};updateAction(i,'config',{...a.config,approver_configs:c});}} style={{flex:1,padding:"5px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F}}/>
-                                  <input placeholder="Email" value={ac.email||""} onChange={e=>{const c=[...(a.config?.approver_configs||[])];c[ai]={...ac,email:e.target.value};updateAction(i,'config',{...a.config,approver_configs:c});}} style={{flex:1,padding:"5px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F}}/>
-                                </>}
-                                {ac.type==="user"&&(
-                                  <select value={ac.user_id||""} onChange={e=>{const c=[...(a.config?.approver_configs||[])];c[ai]={...ac,user_id:e.target.value};updateAction(i,'config',{...a.config,approver_configs:c});}} style={{flex:1,padding:"5px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F,outline:"none",background:"white"}}>
-                                    <option value="">Select user…</option>
-                                    {(agentUsers||[]).map(u=><option key={u.id} value={u.id}>{[u.first_name,u.last_name].filter(Boolean).join(" ")} ({u.email})</option>)}
-                                  </select>
-                                )}
-                                <button onClick={()=>{const c=(a.config?.approver_configs||[]).filter((_,idx)=>idx!==ai);updateAction(i,'config',{...a.config,approver_configs:c});}} style={{background:"none",border:"none",cursor:"pointer",color:"#ef4444",padding:2}}>✕</button>
-                              </div>
-                            ))}
-                            <div style={{display:"flex",gap:6}}>
-                              {["named","user"].map(t=>(
-                                <button key={t} onClick={()=>{const c=[...(a.config?.approver_configs||[]),{type:t,name:"",email:"",user_id:""}];updateAction(i,'config',{...a.config,approver_configs:c});}}
-                                  style={{padding:"5px 10px",borderRadius:7,border:`1px dashed ${C.border}`,background:"transparent",color:C.text3,fontSize:11,cursor:"pointer",fontFamily:F}}>
-                                  + {t==="named"?"Named":"User"}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Options */}
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                            <div>
-                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:4}}>Expire after (hrs)</div>
-                              <input type="number" min={1} value={a.config?.expires_hours||""} onChange={e=>updateAction(i,'config',{...a.config,expires_hours:parseInt(e.target.value)||null})} placeholder="48" style={{width:"100%",boxSizing:"border-box",padding:"6px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F}}/>
-                            </div>
-                            <div>
-                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:4}}>If declined</div>
-                              <select value={a.config?.on_declined||"stop"} onChange={e=>updateAction(i,'config',{...a.config,on_declined:e.target.value})}
-                                style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:12,fontFamily:F,outline:"none",background:"white"}}>
-                                <option value="stop">Stop agent</option>
-                                <option value="continue">Continue anyway</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing. Use the Agents panel to review and approve.</div>)}
                       {a.type==='interview_coordinator'&&(
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           <div style={{padding:"8px 12px",borderRadius:8,background:"#e0f7fa",border:"1px solid #0891b2",fontSize:12,color:"#0e4f5c",lineHeight:1.5}}>
