@@ -806,7 +806,7 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ padding: "8px 12px", borderRadius: 8, background: "#f5f3ff", border: "1px solid #ddd6fe", fontSize: 11, color: "#5b21b6", lineHeight: 1.5 }}>
                 <strong>✦ AI Content Block</strong> — Write a prompt below. At send time, Claude will generate this section using the recipient's profile, the job details, and match scores as context.
-                <br/>You can use {{merge_tags}} in the prompt too.
+                <br/>You can use {'{{merge_tags}}'} in the prompt too.
               </div>
               <textarea
                 value={block.prompt || block.config?.prompt || ''}
