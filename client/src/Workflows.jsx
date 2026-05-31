@@ -891,7 +891,7 @@ function ApprovalRequestConfig({ cfg, onChange, fields, users: allUsers }) {
   const removeApprover = (i) => onChange({ ...cfg, approver_configs: approvers.filter((_,idx) => idx !== i) });
   const updateApprover = (i, patch) => onChange({ ...cfg, approver_configs: approvers.map((a,idx) => idx===i ? {...a,...patch} : a) });
 
-  const peopleFields = fields.filter(f => ["people","email","text"].includes(f.field_type));
+  const peopleFields = fields.filter(f => f.field_type === "people");
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
