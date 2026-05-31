@@ -7711,6 +7711,7 @@ export const PANEL_META = {
   fields:       { icon:"edit",          label:"Profile Fields",      defaultOpen:true  },
   tasks:        { icon:"checkSquare",   label:"Tasks & Reminders",   defaultOpen:true  },
   comms:        { icon:"mail",          label:"Communications",      defaultOpen:true  },
+  approvals:    { icon:"shield",        label:"Approvals",           defaultOpen:false },
   coordination: { icon:"calendar",      label:"Interviews",             defaultOpen:true,  personOrJob:true },
   notes:        { icon:"messageSquare", label:"Notes",               defaultOpen:true  },
   attachments:  { icon:"paperclip",     label:"Files",               defaultOpen:true  },
@@ -7740,6 +7741,7 @@ export const getDefaultPanelOrder = (objectName) => {
     "linked","engagement",
     ["coordination","assessments"],
     ["comms","tasks"],
+    "approvals",
     ["notes","attachments","forms"],
     ["match","agents"],
     "activity"
@@ -7750,10 +7752,10 @@ export const getDefaultPanelOrder = (objectName) => {
     ["interview_plan","coordination","questions","scorecard"],
     ["job_tasks","tasks"],
     ["notes","attachments","forms"],
-    "agents","bias_scan","activity"
+    "approvals","agents","bias_scan","activity"
   ];
   // Default for other objects
-  return ["tasks","comms","notes","attachments","forms","activity","agents","match"];
+  return ["tasks","comms","approvals","notes","attachments","forms","activity","agents","match"];
 };
 
 // ─── Forms Panel ─────────────────────────────────────────────────────────────
