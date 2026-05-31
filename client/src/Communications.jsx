@@ -1125,11 +1125,32 @@ function CommDetail({ item, onClose, onDelete }) {
           </div>
         )}
 
-        {item.body && (
+        {item.body && item.type === "email" ? (
+          <div style={{ borderRadius:12, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:20 }}>
+            {/* Rendered HTML email */}
+            <iframe
+              srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>
+                body{margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827;line-height:1.6;}
+                img{max-width:100%;height:auto;}
+                a{color:#4361ee;}
+                table{border-collapse:collapse;width:100%;}
+                td,th{padding:8px;}
+              </style></head><body>${item.body_html || item.body}</body></html>`}
+              sandbox="allow-same-origin"
+              style={{ width:"100%", minHeight:200, border:"none", display:"block" }}
+              onLoad={e => {
+                try {
+                  const h = e.target.contentDocument?.body?.scrollHeight;
+                  if (h) e.target.style.height = (h + 32) + "px";
+                } catch {}
+              }}
+            />
+          </div>
+        ) : item.body ? (
           <div style={{ background:C.bg, borderRadius:12, padding:"14px 16px", fontSize:13, color:C.text1, lineHeight:1.7, whiteSpace:"pre-wrap", marginBottom:20 }}>
             {item.body}
           </div>
-        )}
+        ) : null}
 
         <div style={{ fontSize:12, color:C.text3, marginBottom:20 }}>
           {item.from_label && <div>From: <strong>{item.from_label}</strong></div>}
@@ -1165,7 +1186,8 @@ function CommItem({ item, onClick }) {
       ? `Call${item.outcome ? ` — ${item.outcome.replace("_", " ")}` : ""}`
       : `${meta.label}`)
   );
-  const preview = resolveVars(item.body);
+  const rawPreview = resolveVars(item.body_text || item.body || "");
+  const preview = rawPreview.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
   return (
     <div onClick={() => onClick(item)}
