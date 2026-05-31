@@ -635,6 +635,43 @@ router.post('/seed-system', (req, res) => {
       text_body: 'Dear {{referee_name}},\n\n{{candidate_name}} has applied for {{job_title}} at {{company_name}} and given your name as a reference. Please provide a reference here:\n{{reference_link}}\n\nThank you.\n{{company_name}} Talent Team',
       variables: ['referee_name','candidate_name','job_title','company_name','reference_link'],
     },
+
+    // ── Match Notification templates (shown in the Notify flow from AI Match panel) ──
+    {
+      slug: 'sys_match_notify_job',
+      name: '✦ Role Match — Candidate Notification',
+      category: 'outreach',
+      is_system: true,
+      notify_mode: 'job',   // shown when notifying candidates about a single job
+      description: 'Sent to matched candidates when a job goes live. Personalised by AI using the candidate\'s profile and match score.',
+      subject: 'We thought you\'d be a great fit — {{job_title}} at {{company_name}}',
+      blocks: [
+        { id: 'mn_job_h',  type: 'header',  content: { text: '{{job_title}} — Open Role' } },
+        { id: 'mn_job_t1', type: 'text',    content: { text: 'Hi {{first_name}},' } },
+        { id: 'mn_job_ai', type: 'ai_content', prompt: 'Write 2–3 sentences explaining why this candidate is a strong match for the {{job_title}} role at {{company_name}}. Reference their background, skills, and any standout match reasons. Be specific, warm, and concise.', config: { prompt: 'Write 2–3 sentences explaining why this candidate is a strong match for the {{job_title}} role at {{company_name}}. Reference their background, skills, and any standout match reasons. Be specific, warm, and concise.' } },
+        { id: 'mn_job_b1', type: 'button',  content: { text: 'View role →', url: '{{portal_link}}', style: 'primary' } },
+        { id: 'mn_job_t2', type: 'text',    content: { text: 'Best regards,\n{{company_name}} Talent Team' } },
+        { id: 'mn_job_ft', type: 'footer',  content: {} },
+      ],
+      variables: ['first_name', 'job_title', 'company_name', 'portal_link'],
+    },
+    {
+      slug: 'sys_match_notify_person',
+      name: '✦ Job Recommendations — Candidate Digest',
+      category: 'outreach',
+      is_system: true,
+      notify_mode: 'person', // shown when notifying one candidate about multiple jobs
+      description: 'Sent to a candidate with a personalised list of recommended roles. AI writes a tailored summary for each job.',
+      subject: '{{company_name}} — {{job_1_title}}{{job_2_title ? " and more roles" : " and other opportunities"}} matched for you',
+      blocks: [
+        { id: 'mn_p_h',  type: 'header',  content: { text: 'Roles matched for you' } },
+        { id: 'mn_p_t1', type: 'text',    content: { text: 'Hi {{first_name}},\n\nBased on your profile we\'ve identified some roles that look like a strong fit. Here\'s a summary of what we think could be great opportunities for you.' } },
+        { id: 'mn_p_ai', type: 'ai_content', prompt: 'Write a personalised digest for this candidate listing all the recommended jobs. For each job, write 1–2 sentences on why it fits their background. Format as a clean HTML list with the job title bolded and a "View role →" link using the job_N_link variables. Be warm and encouraging.', config: { prompt: 'Write a personalised digest for this candidate listing all the recommended jobs. For each job, write 1–2 sentences on why it fits their background. Format as a clean HTML list with the job title bolded and a "View role →" link using the job_N_link variables. Be warm and encouraging.' } },
+        { id: 'mn_p_t2', type: 'text',    content: { text: 'We\'d love to hear your thoughts — feel free to reply to this email.\n\nBest regards,\n{{company_name}} Talent Team' } },
+        { id: 'mn_p_ft', type: 'footer',  content: {} },
+      ],
+      variables: ['first_name', 'company_name', 'job_1_title', 'job_1_link', 'job_2_title', 'job_2_link'],
+    },
   ];
 
   for (const tmpl of SYSTEM_TEMPLATES) {

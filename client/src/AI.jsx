@@ -410,8 +410,27 @@ const NotifyModal = ({ environment, mode, lockedRecord, selectedItems, allMatche
       setPortals(pArr);
       if (pArr.length === 1) setPortalId(pArr[0].id);
       const tArr = (Array.isArray(t) ? t : []).filter(x => !x.deleted_at);
-      setTemplates(tArr);
-      if (tArr.length === 1) setTemplateId(tArr[0].id);
+      // Filter to templates appropriate for this notify mode:
+      //   mode "job"    → templates with notify_mode "job" or "both", OR ai_content/job vars but no notify_mode (user-created)
+      //   mode "person" → templates with notify_mode "person" or "both", OR multi-job vars but no notify_mode
+      const isRelevant = (tpl) => {
+        if (tpl.notify_mode === 'both') return true;
+        if (tpl.notify_mode) return tpl.notify_mode === mode;
+        // Untagged: include if it contains job-related variables or an ai_content block
+        const body = JSON.stringify(tpl);
+        const hasJobVar = body.includes('job_title') || body.includes('job_1_link') || body.includes('portal_link');
+        const hasAiBlock = (tpl.blocks||[]).some(b => b.type === 'ai_content');
+        return hasJobVar || hasAiBlock;
+      };
+      const relevant = tArr.filter(isRelevant);
+      setTemplates(relevant);
+      // Auto-select the standard template for this mode if present
+      const standard = relevant.find(t =>
+        (mode === 'job'    && t.slug === 'sys_match_notify_job') ||
+        (mode === 'person' && t.slug === 'sys_match_notify_person')
+      );
+      if (standard) setTemplateId(standard.id);
+      else if (relevant.length === 1) setTemplateId(relevant[0].id);
     }).catch(console.error);
   }, [envId]);
 
@@ -539,13 +558,20 @@ const NotifyModal = ({ environment, mode, lockedRecord, selectedItems, allMatche
 
             {/* Template picker */}
             <div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                 <div style={{fontSize:12,fontWeight:700,color:C.text2}}>Email template</div>
                 <a href="/settings?section=email_templates" target="_blank" style={{fontSize:11,color:C.accent,textDecoration:'none'}}>Manage templates →</a>
               </div>
+              <div style={{fontSize:11,color:C.text3,marginBottom:8}}>
+                {mode==='job'
+                  ? 'Showing templates designed for candidate notifications (single role).'
+                  : 'Showing templates designed for multi-role digests sent to one candidate.'}
+                {' '}The ✦ system templates use AI to personalise content for each recipient.
+              </div>
               {templates.length === 0 ? (
-                <div style={{padding:'14px',borderRadius:8,background:'#f8f9fc',border:`1px solid ${C.border}`,fontSize:12,color:C.text3,textAlign:'center'}}>
-                  No email templates yet. <a href="/settings?section=email_templates" target="_blank" style={{color:C.accent}}>Create one in Settings →</a>
+                <div style={{padding:'14px',borderRadius:8,background:'#fffbeb',border:'1px solid #fde68a',fontSize:12,color:'#92400e'}}>
+                  No matching templates found. Seed the system templates via <strong>Settings → Email Templates → Seed defaults</strong>, or{' '}
+                  <a href="/settings?section=email_templates" target="_blank" style={{color:C.accent}}>create one with job/portal variables →</a>
                 </div>
               ) : (
                 <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -553,8 +579,16 @@ const NotifyModal = ({ environment, mode, lockedRecord, selectedItems, allMatche
                     <label key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:8,border:`1.5px solid ${templateId===t.id?C.accent:C.border}`,cursor:'pointer',background:templateId===t.id?C.accentLight:'white',transition:'all .12s'}}>
                       <input type="radio" checked={templateId===t.id} onChange={()=>setTemplateId(t.id)} style={{accentColor:C.accent}}/>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{t.name}</div>
-                        {t.category && <div style={{fontSize:11,color:C.text3,textTransform:'capitalize'}}>{t.category}</div>}
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{fontSize:13,fontWeight:600,color:C.text1}}>{t.name}</span>
+                          {(t.blocks||[]).some(b=>b.type==='ai_content') && (
+                            <span style={{fontSize:10,padding:'1px 6px',borderRadius:99,background:'#f5f3ff',color:'#7c3aed',fontWeight:700,flexShrink:0}}>✦ AI</span>
+                          )}
+                          {t.is_system && (
+                            <span style={{fontSize:10,padding:'1px 6px',borderRadius:99,background:'#f0fdf4',color:'#0ca678',fontWeight:700,flexShrink:0}}>System</span>
+                          )}
+                        </div>
+                        {t.description && <div style={{fontSize:11,color:C.text3,marginTop:2,lineHeight:1.4}}>{t.description}</div>}
                       </div>
                     </label>
                   ))}
