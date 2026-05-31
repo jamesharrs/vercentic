@@ -81,6 +81,25 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
   const textBody = text || body || '';
   const htmlBody = html || textBody.replace(/\n/g, '<br>');
 
+  // ── Email redirect override (testing / staging) ───────────────────────────
+  // If EMAIL_REDIRECT_TO is set, ALL outbound emails go to that address instead.
+  // The original recipient is noted in the subject and at the top of the email body.
+  const redirectTo = process.env.EMAIL_REDIRECT_TO;
+  if (redirectTo && redirectTo.trim() && !redirectTo.startsWith('YOUR_')) {
+    const originalTo = to;
+    to     = redirectTo.trim();
+    toName = undefined;
+    subject = `[TEST → ${originalTo}] ${subject}`;
+    const notice = `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-family:sans-serif;font-size:13px;color:#92400e;">
+      <strong>⚠ Email redirect active</strong><br>
+      This email was originally addressed to <strong>${originalTo}</strong>.<br>
+      It has been redirected to <strong>${redirectTo.trim()}</strong> for testing.
+    </div>`;
+    html   = notice + (html || textBody.replace(/\n/g, '<br>'));
+    text   = `[REDIRECT] Original recipient: ${originalTo}\n\n${textBody}`;
+    console.log(\`[messaging] EMAIL REDIRECTED: \${originalTo} → \${redirectTo.trim()} | Subject: \${subject}\`);
+  }
+
   // ── MailerSend (primary) ──────────────────────────────────────────────────
   if (MAILERSEND_CONFIGURED) {
     const ms = require('./mailersend');
