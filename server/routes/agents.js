@@ -489,8 +489,50 @@ async function executeAgent(agent, run, record_id) {
         logAiActivity({ record_id, environment_id: agent.environment_id, agent_name: agent.name, action_type: action.type, summary: aiOutput?.slice(0, 120) });
         addStep(`AI action completed`, { type:'ai', output_preview: aiOutput?.slice(0,200) });
       } else if (action.type === 'human_review') {
-        pendingActions.push({ action, action_index: pendingActions.length, ai_output: aiOutput, record_preview: recordContext.slice(0,300), approved: undefined, created_at: new Date().toISOString() });
-        addStep('Paused — awaiting human approval');
+        // Build a proper approval request linked to the record
+        const cfg = action.config || {};
+        const approverConfigs = cfg.approver_configs || [];
+        const record2 = (getStore().records || []).find(r => r.id === record_id);
+        const rawTitle = cfg.title || `Agent approval required — ${agent.name}`;
+        const approvalTitle = rawTitle.replace(/\{\{(\w+)\}\}/g, (_, k) => record2?.data?.[k] || k);
+
+        let approvalId = null;
+        if (approverConfigs.length > 0 && record2) {
+          try {
+            const appModule = require('./approvals');
+            const resolved = appModule.resolveApprovers(approverConfigs, record2, getStore());
+            if (resolved.length > 0) {
+              const now2 = new Date().toISOString();
+              const approval = {
+                id: require('uuid').v4(), environment_id: agent.environment_id,
+                record_id, object_id: record2.object_id, title: approvalTitle,
+                summary: cfg.summary || aiOutput?.slice(0,300) || null,
+                mode: cfg.mode || 'sequential', majority_threshold: cfg.majority_threshold || null,
+                approvers: resolved, approver_configs: approverConfigs,
+                status: 'pending',
+                on_approved: { action: 'continue_agent' },
+                on_declined: { action: cfg.on_declined || 'stop' },
+                expires_at: cfg.expires_hours ? new Date(Date.now() + cfg.expires_hours*3600000).toISOString() : null,
+                reminder_hours: cfg.reminder_hours || null,
+                source: 'agent', agent_id: agent.id, agent_run_id: runId,
+                created_at: now2, updated_at: now2, resolved_at: null,
+              };
+              const s3 = getStore();
+              if (!s3.approvals) s3.approvals = [];
+              s3.approvals.push(approval);
+              saveStore();
+              approvalId = approval.id;
+              // Send emails
+              const toSend = (cfg.mode||'sequential')==='sequential' ? resolved.slice(0,1) : resolved;
+              for (const approver of toSend) {
+                appModule.sendApprovalEmailDirect({ approval, approver, baseUrl: process.env.APP_URL||'http://localhost:3000' }).catch(()=>{});
+              }
+              addStep(`Approval request sent — "${approvalTitle}" (${resolved.length} approver${resolved.length!==1?'s':''}, ${cfg.mode||'sequential'} mode)`, { type:'approval', approval_id: approvalId });
+            }
+          } catch(e) { console.warn('[agent] approval creation failed:', e.message); }
+        }
+        pendingActions.push({ action, action_index: pendingActions.length, ai_output: aiOutput, record_preview: recordContext.slice(0,300), approved: undefined, created_at: new Date().toISOString(), approval_id: approvalId });
+        addStep('Paused — awaiting approval');
       } else {
         const lastPending = pendingActions[pendingActions.length - 1];
         if (lastPending && lastPending.approved === undefined) { pendingActions.push({ action, action_index: pendingActions.length, queued: true }); }

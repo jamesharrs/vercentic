@@ -456,4 +456,10 @@ router.delete('/templates/list/:id', (req, res) => {
   return res.json({ ok: true });
 });
 
+// Export helpers for use by workflow and agent runners
 module.exports = router;
+module.exports.sendApprovalEmailDirect = sendApprovalEmail;
+module.exports.resolveApprovers = resolveApprovers;
+module.exports.computeOutcome = computeOutcome;
+module.exports.pendingApprovers = pendingApprovers;
+

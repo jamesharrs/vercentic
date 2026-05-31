@@ -74,6 +74,7 @@ const AUTOMATION_TYPES = [
   { type:"create_offer",          label:"Create Offer",         icon:"dollar",    color:"#0ca678", desc:"Create an offer for the candidate" },
   { type:"assign_task_group",     label:"Assign Task Group",    icon:"check-square", color:"#7c3aed", desc:"Assign a task group template to the person" },
   { type:"share_record",          label:"Share Record",         icon:"share",     color:"#0891b2", desc:"Share this record with a user or hiring manager for review or feedback" },
+  { type:"request_approval",      label:"Request Approval",     icon:"shield",    color:"#7c3aed", desc:"Send for approval — sequential, parallel, or majority vote — before continuing" },
 ];
 
 // Keep STEP_TYPES as alias for display in run results etc.
@@ -872,6 +873,150 @@ const StepHubConfig = ({ step, onChange, personFields=[], recordFields=[] }) => 
   );
 };
 
+
+// ── Request Approval config component ────────────────────────────────────────
+function ApprovalRequestConfig({ cfg, onChange, fields, users: allUsers }) {
+  const [users, setUsers] = useState(allUsers || []);
+  useEffect(() => {
+    if (users.length) return;
+    api.get('/users').then(d => { if (Array.isArray(d)) setUsers(d); }).catch(() => {});
+  }, []);
+
+  const inp = { width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`,
+    borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 };
+
+  const approvers = cfg.approver_configs || [];
+
+  const addApprover = (type) => onChange({ ...cfg, approver_configs: [...approvers, { type, name:"", email:"", user_id:"", field_key:"", label:"" }] });
+  const removeApprover = (i) => onChange({ ...cfg, approver_configs: approvers.filter((_,idx) => idx !== i) });
+  const updateApprover = (i, patch) => onChange({ ...cfg, approver_configs: approvers.map((a,idx) => idx===i ? {...a,...patch} : a) });
+
+  const peopleFields = fields.filter(f => ["people","email","text"].includes(f.field_type));
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      {/* Title */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>Approval title</div>
+        <input value={cfg.title||""} onChange={e=>onChange({...cfg,title:e.target.value})}
+          placeholder="e.g. Approve job posting — {{job_title}}" style={inp}/>
+        <div style={{ fontSize:10, color:C.text3, marginTop:3 }}>Use {"{{field_name}}"} to insert record values</div>
+      </div>
+
+      {/* Summary */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>Description (shown to approvers)</div>
+        <textarea value={cfg.summary||""} onChange={e=>onChange({...cfg,summary:e.target.value})} rows={2}
+          placeholder="What are approvers reviewing?" style={{ ...inp, resize:"vertical", lineHeight:1.5 }}/>
+      </div>
+
+      {/* Mode */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>Approval mode</div>
+        <div style={{ display:"flex", gap:6 }}>
+          {[{v:"sequential",l:"Sequential"},{v:"parallel",l:"Parallel"},{v:"majority",l:"Majority"}].map(m => (
+            <button key={m.v} onClick={()=>onChange({...cfg,mode:m.v})}
+              style={{ flex:1, padding:"6px 8px", borderRadius:8, border:"none", cursor:"pointer",
+                background:(cfg.mode||"sequential")===m.v?"#7c3aed":"#f3f4f6",
+                color:(cfg.mode||"sequential")===m.v?"white":"#374151",
+                fontSize:11, fontWeight:700, fontFamily:F }}>
+              {m.l}
+            </button>
+          ))}
+        </div>
+        {cfg.mode==="majority" && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8 }}>
+            <span style={{ fontSize:11, color:C.text3 }}>Required:</span>
+            <input type="number" min={1} value={cfg.majority_threshold||""} onChange={e=>onChange({...cfg,majority_threshold:parseInt(e.target.value)||null})}
+              style={{ ...inp, width:60 }} placeholder="e.g. 2"/>
+            <span style={{ fontSize:11, color:C.text3 }}>of {approvers.length||"?"} approvers</span>
+          </div>
+        )}
+      </div>
+
+      {/* Approvers */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:6 }}>Approvers</div>
+        {approvers.length===0 && (
+          <div style={{ padding:"10px", textAlign:"center", color:C.text3, fontSize:11,
+            borderRadius:8, border:`1.5px dashed ${C.border}`, marginBottom:8 }}>
+            No approvers — add at least one
+          </div>
+        )}
+        {approvers.map((a, i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6,
+            padding:"8px 10px", borderRadius:8, background:C.surface, border:`1px solid ${C.border}` }}>
+            <div style={{ width:18, height:18, borderRadius:"50%", background:"#ede9fe",
+              display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:"#7c3aed", flexShrink:0 }}>{i+1}</div>
+            <select value={a.type} onChange={e=>updateApprover(i,{type:e.target.value,name:"",email:"",user_id:"",field_key:"",label:""})}
+              style={{ ...inp, width:"auto" }}>
+              <option value="named">Named person</option>
+              <option value="user">Platform user</option>
+              {peopleFields.length>0 && <option value="field">From record field</option>}
+            </select>
+            {a.type==="named" && <>
+              <input placeholder="Name" value={a.name||""} onChange={e=>updateApprover(i,{name:e.target.value})} style={{ ...inp, flex:1 }}/>
+              <input placeholder="Email" value={a.email||""} onChange={e=>updateApprover(i,{email:e.target.value})} style={{ ...inp, flex:1 }}/>
+            </>}
+            {a.type==="user" && (
+              <select value={a.user_id||""} onChange={e=>updateApprover(i,{user_id:e.target.value})} style={{ ...inp, flex:1 }}>
+                <option value="">Select user…</option>
+                {users.map(u=><option key={u.id} value={u.id}>{[u.first_name,u.last_name].filter(Boolean).join(" ")} ({u.email})</option>)}
+              </select>
+            )}
+            {a.type==="field" && (
+              <select value={a.field_key||""} onChange={e=>{const f=peopleFields.find(f2=>f2.api_key===e.target.value); updateApprover(i,{field_key:e.target.value,label:f?.name||e.target.value});}} style={{ ...inp, flex:1 }}>
+                <option value="">Select field…</option>
+                {peopleFields.map(f=><option key={f.api_key} value={f.api_key}>{f.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>removeApprover(i)} style={{ background:"none", border:"none", cursor:"pointer", color:"#ef4444", padding:2, flexShrink:0 }}>✕</button>
+          </div>
+        ))}
+        <div style={{ display:"flex", gap:6 }}>
+          {[{t:"named",l:"+ Named"},{t:"user",l:"+ User"},{t:"field",l:"+ From field"}].map(opt => (
+            <button key={opt.t} onClick={()=>addApprover(opt.t)}
+              style={{ padding:"5px 10px", borderRadius:7, border:`1px dashed ${C.border}`,
+                background:"transparent", color:C.text3, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:F }}>
+              {opt.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Options */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>Expire after (hours)</div>
+          <input type="number" min={1} value={cfg.expires_hours||""} onChange={e=>onChange({...cfg,expires_hours:parseInt(e.target.value)||null})}
+            placeholder="e.g. 48" style={inp}/>
+        </div>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>Reminder after (hours)</div>
+          <input type="number" min={1} value={cfg.reminder_hours||""} onChange={e=>onChange({...cfg,reminder_hours:parseInt(e.target.value)||null})}
+            placeholder="e.g. 24" style={inp}/>
+        </div>
+      </div>
+
+      {/* On decline */}
+      <div>
+        <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5 }}>If declined</div>
+        <select value={cfg.on_declined||"stop"} onChange={e=>onChange({...cfg,on_declined:e.target.value})} style={inp}>
+          <option value="stop">Stop workflow</option>
+          <option value="continue">Continue anyway</option>
+          <option value="notify_requester">Notify requester and stop</option>
+        </select>
+      </div>
+
+      {approvers.length===0 && (
+        <div style={{ padding:"8px 10px", borderRadius:8, background:"#fef3c7", border:"1px solid #fde68a", fontSize:11, color:"#b45309" }}>
+          ⚠ Add at least one approver or the step will be skipped.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Assign Task Group config component ────────────────────────────────────────
 function AssignTaskGroupConfig({ cfg, onChange, envId, fields }) {
   const [templates, setTemplates] = useState([]);
@@ -1581,6 +1726,10 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
 
                   {action.type === "assign_task_group" && (
                     <AssignTaskGroupConfig cfg={cfg} onChange={patch=>setActionConfigs(action.id, patch)} envId={envId} fields={fields}/>
+                  )}
+
+                  {action.type === "request_approval" && (
+                    <ApprovalRequestConfig cfg={cfg} onChange={patch=>setActionConfigs(action.id, patch)} fields={fields}/>
                   )}
 
                   {action.type === "share_record" && (

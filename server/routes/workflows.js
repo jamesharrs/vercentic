@@ -721,6 +721,88 @@ router.post('/:id/run', async (req, res) => {
               }
             }
 
+
+          } else if (action.type === 'request_approval') {
+            // Resolve title — replace {{field}} tokens
+            const rawTitle = cfg.title || 'Approval required';
+            const title = rawTitle.replace(/\{\{(\w+)\}\}/g, (_, k) => record.data?.[k] || k);
+            const summary = cfg.summary || null;
+
+            // Resolve approvers using the same logic as the approvals route
+            const resolveApprovers = require('./approvals').resolveApprovers || null;
+            const s2 = getStore();
+
+            // Inline resolve (avoids circular require issues)
+            const approverConfigs = cfg.approver_configs || [];
+            const resolvedApprovers = [];
+            let order = 0;
+            for (const ac of approverConfigs) {
+              if (ac.type === 'named' && ac.email) {
+                resolvedApprovers.push({ id: uuidv4(), name: ac.name||ac.email, email: ac.email, source_label:'Named', order: order++, status:'pending', token: uuidv4(), responded_at:null, note:null });
+              } else if (ac.type === 'user' && ac.user_id) {
+                const u = (s2.users||[]).find(x => x.id === ac.user_id);
+                if (u) resolvedApprovers.push({ id: uuidv4(), name:[u.first_name,u.last_name].filter(Boolean).join(' ')||u.email, email:u.email, source_label:'Platform user', order: order++, status:'pending', token: uuidv4(), responded_at:null, note:null });
+              } else if (ac.type === 'field' && ac.field_key) {
+                const fv = record.data?.[ac.field_key];
+                const ids = Array.isArray(fv) ? fv.map(v=>(typeof v==='object'?v.id:v)) : (fv ? [typeof fv==='object'?fv.id:fv] : []);
+                for (const id of ids) {
+                  const u = (s2.users||[]).find(x=>x.id===id);
+                  if (u?.email) { resolvedApprovers.push({ id:uuidv4(), name:[u.first_name,u.last_name].filter(Boolean).join(' ')||u.email, email:u.email, source_label:ac.label||ac.field_key, order:order++, status:'pending', token:uuidv4(), responded_at:null, note:null }); continue; }
+                  const pr = (s2.records||[]).find(r=>r.id===id);
+                  if (pr?.data?.email) resolvedApprovers.push({ id:uuidv4(), name:[pr.data.first_name,pr.data.last_name].filter(Boolean).join(' ')||pr.data.email, email:pr.data.email, source_label:ac.label||ac.field_key, order:order++, status:'pending', token:uuidv4(), responded_at:null, note:null });
+                }
+              }
+            }
+
+            if (!resolvedApprovers.length) {
+              actionOutput = '⚠ No approvers resolved — approval step skipped';
+              actionStatus = 'warning';
+            } else {
+              const threshold = cfg.majority_threshold || (cfg.mode==='majority' ? Math.ceil(resolvedApprovers.length/2) : null);
+              const now = new Date().toISOString();
+              const approval = {
+                id: uuidv4(),
+                environment_id: record.environment_id,
+                record_id,
+                object_id: record.object_id,
+                title,
+                summary,
+                mode: cfg.mode || 'sequential',
+                majority_threshold: threshold,
+                approvers: resolvedApprovers,
+                approver_configs: approverConfigs,
+                status: 'pending',
+                on_approved: { action: 'next_workflow_step' },
+                on_declined: { action: cfg.on_declined || 'stop' },
+                expires_at: cfg.expires_hours ? new Date(Date.now() + cfg.expires_hours*3600000).toISOString() : null,
+                reminder_hours: cfg.reminder_hours || null,
+                source: 'workflow',
+                workflow_id: wf.id,
+                workflow_step_id: step.id,
+                created_at: now,
+                updated_at: now,
+                resolved_at: null,
+              };
+              if (!s2.approvals) s2.approvals = [];
+              s2.approvals.push(approval);
+              require('../db/init').saveStore();
+
+              // Send emails to first pending approvers
+              const appModule = (() => { try { return require('./approvals'); } catch { return null; } })();
+              if (appModule?.sendApprovalEmailDirect) {
+                const toSend = cfg.mode === 'sequential' ? resolvedApprovers.slice(0,1) : resolvedApprovers;
+                for (const approver of toSend) {
+                  appModule.sendApprovalEmailDirect({ approval, approver, baseUrl: process.env.APP_URL || 'http://localhost:3000' }).catch(()=>{});
+                }
+              } else {
+                // Fallback: log
+                console.log(`[approval] Created "${title}" with ${resolvedApprovers.length} approver(s) — emails simulated`);
+                resolvedApprovers.forEach(a => console.log(`  → ${a.name} <${a.email}> token=${a.token}`));
+              }
+
+              actionOutput = `Approval request created: "${title}" — ${resolvedApprovers.length} approver${resolvedApprovers.length!==1?'s':''}, ${cfg.mode||'sequential'} mode`;
+            }
+
           } else if (action.type === 'share_record') {
             // Resolve recipients
             const { resolveRecipients } = require('./record_shares');
