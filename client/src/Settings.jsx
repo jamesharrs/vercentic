@@ -2519,9 +2519,8 @@ function CompanyProfilePanel({ environment }) {
   // Load profile on mount
   useEffect(() => {
     if (!envId) return;
-    tFetch(`/api/company-research?environment_id=${envId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { setProfile(data); setLoading(false); })
+    api.get(`/company-research?environment_id=${envId}`)
+      .then(data => { setProfile(data?.name ? data : null); setLoading(false); })
       .catch(() => setLoading(false));
   }, [envId]);
 
@@ -2541,15 +2540,16 @@ function CompanyProfilePanel({ environment }) {
     setSaving(true);
     try {
       const merged = { ...(profile || {}), ...patch, environment_id: envId };
-      const r = await tFetch('/api/company-research/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment_id: envId, profile: merged, apply_templates: false }),
+      const d = await api.post('/company-research/save', {
+        environment_id: envId, profile: merged, apply_templates: false,
       });
-      if (r.ok) { const d = await r.json(); setProfile(d.profile || merged); }
+      if (d?.profile) setProfile(d.profile);
+      else setProfile(merged);
       setEditing(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error('[CompanyProfile] save failed', e);
     } finally { setSaving(false); }
   };
 

@@ -3073,6 +3073,21 @@ activeNavRef.current = activeNav;
           onDone={() => setShowLoginModal(false)}
         />
       )}
+
+      {/* Company Setup Wizard — launched from Company Profile settings */}
+      {showSetupWizard && (
+        <Suspense fallback={null}>
+          <CompanySetupWizard
+            environment={selectedEnv}
+            onClose={() => setShowSetupWizard(false)}
+            onComplete={() => {
+              setShowSetupWizard(false);
+              // Re-navigate to company profile so it refreshes
+              window.dispatchEvent(new CustomEvent('talentos:nav', { detail: { section: 'company_profile' } }));
+            }}
+          />
+        </Suspense>
+      )}
     </PermissionProvider>
   );
 }
