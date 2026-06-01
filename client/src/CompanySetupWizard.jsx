@@ -34,7 +34,7 @@ const PATHS = {
   mail:"M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
   star:"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
   briefcase:"M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zm-9-2h2v2H11V5zm-2 0a2 2 0 012-2h2a2 2 0 012 2v2H9V5z",
-  sparkle:"M12 3v1m0 16v1M3 12h1m16 0h1m-2.222-6.364l-.707.707M4.929 19.071l.707-.707M4.929 4.929l.707.707m13.435 13.435l-.707-.707M9 12a3 3 0 116 0 3 3 0 01-6 0z",
+  sparkle:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17zM19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z",
   loader:"M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
   building:"M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
 };
@@ -181,7 +181,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:16,color:"white",padding:"8px 12px",fontFamily:F}}/>
           <button onClick={handleResearch} disabled={!query.trim()||loading}
             style={{padding:"10px 24px",borderRadius:10,border:"none",background:query.trim()?"#4361EE":"rgba(255,255,255,0.2)",color:"white",fontSize:14,fontWeight:700,cursor:query.trim()?"pointer":"default",display:"flex",alignItems:"center",gap:8,fontFamily:F,transition:"background 0.15s"}}>
-            <Ic n="search" s={16} c="white"/>Research
+            <Ic n="sparkle" s={16} c="white"/>Research
           </button>
         </div>
 
