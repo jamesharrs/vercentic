@@ -204,7 +204,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 1: Review profile
   if (step===1&&editedProfile) return (
-    <div style={{padding:"24px 28px",fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={1}/>
       <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:28}}>
         <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
@@ -251,7 +251,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 2: Configure
   if (step===2) return (
-    <div style={{padding:"24px 28px",fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={2}/>
       <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Configure your workspace</h2>
       <p style={{fontSize:14,color:C.text3,margin:"0 0 32px"}}>Choose which AI-generated content to apply. You can change these any time in Settings.</p>
@@ -297,7 +297,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 3: Success
   if (step===3) return (
-    <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center"}}>
+    <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center",background:"#ffffff",minHeight:"100%"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
         <Ic n="check" s={36} c={C.green}/>
       </div>

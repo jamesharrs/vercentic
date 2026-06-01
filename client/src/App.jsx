@@ -3108,6 +3108,8 @@ activeNavRef.current = activeNav;
                     environmentName={selectedEnv?.name}
                     onComplete={() => {
                       setShowSetupWizard(false);
+                      // Force company profile panel to reload by briefly switching away and back
+                      window.dispatchEvent(new CustomEvent('talentos:company-profile-updated'));
                     }}
                     onSkip={() => setShowSetupWizard(false)}
                   />

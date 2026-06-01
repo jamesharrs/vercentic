@@ -2517,12 +2517,17 @@ function CompanyProfilePanel({ environment }) {
 
   const envId = environment?.id;
 
-  // Load profile on mount
+  // Load profile on mount and when wizard completes
   useEffect(() => {
     if (!envId) return;
-    api.get(`/company-research?environment_id=${envId}`)
-      .then(data => { setProfile(data?.name ? data : null); setLoading(false); })
-      .catch(() => setLoading(false));
+    const load = () => {
+      api.get(`/company-research?environment_id=${envId}`)
+        .then(data => { setProfile(data?.name ? data : null); setLoading(false); })
+        .catch(() => setLoading(false));
+    };
+    load();
+    window.addEventListener('talentos:company-profile-updated', load);
+    return () => window.removeEventListener('talentos:company-profile-updated', load);
   }, [envId]);
 
   const launchWizard = () => {
