@@ -97,7 +97,9 @@ router.post('/', async (req, res) => {
           } catch { /* no domains table yet */ }
         }
         dispatchResult = await sendEmail({
-          to, from: fromEmail, replyTo: replyToAddress, subject, text: body,
+          to, from: fromEmail, replyTo: replyToAddress, subject,
+          html: rest.body_html || body,   // use pre-built branded HTML if available
+          text: rest.body_text || body,   // plain-text fallback for email clients
         });
         status = dispatchResult.simulated ? 'simulated' : 'sent';
       }
