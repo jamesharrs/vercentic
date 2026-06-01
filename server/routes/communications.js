@@ -60,7 +60,8 @@ router.get('/:id', (req, res) => {
 
 // ─── Send / create communication ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  const { type, direction, to, subject, body, record_id, environment_id, ...rest } = req.body;
+  const { type, direction, to, body, record_id, environment_id, ...rest } = req.body;
+  const subject = req.body.subject || (type === 'email' ? '(No subject)' : undefined);
 
   let dispatchResult = {};
   let status = 'logged';

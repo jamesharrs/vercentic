@@ -93,8 +93,11 @@ async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, t
       This email was originally addressed to <strong>${originalTo}</strong>.<br>
       It has been redirected to <strong>${redirectTo.trim()}</strong> for testing.
     </div>`;
-    // Inject notice into htmlBody — insert after <body...> tag if present, else prepend
-    if (htmlBody.includes('<body')) {
+    // Inject inside the email body cell if branded template, else after <body>
+    if (htmlBody.includes('class="email-body"')) {
+      // Branded template — inject inside the content cell so it appears inside the card
+      htmlBody = htmlBody.replace(/(<td[^>]*class="email-body"[^>]*>)/i, `$1${notice}`);
+    } else if (htmlBody.includes('<body')) {
       htmlBody = htmlBody.replace(/(<body[^>]*>)/i, `$1${notice}`);
     } else {
       htmlBody = notice + htmlBody;
