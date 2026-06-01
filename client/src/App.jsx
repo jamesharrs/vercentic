@@ -1,5 +1,6 @@
 import StyledSelect from './components/StyledSelect.jsx';
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, startTransition } from "react";
+import ReactDOM from "react-dom";
 import { useTour } from "./GuidedTour.jsx";
 import api, { getTenantSlug } from "./apiClient.js";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
@@ -3077,15 +3078,44 @@ activeNavRef.current = activeNav;
       {/* Company Setup Wizard — launched from Company Profile settings */}
       {showSetupWizard && (
         <Suspense fallback={null}>
-          <CompanySetupWizard
-            environment={selectedEnv}
-            onClose={() => setShowSetupWizard(false)}
-            onComplete={() => {
-              setShowSetupWizard(false);
-              // Re-navigate to company profile so it refreshes
-              window.dispatchEvent(new CustomEvent('talentos:nav', { detail: { section: 'company_profile' } }));
-            }}
-          />
+          {ReactDOM.createPortal(
+            <div style={{
+              position:"fixed", inset:0, zIndex:1200,
+              background:"rgba(0,0,0,0.55)", backdropFilter:"blur(4px)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              padding:24,
+            }}>
+              <div style={{
+                width:"100%", maxWidth:780, maxHeight:"90vh",
+                borderRadius:20, overflow:"hidden",
+                boxShadow:"0 24px 80px rgba(0,0,0,0.35)",
+                display:"flex", flexDirection:"column",
+                position:"relative",
+              }}>
+                {/* Close button */}
+                <button onClick={() => setShowSetupWizard(false)}
+                  style={{ position:"absolute", top:16, right:16, zIndex:10,
+                    width:32, height:32, borderRadius:"50%", border:"none",
+                    background:"rgba(255,255,255,0.15)", color:"white",
+                    cursor:"pointer", fontSize:18, display:"flex",
+                    alignItems:"center", justifyContent:"center",
+                    backdropFilter:"blur(4px)" }}>
+                  ×
+                </button>
+                <div style={{ flex:1, overflowY:"auto" }}>
+                  <CompanySetupWizard
+                    environmentId={selectedEnv?.id}
+                    environmentName={selectedEnv?.name}
+                    onComplete={() => {
+                      setShowSetupWizard(false);
+                    }}
+                    onSkip={() => setShowSetupWizard(false)}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
         </Suspense>
       )}
     </PermissionProvider>
