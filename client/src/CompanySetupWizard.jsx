@@ -1,6 +1,6 @@
 import api, { tFetch } from "./apiClient.js";
 // client/src/CompanySetupWizard.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const C = {
   bg:"#F0F2FF", card:"#FFFFFF", accent:"#4361EE", accentLight:"#EEF0FD",
@@ -115,7 +115,7 @@ const EmailTemplateCard = ({ template, checked, onChange }) => (
 
 export default function CompanySetupWizard({ environmentId, environmentName, onComplete, onSkip }) {
   const [step, setStep] = useState(0);
-  const [query, setQuery] = useState(environmentName || "");
+  const [query, setQuery] = useState("");  // will be set after profile load
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -126,6 +126,16 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   const [selectedTemplates, setSelectedTemplates] = useState(new Set());
   const [selectedFields, setSelectedFields] = useState(new Set());
   const STEPS = ["Search","Company Profile","Configure","Apply"];
+
+  // Pre-fill with existing company name if profile exists, otherwise blank
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/company-research?environment_id=${environmentId}`)
+      .then(data => {
+        if (data?.name) setQuery(data.name);
+      })
+      .catch(() => {});
+  }, [environmentId]);
 
   const handleResearch = async () => {
     if (!query.trim()) return;
