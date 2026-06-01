@@ -1,6 +1,6 @@
 import api, { tFetch } from "./apiClient.js";
 // client/src/CompanySetupWizard.jsx
-import { useState } from "react";
+import React, { useState } from "react";
 
 const C = {
   bg:"#F0F2FF", card:"#FFFFFF", accent:"#4361EE", accentLight:"#EEF0FD",
@@ -63,17 +63,23 @@ const PulseLoader = ({ label="Researching..." }) => (
 );
 
 const StepIndicator = ({ steps, current }) => (
-  <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:36}}>
+  <div style={{display:"flex",alignItems:"center",marginBottom:24,padding:"0 4px"}}>
     {steps.map((s,i)=>(
-      <div key={i} style={{display:"flex",alignItems:"center",flex:i<steps.length-1?1:0}}>
-        <div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:i<current?C.green:i===current?C.accent:C.border,color:i<=current?"white":C.text3,fontSize:12,fontWeight:700,transition:"all 0.3s"}}>
-          {i<current?<Ic n="check" s={14} c="white"/>:i+1}
+      <React.Fragment key={i}>
+        {/* Step circle + label */}
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+            background:i<current?C.green:i===current?C.accent:"#E5E7EB",
+            color:i<=current?"white":C.text3,fontSize:11,fontWeight:700,transition:"all 0.3s"}}>
+            {i<current?<Ic n="check" s={12} c="white"/>:i+1}
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:i===current?C.accent:i<current?C.green:C.text3,whiteSpace:"nowrap"}}>{s}</div>
         </div>
-        <div style={{marginLeft:8,marginRight:16,flexShrink:0}}>
-          <div style={{fontSize:11,fontWeight:700,color:i===current?C.accent:i<current?C.green:C.text3,lineHeight:1.2}}>{s}</div>
-        </div>
-        {i<steps.length-1&&<div style={{flex:1,height:2,background:i<current?C.green:C.border,marginRight:16,transition:"background 0.3s"}}/>}
-      </div>
+        {/* Connector line */}
+        {i<steps.length-1&&(
+          <div style={{flex:1,height:2,background:i<current?C.green:"#E5E7EB",margin:"0 8px",minWidth:16,transition:"background 0.3s"}}/>
+        )}
+      </React.Fragment>
     ))}
   </div>
 );
@@ -153,7 +159,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 0: Search
   if (step===0) return (
-    <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:40,fontFamily:F,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#1a1a2e 0%,#3b5bdb 100%)"}}>
+    <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 32px",fontFamily:F,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#1a1a2e 0%,#3b5bdb 100%)"}}>
       {/* Radial glow — matches login page */}
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 20% 30%,rgba(99,102,241,0.35) 0%,transparent 55%),radial-gradient(ellipse at 80% 70%,rgba(67,97,238,0.25) 0%,transparent 50%)",pointerEvents:"none"}}/>
       {/* Subtle grid overlay */}
@@ -188,7 +194,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 1: Review profile
   if (step===1&&editedProfile) return (
-    <div style={{maxWidth:800,margin:"0 auto",padding:40,fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F}}>
       <StepIndicator steps={STEPS} current={1}/>
       <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:28}}>
         <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
@@ -235,7 +241,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 2: Configure
   if (step===2) return (
-    <div style={{maxWidth:800,margin:"0 auto",padding:40,fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F}}>
       <StepIndicator steps={STEPS} current={2}/>
       <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Configure your workspace</h2>
       <p style={{fontSize:14,color:C.text3,margin:"0 0 32px"}}>Choose which AI-generated content to apply. You can change these any time in Settings.</p>
@@ -281,7 +287,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 3: Success
   if (step===3) return (
-    <div style={{maxWidth:540,margin:"0 auto",padding:40,fontFamily:F,textAlign:"center"}}>
+    <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
         <Ic n="check" s={36} c={C.green}/>
       </div>
