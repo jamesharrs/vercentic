@@ -268,7 +268,11 @@ export function ComposeModal({
   // Close kit picker on outside click
   useEffect(() => {
     if (!showKitPicker) return;
-    const close = () => setShowKitPicker(false);
+    const close = (e) => {
+      // Don't close if clicking inside the picker
+      if (e.target.closest?.('[data-kit-picker]')) return;
+      setShowKitPicker(false);
+    };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [showKitPicker]);
@@ -983,7 +987,7 @@ export function ComposeModal({
                 ) : "🎨 Layout"}
               </button>
               {showKitPicker && (
-                <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:200,
+                <div data-kit-picker="true" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:200,
                   background:"white", borderRadius:12, border:`1.5px solid ${border}`,
                   boxShadow:"0 8px 24px rgba(0,0,0,0.12)", padding:"8px", minWidth:180 }}
                   onClick={e => e.stopPropagation()}>

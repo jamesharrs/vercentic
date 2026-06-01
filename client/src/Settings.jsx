@@ -3,6 +3,7 @@ import api, { tFetch } from "./apiClient.js";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import StyledSelect from "./components/StyledSelect.jsx";
 import { useI18n, LANGUAGES } from "./i18n/I18nContext.jsx";
 
 function _sessionKey() {
