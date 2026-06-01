@@ -207,7 +207,8 @@ export function ComposeModal({
   const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
   // Template context picker — shown when template needs job/object data
   const [brandKits,      setBrandKits]      = useState([]);
-  const [selectedKitId,  setSelectedKitId]  = useState(null);  // brand kit override for this compose
+  const [selectedKitId,  setSelectedKitId]  = useState(null);
+  const [showKitPicker,  setShowKitPicker]  = useState(false);
   const [tplCtxPicker,   setTplCtxPicker]   = useState(null);  // { tpl, missingVars, allJobs }
   const [tplCtxSearch, setTplCtxSearch] = useState("");
   const [tplCtxLoading, setTplCtxLoading] = useState(false);
@@ -263,6 +264,14 @@ export function ComposeModal({
         }).catch(() => {});
     }
   }, [type, environment?.id]);
+
+  // Close kit picker on outside click
+  useEffect(() => {
+    if (!showKitPicker) return;
+    const close = () => setShowKitPicker(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showKitPicker]);
 
   useEffect(() => {
     if (isBulk) return;
@@ -712,47 +721,6 @@ export function ComposeModal({
 
   const TemplateArea = () => (
     <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:12 }}>
-
-      {/* ── Brand Kit selector ── */}
-      {brandKits.length > 0 && (
-        <div>
-          <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".06em", marginBottom:7 }}>
-            Brand Kit
-          </div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            <button
-              onClick={() => setSelectedKitId(null)}
-              style={{ padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                border: !selectedKitId ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
-                background: !selectedKitId ? `${C.accent}12` : "#f9fafc",
-                color: !selectedKitId ? C.accent : C.text2 }}>
-              None
-            </button>
-            {brandKits.map(kit => {
-              const active = selectedKitId === kit.id;
-              const dot = kit.primaryColor || kit.primary_color || "#4361EE";
-              return (
-                <button key={kit.id} onClick={() => setSelectedKitId(active ? null : kit.id)}
-                  style={{ padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                    display:"flex", alignItems:"center", gap:6,
-                    border: active ? `1.5px solid ${dot}` : `1px solid ${C.border}`,
-                    background: active ? `${dot}12` : "#f9fafc",
-                    color: active ? dot : C.text2 }}>
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:dot, flexShrink:0 }}/>
-                  {kit.name}
-                  {active && <span style={{ fontSize:9, fontWeight:800 }}>✓</span>}
-                </button>
-              );
-            })}
-          </div>
-          {selectedKitId && (
-            <div style={{ marginTop:6, fontSize:11, color:C.text3 }}>
-              Emails will be wrapped in this brand kit's template when sent.
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Templates ── */}
       <div style={{ flex:1 }}>
       {templates.length === 0 ? (
@@ -954,6 +922,79 @@ export function ComposeModal({
                 background:"transparent", color:C.text3, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
               Preview ↗
             </button>
+          )}
+
+          {/* Brand Kit layout picker — email write mode only */}
+          {type === "email" && mode === "write" && brandKits.length > 0 && (
+            <div style={{ position:"relative" }}>
+              <button
+                onClick={() => setShowKitPicker(p => !p)}
+                style={{ padding:"5px 10px", borderRadius:8,
+                  border: selectedKitId ? `1.5px solid ${brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent}` : `1.5px solid ${border}`,
+                  background: selectedKitId ? `${brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent}12` : "transparent",
+                  color: selectedKitId ? (brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent) : C.text3,
+                  fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                  display:"flex", alignItems:"center", gap:5 }}>
+                {selectedKitId ? (
+                  <>
+                    <span style={{ width:7, height:7, borderRadius:"50%",
+                      background: brandKits.find(k=>k.id===selectedKitId)?.primaryColor || C.accent }}/>
+                    {brandKits.find(k=>k.id===selectedKitId)?.name}
+                  </>
+                ) : "🎨 Layout"}
+              </button>
+              {showKitPicker && (
+                <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:200,
+                  background:"white", borderRadius:12, border:`1.5px solid ${border}`,
+                  boxShadow:"0 8px 24px rgba(0,0,0,0.12)", padding:"8px", minWidth:180 }}
+                  onClick={e => e.stopPropagation()}>
+                  <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase",
+                    letterSpacing:".06em", padding:"2px 8px 8px" }}>Brand Layout</div>
+                  {/* None option */}
+                  <button
+                    onClick={() => { setSelectedKitId(null); setShowKitPicker(false); }}
+                    style={{ width:"100%", textAlign:"left", padding:"7px 10px", borderRadius:8, border:"none",
+                      background: !selectedKitId ? `${C.accent}10` : "transparent",
+                      color: !selectedKitId ? C.accent : C.text2,
+                      fontSize:12, fontWeight: !selectedKitId ? 700 : 500, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ width:16, height:16, borderRadius:4, border:`1.5px solid ${border}`,
+                      background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {!selectedKitId && <span style={{ fontSize:9 }}>✓</span>}
+                    </span>
+                    Plain (no layout)
+                  </button>
+                  {brandKits.map(kit => {
+                    const active = selectedKitId === kit.id;
+                    const dot = kit.primaryColor || kit.primary_color || C.accent;
+                    return (
+                      <button key={kit.id}
+                        onClick={() => { setSelectedKitId(kit.id); setShowKitPicker(false); }}
+                        style={{ width:"100%", textAlign:"left", padding:"7px 10px", borderRadius:8, border:"none",
+                          background: active ? `${dot}10` : "transparent",
+                          color: active ? dot : C.text2,
+                          fontSize:12, fontWeight: active ? 700 : 500, cursor:"pointer", fontFamily:"inherit",
+                          display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ width:16, height:16, borderRadius:4, background:dot, flexShrink:0,
+                          display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          {active && <span style={{ fontSize:9, color:"white" }}>✓</span>}
+                        </span>
+                        <span style={{ flex:1 }}>{kit.name}</span>
+                        {kit.is_default && (
+                          <span style={{ fontSize:9, background:`${dot}20`, color:dot,
+                            padding:"1px 5px", borderRadius:6, fontWeight:700 }}>default</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  <div style={{ borderTop:`1px solid ${border}`, margin:"8px 0 4px", padding:"6px 8px 2px" }}>
+                    <div style={{ fontSize:10, color:C.text3, lineHeight:1.5 }}>
+                      Layout wraps your email in the brand kit's header, footer, and colours when sent.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* AI toggle — email/sms write mode */}
