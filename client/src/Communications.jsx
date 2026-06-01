@@ -672,14 +672,53 @@ export function ComposeModal({
       )}
 
       {/* Body — RichTextEditor for email, plain textarea for SMS/WhatsApp/call */}
-      {type === "email" ? (
-        <RichTextEditor
-          value={body}
-          onChange={html => setBody(html)}
-          placeholder="Write your message…"
-          minHeight={220}
-        />
-      ) : type !== "call" ? (
+      {type === "email" ? (() => {
+        const kit = brandKits.find(k => k.id === selectedKitId);
+        const primary = kit?.primaryColor || '#4361EE';
+        const bg      = kit?.bgColor      || '#ffffff';
+        const font    = kit?.fontFamily   || 'inherit';
+        const editor  = (
+          <RichTextEditor
+            value={body}
+            onChange={html => setBody(html)}
+            placeholder="Write your message…"
+            minHeight={220}
+          />
+        );
+
+        if (!kit) return editor;
+
+        // Render the editor inside a live branded frame
+        return (
+          <div style={{ margin:"12px 0", borderRadius:12, overflow:"hidden",
+            border:`1.5px solid ${primary}30`, boxShadow:`0 2px 12px rgba(0,0,0,0.07)` }}>
+
+            {/* Header */}
+            <div style={{ background:primary, padding:"14px 24px", display:"flex", alignItems:"center", gap:12 }}>
+              {kit.logo_url
+                ? <img src={kit.logo_url} alt={kit.company_name || ''} style={{ maxHeight:32, maxWidth:160, objectFit:"contain" }} onError={e=>e.target.style.display='none'}/>
+                : kit.company_name
+                  ? <span style={{ fontSize:16, fontWeight:700, color:"#fff", fontFamily:font }}>{kit.company_name}</span>
+                  : null
+              }
+            </div>
+
+            {/* Body area — white card */}
+            <div style={{ background:bg, padding:"20px 24px", fontFamily:font }}>
+              {editor}
+            </div>
+
+            {/* Footer */}
+            {(kit.footer_text || kit.company_name) && (
+              <div style={{ background:"#f8f9fa", borderTop:`1px solid #e8ecf0`,
+                padding:"12px 24px", textAlign:"center",
+                fontSize:11, color:"#888", fontFamily:font, lineHeight:1.5 }}>
+                {kit.footer_text || `© ${new Date().getFullYear()} ${kit.company_name}. All rights reserved.`}
+              </div>
+            )}
+          </div>
+        );
+      })() : type !== "call" ? (
         <AITextEditor context={`${meta.label} message`} onApply={newText => setBody(newText)}>
           <textarea value={body} onChange={e => setBody(e.target.value)}
             placeholder={`${meta.label} message…`}
