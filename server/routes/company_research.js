@@ -101,6 +101,34 @@ router.post('/research', async (req, res) => {
     try { profile = JSON.parse(profileText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim()); }
     catch(e) { return res.status(500).json({ error: 'Failed to parse research results', raw: profileText.slice(0,500) }); }
 
+    // ── Step 2: Generate logo candidates from domain ──────────────────────────
+    // Extract domain from website or company name
+    const rawSite = profile.website || '';
+    let domain = '';
+    try {
+      const withProto = rawSite.startsWith('http') ? rawSite : `https://${rawSite}`;
+      domain = new URL(withProto).hostname.replace(/^www\./, '');
+    } catch {
+      // Fallback: derive domain from company name
+      domain = (profile.name || company_name)
+        .toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+    }
+
+    // Multiple logo sources — client will try each and show working ones
+    const logoCandidates = domain ? [
+      { source: 'clearbit',    url: `https://logo.clearbit.com/${domain}`,                    label: 'Primary' },
+      { source: 'google',      url: `https://www.google.com/s2/favicons?domain=${domain}&sz=256`, label: 'Google' },
+      { source: 'duckduckgo',  url: `https://icons.duckduckgo.com/ip3/${domain}.ico`,         label: 'DuckDuckGo' },
+      { source: 'favicon',     url: `https://${domain}/favicon.ico`,                          label: 'Site favicon' },
+    ] : [];
+
+    // Use clearbit as the default logo_url (best quality)
+    if (domain && !profile.logo_url) {
+      profile.logo_url = `https://logo.clearbit.com/${domain}`;
+    }
+    profile.domain = domain;
+    profile.logo_candidates = logoCandidates;
+
     // Template generation removed — use Email Templates section instead
     const emailTemplates = [];
 

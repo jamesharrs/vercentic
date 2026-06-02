@@ -113,6 +113,25 @@ const EmailTemplateCard = ({ template, checked, onChange }) => (
   </label>
 );
 
+const LogoCandidate = ({ candidate, selected, onSelect }) => {
+  const [loaded, setLoaded] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+  if (failed) return null;
+  return (
+    <div onClick={() => loaded && onSelect(candidate.url)}
+      title={candidate.label}
+      style={{ width:36,height:36,borderRadius:8,border:`1.5px solid ${selected?"#4361EE":"#E5E7EB"}`,
+        background:selected?"#EEF0FD":"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",
+        overflow:"hidden",cursor:loaded?"pointer":"default",transition:"border-color 0.15s",
+        opacity:loaded?1:0.4 }}>
+      <img src={candidate.url} alt={candidate.label}
+        style={{width:"100%",height:"100%",objectFit:"contain",padding:3}}
+        onLoad={()=>setLoaded(true)}
+        onError={()=>setFailed(true)}/>
+    </div>
+  );
+};
+
 export default function CompanySetupWizard({ environmentId, environmentName, onComplete, onSkip }) {
   const [step, setStep] = useState(0);
   const [query, setQuery] = useState("");  // will be set after profile load
@@ -206,9 +225,31 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   if (step===1&&editedProfile) return (
     <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={1}/>
-      <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:28}}>
-        <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
-          {editedProfile.logo_url?<img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:8}} onError={e=>e.target.style.display="none"}/>:<Ic n="building" s={32} c={C.text3}/>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:24}}>
+
+        {/* Logo picker */}
+        <div style={{flexShrink:0}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Logo</div>
+          {/* Selected logo preview */}
+          <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",
+            display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:8}}>
+            {editedProfile.logo_url
+              ? <img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:8}}
+                  onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="flex");}}/>
+              : <Ic n="building" s={32} c={C.text3}/>}
+          </div>
+          {/* Candidate thumbnails */}
+          {(editedProfile.logo_candidates||[]).length > 0 && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,width:80}}>
+              {(editedProfile.logo_candidates||[]).map((cand,i)=>(
+                <LogoCandidate key={i} candidate={cand}
+                  selected={editedProfile.logo_url===cand.url}
+                  onSelect={url=>setEditedProfile(p=>({...p,logo_url:url}))}/>
+              ))}
+            </div>
+          )}
+          <input placeholder="Or paste URL…" value={editedProfile.logo_url||""} onChange={e=>setEditedProfile(p=>({...p,logo_url:e.target.value}))}
+            style={{marginTop:8,width:80,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:10,fontFamily:F,boxSizing:"border-box",color:C.text2}}/>
         </div>
         <div style={{flex:1}}>
           <h2 style={{fontSize:22,fontWeight:800,color:C.text1,margin:"0 0 4px"}}>{editedProfile.name}</h2>
