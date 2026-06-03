@@ -327,6 +327,7 @@ const AUTH_EXEMPT = [
   '/cohort-auth', // candidate portal auth — no main app session
   '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
   '/ai-interview/session', // public token-authenticated interview sessions
+  '/video-interviews/take', // public candidate video interview (token-gated)
   '/interview-coordinator/token', // public availability response pages
 ];
 // Pre-compute Set for O(1) exact-match lookup. Prefix matching still O(n) on the
@@ -466,6 +467,7 @@ app.use('/api/interview-plans',   require('./routes/interview_plans'));
 app.use('/api/interview-coordinator', require('./routes/interview_coordinator'));
 app.use('/api/badges',            require('./routes/badges'));
 app.use('/api/offers',            require('./routes/offers'));
+app.use('/api/video-interviews',  require('./routes/video_interviews'));
 app.use('/api/approvals',         require('./routes/approvals'));
 app.use('/api/candidate-hub',     require('./routes/candidate_hub'));
 app.use('/api/cohorts',          require('./routes/cohorts'));

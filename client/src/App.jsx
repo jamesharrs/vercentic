@@ -38,6 +38,8 @@ const LoginPage           = lazyWithRetry(() => import('./LoginPage.jsx'));
 const CandidateChat       = lazyWithRetry(() => import('./CandidateChat.jsx'));
 const DocumentBuilder     = lazyWithRetry(() => import('./DocumentBuilder.jsx'));
 const BotInterview        = lazyWithRetry(() => import('./BotInterview.jsx'));
+const VideoRecorder       = lazyWithRetry(() => import('./VideoRecorder.jsx'));
+const VideoInterviews     = lazyWithRetry(() => import('./VideoInterviews.jsx'));
 const CandidateHub        = lazyWithRetry(() => import('./CandidateHub.jsx'));
 const ClientHub           = lazyWithRetry(() => import('./ClientHub.jsx'));
 const ClientCasePortal    = lazyWithRetry(() => import('./ClientCasePortal.jsx'));
@@ -992,7 +994,8 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
               { id: "overview",    label: "Overview",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>, desc: "Hiring summary" },
               { id: "campaigns",   label: "Campaigns",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>, desc: "Recruitment marketing" },
               { id: "screening",   label: "Screening",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"/></svg>, desc: "Candidates & AI review" },
-              { id: "interviews",  label: "Interviews",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
+              { id: "interviews",        label: "Interviews",       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
+              { id: "video-interviews",  label: "Video Interviews", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z"/></svg>, desc: "Async on-demand screening" },
               { id: "offers",      label: "Offers",      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>, desc: "Acceptance & approvals" },
               { id: "onboarding",  label: "Onboarding",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>, desc: "Pre & post start" },
               { id: "insights",    label: "Insights",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z"/></svg>, desc: "Predictive analytics" },
@@ -2956,6 +2959,10 @@ activeNavRef.current = activeNav;
           (canGlobal("access_interviews") && featInterviews)
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}><Interviews environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Interviews"/>
+        ) : activeNav === "video-interviews" ? (
+          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
+            <VideoInterviews environment={selectedEnv}/>
+          </Suspense>
         ) : activeNav === "sourcing" ? (
           featSourcing
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><SourcingHub environment={selectedEnv} /></div></Suspense>
@@ -3377,6 +3384,13 @@ export default function AppRoot() {
   const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
   if (botToken) return <BotInterview token={botToken} />;
 
+  const videoToken = _path.match(/^\/video-interview\/(.+)$/)?.[1];
+  if (videoToken) return (
+    <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"linear-gradient(135deg,#EEF2FF,#F5F3FF)"}}>Loading…</div>}>
+      <VideoRecorder token={videoToken}/>
+    </Suspense>
+  );
+
   if (_path.startsWith('/availability/')) {
     return (
       <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",color:"#9ca3af"}}>Loading…</div>}>
@@ -3389,7 +3403,7 @@ export default function AppRoot() {
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
   if (portalSlug) return <PortalApp slug={portalSlug}/>;
 
-  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|dashboard_achievements|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
+  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|video-interview|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|dashboard_achievements|people|jobs|talent-pools|search|interviews|video-interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
   if (_path !== '/' && !_appRoutes.test(_path)) {
     const segments = _path.replace(/^\//, '').split('/');
     const cleanSlug = segments[0];
