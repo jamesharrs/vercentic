@@ -229,6 +229,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     calendar: "M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
     "calendar-days": "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 14h.01M13 14h.01M17 14h.01M9 18h.01M13 18h.01",
     dollar: "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+    video: "M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z",
     link: "M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
     loader: "M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
     sparkles: "M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17z",
@@ -2221,9 +2222,10 @@ activeNavRef.current = activeNav;
     {
       label: t("nav.tools"),
       items: [
-        featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
-        featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
-        featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        featCampaigns  && { id: "campaigns",      icon: "zap",          label: "Campaigns" },
+        featSourcing   && { id: "sourcing",       icon: "sparkles",     label: "Sourcing Hub" },
+        featOffers     && { id: "offers",         icon: "dollar",       label: t("nav.offers") || "Offers" },
+                         { id: "video-interviews", icon: "video",        label: "Video Interviews" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
