@@ -54,7 +54,10 @@ router.patch('/:id', (req, res) => {
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const fields = ['name','interview_format','duration','format','description','location',
-                  'buffer_before','buffer_after','max_bookings_per_day','interviewers','availability','color'];
+                  'buffer_before','buffer_after','max_bookings_per_day','interviewers','availability','color',
+                  'question_ids','scorecard_enabled','pass_criteria','retakes_allowed',
+                  'time_limit_per_question','deadline_hours','welcome_message','completion_message',
+                  'persona_name','persona_intro','is_active'];
   const updates = { updated_at: new Date().toISOString() };
   fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
   const rec = update('interview_types', t => t.id === req.params.id, updates);

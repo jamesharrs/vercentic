@@ -36,6 +36,7 @@ const AgentsSettings = lazy(() => import("./settings/AgentsSettings.jsx"));
 const DataImportSettings = lazy(() => import("./settings/DataImportSettings.jsx"));
 const AiGovernance = lazy(() => import("./settings/AiGovernance.jsx"));
 const QuestionBankSettings = lazy(() => import("./settings/QuestionBankSettings.jsx"));
+const InterviewTemplatesSettings = lazy(() => import("./settings/InterviewTemplatesSettings.jsx"));
 const StageCategoriesSection = lazy(() => import("./settings/StageCategoriesSection.jsx"));
 const FeatureFlagsSettings = lazy(() => import("./settings/FeatureFlagsSettings.jsx"));
 const AiMatchingSettings = lazy(() => import("./settings/AiMatchingSettings.jsx"));
@@ -151,6 +152,7 @@ const PATHS = {
   "paperclip":"M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48",
   "form":"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M8 13h8M8 17h8M8 9h2",
   "workflow":"M22 12h-4l-3 9L9 3l-3 9H2",
+  "video":"M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z",
   "sparkles":"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 19l.7 2.1L7.8 22l-2.1.7L5 24.8l-.7-2.1L2.2 22l2.1-.7L5 19z",
   "sparkle":"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 19l.7 2.1L7.8 22l-2.1.7L5 24.8l-.7-2.1L2.2 22l2.1-.7L5 19z",
   "zap":"M13 2L3 14h9l-1 8 10-12h-9l1-8z",
@@ -2882,8 +2884,9 @@ const NAV_GROUPS = [
       { id:"email_templates",   icon:"mail",     label:"Email Templates" },
       { id:"default_signature", icon:"mail",     label:"Default Signature", perm:"manage_settings" },
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
-      { id:"workflows", icon:"workflow", label:"Workflows", perm:"manage_workflows" },
-      { id:"portals",   icon:"globe",    label:"Portals",   perm:"manage_portals" },
+      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows" },
+      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews" },
+      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals" },
       { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles" },
     ],
   },
@@ -3114,8 +3117,9 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="email_settings"    && <LazyTab><EmailSettings session={currentUser}/></LazyTab>}
         {activeSection==="default_signature" && <LazyTab><DefaultSignatureSettings environment={environment}/></LazyTab>}
         {activeSection==="language"   && <LanguageSection/>}
-        {activeSection==="workflows"     && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
-        {activeSection==="portals"       && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
+        {activeSection==="workflows"            && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
+        {activeSection==="interview_templates"  && <LazyTab><InterviewTemplatesSettings environment={environment}/></LazyTab>}
+        {activeSection==="portals"              && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
         {activeSection==="talent_profile" && (
           <div style={{ maxWidth:700, padding:24 }}>
             <div style={{ marginBottom:20 }}>
