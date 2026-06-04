@@ -1,24 +1,52 @@
 {
   "manifest_version": 3,
-  "name": "Vercentic — Talent Sourcing",
-  "version": "1.0.0",
-  "description": "Import candidate profiles from any web page directly into Vercentic.",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "name": "Vercentic Sourcing",
+  "version": "2.0.0",
+  "description": "Source candidates from LinkedIn and GitHub. Match profiles to open roles, draft personalised outreach with AI, and add to Vercentic in one click.",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "notifications"
+  ],
   "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://github.com/*",
     "https://*.vercel.app/*",
     "https://*.up.railway.app/*",
     "http://localhost:*/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      "js": ["content-linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["content-github.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
-  },
-  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "css": ["content.css"],
-    "run_at": "document_idle"
-  }],
-  "background": { "service_worker": "background.js" }
+    "default_title": "Vercentic Sourcing",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "32":  "icons/icon32.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
 }

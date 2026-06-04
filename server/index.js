@@ -54,6 +54,8 @@ const corsMiddleware = cors({
       // but block browser requests without an Origin header
       return cb(null, true); // Railway health checks etc. need this
     }
+    // Allow Chrome extensions (Vercentic Sourcing extension)
+    if (origin.startsWith('chrome-extension://')) return cb(null, true);
     const ok = allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin));
     cb(ok ? null : new Error('CORS'), ok);
   },
