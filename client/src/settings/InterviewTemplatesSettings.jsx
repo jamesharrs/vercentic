@@ -102,10 +102,12 @@ export default function InterviewTemplatesSettings({ environment }) {
   useEffect(() => { if (envId) load(); }, [load, envId]);
 
   const handleSave = async (data) => {
+    const payload = { ...data, environment_id: data.environment_id || envId };
+    if (!payload.environment_id) { alert("No environment selected. Please refresh and try again."); return; }
     if (data.id) {
-      await api.patch(`/interview-types/${data.id}`, data);
+      await api.patch(`/interview-types/${data.id}`, payload);
     } else {
-      await api.post("/interview-types", { ...data, environment_id: envId });
+      await api.post("/interview-types", payload);
     }
     setEditing(null);
     load();
@@ -302,7 +304,7 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
   const handle = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    await onSave({ ...form, id: template?.id });
+    await onSave({ ...form, id: template?.id, environment_id: envId });
     setSaving(false);
   };
 
