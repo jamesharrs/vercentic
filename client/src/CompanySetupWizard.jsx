@@ -1,6 +1,6 @@
-import { tFetch } from "./apiClient.js";
+import api, { tFetch } from "./apiClient.js";
 // client/src/CompanySetupWizard.jsx
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const C = {
   bg:"#F0F2FF", card:"#FFFFFF", accent:"#4361EE", accentLight:"#EEF0FD",
@@ -34,7 +34,7 @@ const PATHS = {
   mail:"M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
   star:"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
   briefcase:"M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zm-9-2h2v2H11V5zm-2 0a2 2 0 012-2h2a2 2 0 012 2v2H9V5z",
-  sparkle:"M12 3v1m0 16v1M3 12h1m16 0h1m-2.222-6.364l-.707.707M4.929 19.071l.707-.707M4.929 4.929l.707.707m13.435 13.435l-.707-.707M9 12a3 3 0 116 0 3 3 0 01-6 0z",
+  sparkle:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17zM19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z",
   loader:"M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
   building:"M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
 };
@@ -63,17 +63,23 @@ const PulseLoader = ({ label="Researching..." }) => (
 );
 
 const StepIndicator = ({ steps, current }) => (
-  <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:36}}>
+  <div style={{display:"flex",alignItems:"center",marginBottom:24,padding:"0 4px"}}>
     {steps.map((s,i)=>(
-      <div key={i} style={{display:"flex",alignItems:"center",flex:i<steps.length-1?1:0}}>
-        <div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:i<current?C.green:i===current?C.accent:C.border,color:i<=current?"white":C.text3,fontSize:12,fontWeight:700,transition:"all 0.3s"}}>
-          {i<current?<Ic n="check" s={14} c="white"/>:i+1}
+      <React.Fragment key={i}>
+        {/* Step circle + label */}
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+            background:i<current?C.green:i===current?C.accent:"#E5E7EB",
+            color:i<=current?"white":C.text3,fontSize:11,fontWeight:700,transition:"all 0.3s"}}>
+            {i<current?<Ic n="check" s={12} c="white"/>:i+1}
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:i===current?C.accent:i<current?C.green:C.text3,whiteSpace:"nowrap"}}>{s}</div>
         </div>
-        <div style={{marginLeft:8,marginRight:16,flexShrink:0}}>
-          <div style={{fontSize:11,fontWeight:700,color:i===current?C.accent:i<current?C.green:C.text3,lineHeight:1.2}}>{s}</div>
-        </div>
-        {i<steps.length-1&&<div style={{flex:1,height:2,background:i<current?C.green:C.border,marginRight:16,transition:"background 0.3s"}}/>}
-      </div>
+        {/* Connector line */}
+        {i<steps.length-1&&(
+          <div style={{flex:1,height:2,background:i<current?C.green:"#E5E7EB",margin:"0 8px",minWidth:16,transition:"background 0.3s"}}/>
+        )}
+      </React.Fragment>
     ))}
   </div>
 );
@@ -107,9 +113,28 @@ const EmailTemplateCard = ({ template, checked, onChange }) => (
   </label>
 );
 
+const LogoCandidate = ({ candidate, selected, onSelect }) => {
+  const [loaded, setLoaded] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+  if (failed) return null;
+  return (
+    <div onClick={() => loaded && onSelect(candidate.url)}
+      title={candidate.label}
+      style={{ width:36,height:36,borderRadius:8,border:`1.5px solid ${selected?"#4361EE":"#E5E7EB"}`,
+        background:selected?"#EEF0FD":"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",
+        overflow:"hidden",cursor:loaded?"pointer":"default",transition:"border-color 0.15s",
+        opacity:loaded?1:0.4 }}>
+      <img src={candidate.url} alt={candidate.label}
+        style={{width:"100%",height:"100%",objectFit:"contain",padding:3}}
+        onLoad={()=>setLoaded(true)}
+        onError={()=>setFailed(true)}/>
+    </div>
+  );
+};
+
 export default function CompanySetupWizard({ environmentId, environmentName, onComplete, onSkip }) {
   const [step, setStep] = useState(0);
-  const [query, setQuery] = useState(environmentName || "");
+  const [query, setQuery] = useState("");  // will be set after profile load
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -121,16 +146,23 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   const [selectedFields, setSelectedFields] = useState(new Set());
   const STEPS = ["Search","Company Profile","Configure","Apply"];
 
+  // Pre-fill with existing company name if profile exists, otherwise blank
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/company-research?environment_id=${environmentId}`)
+      .then(data => {
+        if (data?.name) setQuery(data.name);
+      })
+      .catch(() => {});
+  }, [environmentId]);
+
   const handleResearch = async () => {
     if (!query.trim()) return;
     setLoading(true); setError(null);
     try {
-      const res = await tFetch('/api/company-research/research', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ company_name: query, environment_id: environmentId })
+      const data = await api.post('/company-research/research', {
+        company_name: query, environment_id: environmentId,
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
       setProfile(data.profile); setEditedProfile(data.profile);
       setEmailTemplates(data.email_templates||[]);
       setSuggestedFields(data.suggested_fields||[]);
@@ -145,11 +177,10 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     setSaving(true);
     try {
       const selectedTpls = emailTemplates.filter((_,i)=>selectedTemplates.has(i));
-      const res = await tFetch('/api/company-research/save', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ environment_id:environmentId, profile:editedProfile, email_templates:selectedTpls, apply_templates:selectedTpls.length>0 })
+      await api.post('/company-research/save', {
+        environment_id: environmentId, profile: editedProfile,
+        email_templates: selectedTpls, apply_templates: selectedTpls.length > 0,
       });
-      if (!res.ok) throw new Error(await res.text());
       setStep(3);
     } catch(e) { setError(e.message); }
     finally { setSaving(false); }
@@ -157,7 +188,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 0: Search
   if (step===0) return (
-    <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:40,fontFamily:F,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#1a1a2e 0%,#3b5bdb 100%)"}}>
+    <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 32px",fontFamily:F,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#1a1a2e 0%,#3b5bdb 100%)"}}>
       {/* Radial glow — matches login page */}
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 20% 30%,rgba(99,102,241,0.35) 0%,transparent 55%),radial-gradient(ellipse at 80% 70%,rgba(67,97,238,0.25) 0%,transparent 50%)",pointerEvents:"none"}}/>
       {/* Subtle grid overlay */}
@@ -179,7 +210,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:16,color:"white",padding:"8px 12px",fontFamily:F}}/>
           <button onClick={handleResearch} disabled={!query.trim()||loading}
             style={{padding:"10px 24px",borderRadius:10,border:"none",background:query.trim()?"#4361EE":"rgba(255,255,255,0.2)",color:"white",fontSize:14,fontWeight:700,cursor:query.trim()?"pointer":"default",display:"flex",alignItems:"center",gap:8,fontFamily:F,transition:"background 0.15s"}}>
-            <Ic n="search" s={16} c="white"/>Research
+            <Ic n="sparkle" s={16} c="white"/>Research
           </button>
         </div>
 
@@ -192,11 +223,33 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 1: Review profile
   if (step===1&&editedProfile) return (
-    <div style={{maxWidth:800,margin:"0 auto",padding:40,fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={1}/>
-      <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:28}}>
-        <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
-          {editedProfile.logo_url?<img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:8}} onError={e=>e.target.style.display="none"}/>:<Ic n="building" s={32} c={C.text3}/>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:24}}>
+
+        {/* Logo picker */}
+        <div style={{flexShrink:0}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Logo</div>
+          {/* Selected logo preview */}
+          <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",
+            display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:8}}>
+            {editedProfile.logo_url
+              ? <img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:8}}
+                  onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="flex");}}/>
+              : <Ic n="building" s={32} c={C.text3}/>}
+          </div>
+          {/* Candidate thumbnails */}
+          {(editedProfile.logo_candidates||[]).length > 0 && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,width:80}}>
+              {(editedProfile.logo_candidates||[]).map((cand,i)=>(
+                <LogoCandidate key={i} candidate={cand}
+                  selected={editedProfile.logo_url===cand.url}
+                  onSelect={url=>setEditedProfile(p=>({...p,logo_url:url}))}/>
+              ))}
+            </div>
+          )}
+          <input placeholder="Or paste URL…" value={editedProfile.logo_url||""} onChange={e=>setEditedProfile(p=>({...p,logo_url:e.target.value}))}
+            style={{marginTop:8,width:80,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:10,fontFamily:F,boxSizing:"border-box",color:C.text2}}/>
         </div>
         <div style={{flex:1}}>
           <h2 style={{fontSize:22,fontWeight:800,color:C.text1,margin:"0 0 4px"}}>{editedProfile.name}</h2>
@@ -239,7 +292,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 2: Configure
   if (step===2) return (
-    <div style={{maxWidth:800,margin:"0 auto",padding:40,fontFamily:F}}>
+    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={2}/>
       <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Configure your workspace</h2>
       <p style={{fontSize:14,color:C.text3,margin:"0 0 32px"}}>Choose which AI-generated content to apply. You can change these any time in Settings.</p>
@@ -285,7 +338,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
   // Step 3: Success
   if (step===3) return (
-    <div style={{maxWidth:540,margin:"0 auto",padding:40,fontFamily:F,textAlign:"center"}}>
+    <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center",background:"#ffffff",minHeight:"100%"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
         <Ic n="check" s={36} c={C.green}/>
       </div>

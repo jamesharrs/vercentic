@@ -1176,7 +1176,7 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                         />
                       )}
                       {a.type==='webhook'&&(<input value={a.webhook_url} onChange={e=>updateAction(i,'webhook_url',e.target.value)} placeholder="https://your-endpoint.com/webhook" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F}}/>)}
-                      {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing.</div>)}
+                      {a.type==='human_review'&&(<div style={{padding:"8px 10px",borderRadius:8,background:"#FFF3CD",border:"1px solid #F08C00",fontSize:12,color:"#664D03"}}>⏸ Agent will pause here and wait for a human to approve before continuing. Use the Agents panel to review and approve.</div>)}
                       {a.type==='interview_coordinator'&&(
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           <div style={{padding:"8px 12px",borderRadius:8,background:"#e0f7fa",border:"1px solid #0891b2",fontSize:12,color:"#0e4f5c",lineHeight:1.5}}>

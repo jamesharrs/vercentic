@@ -1,4 +1,6 @@
+import StyledSelect from './components/StyledSelect.jsx';
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, startTransition } from "react";
+import ReactDOM from "react-dom";
 import { useTour } from "./GuidedTour.jsx";
 import api, { getTenantSlug } from "./apiClient.js";
 import ReportingErrorBoundary from "./ErrorBoundary.jsx";
@@ -36,6 +38,8 @@ const LoginPage           = lazyWithRetry(() => import('./LoginPage.jsx'));
 const CandidateChat       = lazyWithRetry(() => import('./CandidateChat.jsx'));
 const DocumentBuilder     = lazyWithRetry(() => import('./DocumentBuilder.jsx'));
 const BotInterview        = lazyWithRetry(() => import('./BotInterview.jsx'));
+const VideoRecorder       = lazyWithRetry(() => import('./VideoRecorder.jsx'));
+const VideoInterviews     = lazyWithRetry(() => import('./VideoInterviews.jsx'));
 const CandidateHub        = lazyWithRetry(() => import('./CandidateHub.jsx'));
 const ClientHub           = lazyWithRetry(() => import('./ClientHub.jsx'));
 const ClientCasePortal    = lazyWithRetry(() => import('./ClientCasePortal.jsx'));
@@ -73,6 +77,7 @@ const SourcingHub     = lazyWithRetry(() => import("./SourcingHub.jsx"));
 const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
 const Campaigns       = lazyWithRetry(() => import("./Campaigns.jsx"));
 const SuperAdminConsole = lazyWithRetry(() => import("./SuperAdminConsole.jsx"));
+const ApprovalPortal = lazyWithRetry(() => import("./portals/ApprovalPortal.jsx"));
 const AgentsModule      = lazyWithRetry(() => import("./Agents.jsx"));
 const AvailabilityPickerPage = lazyWithRetry(() => import("./AvailabilityPicker.jsx"));
 const IntegrationsPage  = lazyWithRetry(() => import("./IntegrationsSettings.jsx"));
@@ -224,6 +229,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     calendar: "M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
     "calendar-days": "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 14h.01M13 14h.01M17 14h.01M9 18h.01M13 18h.01",
     dollar: "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+    video: "M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z",
     link: "M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
     loader: "M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
     sparkles: "M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17z",
@@ -301,15 +307,8 @@ const Select = ({ label, value, onChange, options, required }) => (
     {label && <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", letterSpacing: "0.02em" }}>
       {label}{required && <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span>}
     </label>}
-    <select value={value} onChange={e => onChange(e.target.value)} style={{
-      padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e5ea",
-      fontSize: 13, fontFamily: "inherit", outline: "none", background: "white",
-      color: "var(--t-text1)", cursor: "pointer"
-    }}>
-      {options.map(opt => (
-        <option key={opt.value || opt} value={opt.value || opt}>{opt.label || opt}</option>
-      ))}
-    </select>
+    <StyledSelect value={value} onChange={onChange} style={{width:"100%"}}
+      options={options.map(opt=>({value:opt.value||opt,label:opt.label||opt}))}/>
   </div>
 );
 
@@ -996,7 +995,8 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
               { id: "overview",    label: "Overview",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>, desc: "Hiring summary" },
               { id: "campaigns",   label: "Campaigns",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>, desc: "Recruitment marketing" },
               { id: "screening",   label: "Screening",   icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"/></svg>, desc: "Candidates & AI review" },
-              { id: "interviews",  label: "Interviews",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
+              { id: "interviews",        label: "Interviews",       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>, desc: "Scheduling & pipeline" },
+              { id: "video-interviews",  label: "Video Interviews", icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z"/></svg>, desc: "Async on-demand screening" },
               { id: "offers",      label: "Offers",      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>, desc: "Acceptance & approvals" },
               { id: "onboarding",  label: "Onboarding",  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>, desc: "Pre & post start" },
               { id: "insights",    label: "Insights",    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z"/></svg>, desc: "Predictive analytics" },
@@ -2222,9 +2222,10 @@ activeNavRef.current = activeNav;
     {
       label: t("nav.tools"),
       items: [
-        featCampaigns  && { id: "campaigns",   icon: "zap",          label: "Campaigns" },
-        featSourcing   && { id: "sourcing",    icon: "sparkles",     label: "Sourcing Hub" },
-        featOffers     && { id: "offers",      icon: "dollar",       label: t("nav.offers") || "Offers" },
+        featCampaigns  && { id: "campaigns",      icon: "zap",          label: "Campaigns" },
+        featSourcing   && { id: "sourcing",       icon: "sparkles",     label: "Sourcing Hub" },
+        featOffers     && { id: "offers",         icon: "dollar",       label: t("nav.offers") || "Offers" },
+                         { id: "video-interviews", icon: "video",        label: "Video Interviews" },
         ...(selectedEnv?.tags && String(selectedEnv.tags).toLowerCase().includes('rpo')
           ? [{ id: "client-hub", icon: "building", label: "Client Hub" }]
           : []),
@@ -2960,6 +2961,10 @@ activeNavRef.current = activeNav;
           (canGlobal("access_interviews") && featInterviews)
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ padding:"28px 32px", flex:1, overflow:"auto" }}><Interviews environment={selectedEnv} /></div></Suspense>
             : <AccessDenied feature="Interviews"/>
+        ) : activeNav === "video-interviews" ? (
+          <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}>
+            <VideoInterviews environment={selectedEnv}/>
+          </Suspense>
         ) : activeNav === "sourcing" ? (
           featSourcing
             ? <Suspense fallback={<div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af", fontSize:13 }}>Loading…</div>}><div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}><SourcingHub environment={selectedEnv} /></div></Suspense>
@@ -3077,6 +3082,52 @@ activeNavRef.current = activeNav;
           userId={session.user.id}
           onDone={() => setShowLoginModal(false)}
         />
+      )}
+
+      {/* Company Setup Wizard — launched from Company Profile settings */}
+      {showSetupWizard && (
+        <Suspense fallback={null}>
+          {ReactDOM.createPortal(
+            <div style={{
+              position:"fixed", inset:0, zIndex:1200,
+              background:"rgba(0,0,0,0.55)", backdropFilter:"blur(4px)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              padding:24,
+            }}>
+              <div style={{
+                width:"100%", maxWidth:780, maxHeight:"90vh",
+                borderRadius:20, overflow:"hidden",
+                boxShadow:"0 24px 80px rgba(0,0,0,0.35)",
+                display:"flex", flexDirection:"column",
+                position:"relative",
+              }}>
+                {/* Close button */}
+                <button onClick={() => setShowSetupWizard(false)}
+                  style={{ position:"absolute", top:16, right:16, zIndex:10,
+                    width:32, height:32, borderRadius:"50%", border:"none",
+                    background:"rgba(255,255,255,0.15)", color:"white",
+                    cursor:"pointer", fontSize:18, display:"flex",
+                    alignItems:"center", justifyContent:"center",
+                    backdropFilter:"blur(4px)" }}>
+                  ×
+                </button>
+                <div style={{ flex:1, overflowY:"auto" }}>
+                  <CompanySetupWizard
+                    environmentId={selectedEnv?.id}
+                    environmentName={selectedEnv?.name}
+                    onComplete={() => {
+                      setShowSetupWizard(false);
+                      // Force company profile panel to reload by briefly switching away and back
+                      window.dispatchEvent(new CustomEvent('talentos:company-profile-updated'));
+                    }}
+                    onSkip={() => setShowSetupWizard(false)}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+        </Suspense>
       )}
     </PermissionProvider>
   );
@@ -3330,9 +3381,17 @@ export default function AppRoot() {
   if (_path.startsWith('/hub'))           return <CandidateHub />;
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
   if (_path === '/superadmin')            return <SuperAdminConsole />;
+  if (_path.startsWith('/approval/'))      return <ApprovalPortal />;
 
   const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
   if (botToken) return <BotInterview token={botToken} />;
+
+  const videoToken = _path.match(/^\/video-interview\/(.+)$/)?.[1];
+  if (videoToken) return (
+    <Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"linear-gradient(135deg,#EEF2FF,#F5F3FF)"}}>Loading…</div>}>
+      <VideoRecorder token={videoToken}/>
+    </Suspense>
+  );
 
   if (_path.startsWith('/availability/')) {
     return (
@@ -3346,7 +3405,7 @@ export default function AppRoot() {
   const portalSlug = _path.match(/^\/portal\/(.+)$/)?.[1];
   if (portalSlug) return <PortalApp slug={portalSlug}/>;
 
-  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|dashboard_achievements|people|jobs|talent-pools|search|interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
+  const _appRoutes = /^\/(hub|support|superadmin|availability|bot|video-interview|interview|api|dashboard|dashboard_custom|dashboard_interviews|dashboard_offers|dashboard_screening|dashboard_onboarding|dashboard_admin|dashboard_agents|dashboard_insights|dashboard_campaigns|dashboard_achievements|people|jobs|talent-pools|search|interviews|video-interviews|offers|sourcing|campaign-links|campaigns|reports|insights|calendar|org-chart|org_chart|settings|workflows|portals|inbox|admin_stats|admin-stats|client-hub|client_hub|help|matching|record|chat|documents|agents|integrations|orgchart|org.chart|app|schema|overview|onboarding|screening|getting-started)(\/|$)/;
   if (_path !== '/' && !_appRoutes.test(_path)) {
     const segments = _path.replace(/^\//, '').split('/');
     const cleanSlug = segments[0];

@@ -54,6 +54,8 @@ const corsMiddleware = cors({
       // but block browser requests without an Origin header
       return cb(null, true); // Railway health checks etc. need this
     }
+    // Allow Chrome extensions (Vercentic Sourcing extension)
+    if (origin.startsWith('chrome-extension://')) return cb(null, true);
     const ok = allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin));
     cb(ok ? null : new Error('CORS'), ok);
   },
@@ -327,6 +329,7 @@ const AUTH_EXEMPT = [
   '/cohort-auth', // candidate portal auth — no main app session
   '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
   '/ai-interview/session', // public token-authenticated interview sessions
+  '/video-interviews/take', // public candidate video interview (token-gated)
   '/interview-coordinator/token', // public availability response pages
 ];
 // Pre-compute Set for O(1) exact-match lookup. Prefix matching still O(n) on the
@@ -452,6 +455,7 @@ app.use('/api/feature-packs',     require('./routes/feature_packs'));
 app.use('/api/availability',      require('./routes/availability'));
 app.use('/api/live-chat',         require('./routes/live_chat'));
 app.use('/api/email-templates',   require('./routes/email-templates'));
+app.use('/api/match-notify',      require('./routes/match_notify'));
 app.use('/api/email-builder',     require('./routes/email_builder'));
 app.use('/api/notifications',     require('./routes/notifications'));
 
@@ -465,6 +469,8 @@ app.use('/api/interview-plans',   require('./routes/interview_plans'));
 app.use('/api/interview-coordinator', require('./routes/interview_coordinator'));
 app.use('/api/badges',            require('./routes/badges'));
 app.use('/api/offers',            require('./routes/offers'));
+app.use('/api/video-interviews',  require('./routes/video_interviews'));
+app.use('/api/approvals',         require('./routes/approvals'));
 app.use('/api/candidate-hub',     require('./routes/candidate_hub'));
 app.use('/api/cohorts',          require('./routes/cohorts'));
 app.use('/api/cohort-messages',  require('./routes/cohort_messages'));

@@ -32,7 +32,7 @@ function StatusPill({ live }) {
 }
 
 // ─── Credential field row ─────────────────────────────────────────────────────
-function CredField({ label, fieldKey, value, placeholder, type="text", onSave, onClear }) {
+function CredField({ label, fieldKey, value, placeholder, type="text", hint, onSave, onClear }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal]         = useState("");
   const [saving, setSaving]   = useState(false);
@@ -92,6 +92,9 @@ function CredField({ label, fieldKey, value, placeholder, type="text", onSave, o
           </div>
         )}
       </div>
+      {hint && (
+        <div style={{ fontSize:11, color:C.text3, marginTop:6, lineHeight:1.4 }}>{hint}</div>
+      )}
     </div>
   );
 }
@@ -122,6 +125,7 @@ function ProviderCard({ provider, title, description, icon, fields, configs, sta
           {fields.map(f => (
             <CredField key={f.key} fieldKey={f.key} label={f.label}
               placeholder={f.placeholder} type={f.secret?"password":"text"}
+              hint={f.hint}
               value={configs?.[provider]?.[f.key] || { set:false, masked:"" }}
               onSave={(key, val) => onSave(provider, key, val)}
               onClear={(key) => onClear(provider, key)}/>
@@ -170,6 +174,16 @@ const PROVIDERS = [
     icon: "🔗",
     fields: [
       { key:"WEBHOOK_BASE_URL", label:"Base URL", placeholder:"https://talentos-production-4045.up.railway.app", secret:false },
+    ],
+  },
+  {
+    provider: "testing",
+    title: "Testing & Debug",
+    description: "Override settings for testing. These intercept real infrastructure — use only in non-production environments.",
+    icon: "🧪",
+    fields: [
+      { key:"EMAIL_REDIRECT_TO", label:"Redirect all emails to", placeholder:"yourname@example.com", secret:false,
+        hint:"When set, ALL outbound emails (to any address) are redirected to this single address. The original recipient appears in the subject line. Leave blank to disable." },
     ],
   },
 ];

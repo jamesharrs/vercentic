@@ -284,31 +284,38 @@ function renderBlock(block, data, brandKit) {
   const btnRadius = bk.buttonRadius || '8px';
   const btnStyle = bk.buttonStyle || 'filled';
 
+  // Normalise content — some system templates store content as { text: '...' } objects
+  const rawContent = typeof block.content === 'object' && block.content !== null
+    ? block.content.text || ''
+    : (block.content || '');
+  // Normalise config — system templates sometimes embed config inside content object
+  const cfg = block.config && Object.keys(block.config).length > 0
+    ? block.config
+    : (typeof block.content === 'object' && block.content !== null ? block.content : {});
+
   switch (block.type) {
     case 'header': {
-      const cfg = block.config || {};
       const logoHtml = bk.logo_url ? `<img src="${bk.logo_url}" alt="${bk.company_name || ''}" style="height:40px;max-width:200px;object-fit:contain;" />` : '';
       const nameHtml = (cfg.showCompanyName !== false && bk.company_name) ? `<span style="font-size:18px;font-weight:700;color:${primary};font-family:${headingFont};">${bk.company_name}</span>` : '';
       return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid ${primary}10;">${logoHtml}${logoHtml && nameHtml ? '&nbsp;&nbsp;' : ''}${nameHtml}</td></tr></table>`;
     }
 
     case 'text': {
-      const content = resolveTags(block.content || '', data);
+      const content = resolveTags(rawContent, data);
       return `<div style="font-size:15px;line-height:1.7;color:${textColor};font-family:${fontFamily};margin-bottom:16px;">${content}</div>`;
     }
 
     case 'heading': {
-      const content = resolveTags(block.content || '', data);
-      const level = block.config?.level || 2;
+      const content = resolveTags(rawContent, data);
+      const level = cfg.level || 2;
       const sizes = { 1: '24px', 2: '20px', 3: '16px' };
       return `<div style="font-size:${sizes[level] || '20px'};font-weight:${bk.headingWeight || 700};color:${textColor};font-family:${headingFont};margin-bottom:12px;">${content}</div>`;
     }
 
     case 'button': {
-      const cfg = block.config || {};
-      const text = resolveTags(cfg.text || 'Click here', data);
+      const text = resolveTags(cfg.text || rawContent || 'Click here', data);
       const url = resolveTags(cfg.url || '#', data);
-      const isFilled = (cfg.style || btnStyle) === 'filled';
+      const isFilled = (cfg.style || btnStyle) !== 'outline';
       const bg = isFilled ? primary : 'transparent';
       const color = isFilled ? '#ffffff' : primary;
       const border = isFilled ? 'none' : `2px solid ${primary}`;
@@ -317,7 +324,6 @@ function renderBlock(block, data, brandKit) {
     }
 
     case 'image': {
-      const cfg = block.config || {};
       const src = resolveTags(cfg.src || '', data);
       const alt = resolveTags(cfg.alt || '', data);
       const width = cfg.width || '100%';
@@ -328,7 +334,7 @@ function renderBlock(block, data, brandKit) {
       return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td style="border-top:1px solid #e5e7eb;"></td></tr></table>`;
 
     case 'spacer':
-      return `<table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:${block.config?.height || 20}px;"></td></tr></table>`;
+      return `<table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:${cfg.height || block.config?.height || 20}px;"></td></tr></table>`;
 
     case 'two_column': {
       const left = (block.left || []).map(b => renderBlock(b, data, brandKit)).join('');
@@ -355,6 +361,11 @@ function renderBlock(block, data, brandKit) {
         </td></tr></table>`;
     }
 
+    case 'html':
+    case 'raw':
+      // Pass raw HTML through as-is — used when wrapping composed email body
+      return rawContent || (typeof block.content === 'string' ? block.content : '');
+
     default:
       return '';
   }
@@ -362,23 +373,127 @@ function renderBlock(block, data, brandKit) {
 
 function buildEmailHtml({ subject, previewText, bodyHtml, brandKit, template, trackingId }) {
   const bk = brandKit || {};
-  const bgColor = bk.bgColor || '#ffffff';
-  const outerBg = '#f4f4f5';
-  const fontFamily = bk.fontFamily || "'Inter', Arial, sans-serif";
-  const maxWidth = bk.maxWidth || '600px';
 
+  // Colours
+  const primaryColor = bk.primaryColor || '#4361EE';
+  const bgColor      = bk.bgColor      || '#ffffff';
+  const textColor    = bk.textColor    || '#0F1729';
+  const outerBg      = '#f0f2f5';
+  const maxWidth     = bk.maxWidth     || '600px';
+  const fontFamily   = bk.fontFamily
+    ? `'${bk.fontFamily}', Arial, Helvetica, sans-serif`
+    : 'Arial, Helvetica, sans-serif';
+
+  // Tracking
   let trackingPixel = '';
   if (trackingId && template?.track_opens) {
     trackingPixel = `<img src="/api/email-builder/track/open/${trackingId}" width="1" height="1" style="display:none;" />`;
   }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${subject}</title></head>
-<body style="margin:0;padding:0;background:${outerBg};font-family:${fontFamily};">
-${previewText ? `<div style="display:none;max-height:0;overflow:hidden;">${previewText}</div>` : ''}
-<table width="100%" cellpadding="0" cellspacing="0" style="background:${outerBg};"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:${maxWidth};background:${bgColor};border-radius:12px;overflow:hidden;">
-<tr><td style="padding:32px 40px;">${bodyHtml}</td></tr>
-</table></td></tr></table>${trackingPixel}</body></html>`;
+  // ── Header ──────────────────────────────────────────────────────────────
+  let headerHtml = '';
+  const logoUrl  = bk.logo_url || '';
+  const compName = bk.company_name || '';
+
+  if (logoUrl || compName) {
+    headerHtml = `
+<tr>
+  <td style="background:${primaryColor};padding:24px 40px;border-radius:12px 12px 0 0;">
+    ${logoUrl
+      ? `<img src="${logoUrl}" alt="${compName}" style="max-height:44px;max-width:200px;display:block;object-fit:contain;" />`
+      : `<span style="font-family:${fontFamily};font-size:20px;font-weight:700;color:#ffffff;">${compName}</span>`
+    }
+  </td>
+</tr>`;
+  } else {
+    // Thin accent bar with no logo/name
+    headerHtml = `
+<tr>
+  <td style="background:${primaryColor};height:6px;border-radius:12px 12px 0 0;"></td>
+</tr>`;
+  }
+
+  // ── Footer ───────────────────────────────────────────────────────────────
+  const footerText    = bk.footer_text    || (compName ? `© ${new Date().getFullYear()} ${compName}. All rights reserved.` : '');
+  const privacyUrl    = bk.privacy_url    || '';
+  const unsubText     = bk.unsubscribe_text || 'Unsubscribe';
+  const socialLinks   = bk.social_links   || {};
+
+  const socialIcons = {
+    linkedin:  { label:'LinkedIn',  path:'M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z M4 6a2 2 0 100-4 2 2 0 000 4z' },
+    twitter:   { label:'Twitter/X', path:'M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z' },
+    instagram: { label:'Instagram', path:'M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zM17.5 6.5h.01M7.5 2h9a5.5 5.5 0 015.5 5.5v9a5.5 5.5 0 01-5.5 5.5h-9A5.5 5.5 0 012 16.5v-9A5.5 5.5 0 017.5 2z' },
+    facebook:  { label:'Facebook',  path:'M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z' },
+    youtube:   { label:'YouTube',   path:'M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 00-1.95 1.96A29 29 0 001 12a29 29 0 00.46 5.58A2.78 2.78 0 003.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.95A29 29 0 0023 12a29 29 0 00-.46-5.58zM10 15V9l5.2 3-5.2 3z' },
+    website:   { label:'Website',   path:'M12 2a10 10 0 100 20A10 10 0 0012 2zm0 0c2.76 3.33 4 6.52 4 10s-1.24 6.67-4 10m0-20C9.24 5.33 8 8.52 8 12s1.24 6.67 4 10M2 12h20' },
+  };
+
+  const socialHtml = Object.entries(socialLinks)
+    .filter(([, url]) => url)
+    .map(([key, url]) => {
+      const icon = socialIcons[key] || socialIcons.website;
+      return `<a href="${url}" style="display:inline-block;margin:0 5px;text-decoration:none;" title="${icon.label}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="${icon.path}"/>
+        </svg>
+      </a>`;
+    }).join('');
+
+  const footerLinks = [
+    privacyUrl ? `<a href="${privacyUrl}" style="color:#888;font-size:11px;text-decoration:none;">Privacy Policy</a>` : '',
+    `<a href="{{unsubscribe_url}}" style="color:#888;font-size:11px;text-decoration:none;">${unsubText}</a>`,
+  ].filter(Boolean).join('<span style="color:#ccc;margin:0 6px;">|</span>');
+
+  const footerHtml = (footerText || socialHtml || footerLinks) ? `
+<tr>
+  <td style="background:#f8f9fa;padding:20px 40px;border-top:1px solid #e8ecf0;border-radius:0 0 12px 12px;text-align:center;">
+    ${socialHtml ? `<div style="margin-bottom:12px;">${socialHtml}</div>` : ''}
+    ${footerText ? `<div style="font-family:${fontFamily};font-size:12px;color:#888;margin-bottom:8px;">${footerText}</div>` : ''}
+    ${footerLinks ? `<div>${footerLinks}</div>` : ''}
+  </td>
+</tr>` : `
+<tr>
+  <td style="height:8px;background:${primaryColor};border-radius:0 0 12px 12px;"></td>
+</tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>${subject || ''}</title>
+  <style>
+    body { margin:0; padding:0; background:${outerBg}; font-family:${fontFamily}; }
+    a { color:${primaryColor}; }
+    img { max-width:100%; height:auto; display:block; }
+    @media only screen and (max-width:640px) {
+      .email-card { border-radius:0 !important; }
+      .email-body { padding:24px 20px !important; }
+    }
+  </style>
+</head>
+<body>
+${previewText ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;color:${outerBg};">${previewText}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>` : ''}
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${outerBg};min-height:100vh;">
+  <tr>
+    <td align="center" style="padding:32px 16px;">
+      <table class="email-card" width="100%" cellpadding="0" cellspacing="0" border="0"
+        style="max-width:${maxWidth};background:${bgColor};border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        ${headerHtml}
+        <tr>
+          <td class="email-body" style="padding:32px 40px;color:${textColor};font-family:${fontFamily};font-size:15px;line-height:1.65;">
+            ${bodyHtml}
+          </td>
+        </tr>
+        ${footerHtml}
+      </table>
+    </td>
+  </tr>
+</table>
+${trackingPixel}
+</body>
+</html>`;
 }
 
 // ── Seed system templates (idempotent — only inserts if slug not already present) ──
@@ -634,6 +749,43 @@ router.post('/seed-system', (req, res) => {
       html_body: ``,
       text_body: 'Dear {{referee_name}},\n\n{{candidate_name}} has applied for {{job_title}} at {{company_name}} and given your name as a reference. Please provide a reference here:\n{{reference_link}}\n\nThank you.\n{{company_name}} Talent Team',
       variables: ['referee_name','candidate_name','job_title','company_name','reference_link'],
+    },
+
+    // ── Match Notification templates (shown in the Notify flow from AI Match panel) ──
+    {
+      slug: 'sys_match_notify_job',
+      name: '✦ Role Match — Candidate Notification',
+      category: 'outreach',
+      is_system: true,
+      notify_mode: 'job',   // shown when notifying candidates about a single job
+      description: 'Sent to matched candidates when a job goes live. Personalised by AI using the candidate\'s profile and match score.',
+      subject: 'We thought you\'d be a great fit — {{job_title}} at {{company_name}}',
+      blocks: [
+        { id: 'mn_job_h',  type: 'header',  content: { text: '{{job_title}} — Open Role' } },
+        { id: 'mn_job_t1', type: 'text',    content: { text: 'Hi {{first_name}},' } },
+        { id: 'mn_job_ai', type: 'ai_content', prompt: 'Write 2–3 sentences explaining why this candidate is a strong match for the {{job_title}} role at {{company_name}}. Reference their background, skills, and any standout match reasons. Be specific, warm, and concise.', config: { prompt: 'Write 2–3 sentences explaining why this candidate is a strong match for the {{job_title}} role at {{company_name}}. Reference their background, skills, and any standout match reasons. Be specific, warm, and concise.' } },
+        { id: 'mn_job_b1', type: 'button',  content: { text: 'View role →', url: '{{portal_link}}', style: 'primary' } },
+        { id: 'mn_job_t2', type: 'text',    content: { text: 'Best regards,\n{{company_name}} Talent Team' } },
+        { id: 'mn_job_ft', type: 'footer',  content: {} },
+      ],
+      variables: ['first_name', 'job_title', 'company_name', 'portal_link'],
+    },
+    {
+      slug: 'sys_match_notify_person',
+      name: '✦ Job Recommendations — Candidate Digest',
+      category: 'outreach',
+      is_system: true,
+      notify_mode: 'person', // shown when notifying one candidate about multiple jobs
+      description: 'Sent to a candidate with a personalised list of recommended roles. AI writes a tailored summary for each job.',
+      subject: '{{company_name}} — {{job_1_title}}{{job_2_title ? " and more roles" : " and other opportunities"}} matched for you',
+      blocks: [
+        { id: 'mn_p_h',  type: 'header',  content: { text: 'Roles matched for you' } },
+        { id: 'mn_p_t1', type: 'text',    content: { text: 'Hi {{first_name}},\n\nBased on your profile we\'ve identified some roles that look like a strong fit. Here\'s a summary of what we think could be great opportunities for you.' } },
+        { id: 'mn_p_ai', type: 'ai_content', prompt: 'Write a personalised digest for this candidate listing all the recommended jobs. For each job, write 1–2 sentences on why it fits their background. Format as a clean HTML list with the job title bolded and a "View role →" link using the job_N_link variables. Be warm and encouraging.', config: { prompt: 'Write a personalised digest for this candidate listing all the recommended jobs. For each job, write 1–2 sentences on why it fits their background. Format as a clean HTML list with the job title bolded and a "View role →" link using the job_N_link variables. Be warm and encouraging.' } },
+        { id: 'mn_p_t2', type: 'text',    content: { text: 'We\'d love to hear your thoughts — feel free to reply to this email.\n\nBest regards,\n{{company_name}} Talent Team' } },
+        { id: 'mn_p_ft', type: 'footer',  content: {} },
+      ],
+      variables: ['first_name', 'company_name', 'job_1_title', 'job_1_link', 'job_2_title', 'job_2_link'],
     },
   ];
 

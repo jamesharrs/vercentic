@@ -1,0 +1,53 @@
+═══════════════════════════════════════════════════════════════
+ AGENT & WORKFLOW TEST REPORT
+ Run:      2026-05-30 07:56 UTC
+ Duration: 159.3s
+ Mode:     LIVE
+ Target:   https://talentos-production-4045.up.railway.app
+═══════════════════════════════════════════════════════════════
+
+AGENTS (17/17)
+✅ ai_analyse                       — run=completed (8154ms)
+✅ ai_summarise                     — run=completed (4453ms)
+✅ ai_score                         — run=completed (5498ms)
+✅ ai_draft_email                   — run=completed (8720ms)
+✅ send_email                       — run=completed (3639ms)
+✅ update_field                     — run=completed (2458ms)
+✅ add_note                         — run=completed (2199ms)
+✅ add_to_pool                      — run=completed (2660ms)
+✅ create_task                      — run=completed (1160ms)
+✅ notify_user                      — run=completed (2172ms)
+✅ webhook                          — run=completed (3527ms)
+✅ human_review                     — run=pending_approval (9036ms)
+✅ ai_interview                     — run=completed (2571ms)
+✅ interview_coordinator            — run=completed (4547ms)
+✅ move_stage                       — run=completed (13497ms)
+✅ link_to_object                   — run=completed (2065ms)
+✅ run_agent (chain)                — run=completed (4182ms)
+
+EMAIL DISPATCH STATUS (live mode)
+  ✅ agent_send_email             — email dispatched to james+testrun@vercentic.com (status=sent)
+  ✅ send_invitation_email        — email dispatched to james+testrun@vercentic.com (status=sent)
+  ✅ manual_send_email            — email dispatched to james+testrun@vercentic.com (status=sent)
+
+WORKFLOWS (16/16)
+✅ Stage: Applied → Interview       — auto-action: update_field (1594ms)
+✅ Stage: Interview → Offer         — moved to Offer (1580ms)
+✅ Workflow: manual run             — 3 step(s) executed (286ms)
+✅ Stage Action: send_email         — action executed correctly (4432ms)
+✅ Stage Action: stage_change       — action executed correctly (9113ms)
+✅ Stage Action: run_agent          — action executed correctly (2535ms)
+✅ Stage Action: send_invitation_email — action executed correctly (2073ms)
+✅ Stage Action: ai_prompt (queued) — action executed correctly (1887ms)
+✅ Manual Action: send_email        — action executed correctly (1083ms)
+✅ Manual Action: stage_change      — action executed correctly (3698ms)
+✅ Manual Action: ai_prompt         — action executed correctly (5104ms)
+✅ Manual Action: webhook           — action executed correctly (5902ms)
+✅ Manual Action: schedule_interview — action executed correctly (2714ms)
+✅ Manual Action: create_offer      — action executed correctly (2340ms)
+✅ Manual Action: assign_task_group — action executed correctly (2497ms)
+✅ Manual Action: share_record      — action executed correctly (2492ms)
+
+═══════════════════════════════════════════════════════════════
+PASSED: 33/33   FAILED: 0/33   SKIPPED: 0/33
+═══════════════════════════════════════════════════════════════

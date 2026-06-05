@@ -205,6 +205,14 @@ export function ComposeModal({
   const [includeSignature, setIncludeSignature] = useState(true);
   const [userSignature,    setUserSignature]    = useState("");   // HTML from preferences
   const [orgSignature,     setOrgSignature]     = useState("");   // fallback from environment
+  // Template context picker — shown when template needs job/object data
+  const [brandKits,      setBrandKits]      = useState([]);
+  const [selectedKitId,  setSelectedKitId]  = useState(null);
+  const [showKitPicker,  setShowKitPicker]  = useState(false);
+  const [tplCtxPicker,   setTplCtxPicker]   = useState(null);  // { tpl, missingVars, allJobs }
+  const [tplCtxSearch, setTplCtxSearch] = useState("");
+  const [tplCtxLoading, setTplCtxLoading] = useState(false);
+  const [tplCtxAllJobs, setTplCtxAllJobs] = useState([]);
 
   const meta = TYPE_META[type] || {};
   const bodyText = type === "email" ? htmlToText(body) : body;
@@ -246,8 +254,28 @@ export function ComposeModal({
     if (type === "email" && environment?.id) {
       api.get(`/email-templates?environment_id=${environment.id}`)
         .then(r => setTemplates(Array.isArray(r) ? r : []));
+      api.get(`/brand-kits?environment_id=${environment.id}`)
+        .then(r => {
+          const kits = Array.isArray(r) ? r : [];
+          setBrandKits(kits);
+          // Auto-select default kit if one is marked
+          const def = kits.find(k => k.is_default);
+          if (def) setSelectedKitId(def.id);
+        }).catch(() => {});
     }
   }, [type, environment?.id]);
+
+  // Close kit picker on outside click
+  useEffect(() => {
+    if (!showKitPicker) return;
+    const close = (e) => {
+      // Don't close if clicking inside the picker
+      if (e.target.closest?.('[data-kit-picker]')) return;
+      setShowKitPicker(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showKitPicker]);
 
   useEffect(() => {
     if (isBulk) return;
@@ -277,10 +305,73 @@ export function ComposeModal({
   const substitute = (text) =>
     (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => { const v = buildVars(); return v[k] !== undefined ? v[k] : m; });
 
-  const applyTemplate = (tpl) => {
+  const applyTemplate = async (tpl) => {
     if (!tpl) return;
-    setSelTpl(tpl); setSubject(substitute(tpl.subject || "")); setBody(substitute(tpl.body || ""));
+    // Detect which variable groups the template needs
+    const JOB_VARS = ["job_title","job_location","job_department","job_salary_min","job_salary_max","job_work_type","job_name","job_description","interview_date","interview_time","interview_format","interview_location","offer_salary","offer_start_date","offer_expiry_date","offer_url","feedback_url","reschedule_url","interview_link"];
+    const templateText = (tpl.subject || "") + " " + (tpl.body || "") + " " +
+      (tpl.html_body || "") + " " +
+      (tpl.blocks || []).map(b => {
+        const ct = typeof b.content === "object" ? (b.content?.text || "") : (b.content || "");
+        const pr = b.prompt || b.config?.prompt || "";
+        return ct + " " + pr;
+      }).join(" ");
+    const usedVars = (templateText.match(/\{\{(\w+)\}\}/g) || []).map(m => m.slice(2,-2));
+    const needsJob = usedVars.some(v => JOB_VARS.includes(v));
+
+    // If template needs job data and none is selected yet — show picker
+    if (needsJob && !relatedRecordId) {
+      setTplCtxLoading(true);
+      setTplCtxSearch("");
+      setTplCtxAllJobs([]);
+      setTplCtxPicker({ tpl, missingVars: usedVars.filter(v => JOB_VARS.includes(v)) });
+      // Load all jobs in background for the "search all" fallback
+      try {
+        const allRecs = await api.get(`/records?object_slug=jobs&environment_id=${environment?.id}&limit=100`);
+        setTplCtxAllJobs(Array.isArray(allRecs?.records) ? allRecs.records : []);
+      } catch (_) {}
+      setTplCtxLoading(false);
+      return; // wait for picker confirmation
+    }
+
+    // Apply immediately if no job vars needed or job already selected
+    setSelTpl(tpl);
+    setSubject(substitute(tpl.subject || ""));
+    setBody(substitute(tpl.body || ""));
+    // Auto-select the template's brand kit if it has one
+    if (tpl.brand_kit_id) setSelectedKitId(tpl.brand_kit_id);
     setMode("write");
+  };
+
+  // Called when user confirms job selection in the context picker
+  const confirmTplContext = (jobId) => {
+    const tpl = tplCtxPicker?.tpl;
+    if (!tpl) return;
+    setRelated(jobId || "");
+    setTplCtxPicker(null);
+    // Re-run applyTemplate with the job now set — use a microtask so state settles
+    setTimeout(() => {
+      setSelTpl(tpl);
+      // Rebuild vars with the newly selected job
+      const selectedJob = linkedJobs.find(j => j.id === jobId) || tplCtxAllJobs.find(j => j.id === jobId);
+      const d = record?.data || {};
+      const jd = selectedJob?.data || {};
+      const vars = {
+        candidate_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
+        first_name: d.first_name || "Candidate", last_name: d.last_name || "",
+        full_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
+        email: d.email || d.email_address || "", phone: d.phone || d.mobile || "",
+        current_title: d.current_title || d.job_title || "", location: d.location || "",
+        job_title: jd.job_title || jd.title || jd.name || jd.job_title || "",
+        job_location: jd.location || jd.job_location || "",
+        department: jd.department || "", company_name: jd.company || jd.entity || "",
+        recruiter_name: "",
+      };
+      const sub = (text) => (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => vars[k] !== undefined ? vars[k] : m);
+      setSubject(sub(tpl.subject || ""));
+      setBody(sub(tpl.body || ""));
+      setMode("write");
+    }, 0);
   };
 
   const handleAiCompose = async () => {
@@ -331,6 +422,20 @@ export function ComposeModal({
 
   const save = async () => {
     setSaving(true);
+
+    // If a brand kit is selected for email, wrap the body in the branded template
+    let finalHtml = bodyWithSignature;
+    if (type === "email" && selectedKitId) {
+      try {
+        const wrapped = await api.post("/email-builder/preview", {
+          blocks: [{ type: "html", content: bodyWithSignature }],
+          brand_kit_id: selectedKitId,
+          subject,
+        });
+        if (wrapped?.html) finalHtml = wrapped.html;
+      } catch (_) { /* fall back to plain body */ }
+    }
+
     const targets = isBulk ? recipients : [record];
     await Promise.all(targets.map(rec => {
       const d = rec?.data || rec || {};
@@ -341,8 +446,8 @@ export function ComposeModal({
         record_id: rec.id, environment_id: environment?.id,
         type, direction, to: recTo || undefined,
         subject: subject || undefined,
-        body: type === "email" ? bodyWithSignature : bodyText,
-        body_html: type === "email" ? bodyWithSignature : undefined,
+        body: type === "email" ? finalHtml : bodyText,
+        body_html: type === "email" ? finalHtml : undefined,
         body_text: type === "email" ? htmlToText(bodyWithSignature) : undefined,
         duration_seconds: duration ? Number(duration) : undefined,
         outcome: outcome || undefined,
@@ -571,14 +676,53 @@ export function ComposeModal({
       )}
 
       {/* Body — RichTextEditor for email, plain textarea for SMS/WhatsApp/call */}
-      {type === "email" ? (
-        <RichTextEditor
-          value={body}
-          onChange={html => setBody(html)}
-          placeholder="Write your message…"
-          minHeight={220}
-        />
-      ) : type !== "call" ? (
+      {type === "email" ? (() => {
+        const kit = brandKits.find(k => k.id === selectedKitId);
+        const primary = kit?.primaryColor || '#4361EE';
+        const bg      = kit?.bgColor      || '#ffffff';
+        const font    = kit?.fontFamily   || 'inherit';
+        const editor  = (
+          <RichTextEditor
+            value={body}
+            onChange={html => setBody(html)}
+            placeholder="Write your message…"
+            minHeight={220}
+          />
+        );
+
+        if (!kit) return editor;
+
+        // Render the editor inside a live branded frame
+        return (
+          <div style={{ margin:"12px 0", borderRadius:12, overflow:"hidden",
+            border:`1.5px solid ${primary}30`, boxShadow:`0 2px 12px rgba(0,0,0,0.07)` }}>
+
+            {/* Header */}
+            <div style={{ background:primary, padding:"14px 24px", display:"flex", alignItems:"center", gap:12 }}>
+              {kit.logo_url
+                ? <img src={kit.logo_url} alt={kit.company_name || ''} style={{ maxHeight:32, maxWidth:160, objectFit:"contain" }} onError={e=>e.target.style.display='none'}/>
+                : kit.company_name
+                  ? <span style={{ fontSize:16, fontWeight:700, color:"#fff", fontFamily:font }}>{kit.company_name}</span>
+                  : null
+              }
+            </div>
+
+            {/* Body area — white card */}
+            <div style={{ background:bg, padding:"20px 24px", fontFamily:font }}>
+              {editor}
+            </div>
+
+            {/* Footer */}
+            {(kit.footer_text || kit.company_name) && (
+              <div style={{ background:"#f8f9fa", borderTop:`1px solid #e8ecf0`,
+                padding:"12px 24px", textAlign:"center",
+                fontSize:11, color:"#888", fontFamily:font, lineHeight:1.5 }}>
+                {kit.footer_text || `© ${new Date().getFullYear()} ${kit.company_name}. All rights reserved.`}
+              </div>
+            )}
+          </div>
+        );
+      })() : type !== "call" ? (
         <AITextEditor context={`${meta.label} message`} onApply={newText => setBody(newText)}>
           <textarea value={body} onChange={e => setBody(e.target.value)}
             placeholder={`${meta.label} message…`}
@@ -619,7 +763,9 @@ export function ComposeModal({
   );
 
   const TemplateArea = () => (
-    <div style={{ flex:1, overflowY:"auto" }}>
+    <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:12 }}>
+      {/* ── Templates ── */}
+      <div style={{ flex:1 }}>
       {templates.length === 0 ? (
         <div style={{ textAlign:"center", color:C.text3, fontSize:13, padding:"40px 0" }}>
           <div style={{ fontSize:28, marginBottom:8 }}>📝</div>
@@ -636,7 +782,21 @@ export function ComposeModal({
                 cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
                 <span style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{tpl.name}</span>
-                {selTpl?.id === tpl.id && <span style={{ fontSize:10, color:accent, fontWeight:700 }}>Selected ✓</span>}
+                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  {tpl.brand_kit_id && (() => {
+                    const kit = brandKits.find(k => k.id === tpl.brand_kit_id);
+                    const dot = kit?.primaryColor || kit?.primary_color || "#4361EE";
+                    return kit ? (
+                      <span style={{ fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:10,
+                        background:`${dot}15`, color:dot, border:`1px solid ${dot}30`,
+                        display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ width:5, height:5, borderRadius:"50%", background:dot }}/>
+                        {kit.name}
+                      </span>
+                    ) : null;
+                  })()}
+                  {selTpl?.id === tpl.id && <span style={{ fontSize:10, color:accent, fontWeight:700 }}>Selected ✓</span>}
+                </div>
               </div>
               {tpl.subject && <div style={{ fontSize:11, color:C.text3, marginBottom:2 }}>Subject: {tpl.subject}</div>}
               {tpl.body && <div style={{ fontSize:11, color:C.text3, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{tpl.body}</div>}
@@ -644,6 +804,7 @@ export function ComposeModal({
           ))}
         </div>
       )}
+      </div>{/* end templates inner */}
     </div>
   );
 
@@ -749,6 +910,7 @@ export function ComposeModal({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return ReactDOM.createPortal(
+    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(10,12,26,0.55)", zIndex:9000,
       display:"flex", alignItems:"center", justifyContent:"center",
       backdropFilter:"blur(3px)", padding:20 }}
@@ -803,6 +965,79 @@ export function ComposeModal({
                 background:"transparent", color:C.text3, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
               Preview ↗
             </button>
+          )}
+
+          {/* Brand Kit layout picker — email write mode only */}
+          {type === "email" && mode === "write" && brandKits.length > 0 && (
+            <div style={{ position:"relative" }}>
+              <button
+                onClick={() => setShowKitPicker(p => !p)}
+                style={{ padding:"5px 10px", borderRadius:8,
+                  border: selectedKitId ? `1.5px solid ${brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent}` : `1.5px solid ${border}`,
+                  background: selectedKitId ? `${brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent}12` : "transparent",
+                  color: selectedKitId ? (brandKits.find(k=>k.id===selectedKitId)?.primaryColor||C.accent) : C.text3,
+                  fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                  display:"flex", alignItems:"center", gap:5 }}>
+                {selectedKitId ? (
+                  <>
+                    <span style={{ width:7, height:7, borderRadius:"50%",
+                      background: brandKits.find(k=>k.id===selectedKitId)?.primaryColor || C.accent }}/>
+                    {brandKits.find(k=>k.id===selectedKitId)?.name}
+                  </>
+                ) : "🎨 Layout"}
+              </button>
+              {showKitPicker && (
+                <div data-kit-picker="true" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:200,
+                  background:"white", borderRadius:12, border:`1.5px solid ${border}`,
+                  boxShadow:"0 8px 24px rgba(0,0,0,0.12)", padding:"8px", minWidth:180 }}
+                  onClick={e => e.stopPropagation()}>
+                  <div style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase",
+                    letterSpacing:".06em", padding:"2px 8px 8px" }}>Brand Layout</div>
+                  {/* None option */}
+                  <button
+                    onClick={() => { setSelectedKitId(null); setShowKitPicker(false); }}
+                    style={{ width:"100%", textAlign:"left", padding:"7px 10px", borderRadius:8, border:"none",
+                      background: !selectedKitId ? `${C.accent}10` : "transparent",
+                      color: !selectedKitId ? C.accent : C.text2,
+                      fontSize:12, fontWeight: !selectedKitId ? 700 : 500, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ width:16, height:16, borderRadius:4, border:`1.5px solid ${border}`,
+                      background:"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {!selectedKitId && <span style={{ fontSize:9 }}>✓</span>}
+                    </span>
+                    Plain (no layout)
+                  </button>
+                  {brandKits.map(kit => {
+                    const active = selectedKitId === kit.id;
+                    const dot = kit.primaryColor || kit.primary_color || C.accent;
+                    return (
+                      <button key={kit.id}
+                        onClick={() => { setSelectedKitId(kit.id); setShowKitPicker(false); }}
+                        style={{ width:"100%", textAlign:"left", padding:"7px 10px", borderRadius:8, border:"none",
+                          background: active ? `${dot}10` : "transparent",
+                          color: active ? dot : C.text2,
+                          fontSize:12, fontWeight: active ? 700 : 500, cursor:"pointer", fontFamily:"inherit",
+                          display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ width:16, height:16, borderRadius:4, background:dot, flexShrink:0,
+                          display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          {active && <span style={{ fontSize:9, color:"white" }}>✓</span>}
+                        </span>
+                        <span style={{ flex:1 }}>{kit.name}</span>
+                        {kit.is_default && (
+                          <span style={{ fontSize:9, background:`${dot}20`, color:dot,
+                            padding:"1px 5px", borderRadius:6, fontWeight:700 }}>default</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  <div style={{ borderTop:`1px solid ${border}`, margin:"8px 0 4px", padding:"6px 8px 2px" }}>
+                    <div style={{ fontSize:10, color:C.text3, lineHeight:1.5 }}>
+                      Layout wraps your email in the brand kit's header, footer, and colours when sent.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* AI toggle — email/sms write mode */}
@@ -887,7 +1122,143 @@ export function ComposeModal({
           </button>
         </div>
       </div>
-    </div>,
+    </div>
+
+    {/* ── Template Context Picker overlay ── */}
+    {tplCtxPicker && (
+      <div style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(10,12,26,0.65)",
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+        backdropFilter:"blur(4px)" }}
+        onClick={e => { if (e.target === e.currentTarget) setTplCtxPicker(null); }}>
+        <div style={{ background:"white", borderRadius:18, width:"100%", maxWidth:520,
+          boxShadow:"0 24px 80px rgba(0,0,0,0.22)", overflow:"hidden" }}
+          onMouseDown={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div style={{ padding:"20px 24px 16px", borderBottom:"1.5px solid #f0f1f5" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:"#0f1729", marginBottom:4 }}>
+              This template needs job details
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+              <strong>{tplCtxPicker.tpl.name}</strong> uses{" "}
+              <code style={{ background:"#f3f4f6", padding:"1px 5px", borderRadius:4, fontSize:11 }}>
+                {"{{"}{tplCtxPicker.missingVars.slice(0,3).join("}}, {{")}{tplCtxPicker.missingVars.length>3 ? `}} +${tplCtxPicker.missingVars.length-3} more` : "}}"}
+              </code>
+              {" "}— select the role this email is about.
+            </div>
+          </div>
+
+          <div style={{ padding:"16px 24px", maxHeight:380, overflowY:"auto" }}>
+            {/* Linked jobs section */}
+            {linkedJobs.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
+                  letterSpacing:".06em", marginBottom:8 }}>Linked roles</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {linkedJobs.map(j => {
+                    const jd = j.data || {};
+                    const title = jd.job_title || jd.title || jd.name || "Untitled role";
+                    const dept  = jd.department || jd.job_department || "";
+                    const loc   = jd.location || jd.job_location || "";
+                    return (
+                      <button key={j.id} onClick={() => confirmTplContext(j.id)}
+                        style={{ textAlign:"left", padding:"11px 14px", borderRadius:10,
+                          border:`1.5px solid ${accent}30`, background:`${accent}05`,
+                          cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.background = `${accent}10`; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = `${accent}30`; e.currentTarget.style.background = `${accent}05`; }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#0f1729" }}>{title}</div>
+                        {(dept || loc) && <div style={{ fontSize:11, color:"#6b7280", marginTop:2 }}>
+                          {[dept, loc].filter(Boolean).join(" · ")}
+                        </div>}
+                        <div style={{ fontSize:10, color:accent, fontWeight:600, marginTop:3 }}>✓ Linked</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Search all jobs */}
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase",
+                letterSpacing:".06em", marginBottom:8 }}>
+                {linkedJobs.length > 0 ? "Or search all roles" : "Select a role"}
+              </div>
+              <input
+                placeholder="Search roles…"
+                value={tplCtxSearch}
+                onChange={e => setTplCtxSearch(e.target.value)}
+                autoFocus={linkedJobs.length === 0}
+                style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", borderRadius:9,
+                  border:"1.5px solid #e5e7eb", fontSize:13, fontFamily:"inherit", outline:"none",
+                  marginBottom:8, background:"#fafafa" }}
+              />
+              {tplCtxLoading ? (
+                <div style={{ textAlign:"center", padding:16, color:"#9ca3af", fontSize:12 }}>Loading roles…</div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:5, maxHeight:200, overflowY:"auto" }}>
+                  {tplCtxAllJobs
+                    .filter(j => {
+                      const q = tplCtxSearch.toLowerCase();
+                      if (!q) return true;
+                      const jd = j.data || {};
+                      return [jd.job_title, jd.title, jd.name, jd.department, jd.location]
+                        .some(v => v && String(v).toLowerCase().includes(q));
+                    })
+                    .slice(0, 20)
+                    .map(j => {
+                      const jd = j.data || {};
+                      const title = jd.job_title || jd.title || jd.name || "Untitled role";
+                      const dept  = jd.department || "";
+                      const loc   = jd.location || "";
+                      const alreadyLinked = linkedJobs.some(lj => lj.id === j.id);
+                      if (alreadyLinked) return null; // already shown above
+                      return (
+                        <button key={j.id} onClick={() => confirmTplContext(j.id)}
+                          style={{ textAlign:"left", padding:"9px 12px", borderRadius:9,
+                            border:"1.5px solid #e5e7eb", background:"white",
+                            cursor:"pointer", fontFamily:"inherit", transition:"all .1s" }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.background = `${accent}06`; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "white"; }}>
+                          <div style={{ fontSize:13, fontWeight:600, color:"#0f1729" }}>{title}</div>
+                          {(dept || loc) && <div style={{ fontSize:11, color:"#6b7280", marginTop:1 }}>
+                            {[dept, loc].filter(Boolean).join(" · ")}
+                          </div>}
+                        </button>
+                      );
+                    })
+                  }
+                  {tplCtxAllJobs.length === 0 && !tplCtxLoading && (
+                    <div style={{ textAlign:"center", padding:12, color:"#9ca3af", fontSize:12 }}>
+                      No roles found. You can still use this template without job data.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ display:"flex", gap:8, padding:"14px 24px", borderTop:"1.5px solid #f0f1f5",
+            background:"#fafafa", justifyContent:"flex-end" }}>
+            <button onClick={() => setTplCtxPicker(null)}
+              style={{ padding:"8px 18px", borderRadius:9, border:"1.5px solid #e5e7eb",
+                background:"transparent", fontSize:13, fontWeight:600, color:"#6b7280",
+                cursor:"pointer", fontFamily:"inherit" }}>
+              Cancel
+            </button>
+            <button onClick={() => confirmTplContext("")}
+              style={{ padding:"8px 18px", borderRadius:9, border:"none",
+                background:"#f3f4f6", fontSize:13, fontWeight:600, color:"#374151",
+                cursor:"pointer", fontFamily:"inherit" }}>
+              Use without job data
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>,
     document.body
   );
 }
@@ -922,11 +1293,32 @@ function CommDetail({ item, onClose, onDelete }) {
           </div>
         )}
 
-        {item.body && (
+        {item.body && item.type === "email" ? (
+          <div style={{ borderRadius:12, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:20 }}>
+            {/* Rendered HTML email */}
+            <iframe
+              srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>
+                body{margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827;line-height:1.6;}
+                img{max-width:100%;height:auto;}
+                a{color:#4361ee;}
+                table{border-collapse:collapse;width:100%;}
+                td,th{padding:8px;}
+              </style></head><body>${item.body_html || item.body}</body></html>`}
+              sandbox="allow-same-origin"
+              style={{ width:"100%", minHeight:200, border:"none", display:"block" }}
+              onLoad={e => {
+                try {
+                  const h = e.target.contentDocument?.body?.scrollHeight;
+                  if (h) e.target.style.height = (h + 32) + "px";
+                } catch {}
+              }}
+            />
+          </div>
+        ) : item.body ? (
           <div style={{ background:C.bg, borderRadius:12, padding:"14px 16px", fontSize:13, color:C.text1, lineHeight:1.7, whiteSpace:"pre-wrap", marginBottom:20 }}>
             {item.body}
           </div>
-        )}
+        ) : null}
 
         <div style={{ fontSize:12, color:C.text3, marginBottom:20 }}>
           {item.from_label && <div>From: <strong>{item.from_label}</strong></div>}
@@ -962,7 +1354,8 @@ function CommItem({ item, onClick }) {
       ? `Call${item.outcome ? ` — ${item.outcome.replace("_", " ")}` : ""}`
       : `${meta.label}`)
   );
-  const preview = resolveVars(item.body);
+  const rawPreview = resolveVars(item.body_text || item.body || "");
+  const preview = rawPreview.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
   return (
     <div onClick={() => onClick(item)}

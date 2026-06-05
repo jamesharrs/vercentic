@@ -79,7 +79,31 @@ async function sendWhatsApp({ to, body }) {
 // ─── Email ────────────────────────────────────────────────────────────────────
 async function sendEmail({ to, toName, from, fromName, replyTo, subject, body, text, html, tags, attachments = [] }) {
   const textBody = text || body || '';
-  const htmlBody = html || textBody.replace(/\n/g, '<br>');
+  let   htmlBody = html || textBody.replace(/\n/g, '<br>');
+
+  // ── Email redirect override (testing / staging) ───────────────────────────
+  const redirectTo = process.env.EMAIL_REDIRECT_TO;
+  if (redirectTo && redirectTo.trim() && !redirectTo.startsWith('YOUR_')) {
+    const originalTo = to;
+    to      = redirectTo.trim();
+    toName  = undefined;
+    subject = `[TEST → ${originalTo}] ${subject}`;
+    const notice = `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-family:sans-serif;font-size:13px;color:#92400e;">
+      <strong>⚠ Email redirect active</strong><br>
+      This email was originally addressed to <strong>${originalTo}</strong>.<br>
+      It has been redirected to <strong>${redirectTo.trim()}</strong> for testing.
+    </div>`;
+    // Inject inside the email body cell if branded template, else after <body>
+    if (htmlBody.includes('class="email-body"')) {
+      // Branded template — inject inside the content cell so it appears inside the card
+      htmlBody = htmlBody.replace(/(<td[^>]*class="email-body"[^>]*>)/i, `$1${notice}`);
+    } else if (htmlBody.includes('<body')) {
+      htmlBody = htmlBody.replace(/(<body[^>]*>)/i, `$1${notice}`);
+    } else {
+      htmlBody = notice + htmlBody;
+    }
+    console.log(`[messaging] EMAIL REDIRECTED: ${originalTo} → ${redirectTo.trim()} | Subject: ${subject}`);
+  }
 
   // ── MailerSend (primary) ──────────────────────────────────────────────────
   if (MAILERSEND_CONFIGURED) {

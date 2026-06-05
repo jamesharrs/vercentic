@@ -3,6 +3,7 @@ import api, { tFetch } from "./apiClient.js";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
+import StyledSelect from "./components/StyledSelect.jsx";
 import { useI18n, LANGUAGES } from "./i18n/I18nContext.jsx";
 
 function _sessionKey() {
@@ -35,6 +36,7 @@ const AgentsSettings = lazy(() => import("./settings/AgentsSettings.jsx"));
 const DataImportSettings = lazy(() => import("./settings/DataImportSettings.jsx"));
 const AiGovernance = lazy(() => import("./settings/AiGovernance.jsx"));
 const QuestionBankSettings = lazy(() => import("./settings/QuestionBankSettings.jsx"));
+const InterviewTemplatesSettings = lazy(() => import("./settings/InterviewTemplatesSettings.jsx"));
 const StageCategoriesSection = lazy(() => import("./settings/StageCategoriesSection.jsx"));
 const FeatureFlagsSettings = lazy(() => import("./settings/FeatureFlagsSettings.jsx"));
 const AiMatchingSettings = lazy(() => import("./settings/AiMatchingSettings.jsx"));
@@ -89,9 +91,8 @@ const Inp = ({label,value,onChange,placeholder,type="text",required,help,disable
 const Sel = ({label,value,onChange,options}) => (
   <div style={{display:"flex",flexDirection:"column",gap:4}}>
     {label&&<label style={{fontSize:12,fontWeight:600,color:C.text2}}>{label}</label>}
-    <select value={value||""} onChange={e=>onChange(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-      {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
-    </select>
+    <StyledSelect value={value||""} onChange={onChange} style={{width:"100%"}}
+      options={options.map(o=>({value:o.value??o,label:o.label??o}))}/>
   </div>
 );
 
@@ -151,7 +152,9 @@ const PATHS = {
   "paperclip":"M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48",
   "form":"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M8 13h8M8 17h8M8 9h2",
   "workflow":"M22 12h-4l-3 9L9 3l-3 9H2",
+  "video":"M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z",
   "sparkles":"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 19l.7 2.1L7.8 22l-2.1.7L5 24.8l-.7-2.1L2.2 22l2.1-.7L5 19z",
+  "sparkle":"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 19l.7 2.1L7.8 22l-2.1.7L5 24.8l-.7-2.1L2.2 22l2.1-.7L5 19z",
   "zap":"M13 2L3 14h9l-1 8 10-12h-9l1-8z",
   "bot":"M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7v1H3v-1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2zM7.5 13a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM16.5 13a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM3 18h18v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2z",
   "help-circle":"M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10zM9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01",
@@ -1148,20 +1151,12 @@ const AuditLogSection = () => {
         <div>
           {/* Filters */}
           <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-            <select value={severityFilter} onChange={e=>{setSeverityFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-              <option value="">All severities</option>
-              <option value="critical">Critical</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-            </select>
-            <select value={eventFilter} onChange={e=>{setEventFilter(e.target.value);setPage(1);}} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:C.surface,color:C.text1}}>
-              <option value="">All event types</option>
-              <option value="access_denied">Access Denied</option>
-              <option value="permissions_changed">Permissions Changed</option>
-              <option value="role_created">Role Created</option>
-              <option value="role_deleted">Role Deleted</option>
-              <option value="field_visibility_changed">Field Visibility</option>
-            </select>
+            <StyledSelect value={severityFilter} onChange={v=>{setSeverityFilter(v);setPage(1);}} size="sm"
+              allowClear placeholder="All severities"
+              options={[{value:"critical",label:"Critical"},{value:"warn",label:"Warning"},{value:"info",label:"Info"}]}/>
+            <StyledSelect value={eventFilter} onChange={v=>{setEventFilter(v);setPage(1);}} size="sm"
+              allowClear placeholder="All event types"
+              options={[{value:"access_denied",label:"Access Denied"},{value:"permissions_changed",label:"Permissions Changed"},{value:"role_created",label:"Role Created"},{value:"role_deleted",label:"Role Deleted"},{value:"field_visibility_changed",label:"Field Visibility"}]}/>
           </div>
 
           {loading ? <div style={{padding:24,textAlign:"center",color:C.text3}}>Loading…</div> : items.length === 0 ? (
@@ -2524,13 +2519,17 @@ function CompanyProfilePanel({ environment }) {
 
   const envId = environment?.id;
 
-  // Load profile on mount
+  // Load profile on mount and when wizard completes
   useEffect(() => {
     if (!envId) return;
-    tFetch(`/api/company-research?environment_id=${envId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { setProfile(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    const load = () => {
+      api.get(`/company-research?environment_id=${envId}`)
+        .then(data => { setProfile(data?.name ? data : null); setLoading(false); })
+        .catch(() => setLoading(false));
+    };
+    load();
+    window.addEventListener('talentos:company-profile-updated', load);
+    return () => window.removeEventListener('talentos:company-profile-updated', load);
   }, [envId]);
 
   const launchWizard = () => {
@@ -2549,15 +2548,16 @@ function CompanyProfilePanel({ environment }) {
     setSaving(true);
     try {
       const merged = { ...(profile || {}), ...patch, environment_id: envId };
-      const r = await tFetch('/api/company-research/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment_id: envId, profile: merged, apply_templates: false }),
+      const d = await api.post('/company-research/save', {
+        environment_id: envId, profile: merged, apply_templates: false,
       });
-      if (r.ok) { const d = await r.json(); setProfile(d.profile || merged); }
+      if (d?.profile) setProfile(d.profile);
+      else setProfile(merged);
       setEditing(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error('[CompanyProfile] save failed', e);
     } finally { setSaving(false); }
   };
 
@@ -2884,8 +2884,9 @@ const NAV_GROUPS = [
       { id:"email_templates",   icon:"mail",     label:"Email Templates" },
       { id:"default_signature", icon:"mail",     label:"Default Signature", perm:"manage_settings" },
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
-      { id:"workflows", icon:"workflow", label:"Workflows", perm:"manage_workflows" },
-      { id:"portals",   icon:"globe",    label:"Portals",   perm:"manage_portals" },
+      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows" },
+      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews" },
+      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals" },
       { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles" },
     ],
   },
@@ -3116,8 +3117,9 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="email_settings"    && <LazyTab><EmailSettings session={currentUser}/></LazyTab>}
         {activeSection==="default_signature" && <LazyTab><DefaultSignatureSettings environment={environment}/></LazyTab>}
         {activeSection==="language"   && <LanguageSection/>}
-        {activeSection==="workflows"     && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
-        {activeSection==="portals"       && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
+        {activeSection==="workflows"            && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
+        {activeSection==="interview_templates"  && <LazyTab><InterviewTemplatesSettings environment={environment}/></LazyTab>}
+        {activeSection==="portals"              && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
         {activeSection==="talent_profile" && (
           <div style={{ maxWidth:700, padding:24 }}>
             <div style={{ marginBottom:20 }}>

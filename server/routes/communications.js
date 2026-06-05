@@ -60,7 +60,8 @@ router.get('/:id', (req, res) => {
 
 // ─── Send / create communication ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  const { type, direction, to, subject, body, record_id, environment_id, ...rest } = req.body;
+  const { type, direction, to, body, record_id, environment_id, ...rest } = req.body;
+  const subject = req.body.subject || (type === 'email' ? '(No subject)' : undefined);
 
   let dispatchResult = {};
   let status = 'logged';
@@ -97,7 +98,9 @@ router.post('/', async (req, res) => {
           } catch { /* no domains table yet */ }
         }
         dispatchResult = await sendEmail({
-          to, from: fromEmail, replyTo: replyToAddress, subject, text: body,
+          to, from: fromEmail, replyTo: replyToAddress, subject,
+          html: rest.body_html || body,   // use pre-built branded HTML if available
+          text: rest.body_text || body,   // plain-text fallback for email clients
         });
         status = dispatchResult.simulated ? 'simulated' : 'sent';
       }

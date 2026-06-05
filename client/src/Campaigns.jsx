@@ -641,6 +641,7 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
   const inp = { width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,
     fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,boxSizing:"border-box" };
   const lbl = { fontSize:12,fontWeight:600,color:C.text2,marginBottom:4,display:"block" };
+  const sectionLabel = { fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6 };
 
   const [workflows, setWorkflows] = useState([]);
 
@@ -667,55 +668,59 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
   const nextStatuses = STATUS_ACTIONS[campaign.status] || [];
 
   return (
-    <div style={{ height:"100%", display:"flex", flexDirection:"column" }}>
-      {/* Header */}
-      <div style={{ padding:"16px 24px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12 }}>
-        <button onClick={onBack} style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:0 }}>
-          <Ic n="arrowL" s={18} c={C.text3}/>
-        </button>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:16,fontWeight:700,color:C.text1 }}>{campaign.name}</div>
-          <div style={{ display:"flex",gap:6,marginTop:3 }}>
-            <Badge label={goal.label}   color={goal.color}   bg={goal.bg}/>
-            <Badge label={status.label} color={status.color} bg={status.bg}/>
-            {campaign.campaign_portal_id && (
-              <span onClick={()=>window.open(`/settings/portals?edit=${campaign.campaign_portal_id}`,"_blank")}
-                style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:99,
-                  fontSize:11,fontWeight:700,background:"#F3F0FF",color:"#7048e8",cursor:"pointer" }}>
-                📄 Page created ↗
-              </span>
-            )}
+    <div style={{ height:"100%", display:"flex", flexDirection:"column", background:C.bg }}>
+      {/* Header — solid white strip with all context */}
+      <div style={{ padding:"16px 28px 0", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:12 }}>
+          <button onClick={onBack} style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:"2px 0",marginTop:2 }}>
+            <Ic n="arrowL" s={18} c={C.text3}/>
+          </button>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:18,fontWeight:800,color:C.text1,marginBottom:6 }}>{campaign.name}</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center" }}>
+              <Badge label={goal.label}   color={goal.color}   bg={goal.bg}/>
+              <Badge label={status.label} color={status.color} bg={status.bg}/>
+              {campaign.campaign_portal_id && (
+                <span onClick={()=>window.open(`/settings/portals?edit=${campaign.campaign_portal_id}`,"_blank")}
+                  style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:99,
+                    fontSize:11,fontWeight:700,background:"#F3F0FF",color:"#7048e8",cursor:"pointer" }}>
+                  <Ic n="file-text" s={10} c="#7048e8"/> Page created ↗
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            {nextStatuses.map(s=>(
+              <Btn key={s} v="secondary" s="sm" onClick={()=>changeStatus(s)}>
+                → {STATUS_META[s]?.label}
+              </Btn>
+            ))}
+            <Btn v={editing?"green":"primary"} s="sm" icon={editing?"check":"edit"}
+              onClick={editing?save:()=>setEditing(true)}>
+              {editing?(saving?"Saving…":"Save"):"Edit"}
+            </Btn>
+            {editing && <Btn v="secondary" s="sm" onClick={()=>{setEditing(false);setForm({...campaign});}}>Cancel</Btn>}
           </div>
         </div>
-        <div style={{ display:"flex", gap:8 }}>
-          {nextStatuses.map(s=>(
-            <Btn key={s} v="secondary" s="sm" onClick={()=>changeStatus(s)}>
-              → {STATUS_META[s]?.label}
-            </Btn>
-          ))}
-          <Btn v={editing?"green":"secondary"} s="sm" icon={editing?"check":"edit"}
-            onClick={editing?save:()=>setEditing(true)}>
-            {editing?(saving?"Saving…":"Save"):"Edit"}
-          </Btn>
-          {editing && <Btn v="secondary" s="sm" onClick={()=>{setEditing(false);setForm({...campaign});}}>Cancel</Btn>}
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, padding:"0 24px" }}>
-        {tabs.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            padding:"10px 14px", border:"none", background:"none", cursor:"pointer",
-            fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.text3,
-            borderBottom:`2px solid ${tab===t.id?C.accent:"transparent"}`, fontFamily:F,
-          }}>{t.label}</button>
-        ))}
+        {/* Tabs — flush to bottom of header */}
+        <div style={{ display:"flex", gap:0 }}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              padding:"9px 16px", border:"none", background:"none", cursor:"pointer",
+              fontSize:13, fontWeight:tab===t.id?700:500,
+              color:tab===t.id?C.accent:C.text3,
+              borderBottom:`2px solid ${tab===t.id?C.accent:"transparent"}`,
+              fontFamily:F, transition:"all 0.15s",
+            }}>{t.label}</button>
+          ))}
+        </div>
       </div>
 
       {/* Tab content */}
-      <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
         {tab === "brief" && (
-          <div style={{ maxWidth:620 }}>
+          <div style={{ maxWidth:680 }}>
             {editing ? (
               <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
                 <div><label style={lbl}>Campaign name</label><input value={form.name} onChange={e=>set("name",e.target.value)} style={inp}/></div>
@@ -741,32 +746,72 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
                 <div><label style={lbl}>Budget</label><input type="number" value={form.budget||""} onChange={e=>set("budget",e.target.value)} placeholder="Optional" style={inp}/></div>
               </div>
             ) : (
-              <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
-                {campaign.brief && (
-                  <div>
-                    <div style={{ fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6 }}>Brief</div>
-                    <div style={{ fontSize:14,color:C.text1,lineHeight:1.7 }}>{campaign.brief}</div>
+              <div style={{ display:"flex",flexDirection:"column",gap:0 }}>
+                {/* Summary card */}
+                <div style={{ background:C.surface,borderRadius:14,border:`1.5px solid ${C.border}`,overflow:"hidden",marginBottom:16 }}>
+                  {/* Goal strip */}
+                  <div style={{ background:goal.bg,borderBottom:`1px solid ${goal.color}20`,padding:"10px 18px",display:"flex",alignItems:"center",gap:8 }}>
+                    <div style={{ width:8,height:8,borderRadius:"50%",background:goal.color }}/>
+                    <span style={{ fontSize:12,fontWeight:700,color:goal.color }}>{goal.label}</span>
                   </div>
-                )}
-                {campaign.audience_tags?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6 }}>Target audience</div>
-                    <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                      {campaign.audience_tags.map(t=>(
-                        <span key={t} style={{ padding:"4px 10px",borderRadius:8,fontSize:12,fontWeight:600,background:C.s2,color:C.text2,border:`1px solid ${C.border}` }}>{t}</span>
-                      ))}
-                    </div>
+                  <div style={{ padding:"16px 18px",display:"flex",flexDirection:"column",gap:14 }}>
+                    {campaign.brief && (
+                      <div>
+                        <div style={sectionLabel}>Brief</div>
+                        <div style={{ fontSize:14,color:C.text1,lineHeight:1.7 }}>{campaign.brief}</div>
+                      </div>
+                    )}
+                    {campaign.audience_tags?.length > 0 && (
+                      <div>
+                        <div style={sectionLabel}>Target audience</div>
+                        <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                          {campaign.audience_tags.map(t=>(
+                            <span key={t} style={{ padding:"4px 10px",borderRadius:8,fontSize:12,fontWeight:600,background:C.bg,color:C.text2,border:`1px solid ${C.border}` }}>{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!campaign.brief && !campaign.audience_tags?.length && (
+                      <div style={{ padding:"12px 0",color:C.text3,fontSize:13 }}>No brief added yet. Click Edit to add details.</div>
+                    )}
                   </div>
-                )}
-                <div style={{ display:"flex",gap:20 }}>
-                  {campaign.start_date && <div><div style={{ fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4 }}>Starts</div><div style={{ fontSize:13,color:C.text1 }}>{new Date(campaign.start_date).toLocaleDateString()}</div></div>}
-                  {campaign.end_date   && <div><div style={{ fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4 }}>Ends</div><div style={{ fontSize:13,color:C.text1 }}>{new Date(campaign.end_date).toLocaleDateString()}</div></div>}
-                  {campaign.budget     && <div><div style={{ fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4 }}>Budget</div><div style={{ fontSize:13,color:C.text1 }}>${Number(campaign.budget).toLocaleString()}</div></div>}
                 </div>
-                {!campaign.brief && !campaign.audience_tags?.length && (
-                  <div style={{ padding:"30px 0",textAlign:"center",color:C.text3 }}>
-                    <Ic n="edit" s={24} c={C.border} style={{ marginBottom:8 }}/>
-                    <div style={{ fontSize:13 }}>Click Edit to add a brief and audience details</div>
+
+                {/* Dates + budget row */}
+                {(campaign.start_date || campaign.end_date || campaign.budget) && (
+                  <div style={{ display:"flex",gap:12,marginBottom:16 }}>
+                    {campaign.start_date && (
+                      <div style={{ flex:1,background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 16px" }}>
+                        <div style={sectionLabel}>Starts</div>
+                        <div style={{ fontSize:14,fontWeight:600,color:C.text1 }}>{new Date(campaign.start_date).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</div>
+                      </div>
+                    )}
+                    {campaign.end_date && (
+                      <div style={{ flex:1,background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 16px" }}>
+                        <div style={sectionLabel}>Ends</div>
+                        <div style={{ fontSize:14,fontWeight:600,color:C.text1 }}>{new Date(campaign.end_date).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</div>
+                      </div>
+                    )}
+                    {campaign.budget && (
+                      <div style={{ flex:1,background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 16px" }}>
+                        <div style={sectionLabel}>Budget</div>
+                        <div style={{ fontSize:14,fontWeight:600,color:C.text1 }}>${Number(campaign.budget).toLocaleString()}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Next step prompt if draft */}
+                {campaign.status === "draft" && (
+                  <div style={{ background:`${C.accent}08`,border:`1.5px solid ${C.accent}20`,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",gap:12 }}>
+                    <div style={{ width:32,height:32,borderRadius:8,background:`${C.accent}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                      <Ic n="sparkle" s={16} c={C.accent}/>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13,fontWeight:700,color:C.text1,marginBottom:2 }}>Generate content</div>
+                      <div style={{ fontSize:12,color:C.text3 }}>Switch to the AI Content tab to generate LinkedIn posts, job ads, and more.</div>
+                    </div>
+                    <Btn v="primary" s="sm" onClick={()=>setTab("content")}>Go to AI Content →</Btn>
                   </div>
                 )}
               </div>
@@ -775,7 +820,7 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
         )}
 
         {tab === "content" && (
-          <div style={{ maxWidth:640 }}>
+          <div style={{ maxWidth:680 }}>
             <ContentPanel
               campaign={campaign}
               environment={environment}
@@ -794,12 +839,9 @@ function CampaignDetail({ campaign: initCampaign, environment, onBack, onUpdated
         )}
 
         {tab === "links" && (
-          <div>
-            <LinkChannelHeader campaign={campaign} />
-            <Suspense fallback={<div style={{color:C.text3,fontSize:13,padding:20}}>Loading…</div>}>
-              <CampaignLinksInline environment={environment} campaignId={campaign.id}/>
-            </Suspense>
-          </div>
+          <Suspense fallback={<div style={{color:C.text3,fontSize:13,padding:20}}>Loading…</div>}>
+            <CampaignLinksInline environment={environment} campaignId={campaign.id}/>
+          </Suspense>
         )}
 
         {tab === "automation" && (

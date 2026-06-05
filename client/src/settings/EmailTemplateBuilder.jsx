@@ -63,6 +63,7 @@ const BLOCK_TYPES = [
   { type: 'spacer', label: 'Spacer', icon: 'minus', description: 'Vertical spacing' },
   { type: 'two_column', label: 'Two Columns', icon: 'columns', description: 'Side-by-side layout' },
   { type: 'footer', label: 'Footer', icon: 'type', description: 'Auto-generated from brand kit' },
+  { type: 'ai_content', label: '✦ AI Content', icon: 'zap', description: 'AI-generated personalised content — write a prompt, Claude fills it in at send time using the candidate and job data' },
 ];
 
 const MERGE_TAGS = {
@@ -710,6 +711,19 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
   const [expanded, setExpanded] = useState(true);
   const typeInfo = BLOCK_TYPES.find(t => t.type === block.type) || { label: block.type, icon: 'type' };
 
+  // Normalise content — system templates store content as { text: '...' } objects
+  const contentStr = typeof block.content === 'object' && block.content !== null
+    ? (block.content.text || '')
+    : (block.content || '');
+  // Normalise config — system templates may embed config fields inside content object
+  const blockCfg = (block.config && Object.keys(block.config).length > 0)
+    ? block.config
+    : (typeof block.content === 'object' && block.content !== null ? block.content : {});
+
+  // Helper: update content as a plain string (normalises away any object format)
+  const setContent = (val) => onUpdate({ content: val, config: block.config || {} });
+  const setConfig  = (updates) => onUpdate({ config: { ...blockCfg, ...updates } });
+
   return (
     <div style={{ background: "white", borderRadius: 10, border: `1.5px solid ${C.border}`, marginBottom: 8, overflow: "hidden" }}>
       {/* Header */}
@@ -730,15 +744,15 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
       {expanded && (
         <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}` }}>
           {block.type === 'text' && (
-            <textarea value={block.content || ''} onChange={e => onUpdate({ content: e.target.value })}
+            <textarea value={contentStr} onChange={e => setContent(e.target.value)}
               rows={4} placeholder="<p>Your text here… Use {{first_name}} for merge tags</p>"
               style={{ width: "100%", padding: "8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
           )}
           {block.type === 'heading' && (
             <div style={{ display: "flex", gap: 8 }}>
-              <input value={block.content || ''} onChange={e => onUpdate({ content: e.target.value })} placeholder="Section heading"
+              <input value={contentStr} onChange={e => setContent(e.target.value)} placeholder="Section heading"
                 style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: F, fontWeight: 700 }} />
-              <select value={block.config?.level || 2} onChange={e => onUpdate({ config: { ...block.config, level: Number(e.target.value) } })}
+              <select value={blockCfg.level || 2} onChange={e => setConfig({ level: Number(e.target.value) })}
                 style={{ padding: "4px 8px", borderRadius: 5, border: `1px solid ${C.border}`, fontSize: 11, fontFamily: F }}>
                 {[1, 2, 3].map(l => <option key={l} value={l}>H{l}</option>)}
               </select>
@@ -746,25 +760,25 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
           )}
           {block.type === 'button' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <input value={block.config?.text || ''} onChange={e => onUpdate({ config: { ...block.config, text: e.target.value } })} placeholder="Button text"
+              <input value={blockCfg.text || ''} onChange={e => setConfig({ text: e.target.value })} placeholder="Button text"
                 style={{ padding: "6px 8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: F }} />
-              <input value={block.config?.url || ''} onChange={e => onUpdate({ config: { ...block.config, url: e.target.value } })} placeholder="URL or {{portal_link}}"
+              <input value={blockCfg.url || ''} onChange={e => setConfig({ url: e.target.value })} placeholder="URL or {{portal_link}}"
                 style={{ padding: "6px 8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "monospace" }} />
               <div style={{ display: "flex", gap: 4 }}>
                 {['filled', 'outline'].map(s => (
-                  <button key={s} onClick={() => onUpdate({ config: { ...block.config, style: s } })} style={{
+                  <button key={s} onClick={() => setConfig({ style: s })} style={{
                     flex: 1, padding: "4px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: F, textTransform: "capitalize",
-                    border: `1px solid ${(block.config?.style || 'filled') === s ? C.accent : C.border}`,
-                    background: (block.config?.style || 'filled') === s ? C.accentLight : "white",
-                    color: (block.config?.style || 'filled') === s ? C.accent : C.text3,
+                    border: `1px solid ${(blockCfg.style || 'filled') === s ? C.accent : C.border}`,
+                    background: (blockCfg.style || 'filled') === s ? C.accentLight : "white",
+                    color: (blockCfg.style || 'filled') === s ? C.accent : C.text3,
                   }}>{s}</button>
                 ))}
                 {['left', 'center'].map(a => (
-                  <button key={a} onClick={() => onUpdate({ config: { ...block.config, align: a } })} style={{
+                  <button key={a} onClick={() => setConfig({ align: a })} style={{
                     padding: "4px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: F, textTransform: "capitalize",
-                    border: `1px solid ${(block.config?.align || 'left') === a ? C.accent : C.border}`,
-                    background: (block.config?.align || 'left') === a ? C.accentLight : "white",
-                    color: (block.config?.align || 'left') === a ? C.accent : C.text3,
+                    border: `1px solid ${(blockCfg.align || 'left') === a ? C.accent : C.border}`,
+                    background: (blockCfg.align || 'left') === a ? C.accentLight : "white",
+                    color: (blockCfg.align || 'left') === a ? C.accent : C.text3,
                   }}>{a}</button>
                 ))}
               </div>
@@ -772,25 +786,25 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
           )}
           {block.type === 'image' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <input value={block.config?.src || ''} onChange={e => onUpdate({ config: { ...block.config, src: e.target.value } })} placeholder="Image URL"
+              <input value={blockCfg.src || ''} onChange={e => setConfig({ src: e.target.value })} placeholder="Image URL"
                 style={{ padding: "6px 8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: F }} />
-              <input value={block.config?.alt || ''} onChange={e => onUpdate({ config: { ...block.config, alt: e.target.value } })} placeholder="Alt text"
+              <input value={blockCfg.alt || ''} onChange={e => setConfig({ alt: e.target.value })} placeholder="Alt text"
                 style={{ padding: "6px 8px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: F }} />
             </div>
           )}
           {block.type === 'spacer' && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 11, color: C.text3 }}>Height:</span>
-              <input type="number" min={4} max={80} value={block.config?.height || 20}
-                onChange={e => onUpdate({ config: { ...block.config, height: Number(e.target.value) } })}
+              <input type="number" min={4} max={80} value={blockCfg.height || 20}
+                onChange={e => setConfig({ height: Number(e.target.value) })}
                 style={{ width: 60, padding: "4px 6px", borderRadius: 5, border: `1px solid ${C.border}`, fontSize: 11, fontFamily: F, textAlign: "center" }} />
               <span style={{ fontSize: 11, color: C.text4 }}>px</span>
             </div>
           )}
           {block.type === 'header' && (
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.text2, cursor: "pointer" }}>
-              <input type="checkbox" checked={block.config?.showCompanyName !== false}
-                onChange={e => onUpdate({ config: { ...block.config, showCompanyName: e.target.checked } })}
+              <input type="checkbox" checked={blockCfg.showCompanyName !== false}
+                onChange={e => setConfig({ showCompanyName: e.target.checked })}
                 style={{ accentColor: C.accent }} />
               Show company name next to logo
             </label>
@@ -800,6 +814,26 @@ function BlockEditor({ block, idx, total, onUpdate, onRemove, onMoveUp, onMoveDo
           )}
           {block.type === 'divider' && (
             <div style={{ fontSize: 11, color: C.text3, fontStyle: "italic" }}>Horizontal divider line</div>
+          )}
+          {block.type === 'ai_content' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ padding: "8px 12px", borderRadius: 8, background: "#f5f3ff", border: "1px solid #ddd6fe", fontSize: 11, color: "#5b21b6", lineHeight: 1.5 }}>
+                <strong>✦ AI Content Block</strong> — Write a prompt below. At send time, Claude will generate this section using the recipient's profile, the job details, and match scores as context.
+                <br/>You can use {'{{merge_tags}}'} in the prompt too.
+              </div>
+              <textarea
+                value={block.prompt || block.config?.prompt || ''}
+                onChange={e => {
+                  onUpdate({ ...block, prompt: e.target.value, config: { ...(block.config || {}), prompt: e.target.value } });
+                }}
+                placeholder="e.g. Write 2-3 sentences explaining why {{job_title}} is a great match for this candidate based on their background. Be specific and warm."
+                rows={4}
+                style={{ width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontFamily: "inherit", resize: "vertical", lineHeight: 1.5, outline: "none", boxSizing: "border-box" }}
+              />
+              <div style={{ fontSize: 10, color: C.text3 }}>
+                Supports HTML output for rich formatting. Available context: candidate profile, job record(s), match score &amp; reasons, company info.
+              </div>
+            </div>
           )}
         </div>
       )}
