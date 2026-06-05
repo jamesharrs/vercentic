@@ -830,9 +830,17 @@ const TypeFormModal = ({ type, envId, onSave, onClose }) => {
 
 
 // ── Schedule Interview Modal ──────────────────────────────────────────────────
-export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialValues, linkedJobIds }) => {
+export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose, initialValues, linkedJobIds }) => {
   const isEdit = !!initialValues?.id;
   const bulkCandidates = interviewType?._bulkCandidates || null;
+
+  // Template picker — which interview type is selected
+  const [selectedTypeId, setSelectedTypeId] = useState(
+    interviewType?.id || (allTypes?.length === 1 ? allTypes[0]?.id : null)
+  );
+  const activeType = selectedTypeId
+    ? (allTypes || []).find(t => t.id === selectedTypeId) || interviewType
+    : interviewType;
   const [form, setForm] = useState({
     candidate_id: initialValues?.candidate_id || (bulkCandidates?.length === 1 ? bulkCandidates[0].id : null),
     candidate_name: initialValues?.candidate_name || (bulkCandidates?.length === 1 ? bulkCandidates[0].name : ""),
@@ -841,7 +849,7 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
     date: initialValues?.date || "",
     time: initialValues?.time || "",
     notes: initialValues?.notes || "",
-    interviewers: initialValues?.interviewers || interviewType?.interviewers || [],
+    interviewers: initialValues?.interviewers || activeType?.interviewers || [],
     // AI agent fields
     interviewer_mode: initialValues?.interviewer_mode || "employee",
     ai_agent_id:      initialValues?.ai_agent_id || "",
@@ -930,10 +938,10 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
     const isAi = form.interviewer_mode === "ai_agent";
     await onSave({
       ...form,
-      interview_type_id:   interviewType?.id,
-      interview_type_name: interviewType?.name,
-      duration:            interviewType?.duration,
-      format:              interviewType?.format,
+      interview_type_id:   activeType?.id || null,
+      interview_type_name: activeType?.name || "Interview",
+      duration:            activeType?.duration,
+      format:              activeType?.format,
       // only send AI fields when in AI mode
       interviewer_mode: isAi ? "ai_agent" : "employee",
       ai_agent_id:      isAi ? form.ai_agent_id : null,
@@ -973,6 +981,52 @@ export const ScheduleModal = ({ interviewType, envId, onSave, onClose, initialVa
                 <div style={{ marginTop:6, fontWeight:600 }}>
                   Now scheduling: {bulkCandidates[bulkIdx]?.name}
                   {bulkIdx < bulkCandidates.length - 1 && ` (${bulkIdx + 1} of ${bulkCandidates.length})`}
+                </div>
+              </div>
+            )}
+            {/* Template picker — shown when allTypes available and not editing */}
+            {!isEdit && allTypes && allTypes.length > 0 && (
+              <div style={{marginBottom:20}}>
+                <label style={labelSt}>Interview Template</label>
+                <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
+                  <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                    borderRadius:10,border:`1.5px solid ${selectedTypeId===null?"#8B7EC8":C.border}`,
+                    background:selectedTypeId===null?"#f7f4ff":C.surface,cursor:"pointer",transition:"all .15s"}}>
+                    <input type="radio" name="sched-type" checked={selectedTypeId===null}
+                      onChange={()=>{setSelectedTypeId(null);set("interviewers",[]);}}
+                      style={{accentColor:"#8B7EC8"}}/>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text1}}>Manual (no template)</div>
+                      <div style={{fontSize:11,color:C.text3}}>Set all details manually</div>
+                    </div>
+                  </label>
+                  {allTypes.map(t => {
+                    const ICONS = {"Video Call":"🎥","Phone":"📞","In Person":"🏢","Panel":"👥","Technical":"💻"};
+                    const icon = ICONS[t.interview_format||t.format] || "📅";
+                    const sel = selectedTypeId === t.id;
+                    return (
+                      <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                        borderRadius:10,border:`1.5px solid ${sel?"#8B7EC8":C.border}`,
+                        background:sel?"#f7f4ff":C.surface,cursor:"pointer",transition:"all .15s"}}>
+                        <input type="radio" name="sched-type" checked={sel}
+                          onChange={()=>{setSelectedTypeId(t.id);set("interviewers",t.interviewers||[]);}}
+                          style={{accentColor:"#8B7EC8"}}/>
+                        <div style={{width:32,height:32,borderRadius:8,background:`${t.color||"#8B7EC8"}18`,
+                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+                          {icon}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{t.name}</div>
+                          <div style={{fontSize:11,color:C.text3,display:"flex",gap:8,marginTop:2}}>
+                            {t.duration&&<span>⏱ {t.duration} min</span>}
+                            {(t.interview_format||t.format)&&<span>· {t.interview_format||t.format}</span>}
+                            {t.interviewers?.length>0&&<span>· {t.interviewers.length} interviewer{t.interviewers.length!==1?"s":""}</span>}
+                          </div>
+                        </div>
+                        {sel&&<svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#8B7EC8" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1596,11 +1650,12 @@ export default function Interviews({ environment }) {
 )}
 
       {showForm && <TypeFormModal type={editType} envId={envId} onSave={handleSaveType} onClose={()=>{setShowForm(false);setEditType(null);}}/>}
-      {scheduleFor && <ScheduleModal interviewType={scheduleFor} envId={envId} onSave={handleSchedule} onClose={()=>setScheduleFor(null)}/>}
+      {scheduleFor && <ScheduleModal interviewType={scheduleFor} allTypes={types} envId={envId} onSave={handleSchedule} onClose={()=>setScheduleFor(null)}/>}
       {editScheduled && <ScheduleModal
         interviewType={{ id: editScheduled.interview_type_id, name: editScheduled.interview_type_name, duration: editScheduled.duration, format: editScheduled.format, interview_format: editScheduled.interview_format || 'video', interviewers: editScheduled.interviewers || [] }}
         envId={envId}
         initialValues={editScheduled}
+        allTypes={types}
         onSave={handleUpdateScheduled}
         onClose={()=>setEditScheduled(null)}
       />}
