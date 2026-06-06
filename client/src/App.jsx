@@ -2396,8 +2396,15 @@ activeNavRef.current = activeNav;
   // Global event listener — anything can fire talentos:openRecord to navigate to a record page
   useEffect(() => {
     const handler = (e) => {
-      const { recordId, objectId, recordNumber } = e.detail || {};
-      if (recordId && objectId) openRecordRef.current(recordId, objectId, recordNumber);
+      const { recordId, objectId, objectSlug, recordNumber } = e.detail || {};
+      if (!recordId) return;
+      // Resolve objectId from objectSlug if only slug provided
+      let resolvedObjectId = objectId;
+      if (!resolvedObjectId && objectSlug) {
+        const found = navObjects.find(o => o.slug === objectSlug);
+        resolvedObjectId = found?.id;
+      }
+      if (recordId && resolvedObjectId) openRecordRef.current(recordId, resolvedObjectId, recordNumber);
     };
     window.addEventListener("talentos:openRecord", handler);
     return () => window.removeEventListener("talentos:openRecord", handler);
@@ -3135,226 +3142,186 @@ activeNavRef.current = activeNav;
 
 // ErrorBoundary: using the reporting version from ErrorBoundary.jsx (reports to /api/error-logs)
 
+
 // ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
-function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t, environments = [], selectedEnv, onSwitchEnv }) {
+function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
   const [open, setOpen] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const multiEnv = environments.length > 1;
+  const [testUsers,     setTestUsers]     = useState([]);
+  const [switchLoading, setSwitchLoading] = useState(false);
+  const [switchError,   setSwitchError]   = useState('');
+  const [provisioning,  setProvisioning]  = useState(false);
 
-  const TEST_USERS = [
-    { email: "admin@talentos.io",       password: "Admin1234!", label: "Super Admin",    roleSlug: "super_admin",    color: "#e03131" },
-    { email: "admin.test@talentos.io",  password: "Admin1234!", label: "Admin",          roleSlug: "admin",          color: "#f59f00" },
-    { email: "recruiter@talentos.io",   password: "Admin1234!", label: "Recruiter",      roleSlug: "recruiter",      color: "#4361EE" },
-    { email: "manager@talentos.io",     password: "Admin1234!", label: "Hiring Manager", roleSlug: "hiring_manager", color: "#0ca678" },
-    { email: "readonly@talentos.io",    password: "Admin1234!", label: "Read Only",      roleSlug: "read_only",      color: "#868e96" },
-  ];
+  const ROLE_COLORS = {
+    'Super Admin':'#e03131','Admin':'#f59f00','Recruiter':'#3b5bdb',
+    'Hiring Manager':'#0ca678','Read Only':'#868e96',
+  };
+  const isSuperAdmin = session?.role?.slug === 'super_admin';
+  const currentEmail = session?.user?.email;
 
-  const switchUser = async (u) => {
-    if (switching) return;
-    setSwitching(u.email);
+  useEffect(() => {
+    if (!open || !isSuperAdmin) return;
+    (async () => {
+      setProvisioning(true); setSwitchError('');
+      try {
+        const data = await api.post('/users/ensure-test-users', {});
+        if (data?.users?.length) {
+          setTestUsers(data.users.map(u => ({
+            ...u,
+            color:    ROLE_COLORS[u.role] || '#4361EE',
+            initials: u.role.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
+          })));
+        }
+      } catch { setSwitchError('Could not provision test users'); }
+      setProvisioning(false);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const switchToUser = async (tu) => {
+    if (switchLoading) return;
+    setSwitchLoading(true); setSwitchError('');
     try {
-      const res = await fetch("/api/users/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: u.email, password: u.password }),
-      });
-      const data = await res.json();
-      if (res.ok && data.id) {
-        const sessionData = {
-          user:        { id: data.id, email: data.email, first_name: data.first_name, last_name: data.last_name },
-          role:        data.role || {},
-          permissions: data.permissions || [],
-          tenant_slug: data.tenant_slug || null,
-        };
-        try { localStorage.setItem(_sessionKey(), JSON.stringify(sessionData)); } catch {}
-        setSession(sessionData);
-        setOpen(false);
-        window.location.reload();
-      } else {
-        alert(data.error || "Switch failed");
-      }
-    } catch { alert("Could not reach server"); }
-    setSwitching(false);
+      const data = await api.post('/users/login', { email: tu.email, password: tu.password });
+      if (data?.error) { setSwitchError(data.error); setSwitchLoading(false); return; }
+      const { role, permissions, tenant_slug, ...user } = data;
+      const ns = { user, role, permissions, tenant_slug: tenant_slug || null };
+      setSession(ns);
+      localStorage.setItem('talentos_session', JSON.stringify(ns));
+      setOpen(false);
+      window.location.reload();
+    } catch (err) { setSwitchError('Login failed — ' + (err.message || 'unknown error')); }
+    setSwitchLoading(false);
   };
 
-  const currentSlug = session?.role?.slug;
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position:"relative" }}>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
-          <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0,
-            background: "var(--t-surface)", border: "1px solid var(--t-border)",
-            borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-            zIndex: 201, overflow: "hidden", padding: "4px 0" }}>
+          <div onClick={()=>{setOpen(false);setSwitchError('');}} style={{position:"fixed",inset:0,zIndex:200}}/>
+          <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:0,right:0,
+            background:"var(--t-surface)",border:"1px solid var(--t-border)",
+            borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,0.16)",zIndex:201,overflow:"hidden",minWidth:220}}>
 
-            {/* ── Dev: User switcher ── */}
-            <div style={{ padding: "6px 14px 4px", fontSize: 10, fontWeight: 700,
-              color: "#f59f00", letterSpacing: "0.06em", textTransform: "uppercase",
-              display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59f00" }}/>
-              Test User Switcher
-            </div>
-            {TEST_USERS.map(u => {
-              const isCurrent = currentSlug === u.roleSlug;
-              const isLoading = switching === u.email;
-              return (
-                <button key={u.email} onClick={() => !isCurrent && switchUser(u)}
-                  disabled={isCurrent || !!switching}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
-                    padding: "7px 14px", border: "none",
-                    background: isCurrent ? `${u.color}12` : "transparent",
-                    cursor: isCurrent ? "default" : "pointer",
-                    fontFamily: "inherit", fontSize: 12,
-                    color: isCurrent ? u.color : "var(--t-text2)",
-                    textAlign: "left", opacity: (switching && !isLoading) ? 0.4 : 1,
-                    transition: "opacity 0.15s" }}
-                  onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background = "var(--t-surface2)"; }}
-                  onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background = isCurrent ? `${u.color}12` : "transparent"; }}>
-                  <span style={{ width: 24, height: 24, borderRadius: "50%", background: u.color,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0, fontSize: 9, fontWeight: 800, color: "white" }}>
-                    {isLoading ? "…" : u.label.split(" ").map(w=>w[0]).join("").slice(0,2)}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: isCurrent ? 700 : 500, lineHeight: 1.2 }}>{u.label}</div>
-                    <div style={{ fontSize: 10, color: "var(--t-text3)", lineHeight: 1.2 }}>{u.email}</div>
-                  </div>
-                  {isCurrent && (
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
-                      background: u.color, color: "white", flexShrink: 0 }}>ACTIVE</span>
-                  )}
-                </button>
-              );
-            })}
-            <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
-
-            {/* Environment switcher — only shown when multiple envs exist */}
-            {multiEnv && (
-              <>
-                <div style={{ padding: "6px 14px 4px", fontSize: 10, fontWeight: 700,
-                  color: "var(--t-text3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                  Environment
+            {isSuperAdmin && (
+              <div style={{borderBottom:"1px solid var(--t-border)"}}>
+                <div style={{padding:"8px 12px 4px",fontSize:9,fontWeight:700,color:"#f59f00",
+                  textTransform:"uppercase",letterSpacing:"0.1em",display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{width:6,height:6,borderRadius:"50%",background:"#f59f00",display:"inline-block",flexShrink:0}}/>
+                  TEST USER SWITCHER
                 </div>
-                {environments.map(env => {
-                  const isSandbox = !!env.is_sandbox;
-                  const isSelected = selectedEnv?.id === env.id;
-                  const dot = env.color || (isSandbox ? "#F59E0B" : "#4f46e5");
-                  return (
-                    <button key={env.id}
-                      onClick={() => { if (onSwitchEnv) onSwitchEnv(env); setOpen(false); }}
-                      style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
-                        padding: "7px 14px", border: "none",
-                        background: isSelected ? "var(--t-accentLight)" : "transparent",
-                        cursor: "pointer", fontFamily: "inherit", fontSize: 12,
-                        fontWeight: isSelected ? 700 : 500,
-                        color: isSelected ? "var(--t-accent)" : "var(--t-text2)",
-                        textAlign: "left" }}
-                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--t-surface2)"; }}
-                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%",
-                        background: dot, flexShrink: 0,
-                        boxShadow: isSelected ? `0 0 0 2px ${dot}40` : "none" }} />
-                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
-                        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{env.name}</span>
-                      {isSandbox && (
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px",
-                          borderRadius: 4, background: "#FEF3C7", color: "#92400E",
-                          flexShrink: 0 }}>SANDBOX</span>
-                      )}
-                      {isSelected && (
-                        <Icon name="check" size={12} color="var(--t-accent)" />
-                      )}
-                    </button>
-                  );
-                })}
-                <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
-              </>
+                {provisioning
+                  ? <div style={{padding:"10px 12px",fontSize:11,color:"var(--t-text3)"}}>Provisioning users…</div>
+                  : <div style={{padding:"4px 0"}}>
+                      {testUsers.map(tu => {
+                        const isActive = tu.email === currentEmail;
+                        return (
+                          <button key={tu.email} onClick={()=>!isActive&&switchToUser(tu)}
+                            disabled={switchLoading||isActive}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:10,
+                              padding:"7px 12px",border:"none",cursor:isActive?"default":"pointer",
+                              background:isActive?"var(--t-accentLight,#EEF2FF)":"transparent",
+                              textAlign:"left",transition:"background .12s",
+                              opacity:switchLoading&&!isActive?0.5:1}}
+                            onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background="var(--t-surface2)";}}
+                            onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background="transparent";}}>
+                            <div style={{width:28,height:28,borderRadius:"50%",background:tu.color,
+                              flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <span style={{color:"white",fontSize:10,fontWeight:700}}>{tu.initials}</span>
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:isActive?700:500,
+                                color:isActive?"var(--t-accent)":"var(--t-text1)",
+                                whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{tu.role}</div>
+                              <div style={{fontSize:10,color:"var(--t-text3)",
+                                whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{tu.email}</div>
+                            </div>
+                            {isActive && (
+                              <span style={{fontSize:8,fontWeight:800,padding:"2px 6px",borderRadius:99,
+                                background:"var(--t-accent,#4361EE)",color:"white",
+                                textTransform:"uppercase",letterSpacing:"0.06em",flexShrink:0}}>ACTIVE</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                }
+                {switchError && (
+                  <div style={{margin:"4px 12px 8px",padding:"7px 10px",
+                    background:"#FEF2F2",border:"1px solid #FECACA",
+                    borderRadius:7,fontSize:11,color:"#DC2626"}}>{switchError}</div>
+                )}
+              </div>
             )}
 
-            {[
-              { id: "settings", icon: "settings", label: t ? t("nav.settings") : "Settings" },
-              { id: "help",     icon: "help-circle", label: "Help" },
-            ].map(item => (
-              <button key={item.id}
-                onClick={() => { setActiveNav(item.id); setOpen(false); }}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
-                  padding: "9px 14px", border: "none", background: "transparent",
-                  cursor: "pointer", fontFamily: "inherit", fontSize: 13,
-                  fontWeight: activeNav === item.id ? 700 : 500,
-                  color: activeNav === item.id ? "var(--t-accent)" : "var(--t-text2)",
-                  textAlign: "left" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <Icon name={item.icon} size={14} color={activeNav === item.id ? "var(--t-accent)" : "var(--t-text3)"} />
-                {item.label}
+            <div style={{padding:"4px 0"}}>
+              {[
+                {id:"settings",icon:"settings",label:t?t("nav.settings"):"Settings"},
+                {id:"help",icon:"help-circle",label:"Help"},
+              ].map(item => (
+                <button key={item.id}
+                  onClick={()=>{setActiveNav(item.id);setOpen(false);}}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:9,
+                    padding:"9px 14px",border:"none",background:"transparent",
+                    cursor:"pointer",fontFamily:"inherit",fontSize:13,
+                    fontWeight:activeNav===item.id?700:500,
+                    color:activeNav===item.id?"var(--t-accent)":"var(--t-text2)",textAlign:"left"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <Icon name={item.icon} size={14} color={activeNav===item.id?"var(--t-accent)":"var(--t-text3)"}/>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{height:1,background:"var(--t-border)"}}/>
+            <div style={{padding:"4px 0"}}>
+              <button onClick={()=>{clearSession();setOpen(false);}}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,
+                  padding:"9px 14px",border:"none",background:"transparent",
+                  cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500,
+                  color:"#e03131",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <Icon name="log-out" size={14} color="#e03131"/>
+                Sign out
               </button>
-            ))}
-            <button onClick={()=>{setOpen(false);window.dispatchEvent(new CustomEvent("vercentic:start-tour"));}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 14px",border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500,color:"var(--t-text2)",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon name="play-circle" size={14} color="var(--t-text3)"/>Product tour</button>
-            <button
-              onClick={() => {
-                try { localStorage.removeItem('vercentic_force_desktop'); } catch {}
-                window.location.href = window.location.origin + '/';
-              }}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
-                padding: "9px 14px", border: "none", background: "transparent",
-                cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
-                color: "var(--t-text2)", textAlign: "left" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              <Icon name="smartphone" size={14} color="var(--t-text3)" />
-              Use Mobile View
-            </button>
-            <div style={{ height: 1, background: "var(--t-border)", margin: "4px 0" }} />
-            <button onClick={() => { clearSession(); setOpen(false); startTransition(() => setSession(null)); }}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9,
-                padding: "9px 14px", border: "none", background: "transparent",
-                cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
-                color: "#e03131", textAlign: "left" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--t-surface2)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              <Icon name="log-out" size={14} color="#e03131" />
-              Sign out
-            </button>
+            </div>
           </div>
         </>
       )}
-      <button onClick={() => setOpen(v => !v)}
-        style={{ width: "100%", padding: "8px 10px", borderRadius: 10,
-          background: open ? "var(--t-accentLight)" : "var(--t-surface2)",
-          border: `1px solid ${open ? "var(--t-accent)" : "transparent"}`,
-          display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-          textAlign: "left", transition: "all .15s" }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--t-border)"; }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = "transparent"; }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%",
-          background: session.role?.color || "#4f46e5",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ color: "white", fontSize: 11, fontWeight: 700 }}>
-            {(session.user.first_name?.[0] || "") + (session.user.last_name?.[0] || "")}
+
+      <button onClick={()=>{setOpen(v=>!v);setSwitchError('');}}
+        style={{width:"100%",padding:"8px 10px",borderRadius:10,
+          background:open?"var(--t-accentLight)":"var(--t-surface2)",
+          border:`1px solid ${open?"var(--t-accent)":"transparent"}`,
+          display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+          textAlign:"left",transition:"all .15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--t-border)";}}
+        onMouseLeave={e=>{if(!open)e.currentTarget.style.borderColor="transparent";}}>
+        <div style={{width:28,height:28,borderRadius:"50%",
+          background:session.role?.color||"#4f46e5",
+          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{color:"white",fontSize:11,fontWeight:700}}>
+            {(session.user.first_name?.[0]||"")+(session.user.last_name?.[0]||"")}
           </span>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--t-text1)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            lineHeight: "1.4", paddingBottom: 1 }}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--t-text1)",
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.4",paddingBottom:1}}>
             {session.user.first_name} {session.user.last_name}
           </div>
-          <div style={{ fontSize: 10, color: selectedEnv?.is_sandbox ? "#92400E" : "var(--t-text3)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "1.4",
-            display: "flex", alignItems: "center", gap: 3 }}>
-            {selectedEnv?.is_sandbox && (
-              <span style={{ display:"inline-block",width:5,height:5,borderRadius:"50%",background:"#F59E0B",flexShrink:0 }}/>
-            )}
-            {multiEnv ? (selectedEnv?.name || session.role?.name || "") : (session.role?.name || "")}
+          <div style={{fontSize:10,color:"var(--t-text3)",
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.4"}}>
+            {session.role?.name||""}
           </div>
         </div>
         <Icon name="chevron-up" size={12} color="var(--t-text3)"
-          style={{ transform: open ? "rotate(0deg)" : "rotate(180deg)", transition: "transform .2s", flexShrink: 0 }} />
+          style={{transform:open?"rotate(0deg)":"rotate(180deg)",transition:"transform .2s",flexShrink:0}}/>
       </button>
     </div>
   );
 }
+
 
 // ─── Root export wrapped in ThemeProvider ─────────────────────────────────────
 // ── Main app shell — owns the FeatureProvider so App() can call useFeature() ──
