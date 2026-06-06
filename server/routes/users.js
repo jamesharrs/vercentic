@@ -423,4 +423,66 @@ router.post('/logout', (req, res) => {
   });
 });
 
+
+// ── POST /api/users/ensure-test-users ────────────────────────────────────────
+// Idempotently creates the 5 role-based test/demo users.
+router.post('/ensure-test-users', (req, res) => {
+  try {
+    const roles = query('roles', () => true);
+    const findRole = slug => roles.find(r => r.slug === slug);
+
+    const TEST_USERS = [
+      { email:'admin@talentos.io',       first_name:'Admin',    last_name:'User',    role_slug:'super_admin',    password:'Admin1234!' },
+      { email:'admin.test@talentos.io',  first_name:'Admin',    last_name:'Test',    role_slug:'admin',          password:'Admin1234!' },
+      { email:'recruiter@talentos.io',   first_name:'Recruiter',last_name:'Test',    role_slug:'recruiter',      password:'Admin1234!' },
+      { email:'manager@talentos.io',     first_name:'Hiring',   last_name:'Manager', role_slug:'hiring_manager', password:'Admin1234!' },
+      { email:'readonly@talentos.io',    first_name:'Read',     last_name:'Only',    role_slug:'read_only',      password:'Admin1234!' },
+    ];
+
+    const created = [], existing = [];
+    let changed = false;
+
+    for (const tu of TEST_USERS) {
+      const role = findRole(tu.role_slug);
+      if (!role) continue;
+      const already = findOne('users', u => u.email === tu.email);
+      if (already) {
+        if (!already.password_hash) {
+          update('users', u => u.id === already.id, {
+            password_hash: hashPassword(tu.password),
+            must_change_password: 0,
+            updated_at: new Date().toISOString(),
+          });
+          changed = true;
+        }
+        existing.push({ email: tu.email, role: role.name, password: tu.password });
+      } else {
+        insert('users', {
+          id: uuidv4(), email: tu.email,
+          first_name: tu.first_name, last_name: tu.last_name,
+          password_hash: hashPassword(tu.password),
+          role_id: role.id, status: 'active',
+          auth_provider: 'local', mfa_enabled: 0, must_change_password: 0,
+          last_login: null, last_login_ip: null, login_count: 0,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+        created.push({ email: tu.email, role: role.name, password: tu.password });
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const { saveStoreNow } = require('../db/init');
+      saveStoreNow();
+    }
+
+    const allUsers = [...created, ...existing];
+    res.json({ ok: true, created: created.length, existing: existing.length, users: allUsers });
+  } catch (err) {
+    console.error('[ensure-test-users]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;

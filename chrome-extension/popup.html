@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet"/>
   <style>
-    :root{--ink:#0D0D0F;--lav:#8B7EC8;--lilac:#B89ED8;--sage:#7EC8B8;--amber:#C8A87E;--surface:#fff;--bg:#F5F4FA;--border:#E8E6F0;--t2:#4a4760;--t3:#8b88a6;--t4:#b8b5cc;--green:#0CA678;--red:#E03131;--font:'DM Sans',system-ui,sans-serif;--head:'Space Grotesk',sans-serif;--r:12px;}
+    :root{--ink:#0D0D0F;--lav:#8B7EC8;--lilac:#B89ED8;--surface:#fff;--bg:#F5F4FA;--border:#E8E6F0;--t2:#4a4760;--t3:#8b88a6;--t4:#b8b5cc;--green:#0CA678;--red:#E03131;--font:'DM Sans',system-ui,sans-serif;--head:'Space Grotesk',sans-serif;--r:12px;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{width:380px;min-height:500px;max-height:680px;font-family:var(--font);background:var(--bg);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;}
+    body{width:440px;min-height:480px;max-height:700px;font-family:var(--font);background:var(--bg);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;}
     .hdr{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--ink);color:white;flex-shrink:0;}
     .logo{width:28px;height:28px;background:linear-gradient(135deg,var(--lav),var(--lilac));border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:14px;font-weight:700;color:white;flex-shrink:0;}
     .hdr-title{font-family:var(--head);font-size:14px;font-weight:700;flex:1;}
@@ -30,9 +30,7 @@
     .ptitle{font-size:12px;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .ploc{font-size:11px;color:var(--t3);margin-top:3px;}
     .sbadge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:11px;font-weight:600;}
-    .b-exists{background:#FEF3C7;color:#92400E;}
-    .b-new{background:#D1FAE5;color:#065F46;}
-    .b-unknown{background:var(--bg);color:var(--t3);border:1px solid var(--border);}
+    .b-exists{background:#FEF3C7;color:#92400E;} .b-new{background:#D1FAE5;color:#065F46;} .b-unknown{background:var(--bg);color:var(--t3);border:1px solid var(--border);}
     .skills-wrap{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;}
     .skill{padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);font-size:11px;color:var(--t2);}
     .job-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:6px;cursor:pointer;transition:all .15s;}
@@ -40,9 +38,7 @@
     .job-row.sel .jradio{border-color:var(--lav);background:var(--lav);}
     .jradio{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;transition:all .15s;display:flex;align-items:center;justify-content:center;}
     .jdot{width:6px;height:6px;border-radius:50%;background:white;}
-    .jinfo{flex:1;min-width:0;}
-    .jtitle{font-size:12px;font-weight:600;color:var(--ink);}
-    .jdept{font-size:11px;color:var(--t3);}
+    .jinfo{flex:1;min-width:0;} .jtitle{font-size:12px;font-weight:600;color:var(--ink);} .jdept{font-size:11px;color:var(--t3);}
     .sring{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;border:2.5px solid;}
     .tone-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
     .tone{padding:4px 10px;border-radius:99px;border:1.5px solid var(--border);cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);transition:all .15s;}
@@ -55,34 +51,33 @@
     .subj-box{width:100%;padding:7px 10px;margin-bottom:6px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:12px;color:var(--ink);outline:none;background:var(--bg);}
     .subj-box:focus{border-color:var(--lav);background:white;}
     .btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:8px;border:none;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;width:100%;}
-    .btn-pri{background:var(--lav);color:white;}
-    .btn-pri:hover{background:#7a6eb8;}
-    .btn-pri:disabled{background:var(--t4);cursor:not-allowed;}
-    .btn-sec{background:var(--bg);color:var(--t2);border:1.5px solid var(--border);}
-    .btn-sec:hover{border-color:var(--lav);color:var(--lav);}
-    .btn-sm{padding:6px 10px;font-size:11px;border-radius:7px;width:auto;}
-    .btn-row{display:flex;gap:6px;}
-    .login-wrap{display:flex;flex-direction:column;align-items:center;padding:24px 20px;text-align:center;}
-    .login-logo{width:52px;height:52px;background:linear-gradient(135deg,var(--lav),var(--lilac));border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:22px;font-weight:700;color:white;margin-bottom:16px;}
-    .login-title{font-family:var(--head);font-size:18px;font-weight:700;margin-bottom:4px;}
-    .login-sub{font-size:12px;color:var(--t3);margin-bottom:20px;}
-    .inp{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:13px;color:var(--ink);outline:none;margin-bottom:8px;}
+    .btn-pri{background:var(--lav);color:white;} .btn-pri:hover{background:#7a6eb8;} .btn-pri:disabled{background:var(--t4);cursor:not-allowed;}
+    .btn-sec{background:var(--bg);color:var(--t2);border:1.5px solid var(--border);} .btn-sec:hover{border-color:var(--lav);color:var(--lav);}
+    .btn-sm{padding:6px 10px;font-size:11px;border-radius:7px;width:auto;} .btn-row{display:flex;gap:6px;}
+    .login-wrap{display:flex;flex-direction:column;align-items:center;padding:20px 20px 24px;}
+    .login-logo{width:52px;height:52px;background:linear-gradient(135deg,var(--lav),var(--lilac));border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:22px;font-weight:700;color:white;margin-bottom:14px;}
+    .login-title{font-family:var(--head);font-size:18px;font-weight:700;margin-bottom:3px;}
+    .login-sub{font-size:12px;color:var(--t3);margin-bottom:18px;}
+    .field-wrap{width:100%;margin-bottom:10px;}
+    .field-lbl{font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+    .inp{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:13px;color:var(--ink);outline:none;background:white;}
     .inp:focus{border-color:var(--lav);}
+    .url-inp{font-family:monospace;font-size:11px;}
+    .url-hint{font-size:10px;color:var(--t3);margin-top:3px;}
     .loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:20px;color:var(--t3);font-size:13px;}
     .spin{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--lav);border-radius:50%;animation:spin .6s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg);}}
     .empty{text-align:center;padding:20px;color:var(--t3);font-size:12px;}
-    .err-msg{padding:8px 12px;border-radius:8px;background:#FEE2E2;border:1px solid #FECACA;color:var(--red);font-size:12px;margin-bottom:8px;}
+    .err-msg{width:100%;padding:8px 12px;border-radius:8px;background:#FEE2E2;border:1px solid #FECACA;color:var(--red);font-size:12px;margin-bottom:10px;text-align:center;line-height:1.4;}
     .ok-msg{padding:8px 12px;border-radius:8px;background:#D1FAE5;border:1px solid #A7F3D0;color:var(--green);font-size:12px;margin-bottom:8px;}
+    .debug-box{background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 12px;font-size:11px;color:#3730a3;margin-bottom:10px;word-break:break-all;line-height:1.5;}
     .tabs{display:flex;gap:4px;margin-bottom:10px;}
     .tab{flex:1;padding:6px 4px;border-radius:7px;border:1.5px solid var(--border);background:white;font-size:11px;font-weight:600;color:var(--t3);cursor:pointer;text-align:center;transition:all .15s;}
     .tab.act{border-color:var(--lav);background:#F7F4FF;color:var(--lav);}
     .no-profile{display:flex;flex-direction:column;align-items:center;padding:30px 20px;text-align:center;}
-    .no-profile h3{font-size:14px;font-weight:700;margin-bottom:6px;}
-    .no-profile p{font-size:12px;color:var(--t3);line-height:1.5;}
+    .no-profile h3{font-size:14px;font-weight:700;margin-bottom:6px;} .no-profile p{font-size:12px;color:var(--t3);line-height:1.5;}
     .pbadge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;}
-    .b-li{background:#E7F0FA;color:#0A66C2;}
-    .b-gh{background:#F0F0F5;color:#24292F;}
+    .b-li{background:#E7F0FA;color:#0A66C2;} .b-gh{background:#F0F0F5;color:#24292F;}
     .note-box{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:12px;color:var(--ink);outline:none;resize:none;height:60px;margin-bottom:8px;}
     .note-box:focus{border-color:var(--lav);}
     .set-lbl{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
@@ -94,144 +89,88 @@
 <body>
   <div class="hdr">
     <div class="logo">V</div>
-    <div>
-      <div class="hdr-title">Vercentic</div>
-      <div class="hdr-sub" id="hdr-sub">Sourcing Assistant</div>
-    </div>
+    <div><div class="hdr-title">Vercentic</div><div class="hdr-sub" id="hdr-sub">Sourcing Assistant</div></div>
     <div class="hdr-acts">
-      <button class="ico-btn" id="btn-settings" title="Settings">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-      <button class="ico-btn hidden" id="btn-back" title="Back">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
+      <button class="ico-btn" id="btn-settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button class="ico-btn hidden" id="btn-back" title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
   </div>
-
   <div class="scroll" id="main">
     <div class="loading" id="s-loading"><div class="spin"></div> Loading…</div>
-
     <div class="hidden" id="s-login">
       <div class="login-wrap">
         <div class="login-logo">V</div>
         <div class="login-title">Sign in to Vercentic</div>
         <div class="login-sub">Enter your Vercentic credentials</div>
         <div id="login-err" class="err-msg hidden"></div>
-        <div style="width:100%;text-align:left;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Vercentic URL</div>
-        <input id="login-url" class="inp" type="url" placeholder="https://…railway.app" value="https://talentos-production-4045.up.railway.app"/>
-        <input id="login-email"    class="inp" type="email"    placeholder="Email address"/>
-        <input id="login-pass"     class="inp" type="password" placeholder="Password"/>
-        <button class="btn btn-pri" id="btn-login">Sign in</button>
+        <div id="login-debug" class="debug-box hidden"></div>
+        <div class="field-wrap"><div class="field-lbl">Vercentic API URL</div><input id="login-url" class="inp url-inp" type="text" placeholder="https://talentos-production-4045.up.railway.app" value="https://talentos-production-4045.up.railway.app"/><div class="url-hint">Full URL — no trailing slash</div></div>
+        <div class="field-wrap"><div class="field-lbl">Email</div><input id="login-email" class="inp" type="email" placeholder="admin@talentos.io"/></div>
+        <div class="field-wrap"><div class="field-lbl">Password</div><input id="login-pass" class="inp" type="password" placeholder="••••••••"/></div>
+        <button class="btn btn-pri" id="btn-login" style="margin-top:4px;">Sign in</button>
+        <button class="btn btn-sec" id="btn-test-conn" style="margin-top:8px;font-size:11px;">Test connection</button>
       </div>
     </div>
-
     <div class="hidden" id="s-no-profile">
       <div class="no-profile">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3;margin-bottom:12px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <h3>Navigate to a profile</h3>
         <p>Open a LinkedIn or GitHub profile page to extract candidate data and draft outreach.</p>
-        <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;">
-          <span class="pbadge b-li">LinkedIn ✓</span>
-          <span class="pbadge b-gh">GitHub ✓</span>
-        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;"><span class="pbadge b-li">LinkedIn ✓</span><span class="pbadge b-gh">GitHub ✓</span></div>
       </div>
     </div>
-
     <div class="hidden" id="s-profile">
-      <div class="card" id="profile-card">
+      <div class="card">
         <div class="profile-row">
           <div class="avatar" id="av-el">?</div>
           <div class="pinfo">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <div class="pname" id="p-name">—</div>
-              <span class="sbadge b-unknown" id="p-status">Checking…</span>
-            </div>
-            <div class="ptitle" id="p-title"></div>
-            <div class="ploc"   id="p-loc"></div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><div class="pname" id="p-name">—</div><span class="sbadge b-unknown" id="p-status">Checking…</span></div>
+            <div class="ptitle" id="p-title"></div><div class="ploc" id="p-loc"></div>
             <div style="margin-top:5px;"><span class="pbadge" id="p-platform"></span></div>
           </div>
         </div>
         <div class="skills-wrap" id="skills-wrap"></div>
       </div>
-
       <div class="tabs">
-        <div class="tab act" data-tab="match"    id="t-match">🎯 Match</div>
-        <div class="tab"     data-tab="outreach" id="t-outreach">✉️ Outreach</div>
-        <div class="tab"     data-tab="add"      id="t-add">➕ Add</div>
+        <div class="tab act" data-tab="match">🎯 Match</div>
+        <div class="tab" data-tab="outreach">✉️ Outreach</div>
+        <div class="tab" data-tab="add">➕ Add</div>
       </div>
-
-      <div id="p-match">
-        <div class="card">
-          <div class="card-ttl">Open Roles — Best Match</div>
-          <div id="jobs-list"><div class="loading"><div class="spin"></div> Scoring roles…</div></div>
-        </div>
-      </div>
-
+      <div id="p-match"><div class="card"><div class="card-ttl">Open Roles — Best Match</div><div id="jobs-list"><div class="loading"><div class="spin"></div> Scoring roles…</div></div></div></div>
       <div id="p-outreach" class="hidden">
         <div class="card">
           <div class="card-ttl">Channel</div>
-          <div class="ch-row">
-            <div class="ch-btn act" data-ch="inmail">InMail</div>
-            <div class="ch-btn" data-ch="connection">Connect</div>
-            <div class="ch-btn" data-ch="email">Email</div>
-          </div>
+          <div class="ch-row"><div class="ch-btn act" data-ch="inmail">InMail</div><div class="ch-btn" data-ch="connection">Connect</div><div class="ch-btn" data-ch="email">Email</div></div>
           <div class="card-ttl">Tone</div>
-          <div class="tone-row">
-            <div class="tone act" data-tone="professional">Professional</div>
-            <div class="tone" data-tone="friendly">Friendly</div>
-            <div class="tone" data-tone="direct">Direct</div>
-            <div class="tone" data-tone="casual">Casual</div>
-          </div>
+          <div class="tone-row"><div class="tone act" data-tone="professional">Professional</div><div class="tone" data-tone="friendly">Friendly</div><div class="tone" data-tone="direct">Direct</div><div class="tone" data-tone="casual">Casual</div></div>
           <div id="out-err" class="err-msg hidden"></div>
           <div id="subj-wrap" style="display:none"><input id="msg-subj" class="subj-box" placeholder="Subject line…"/></div>
           <textarea id="msg-body" class="msg-box" placeholder="Click 'Draft with AI' to generate a personalised message…"></textarea>
           <div class="btn-row" style="margin-top:8px;">
-            <button class="btn btn-sec btn-sm" id="btn-draft">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-              Draft with AI
-            </button>
-            <button class="btn btn-sec btn-sm" id="btn-copy">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy
-            </button>
+            <button class="btn btn-sec btn-sm" id="btn-draft">✨ Draft with AI</button>
+            <button class="btn btn-sec btn-sm" id="btn-copy">Copy</button>
             <button class="btn btn-pri btn-sm" id="btn-log" style="margin-left:auto;">Log sent</button>
           </div>
         </div>
       </div>
-
       <div id="p-add" class="hidden">
         <div class="card">
           <div id="add-exists" class="ok-msg hidden">✓ Already in Vercentic.</div>
           <div class="card-ttl">Link to job (optional)</div>
-          <select id="add-job" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:12px;color:var(--ink);outline:none;margin-bottom:10px;">
-            <option value="">— Add without linking —</option>
-          </select>
+          <select id="add-job" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font);font-size:12px;color:var(--ink);outline:none;margin-bottom:10px;"><option value="">— Add without linking —</option></select>
           <div class="card-ttl">Note (optional)</div>
           <textarea id="add-note" class="note-box" placeholder="e.g. Strong React skills, referred by Ahmed…"></textarea>
           <div id="add-err" class="err-msg hidden"></div>
-          <div id="add-ok"  class="ok-msg hidden"></div>
-          <button class="btn btn-pri" id="btn-add">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add to Vercentic
-          </button>
+          <div id="add-ok" class="ok-msg hidden"></div>
+          <button class="btn btn-pri" id="btn-add">+ Add to Vercentic</button>
         </div>
       </div>
     </div>
-
     <div class="hidden" id="s-settings">
-      <div class="card">
-        <div class="set-lbl">Account</div>
-        <div style="font-size:13px;color:var(--t2);margin-bottom:10px;" id="set-user">—</div>
-        <button class="btn btn-sec" id="btn-logout" style="width:auto;">Sign out</button>
-      </div>
-      <div class="card">
-        <div class="set-lbl" style="margin-bottom:6px;">API URL</div>
-        <input id="set-url" class="inp" type="url" style="margin-bottom:8px;"/>
-        <button class="btn btn-pri" id="btn-save-url" style="width:auto;">Save</button>
-      </div>
+      <div class="card"><div class="set-lbl">Signed in as</div><div style="font-size:13px;color:var(--t2);margin-bottom:10px;" id="set-user">—</div><button class="btn btn-sec" id="btn-logout" style="width:auto;">Sign out</button></div>
+      <div class="card"><div class="set-lbl" style="margin-bottom:4px;">API URL</div><input id="set-url" class="inp url-inp" type="text" style="margin-bottom:4px;"/><div class="url-hint" style="margin-bottom:8px;">e.g. https://talentos-production-4045.up.railway.app</div><button class="btn btn-pri" id="btn-save-url" style="width:auto;">Save</button></div>
     </div>
   </div>
-
   <div id="toast" class="toast hidden"></div>
   <script src="popup.js"></script>
 </body>

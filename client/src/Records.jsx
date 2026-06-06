@@ -2753,27 +2753,51 @@ const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleO
           </div>
         );
       })}
-      {/* System columns divider */}
-      {filteredSystem.length > 0 && (
-        <div style={{ padding:"6px 14px 6px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>System</div>
-      )}
-      {filteredSystem.map(f => {
-        const on = visibleIds.includes(f.id);
-        return (
-          <div key={f.id} onClick={() => toggleField(f.id)}
-            style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 14px", cursor:"pointer",
-              background: on ? C.accentLight : "transparent", transition:"background .1s" }}
-            onMouseEnter={e => !on && (e.currentTarget.style.background="#f8f9fc")}
-            onMouseLeave={e => !on && (e.currentTarget.style.background="transparent")}>
-            <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${on?C.accent:C.border}`,
-              background: on ? C.accent : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {on && <Ic n="check" s={10} c="white"/>}
+      {/* System columns — split into Pipeline and other */}
+      {(() => {
+        const pipelineIds = new Set(['_linked_job','_linked_all_jobs','_linked_open_jobs','_stage']);
+        const pipelineSys = filteredSystem.filter(f => pipelineIds.has(f.apiKey) && !f.hidden);
+        const otherSys    = filteredSystem.filter(f => !pipelineIds.has(f.apiKey) && !f.hidden);
+        const SysRow = ({ f }) => {
+          const on = visibleIds.includes(f.id);
+          const desc = f.apiKey === '_linked_open_jobs' ? 'Open status only'
+                     : f.apiKey === '_linked_all_jobs'  ? 'All linked jobs'
+                     : f.apiKey === '_stage'             ? 'Current pipeline stage'
+                     : null;
+          return (
+            <div key={f.id} onClick={() => toggleField(f.id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 14px", cursor:"pointer",
+                background: on ? C.accentLight : "transparent", transition:"background .1s" }}
+              onMouseEnter={e => !on && (e.currentTarget.style.background="#f8f9fc")}
+              onMouseLeave={e => !on && (e.currentTarget.style.background="transparent")}>
+              <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${on?C.accent:C.border}`,
+                background: on ? C.accent : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {on && <Ic n="check" s={10} c="white"/>}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight: on?600:400, color: on?C.accent:C.text1 }}>{f.name}</div>
+                {desc && <div style={{ fontSize:10, color:C.text3 }}>{desc}</div>}
+              </div>
             </div>
-            <span style={{ fontSize:13, fontWeight: on?600:400, color: on?C.accent:C.text1 }}>{f.name}</span>
-            <span style={{ marginLeft:"auto", fontSize:10, color:C.text3, background:"#f1f5f9", padding:"1px 5px", borderRadius:99 }}>system</span>
-          </div>
+          );
+        };
+        return (
+          <>
+            {pipelineSys.length > 0 && (
+              <>
+                <div style={{ padding:"6px 14px 4px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>Pipeline</div>
+                {pipelineSys.map(f => <SysRow key={f.id} f={f}/>)}
+              </>
+            )}
+            {otherSys.length > 0 && (
+              <>
+                <div style={{ padding:"6px 14px 4px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>System</div>
+                {otherSys.map(f => <SysRow key={f.id} f={f}/>)}
+              </>
+            )}
+          </>
         );
-      })}
+      })()}
       {q && filteredFields.length === 0 && filteredSystem.length === 0 && (
         <div style={{ padding:"16px 14px", textAlign:"center", fontSize:12, color:C.text3 }}>No columns match "{search}"</div>
       )}
@@ -4634,7 +4658,9 @@ const SYSTEM_COLS = [
   { id: '_created_by',   name: 'Created By',         apiKey: '_created_by',   isSystem: true },
   { id: '_days_old',     name: 'Age (Days)',          apiKey: '_days_old',     isSystem: true },
   { id: '_days_active',  name: 'Days Since Update',  apiKey: '_days_active',  isSystem: true },
-  { id: '_linked_job',   name: 'Linked Job',         apiKey: '_linked_job',   isSystem: true },
+  { id: '_linked_all_jobs',  name: 'All Linked Jobs',  apiKey: '_linked_all_jobs',  isSystem: true },
+  { id: '_linked_open_jobs', name: 'Linked Open Jobs', apiKey: '_linked_open_jobs', isSystem: true },
+  { id: '_linked_job',   name: 'Linked Job',         apiKey: '_linked_job',   isSystem: true, hidden: true },
   { id: '_stage',        name: 'Stage',              apiKey: '_stage',        isSystem: true },
   { id: '_linked_count', name: 'Linked People',      apiKey: '_linked_count', isSystem: true },
   { id: '__engagement',  name: 'Engagement Score',   apiKey: '__engagement',  isSystem: true, isPeopleOnly: true, field_type: 'number' },
@@ -4658,10 +4684,16 @@ function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
     const info = linkedPeopleCounts?.[record.id];
     return info?.count ? String(info.count) : null;
   }
-  if (col === '_linked_job') {
+  if (col === '_linked_job' || col === '_linked_all_jobs') {
     const jobs = linkedJobs?.[record.id];
     if (!jobs?.length) return '—';
     return jobs.map(j => j.title).filter(Boolean).join(', ') || '—';
+  }
+  if (col === '_linked_open_jobs') {
+    const jobs = linkedJobs?.[record.id];
+    if (!jobs?.length) return '—';
+    const open = jobs.filter(j => !['Closed','Filled','Cancelled'].includes(j.status));
+    return open.length ? open.map(j => j.title).filter(Boolean).join(', ') : '—';
   }
   if (col === '_stage') {
     const jobs = linkedJobs?.[record.id];
@@ -4669,6 +4701,54 @@ function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
     return jobs.map(j => j.stage).filter(Boolean).join(', ') || '—';
   }
   return '—';
+}
+
+
+// ── LinkedJobsPill — renders all linked jobs for a person in the table ───────
+function LinkedJobsPill({ jobs, mode, onNavigate }) {
+  const shown = !Array.isArray(jobs) ? [] : (
+    mode === 'open'
+      ? jobs.filter(j => !['Closed','Filled','Cancelled'].includes(j.status))
+      : jobs
+  );
+  if (shown.length === 0) return <span style={{ fontSize:12, color:'#9ca3af' }}>—</span>;
+  const STATUS_COLORS = {
+    Open:'#0ca678', Draft:'#9ca3af', 'On Hold':'#f59f00',
+    Filled:'#3b5bdb', Cancelled:'#e03131', Closed:'#6b7280',
+  };
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+      {shown.map((job, i) => {
+        const sc = STATUS_COLORS[job.status] || '#6b7280';
+        return (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap' }}>
+            <button
+              onClick={e => { e.stopPropagation(); if (job.id) onNavigate?.(job.id); }}
+              title={job.id ? `Open ${job.title}` : job.title}
+              style={{ fontSize:12, fontWeight:600, color:'#4361EE', background:'none',
+                border:'none', padding:0, cursor: job.id ? 'pointer' : 'default',
+                fontFamily:'inherit', textAlign:'left', lineHeight:1.3 }}
+              onMouseEnter={e => { if (job.id) e.currentTarget.style.textDecoration='underline'; }}
+              onMouseLeave={e => e.currentTarget.style.textDecoration='none'}>
+              {job.title || '—'}
+            </button>
+            {job.status && (
+              <span style={{ fontSize:10, fontWeight:700, padding:'1px 5px', borderRadius:99,
+                background:`${sc}18`, color:sc, border:`1px solid ${sc}30`, whiteSpace:'nowrap', flexShrink:0 }}>
+                {job.status}
+              </span>
+            )}
+            {job.stage && (
+              <span style={{ fontSize:10, padding:'1px 5px', borderRadius:99,
+                background:'#f3f4f6', color:'#6b7280', whiteSpace:'nowrap', flexShrink:0 }}>
+                {job.stage}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── Inline stage pill with dropdown — used in the list table ─────────────────
@@ -5003,24 +5083,18 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
                             {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
                           </span>
-                        : f.apiKey === '_linked_job'
-                          ? (() => {
-                              const jobs = linkedJobs?.[record.id] || [];
-                              if (!jobs.length) return <span style={{ fontSize:12, color:'#9ca3af' }}>—</span>;
-                              return (
-                                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                                  {jobs.map((j, idx) => (
-                                    <div key={idx} style={{ display:'flex', alignItems:'center', minHeight:28 }}>
-                                      <span style={{ fontSize:11, fontWeight:600, color:'#4361EE',
-                                        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:180 }}
-                                        title={j.title}>
-                                        {j.title || '—'}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()
+                        : (f.apiKey === '_linked_job' || f.apiKey === '_linked_all_jobs')
+                          ? <LinkedJobsPill
+                              jobs={linkedJobs?.[record.id]}
+                              mode="all"
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                            />
+                          : f.apiKey === '_linked_open_jobs'
+                          ? <LinkedJobsPill
+                              jobs={linkedJobs?.[record.id]}
+                              mode="open"
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                            />
                           : f.apiKey === '_linked_count'
                           ? (() => {
                               const info = linkedPeopleCounts?.[record.id];
@@ -12266,7 +12340,11 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           // System column
           if (sortBy === '_created') { av = a.created_at||''; bv = b.created_at||''; }
           else if (sortBy === '_updated') { av = a.updated_at||''; bv = b.updated_at||''; }
-          else if (sortBy === '_linked_job') { av = linkedJobs[a.id]?.title||''; bv = linkedJobs[b.id]?.title||''; }
+          else if (sortBy === '_linked_job' || sortBy === '_linked_all_jobs' || sortBy === '_linked_open_jobs') {
+            const aj = Array.isArray(linkedJobs[a.id]) ? linkedJobs[a.id][0] : linkedJobs[a.id];
+            const bj = Array.isArray(linkedJobs[b.id]) ? linkedJobs[b.id][0] : linkedJobs[b.id];
+            av = aj?.title || ''; bv = bj?.title || '';
+          }
           else if (sortBy === '_stage') { av = linkedJobs[a.id]?.stage||''; bv = linkedJobs[b.id]?.stage||''; }
           else if (sortBy === '__engagement') {
             av = engagementScores[a.id]?.score ?? -1;
@@ -12369,11 +12447,14 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           if (!pid) return;
           if (!map[pid]) map[pid] = [];
           map[pid].push({
+            id:       l.target_record_id || null,
             title:    l.target_title || l.target_data?.job_title || l.target_data?.title || '',
+            status:   l.target_data?.status || '',
             stage:    l.stage_name  || '',
             stage_id: l.stage_id    || null,
             link_id:  l.id          || null,
             steps:    l.workflow_steps || [],
+            object_color: l.target_object_color || '#4361EE',
           });
         });
         setLinkedJobs(map);
