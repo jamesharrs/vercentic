@@ -535,9 +535,12 @@ const FilePageThumb = ({ url }) => {
 
 // Full-screen modal preview
 const FilePreviewModal = ({ url, name, onClose }) => {
-  // Reuse AttachmentPreviewModal so PDFs go through PDF.js (not <object>/<iframe>)
+  // Render via portal to document.body so position:fixed escapes any parent stacking context
   const att = { name, url, ext: name?.split('.').pop()?.toLowerCase() || '' };
-  return <AttachmentPreviewModal att={att} onClose={onClose}/>;
+  return ReactDOM.createPortal(
+    <AttachmentPreviewModal att={att} onClose={onClose}/>,
+    document.body
+  );
 };
 
 // ─── Table field components ───────────────────────────────────────────────────
@@ -5679,7 +5682,7 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
     <div onClick={onClose}
       style={{ position:'fixed', inset:0, background:'rgba(10,14,30,.78)', zIndex:9700, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:960, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,.4)' }}>
+        style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:960, height:'92vh', maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,.4)' }}>
 
         {/* Header */}
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderBottom:'1px solid #e8eaed', flexShrink:0 }}>
@@ -5707,7 +5710,7 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
         </div>
 
         {/* Content */}
-        <div style={{ flex:1, overflow:'auto', background:'#f0f2f5', display:'flex', flexDirection:'column', alignItems:'center', minHeight:0 }}>
+        <div style={{ flex:1, overflow:'hidden', background:'#f0f2f5', display:'flex', flexDirection:'column', alignItems:'stretch', minHeight:0, position:'relative' }}>
           {/* Loading */}
           {!blobUrl && !loadErr && !isDocx && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, padding:48 }}>
@@ -5724,11 +5727,10 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
           )}
           {/* PDF — rendered via blob URL in iframe (reliable cross-browser) */}
           {blobUrl && isPdf && (
-            <iframe
+            <embed
               src={blobUrl}
-              title={att.name}
-              style={{ width:'100%', flex:1, border:'none', minHeight:'75vh', background:'white' }}
-              sandbox="allow-scripts allow-same-origin"
+              type="application/pdf"
+              style={{ width:'100%', flex:1, height:'100%', minHeight:'75vh', border:'none', display:'block' }}
             />
           )}
           {/* DOCX — server-side mammoth → HTML in iframe */}
