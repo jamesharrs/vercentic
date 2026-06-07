@@ -2983,10 +2983,17 @@ const applyFilters = (records, filters, fields, _legacyLogic = "AND", linkedReco
   });
 };
 
-function testFilter(filt, fields, record) {
+function testFilter(filt, fields, record, linkedJobsMap) {
   const field = fields.find(f => f.id === filt.fieldId);
   if (!field) return true;
-  const rawVal = record.data?.[field.api_key];
+  // For system columns, derive the value via getSystemValue instead of data[]
+  let rawVal;
+  if (field.isSystemCol) {
+    rawVal = getSystemValue(record, field.apiKey || field.api_key, linkedJobsMap || {});
+    if (rawVal === '—') rawVal = '';
+  } else {
+    rawVal = record.data?.[field.api_key];
+  }
   const op = filt.op; const fv = filt.value;
   // $me dynamic resolution
   if (fv === ME_TOKEN) return matchesMe(rawVal, field, op);
@@ -3498,9 +3505,21 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
             handleFieldChange({ target: { value: val } });
           }}
           groups={[
-            { label: "This record", fields: (ownGroup?.fields||[]).map(f=>({ ...f, _value:`own||${f.id}` })) },
+            // Split own fields into Core (show_in_list), Additional, System
+            ...(() => {
+              const own = (ownGroup?.fields || []);
+              const core   = own.filter(f => f.show_in_list && !f.isSystemCol);
+              const extra  = own.filter(f => !f.show_in_list && !f.isSystemCol);
+              const system = own.filter(f => f.isSystemCol);
+              const toFld  = f => ({ ...f, _value: `own||${f.id}` });
+              const groups = [];
+              if (core.length)   groups.push({ label: "Core fields",       fields: core.map(toFld) });
+              if (extra.length)  groups.push({ label: "Additional fields", fields: extra.map(toFld) });
+              if (system.length) groups.push({ label: "System",            fields: system.map(toFld) });
+              return groups;
+            })(),
             ...(linkedGroups||[]).map(grp => ({
-              label: `Linked ${grp.label}`,
+              label: `Linked: ${grp.label}`,
               fields: (grp.fields||[]).map(f=>({ ...f, _value:`linked|${grp.objectId}|${f.id}` })),
             })),
           ]}
@@ -3571,8 +3590,25 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
 
   const getOps = f => TYPE_OPS[f?.field_type] || TYPE_OPS.text;
 
-  // Build field options grouped by object — only fields marked show_in_list
-  const ownGroup = { label: null, fields: fields.filter(f => f.show_in_list), objectId: null, objectSlug: null };
+  // Build field options grouped by object — show ALL fields (not just show_in_list)
+  // Group them for discoverability: core fields first, then additional, then system
+  const coreFields   = fields.filter(f => f.show_in_list);
+  const extraFields  = fields.filter(f => !f.show_in_list && !f.hidden);
+  // System filterable cols (created, updated, stage, linked jobs, etc.)
+  const sysFilterFields = SYSTEM_COLS
+    .filter(s => !s.hidden && ['_created','_updated','_created_by','_days_old','_linked_all_jobs','_linked_open_jobs','_stage'].includes(s.apiKey))
+    .map(s => ({
+      ...s,
+      id: s.id,
+      api_key: s.apiKey,
+      name: s.name,
+      field_type: s.field_type || 'text',
+      isSystemCol: true,
+    }));
+
+  // Flat array of all own fields (core + extra + system) for the ownGroup
+  const allOwnFields = [...coreFields, ...extraFields, ...sysFilterFields];
+  const ownGroup = { label: null, fields: allOwnFields, objectId: null, objectSlug: null };
   const linkedGroups = Object.entries(linkedObjectFields)
     .filter(([key]) => !key.startsWith('__'))
     .map(([objId, flds]) => {
@@ -3588,7 +3624,8 @@ const AdvancedFilterPanel = ({ fields, filters, logic, onFiltersChange, onLogicC
   };
 
   const addRow = () => {
-    const first = ownGroup.fields[0] || fields[0];
+    // Default to first core (show_in_list) field so new rows start sensibly
+    const first = ownGroup.fields.find(f => f.show_in_list && !f.isSystemCol) || ownGroup.fields[0] || fields[0];
     onFiltersChange([...filters, {
       id: Date.now() + "",
       source: "own",
