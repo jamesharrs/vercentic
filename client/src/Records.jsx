@@ -3428,6 +3428,107 @@ const FilterPeoplePicker = ({ field, value, onSelect }) => {
 
 // ── FilterRow — module-level so it is never recreated on parent re-render ─────
 // (defining inside AdvancedFilterPanel caused focus loss on every keystroke)
+
+// ── FilterSkillsPicker — inline skill search for filter rows ─────────────────
+// Uses the same ESCO API as the record skills field, but returns a single skill
+// name string (the filter tests via "includes" against the array)
+function FilterSkillsPicker({ value, onSelect }) {
+  const [open,   setOpen]   = useState(false);
+  const [query,  setQuery]  = useState(value || "");
+  const [results,setResults]= useState([]);
+  const [loading,setLoading]= useState(false);
+  const ref   = useRef(null);
+  const inpRef= useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setTimeout(() => inpRef.current?.focus(), 30);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!query.trim()) { setResults([]); return; }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/enterprise/skills/search?q=${encodeURIComponent(query)}&limit=20`);
+        const d   = await res.json();
+        setResults(Array.isArray(d.skills||d) ? (d.skills||d) : []);
+      } catch { setResults([]); }
+      setLoading(false);
+    }, 220);
+    return () => clearTimeout(t);
+  }, [query, open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const commit = (skill) => {
+    const name = typeof skill === "string" ? skill : (skill.label || skill.name || skill.preferredLabel || skill);
+    setQuery(name);
+    onSelect(name);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} style={{ position:"relative", flex:1, minWidth:140 }}>
+      <input
+        ref={inpRef}
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={e => { setQuery(e.target.value); onSelect(e.target.value); setOpen(true); }}
+        placeholder="Search skills…"
+        style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px",
+          borderRadius:8, border:`1.5px solid ${C.accent}`, fontSize:13, fontFamily:F,
+          outline:"none", color:C.text1, background:C.surface }}
+      />
+      {open && (query.trim() || results.length > 0) && ReactDOM.createPortal(
+        <div style={{
+          position:"fixed",
+          top: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0; })(),
+          left: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.left : 0; })(),
+          width: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.width : 260; })(),
+          maxHeight:280, overflowY:"auto",
+          background:"white", border:`1px solid ${C.border}`, borderRadius:10,
+          boxShadow:"0 8px 28px rgba(0,0,0,.13)", zIndex:9900, fontFamily:F,
+        }}>
+          {loading && <div style={{ padding:"12px 14px", fontSize:12, color:C.text3 }}>Searching…</div>}
+          {!loading && results.length === 0 && query.trim() && (
+            <div style={{ padding:"10px 14px" }}>
+              <button onMouseDown={() => commit(query)}
+                style={{ width:"100%", textAlign:"left", border:"none", background:"none", cursor:"pointer",
+                  fontSize:13, color:C.text1, fontFamily:F, padding:"4px 0" }}>
+                Use "<strong>{query}</strong>"
+              </button>
+            </div>
+          )}
+          {results.map((s, i) => {
+            const name = s.label || s.name || s.preferredLabel || s;
+            return (
+              <button key={i} onMouseDown={() => commit(name)}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:9,
+                  padding:"8px 14px", border:"none", background:"none", cursor:"pointer",
+                  textAlign:"left", fontFamily:F, fontSize:13, color:C.text1 }}
+                onMouseEnter={e => e.currentTarget.style.background = C.accentLight}
+                onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                <span style={{ fontSize:13 }}>⚡</span>
+                <span style={{ flex:1 }}>{name}</span>
+                {s.category && <span style={{ fontSize:10, color:C.text3 }}>{s.category}</span>}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) => {
   const getOps = f => TYPE_OPS[f?.field_type] || TYPE_OPS.text;
   const needsVal = op => !NO_VAL_OPS.includes(op);
@@ -3535,11 +3636,16 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
         {ops.map(op => <option key={op} value={op}>{op}</option>)}
       </select>
 
-      {/* Value — people/multi_lookup: searchable picker with "Logged in user"; others: existing inputs */}
+      {/* Value — people/multi_lookup: searchable picker with "Logged in user"; skills: ESCO search; others: existing inputs */}
       {showVal && (
         (field?.field_type === "people" || field?.field_type === "multi_lookup")
           ? <FilterPeoplePicker
               field={field}
+              value={filt.value}
+              onSelect={v => onUpdate(filt.id, { value: v })}
+            />
+          : field?.field_type === "skills"
+          ? <FilterSkillsPicker
               value={filt.value}
               onSelect={v => onUpdate(filt.id, { value: v })}
             />
@@ -10903,7 +11009,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections]);
+  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections]);
 
 
   // PanelCard is defined at module level above RecordDetail
