@@ -6804,6 +6804,7 @@ const INTERVIEW_STATUS_COLORS = {
 };
 const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJobContext, fetchByJob = false }) => {
   const [interviews, setInterviews]   = useState([]);
+  const [interviewTypes, setInterviewTypes] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [jobFilter, setJobFilter]     = useState("all");
   const [timeFilter, setTimeFilter]   = useState("all");
@@ -6811,6 +6812,14 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
   const [showSchedule, setShowSchedule] = useState(false);
 
   useEffect(() => { setJobFilter(activeJobContext || "all"); }, [activeJobContext]);
+
+  // Load interview templates so the schedule modal can offer a picker
+  useEffect(() => {
+    if (!environment?.id) return;
+    api.get(`/interview-types?environment_id=${environment.id}`)
+      .then(d => setInterviewTypes(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [environment?.id]);
 
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
@@ -7001,6 +7010,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
           <ScheduleModalLazy
             envId={environment?.id}
             interviewType={null}
+            allTypes={interviewTypes}
             linkedJobIds={fetchByJob ? [] : linkedJobs.map(j => j.id)}
             initialValues={fetchByJob ? {
               // Job record context: pre-populate the job, let user pick candidate
