@@ -5678,7 +5678,7 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
         const blob = new Blob([buf], { type: mime });
         url = URL.createObjectURL(blob);
         setBlobUrl(url);
-        // setBlobData no longer needed — PDF displayed via blob iframe
+        if (isPdf) setBlobData(buf);  // pass ArrayBuffer to PdfViewer
       })
       .catch(err => { console.warn('[FilePreview] fetch failed:', err); setLoadErr(true); });
     return () => { if (url) URL.revokeObjectURL(url); };
@@ -5737,13 +5737,11 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
               <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Could not load file</div>
             </div>
           )}
-          {/* PDF — rendered via blob URL in iframe (reliable cross-browser) */}
-          {blobUrl && isPdf && (
-            <embed
-              src={blobUrl}
-              type="application/pdf"
-              style={{ width:'100%', flex:1, height:'100%', minHeight:'75vh', border:'none', display:'block' }}
-            />
+          {/* PDF — rendered via PDF.js canvas (same engine as the thumbnail, works in all contexts) */}
+          {blobData && isPdf && (
+            <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', minHeight:0 }}>
+              <PdfViewer data={blobData}/>
+            </div>
           )}
           {/* DOCX — server-side mammoth → HTML in iframe */}
           {isDocx && previewUrl && (
