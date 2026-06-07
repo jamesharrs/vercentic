@@ -3548,9 +3548,11 @@ const FilterRow = ({ filt, idx, ownGroup, linkedGroups, onUpdate, onRemove }) =>
                 value={filt.value}
                 onChange={v => onUpdate(filt.id, { value: v })}
                 placeholder="Select…"
-                size="sm"
+                size="md"
                 allowClear
-                style={{ flex:1 }}
+                searchable={opts.length > 6}
+                dropdownWidth={240}
+                style={{ flex:1, minWidth:140 }}
                 options={opts.map(o => {
                   const v = typeof o === "object" ? o.value : o;
                   const l = typeof o === "object" ? o.label : o;

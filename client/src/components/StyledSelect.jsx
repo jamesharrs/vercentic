@@ -24,6 +24,7 @@ export default function StyledSelect({
   const [pos,  setPos]      = useState({ top: 0, left: 0, width: 0 });
   const [q,    setQ]        = useState('');
   const ref                 = useRef(null);
+  const dropRef             = useRef(null);  // ref for the portal dropdown
 
   const sel = options.find(o => String(o.value) === String(value));
   const visibleOptions = (searchable && q)
@@ -41,15 +42,20 @@ export default function StyledSelect({
 
   useEffect(() => {
     if (!open) { setQ(''); return; }
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const h = e => {
+      // Exclude both the trigger and the portal dropdown from outside-click
+      if (ref.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
 
   // Size tokens
   const sz = {
-    sm: { fontSize: 11, padding: "3px 8px 3px 8px", borderRadius: 7,  gap: 5,  iconSize: 12 },
-    md: { fontSize: 13, padding: "7px 10px 7px 10px", borderRadius: 9,  gap: 7,  iconSize: 14 },
+    sm: { fontSize: 13, padding: "7px 10px",          borderRadius: 8,  gap: 6,  iconSize: 13 },
+    md: { fontSize: 13, padding: "7px 10px",            borderRadius: 9,  gap: 7,  iconSize: 14 },
     lg: { fontSize: 14, padding: "9px 12px 9px 12px", borderRadius: 10, gap: 8,  iconSize: 16 },
   }[size] || {};
 
@@ -100,9 +106,9 @@ export default function StyledSelect({
 
       {/* Dropdown portal */}
       {open && createPortal(
-        <div style={{
+        <div ref={dropRef} style={{
           position: "fixed", top: pos.top, left: pos.left,
-          width: dropdownWidth || Math.max(pos.width, 160),
+          width: dropdownWidth || Math.max(pos.width, 220),
           maxHeight, overflowY: "auto",
           background: "white", border: "1.5px solid #e5e7eb",
           borderRadius: 12, boxShadow: "0 8px 28px rgba(0,0,0,.13)",
