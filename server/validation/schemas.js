@@ -203,7 +203,7 @@ const offerStatusSchema = z.object({
 });
 
 // ── Interviews ────────────────────────────────────────────────────────────────
-const INTERVIEW_FORMATS = ['video','phone','onsite','panel','assessment','other'];
+const INTERVIEW_FORMATS = ['video','phone','onsite','panel','assessment','async_video','ai_bot','other'];
 const createInterviewTypeSchema = z.object({
   environment_id:       uuid(),
   name:                 str(100),

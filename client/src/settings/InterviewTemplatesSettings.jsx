@@ -5,6 +5,7 @@
 // Used by Interview Plans (per-job stage sequences) and Video Interview sessions
 
 import { useState, useEffect, useCallback } from "react";
+import ReactDOM from "react-dom";
 import api from "../apiClient.js";
 
 const F = "'Space Grotesk','DM Sans',system-ui,sans-serif";
@@ -57,6 +58,7 @@ const Btn = ({ children, onClick, v="secondary", disabled, icon, style }) => {
       {icon && <Ic n={icon} s={14} c={v==="primary"?"#fff":v==="danger"?"#DC2626":C.accent}/>}
       {children}
     </button>
+  , document.body
   );
 };
 
@@ -320,8 +322,8 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
     { id:"scorecard", label:"Scorecard" },
   ];
 
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:900,
+  return ReactDOM.createPortal(
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:9500,
       display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div style={{ width:"100%", maxWidth:800, maxHeight:"92vh", display:"flex",
         flexDirection:"column", background:C.surface, borderRadius:16, overflow:"hidden",
