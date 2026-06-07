@@ -13,7 +13,7 @@ const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(n
 
 
 // GET all roles with user counts — cached 5 minutes (roles rarely change)
-router.get('/', cacheResponse(300_000), (req, res) => {
+router.get('/', (req, res) => {
   const roles = query('roles').map(role => ({
     ...role,
     user_count: query('users', u => u.role_id === role.id && u.status !== 'deactivated').length,

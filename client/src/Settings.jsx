@@ -607,9 +607,16 @@ const RolesSection = ({ environment }) => {
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [users, setUsers] = useState([]);
+
   const load = useCallback(async () => {
-    const r = await api.get("/roles");
+    // Load both roles and users together so we can show user assignments on each role card
+    const [r, u] = await Promise.all([
+      api.get("/roles"),
+      api.get("/users"),
+    ]);
     setRoles(Array.isArray(r) ? r : []);
+    setUsers(Array.isArray(u) ? u : []);
     setLoading(false);
   }, []);
 
@@ -663,7 +670,26 @@ const RolesSection = ({ environment }) => {
                     {role.name}
                     {role.is_system?<Badge color="#868e96" light>system</Badge>:null}
                   </div>
-                  <div style={{fontSize:11,color:C.text3}}>{role.user_count||0} users</div>
+                  {(() => {
+                    const roleUsers = users.filter(u => u.role_id === role.id && u.status !== 'deactivated');
+                    if (roleUsers.length === 0) return <div style={{fontSize:11,color:C.text3}}>No users assigned</div>;
+                    return (
+                      <div style={{display:"flex",alignItems:"center",gap:3,marginTop:2,flexWrap:"wrap"}}>
+                        {roleUsers.slice(0,4).map(u => (
+                          <div key={u.id} title={`${u.first_name||''} ${u.last_name||''}`.trim()||u.email}
+                            style={{width:18,height:18,borderRadius:"50%",background:role.color||C.accent,
+                              display:"flex",alignItems:"center",justifyContent:"center",
+                              fontSize:8,fontWeight:700,color:"white",border:"1.5px solid white",flexShrink:0}}>
+                            {(u.first_name?.[0]||u.email?.[0]||'?').toUpperCase()}
+                          </div>
+                        ))}
+                        {roleUsers.length > 4 && (
+                          <div style={{fontSize:10,color:C.text3,fontWeight:600}}>+{roleUsers.length-4}</div>
+                        )}
+                        <div style={{fontSize:10,color:C.text3,marginLeft:2}}>{roleUsers.length} user{roleUsers.length!==1?'s':''}</div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </button>
             ))}
