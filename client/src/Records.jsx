@@ -3422,8 +3422,9 @@ function FilterSkillsPicker({ value, onSelect }) {
   const [query,  setQuery]  = useState(value || "");
   const [results,setResults]= useState([]);
   const [loading,setLoading]= useState(false);
-  const ref   = useRef(null);
-  const inpRef= useRef(null);
+  const ref     = useRef(null);
+  const dropRef = useRef(null);  // ref for the portal dropdown
+  const inpRef  = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -3438,17 +3439,23 @@ function FilterSkillsPicker({ value, onSelect }) {
       try {
         const res = await fetch(`/api/enterprise/skills/search?q=${encodeURIComponent(query)}&limit=20`);
         const d   = await res.json();
-        setResults(Array.isArray(d.skills||d) ? (d.skills||d) : []);
+        // API returns { results: [{name, category}], total } or plain array
+        const arr = Array.isArray(d) ? d : (Array.isArray(d.results) ? d.results : (Array.isArray(d.skills) ? d.skills : []));
+        setResults(arr);
       } catch { setResults([]); }
       setLoading(false);
     }, 220);
     return () => clearTimeout(t);
   }, [query, open]);
 
-  // Close on outside click
+  // Close on outside click — exclude both the input wrapper and the portal dropdown
   useEffect(() => {
     if (!open) return;
-    const h = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const h = e => {
+      if (ref.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
@@ -3472,16 +3479,21 @@ function FilterSkillsPicker({ value, onSelect }) {
           borderRadius:8, border:`1.5px solid ${C.accent}`, fontSize:13, fontFamily:F,
           outline:"none", color:C.text1, background:C.surface }}
       />
-      {open && (query.trim() || results.length > 0) && ReactDOM.createPortal(
-        <div style={{
+      {open && ReactDOM.createPortal(
+        <div ref={dropRef} style={{
           position:"fixed",
           top: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0; })(),
           left: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.left : 0; })(),
-          width: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.width : 260; })(),
-          maxHeight:280, overflowY:"auto",
+          width: (() => { const r = ref.current?.getBoundingClientRect(); return Math.max(r?.width || 260, 260); })(),
+          maxHeight:320, overflowY:"auto",
           background:"white", border:`1px solid ${C.border}`, borderRadius:10,
-          boxShadow:"0 8px 28px rgba(0,0,0,.13)", zIndex:9900, fontFamily:F,
+          boxShadow:"0 8px 28px rgba(0,0,0,.13)", zIndex:9999, fontFamily:F,
         }}>
+          {!query.trim() && !loading && results.length === 0 && (
+            <div style={{ padding:"10px 14px 6px", fontSize:11, color:C.text3 }}>
+              Type to search 2,400+ skills…
+            </div>
+          )}
           {loading && <div style={{ padding:"12px 14px", fontSize:12, color:C.text3 }}>Searching…</div>}
           {!loading && results.length === 0 && query.trim() && (
             <div style={{ padding:"10px 14px" }}>
@@ -3493,7 +3505,7 @@ function FilterSkillsPicker({ value, onSelect }) {
             </div>
           )}
           {results.map((s, i) => {
-            const name = s.label || s.name || s.preferredLabel || s;
+            const name = s.name || s.label || s.preferredLabel || (typeof s === 'string' ? s : '');
             return (
               <button key={i} onMouseDown={() => commit(name)}
                 style={{ width:"100%", display:"flex", alignItems:"center", gap:9,
