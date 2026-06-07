@@ -3157,9 +3157,11 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
   };
   const isSuperAdmin = session?.role?.slug === 'super_admin';
   const currentEmail = session?.user?.email;
+  // Show test user switcher in dev mode to any logged-in user so you can always switch back
+  const showTestSwitcher = !import.meta.env.PROD;
 
   useEffect(() => {
-    if (!open || !isSuperAdmin) return;
+    if (!open || !showTestSwitcher) return;
     (async () => {
       setProvisioning(true); setSwitchError('');
       try {
@@ -3185,8 +3187,9 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
       if (data?.error) { setSwitchError(data.error); setSwitchLoading(false); return; }
       const { role, permissions, tenant_slug, ...user } = data;
       const ns = { user, role, permissions, tenant_slug: tenant_slug || null };
-      setSession(ns);
-      localStorage.setItem('talentos_session', JSON.stringify(ns));
+      // Use _sessionKey() so the session is saved under the same key the app reads from
+      try { localStorage.setItem(_sessionKey(), JSON.stringify(ns)); } catch {}
+      setSession(ns);   // update React state
       setOpen(false);
       window.location.reload();
     } catch (err) { setSwitchError('Login failed — ' + (err.message || 'unknown error')); }
@@ -3202,7 +3205,7 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
             background:"var(--t-surface)",border:"1px solid var(--t-border)",
             borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,0.16)",zIndex:201,overflow:"hidden",minWidth:220}}>
 
-            {isSuperAdmin && (
+            {showTestSwitcher && (
               <div style={{borderBottom:"1px solid var(--t-border)"}}>
                 <div style={{padding:"8px 12px 4px",fontSize:9,fontWeight:700,color:"#f59f00",
                   textTransform:"uppercase",letterSpacing:"0.1em",display:"flex",alignItems:"center",gap:5}}>
@@ -3275,7 +3278,15 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
 
             <div style={{height:1,background:"var(--t-border)"}}/>
             <div style={{padding:"4px 0"}}>
-              <button onClick={()=>{clearSession();setOpen(false);}}
+              <button onClick={()=>{
+                // Clear both possible keys (handles legacy raw key from old switcher)
+                try { localStorage.removeItem(_sessionKey()); } catch {}
+                try { localStorage.removeItem('talentos_session'); } catch {}
+                try { localStorage.removeItem('talentos_session_default'); } catch {}
+                clearSession();
+                setSession(null);
+                setOpen(false);
+              }}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,
                   padding:"9px 14px",border:"none",background:"transparent",
                   cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500,
