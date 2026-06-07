@@ -830,6 +830,142 @@ const TypeFormModal = ({ type, envId, onSave, onClose }) => {
 
 
 // ── Schedule Interview Modal ──────────────────────────────────────────────────
+
+// ── TemplatePicker — searchable dropdown for interview templates ──────────────
+function TemplatePicker({ allTypes, selectedTypeId, onSelect }) {
+  const [open,   setOpen]   = useState(false);
+  const [search, setSearch] = useState("");
+  const triggerRef = useRef(null);
+  const dropRef    = useRef(null);
+  const inputRef   = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const h = e => {
+      if (triggerRef.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 30);
+  }, [open]);
+
+  const filtered = [
+    { id: null, name: "Manual (no template)", sub: "Set all details manually", fmt: null, color: "#8B7EC8" },
+    ...allTypes.filter(t =>
+      !search || t.name.toLowerCase().includes(search.toLowerCase()) ||
+      (t.interview_format || "").toLowerCase().includes(search.toLowerCase())
+    ).map(t => ({ ...t, sub: [t.duration ? `${t.duration} min` : null, t.interview_format].filter(Boolean).join(" · ") }))
+  ];
+
+  const active = selectedTypeId === null
+    ? filtered[0]
+    : allTypes.find(t => t.id === selectedTypeId);
+
+  const activeMeta = active?.interview_format
+    ? (INTERVIEW_TYPES.find(x => x.value === active.interview_format) || INTERVIEW_TYPES[1])
+    : null;
+
+  const labelSt2 = { fontSize:11, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:4 };
+
+  return (
+    <div style={{ marginBottom:14, position:"relative" }}>
+      <label style={labelSt2}>Interview Template</label>
+      {/* Trigger */}
+      <div ref={triggerRef} onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+          borderRadius:9, border:`1.5px solid ${open ? C.accent : C.border}`,
+          background:C.surface, cursor:"pointer", userSelect:"none",
+          boxShadow: open ? `0 0 0 3px ${C.accent}20` : "none", transition:"all .15s" }}>
+        {activeMeta ? (
+          <div style={{ width:28, height:28, borderRadius:7, background:`${activeMeta.color}15`,
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <Ic n={activeMeta.iconName} s={14} c={activeMeta.color}/>
+          </div>
+        ) : (
+          <div style={{ width:28, height:28, borderRadius:7, background:"#f3f0ff",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <Ic n="calendar" s={14} c="#8B7EC8"/>
+          </div>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {active?.name || "Select template…"}
+          </div>
+          {active?.sub && <div style={{ fontSize:11, color:C.text3 }}>{active.sub}</div>}
+        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" style={{ flexShrink:0, opacity:.5, transform: open ? "rotate(180deg)" : "none", transition:"transform .2s" }}>
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+
+      {/* Dropdown portal */}
+      {open && ReactDOM.createPortal(
+        <div ref={dropRef} style={{
+          position:"fixed",
+          top: (() => { const r = triggerRef.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0; })(),
+          left: (() => { const r = triggerRef.current?.getBoundingClientRect(); return r ? r.left : 0; })(),
+          width: (() => { const r = triggerRef.current?.getBoundingClientRect(); return r ? r.width : 360; })(),
+          background:"white", border:`1px solid ${C.border}`, borderRadius:12,
+          boxShadow:"0 12px 36px rgba(0,0,0,.16)", zIndex:9999,
+          overflow:"hidden", maxHeight:320, display:"flex", flexDirection:"column"
+        }}>
+          {/* Search */}
+          <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+              borderRadius:8, border:`1.5px solid ${C.border}`, background:"#f8f9fc" }}>
+              <Ic n="search" s={13} c={C.text3}/>
+              <input ref={inputRef} value={search} onChange={e=>setSearch(e.target.value)}
+                placeholder="Search templates…"
+                style={{ flex:1, border:"none", background:"none", fontSize:12, fontFamily:"inherit",
+                  outline:"none", color:C.text1 }}/>
+              {search && <button onMouseDown={e=>{e.preventDefault();setSearch("");}} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:C.text3,fontSize:14}}>×</button>}
+            </div>
+          </div>
+          {/* Options */}
+          <div style={{ overflowY:"auto", flex:1 }}>
+            {filtered.length === 0 && (
+              <div style={{ padding:"16px", textAlign:"center", fontSize:12, color:C.text3 }}>No templates match</div>
+            )}
+            {filtered.map(t => {
+              const isManual = t.id === null;
+              const meta = !isManual && t.interview_format
+                ? (INTERVIEW_TYPES.find(x => x.value === t.interview_format) || INTERVIEW_TYPES[1])
+                : null;
+              const isSel = isManual ? selectedTypeId === null : selectedTypeId === t.id;
+              return (
+                <div key={t.id ?? "__manual"} onMouseDown={() => { onSelect(t.id, t.id ? t : null); setOpen(false); setSearch(""); }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
+                    background: isSel ? C.accentLight : "transparent",
+                    cursor:"pointer", transition:"background .1s" }}
+                  onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8f9fc"; }}
+                  onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
+                  <div style={{ width:30, height:30, borderRadius:8,
+                    background: meta ? `${meta.color}15` : "#f3f0ff",
+                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <Ic n={meta ? meta.iconName : "calendar"} s={14} c={meta ? meta.color : "#8B7EC8"}/>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight: isSel ? 700 : 500, color: isSel ? C.accent : C.text1 }}>{t.name}</div>
+                    {t.sub && <div style={{ fontSize:11, color:C.text3 }}>{t.sub}</div>}
+                  </div>
+                  {isSel && <Ic n="check" s={13} c={C.accent}/>}
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose, initialValues, linkedJobIds }) => {
   const isEdit = !!initialValues?.id;
   const bulkCandidates = interviewType?._bulkCandidates || null;
@@ -984,51 +1120,16 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
                 </div>
               </div>
             )}
-            {/* Template picker — shown when allTypes available and not editing */}
+            {/* Template picker — searchable dropdown */}
             {!isEdit && allTypes && allTypes.length > 0 && (
-              <div style={{marginBottom:20}}>
-                <label style={labelSt}>Interview Template</label>
-                <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
-                  <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
-                    borderRadius:10,border:`1.5px solid ${selectedTypeId===null?"#8B7EC8":C.border}`,
-                    background:selectedTypeId===null?"#f7f4ff":C.surface,cursor:"pointer",transition:"all .15s"}}>
-                    <input type="radio" name="sched-type" checked={selectedTypeId===null}
-                      onChange={()=>{setSelectedTypeId(null);set("interviewers",[]);}}
-                      style={{accentColor:"#8B7EC8"}}/>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text1}}>Manual (no template)</div>
-                      <div style={{fontSize:11,color:C.text3}}>Set all details manually</div>
-                    </div>
-                  </label>
-                  {allTypes.map(t => {
-                    const ICONS = {"Video Call":"🎥","Phone":"📞","In Person":"🏢","Panel":"👥","Technical":"💻"};
-                    const icon = ICONS[t.interview_format||t.format] || "📅";
-                    const sel = selectedTypeId === t.id;
-                    return (
-                      <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
-                        borderRadius:10,border:`1.5px solid ${sel?"#8B7EC8":C.border}`,
-                        background:sel?"#f7f4ff":C.surface,cursor:"pointer",transition:"all .15s"}}>
-                        <input type="radio" name="sched-type" checked={sel}
-                          onChange={()=>{setSelectedTypeId(t.id);set("interviewers",t.interviewers||[]);}}
-                          style={{accentColor:"#8B7EC8"}}/>
-                        <div style={{width:32,height:32,borderRadius:8,background:`${t.color||"#8B7EC8"}18`,
-                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
-                          {icon}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{t.name}</div>
-                          <div style={{fontSize:11,color:C.text3,display:"flex",gap:8,marginTop:2}}>
-                            {t.duration&&<span>⏱ {t.duration} min</span>}
-                            {(t.interview_format||t.format)&&<span>· {t.interview_format||t.format}</span>}
-                            {t.interviewers?.length>0&&<span>· {t.interviewers.length} interviewer{t.interviewers.length!==1?"s":""}</span>}
-                          </div>
-                        </div>
-                        {sel&&<svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#8B7EC8" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              <TemplatePicker
+                allTypes={allTypes}
+                selectedTypeId={selectedTypeId}
+                onSelect={(id, t) => {
+                  setSelectedTypeId(id);
+                  set("interviewers", t ? (t.interviewers || []) : []);
+                }}
+              />
             )}
             <div>
               <label style={labelSt}>Candidate *</label>
