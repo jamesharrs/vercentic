@@ -267,6 +267,8 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
     deadline_hours:      template?.deadline_hours      || 72,
     welcome_message:     template?.welcome_message     || "Thank you for taking the time to complete this interview.",
     completion_message:  template?.completion_message  || "Thank you for completing the interview. We'll be in touch shortly.",
+    // Confirmation email
+    confirmation_email_template_id: template?.confirmation_email_template_id || null,
     // Scorecard / rubric
     scorecard_enabled:   template?.scorecard_enabled   ?? true,
     pass_criteria:       template?.pass_criteria       || "",
@@ -279,6 +281,33 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
   const [tab, setTab]       = useState("basics");
   const [saving, setSaving] = useState(false);
   const [qSearch, setQSearch] = useState("");
+  const [emailTemplates, setEmailTemplates]   = useState([]);
+  const [emailTplSearch, setEmailTplSearch]   = useState("");
+  const [copyingTpl, setCopyingTpl]           = useState(false);
+
+  useEffect(() => {
+    if (!envId) return;
+    api.get(`/email-templates?environment_id=${envId}`)
+      .then(d => setEmailTemplates(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [envId]);
+
+  const copyAndUseTemplate = async (tpl) => {
+    setCopyingTpl(true);
+    try {
+      const copy = await api.post('/email-templates', {
+        environment_id: envId,
+        name: `${tpl.name} (Interview)`,
+        category: 'interview',
+        subject: tpl.subject,
+        body: tpl.body,
+        tone: tpl.tone || 'professional',
+      });
+      setEmailTemplates(prev => [...prev, copy]);
+      set('confirmation_email_template_id', copy.id);
+    } catch(e) { console.error(e); }
+    setCopyingTpl(false);
+  };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -319,6 +348,7 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
     ...(isAsync ? [{ id:"video",    label:"Video Settings" }] : []),
     ...(isBot   ? [{ id:"bot",      label:"AI Settings" }]    : []),
     { id:"scorecard", label:"Scorecard" },
+    { id:"email",     label:"Confirmation Email" },
   ];
 
   return ReactDOM.createPortal(
@@ -573,6 +603,92 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
               </div>
             </div>
           )}
+
+          {tab === "email" && (() => {
+            const activeTpl = emailTemplates.find(t => t.id === form.confirmation_email_template_id);
+            const interviewTpls = emailTemplates.filter(t => t.category === 'interview' || t.category === 'scheduling');
+            const otherTpls    = emailTemplates.filter(t => t.category !== 'interview' && t.category !== 'scheduling');
+            const filtered = emailTemplates.filter(t =>
+              !emailTplSearch || t.name.toLowerCase().includes(emailTplSearch.toLowerCase())
+            );
+            return (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                <div style={{ padding:"10px 14px", background:C.accentLight, borderRadius:10,
+                  border:`1px solid ${C.border}`, fontSize:12, color:C.text2 }}>
+                  When an interview using this template is created, a confirmation email will automatically be sent to the candidate.
+                  Select an existing email template, or copy one to customise it specifically for this interview type.
+                </div>
+                {/* Current selection */}
+                {activeTpl && (
+                  <div style={{ padding:"12px 14px", borderRadius:10, border:`1.5px solid ${C.accent}`,
+                    background:C.accentLight, display:"flex", alignItems:"center", gap:10 }}>
+                    <Ic n="mail" s={16} c={C.accent}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:C.accent }}>{activeTpl.name}</div>
+                      <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{activeTpl.subject}</div>
+                    </div>
+                    <button onClick={() => set('confirmation_email_template_id', null)}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:4, fontSize:16 }}>×</button>
+                  </div>
+                )}
+                {!activeTpl && (
+                  <div style={{ padding:"12px 14px", borderRadius:10, border:`1.5px dashed ${C.border}`,
+                    background:"#f9fafb", fontSize:12, color:C.text3, textAlign:"center" }}>
+                    No confirmation email selected — interviews will be created without an automatic email.
+                  </div>
+                )}
+                {/* Search */}
+                <div style={{ position:"relative" }}>
+                  <Ic n="search" s={13} c={C.text3} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
+                  <input value={emailTplSearch} onChange={e=>setEmailTplSearch(e.target.value)}
+                    placeholder="Search email templates…"
+                    style={{...inp, paddingLeft:30}}/>
+                </div>
+                {/* Template list */}
+                <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:280, overflowY:"auto" }}>
+                  {filtered.length === 0 && (
+                    <div style={{ textAlign:"center", padding:24, color:C.text3, fontSize:12 }}>No templates found.</div>
+                  )}
+                  {filtered.map(t => {
+                    const isSel = form.confirmation_email_template_id === t.id;
+                    const isInterview = t.category === 'interview' || t.category === 'scheduling';
+                    return (
+                      <div key={t.id}
+                        style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                          borderRadius:9, border:`1.5px solid ${isSel ? C.accent : C.border}`,
+                          background: isSel ? C.accentLight : C.surface, cursor:"pointer", transition:"all .12s" }}
+                        onClick={() => set('confirmation_email_template_id', isSel ? null : t.id)}>
+                        <div style={{ width:30, height:30, borderRadius:8,
+                          background: isInterview ? `${C.accent}15` : "#f3f4f6",
+                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          <Ic n="mail" s={14} c={isInterview ? C.accent : C.text3}/>
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                            <span style={{ fontSize:13, fontWeight: isSel ? 700 : 500, color: isSel ? C.accent : C.text1 }}>{t.name}</span>
+                            {isInterview && <span style={{ fontSize:10, fontWeight:700, color:C.accent,
+                              background:C.accentLight, padding:"1px 6px", borderRadius:4 }}>interview</span>}
+                          </div>
+                          <div style={{ fontSize:11, color:C.text3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.subject}</div>
+                        </div>
+                        {isSel
+                          ? <Ic n="check" s={13} c={C.accent}/>
+                          : <button onMouseDown={e=>{ e.stopPropagation(); copyAndUseTemplate(t); }}
+                              disabled={copyingTpl}
+                              title="Copy this template and use it for this interview type"
+                              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6,
+                                cursor:"pointer", padding:"3px 8px", fontSize:11, fontWeight:600,
+                                color:C.text2, fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                              {copyingTpl ? "…" : "Copy & use"}
+                            </button>
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {tab === "scorecard" && (
             <div style={{ display:"flex", flexDirection:"column", gap:16 }}>

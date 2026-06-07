@@ -977,6 +977,9 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
   const activeType = selectedTypeId
     ? (allTypes || []).find(t => t.id === selectedTypeId) || interviewType
     : interviewType;
+  // Async/AI formats don't need a scheduled date/time
+  const activeFormat = activeType?.interview_format || interviewType?.interview_format || "";
+  const isAsyncFormat = activeFormat === "async_video" || activeFormat === "ai_bot";
   const [form, setForm] = useState({
     candidate_id: initialValues?.candidate_id || (bulkCandidates?.length === 1 ? bulkCandidates[0].id : null),
     candidate_name: initialValues?.candidate_name || (bulkCandidates?.length === 1 ? bulkCandidates[0].name : ""),
@@ -1070,6 +1073,8 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
   }, [form.job_id, jobs]);
 
   const handle = async () => {
+    // date/time not required for async or AI bot formats
+    if (!isAsyncFormat && (!form.date || !form.time)) return;
     setSaving(true);
     const isAi = form.interviewer_mode === "ai_agent";
     await onSave({
@@ -1323,16 +1328,23 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
                 );
               })()}
             </div>}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div>
-                <label style={labelSt}>Date {form.interviewer_mode!=="ai_agent"&&"*"}</label>
-                <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} min={new Date().toISOString().slice(0,10)} disabled={form.interviewer_mode==="ai_agent"}/>
+            {!isAsyncFormat && (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={labelSt}>Date {form.interviewer_mode!=="ai_agent"&&"*"}</label>
+                  <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} min={new Date().toISOString().slice(0,10)} disabled={form.interviewer_mode==="ai_agent"}/>
+                </div>
+                <div>
+                  <label style={labelSt}>Time {form.interviewer_mode!=="ai_agent"&&"*"}</label>
+                  <input type="time" value={form.time} onChange={e=>set("time",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} disabled={form.interviewer_mode==="ai_agent"}/>
+                </div>
               </div>
-              <div>
-                <label style={labelSt}>Time {form.interviewer_mode!=="ai_agent"&&"*"}</label>
-                <input type="time" value={form.time} onChange={e=>set("time",e.target.value)} style={{...inpSt, opacity: form.interviewer_mode==="ai_agent"?0.4:1}} disabled={form.interviewer_mode==="ai_agent"}/>
+            )}
+            {isAsyncFormat && (
+              <div style={{padding:"10px 14px", background:"#eff6ff", borderRadius:8, border:"1px solid #bfdbfe", fontSize:12, color:"#1e40af"}}>
+                <strong>{activeFormat === "ai_bot" ? "AI Screening" : "Async Video"}</strong> — candidate completes this in their own time. No date or time needed.
               </div>
-            </div>
+            )}
             <div>
               {/* ── Employee / AI Agent toggle ─────────────────────────────── */}
               <label style={labelSt}>Interviewers</label>
