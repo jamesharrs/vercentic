@@ -58,7 +58,6 @@ const Btn = ({ children, onClick, v="secondary", disabled, icon, style }) => {
       {icon && <Ic n={icon} s={14} c={v==="primary"?"#fff":v==="danger"?"#DC2626":C.accent}/>}
       {children}
     </button>
-  , document.body
   );
 };
 
@@ -620,6 +619,7 @@ function TemplateEditor({ template, questions, envId, onSave, onClose }) {
           </Btn>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
