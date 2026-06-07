@@ -69,6 +69,10 @@ router.get('/file/:filename', (req, res) => {
     return res.status(400).json({ error: 'Invalid path' });
   }
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  // Set Content-Disposition: inline so browsers render PDFs/images rather than downloading
+  const mime = require('mime-types').lookup(filename) || 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
   res.sendFile(filePath);
 });
 

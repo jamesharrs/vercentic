@@ -5716,8 +5716,9 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
                 Download
               </a>
             )}
-            <button onClick={onClose}
-              style={{ width:30, height:30, borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', cursor:'pointer', color:'#6b7280', fontSize:18, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
+            <button onClick={e=>{ e.stopPropagation(); onClose(); }}
+              style={{ width:30, height:30, borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', cursor:'pointer', color:'#6b7280', fontSize:18, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}
+              title="Close preview">
               ×
             </button>
           </div>
@@ -11009,7 +11010,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections]);
+  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections, previewAtt]);
 
 
   // PanelCard is defined at module level above RecordDetail
