@@ -495,7 +495,10 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
       <div style={{border:"1.5px solid #e8eaed",borderRadius:8,overflow:"hidden",background:"#f9fafb",cursor:"pointer"}} onClick={handleClick}>
         {isPdf
-          ? <object data={fileUrl} type="application/pdf" width="100%" height="360" style={{display:"block",border:"none"}}><p style={{padding:12,fontSize:12,color:C.text3}}>PDF preview not supported — <a href={fileUrl} target="_blank" rel="noreferrer">open file</a></p></object>
+          ? <div style={{padding:16,textAlign:"center"}}>
+              <FilePageThumb url={fileUrl}/>
+              <div style={{fontSize:12,fontWeight:600,color:C.accent,marginTop:6,cursor:"pointer"}}>Click to preview</div>
+            </div>
           : <div style={{padding:16,textAlign:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
       </div>
       {cfg.showName && <div style={{fontSize:11,fontWeight:600,color:"#1a1a2e"}}>{label}</div>}
@@ -532,30 +535,9 @@ const FilePageThumb = ({ url }) => {
 
 // Full-screen modal preview
 const FilePreviewModal = ({ url, name, onClose }) => {
-  useEffect(() => {
-    const handler = e => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-  const isPdf = url?.endsWith(".pdf") || name?.endsWith(".pdf");
-  return ReactDOM.createPortal(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:9999,display:"flex",flexDirection:"column"}} onClick={onClose}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(0,0,0,0.5)"}}>
-        <span style={{fontSize:13,fontWeight:600,color:"white"}}>{name}</span>
-        <div style={{display:"flex",gap:8}}>
-          <a href={url} download={name} onClick={e=>e.stopPropagation()} style={{padding:"4px 10px",borderRadius:6,background:"white",color:"#1a1a2e",fontSize:11,fontWeight:600,textDecoration:"none"}}>Download</a>
-          <a href={url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{padding:"4px 10px",borderRadius:6,background:"#3b5bdb",color:"white",fontSize:11,fontWeight:600,textDecoration:"none"}}>Open in tab</a>
-          <button onClick={onClose} style={{padding:"4px 8px",borderRadius:6,background:"rgba(255,255,255,0.15)",border:"none",color:"white",cursor:"pointer",fontSize:16}}>✕</button>
-        </div>
-      </div>
-      <div style={{flex:1,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-        {isPdf
-          ? <object data={url} type="application/pdf" width="100%" height="100%" style={{display:"block",border:"none"}}><iframe src={url} width="100%" height="100%" style={{border:"none"}} title={name}/></object>
-          : <img src={url} alt={name} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",margin:"auto",display:"block",paddingTop:16}}/>}
-      </div>
-    </div>,
-    document.body
-  );
+  // Reuse AttachmentPreviewModal so PDFs go through PDF.js (not <object>/<iframe>)
+  const att = { name, url, ext: name?.split('.').pop()?.toLowerCase() || '' };
+  return <AttachmentPreviewModal att={att} onClose={onClose}/>;
 };
 
 // ─── Table field components ───────────────────────────────────────────────────
@@ -5681,7 +5663,7 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
         const blob = new Blob([buf], { type: mime });
         url = URL.createObjectURL(blob);
         setBlobUrl(url);
-        if (isPdf) setBlobData(buf);
+        // setBlobData no longer needed — PDF displayed via blob iframe
       })
       .catch(err => { console.warn('[FilePreview] fetch failed:', err); setLoadErr(true); });
     return () => { if (url) URL.revokeObjectURL(url); };
@@ -5740,8 +5722,15 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
               <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Could not load file</div>
             </div>
           )}
-          {/* PDF — rendered by PDF.js */}
-          {blobData && isPdf && <PdfViewer data={blobData}/>}
+          {/* PDF — rendered via blob URL in iframe (reliable cross-browser) */}
+          {blobUrl && isPdf && (
+            <iframe
+              src={blobUrl}
+              title={att.name}
+              style={{ width:'100%', flex:1, border:'none', minHeight:'75vh', background:'white' }}
+              sandbox="allow-scripts allow-same-origin"
+            />
+          )}
           {/* DOCX — server-side mammoth → HTML in iframe */}
           {isDocx && previewUrl && (
             <iframe src={previewUrl} title={att.name}
