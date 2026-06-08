@@ -603,22 +603,28 @@ const RolesSection = ({ environment }) => {
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
-  const [roleTab, setRoleTab] = useState("permissions"); // "permissions" | "field_visibility"
+  const [roleTab, setRoleTab] = useState("permissions");
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dynamicObjects, setDynamicObjects] = useState([]); // includes custom objects
 
   const [users, setUsers] = useState([]);
 
   const load = useCallback(async () => {
-    // Load both roles and users together so we can show user assignments on each role card
-    const [r, u] = await Promise.all([
+    const [r, u, objs] = await Promise.all([
       api.get("/roles"),
       api.get("/users"),
+      environment?.id ? api.get(`/objects?environment_id=${environment.id}`) : Promise.resolve([]),
     ]);
     setRoles(Array.isArray(r) ? r : []);
     setUsers(Array.isArray(u) ? u : []);
+    const rawObjs = Array.isArray(objs) ? objs : (objs?.objects || []);
+    setDynamicObjects(rawObjs
+      .filter(o => o.slug)
+      .map(o => ({ slug: o.slug, label: o.plural_name || o.name || o.slug }))
+    );
     setLoading(false);
-  }, []);
+  }, [environment?.id]);
 
   useEffect(() => { load(); }, [load]);
 
