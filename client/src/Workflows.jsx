@@ -1360,6 +1360,55 @@ function CategoryPicker({ categories, value, onChange }) {
         </div>,
         document.body
       )}
+
+      {/* ── Stage picker modal — shown when linking to a record with multiple entry points ── */}
+      {stagePicker && createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2100,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={() => setStagePicker(null)}>
+          <div style={{ background:"#fff", borderRadius:16, width:400, maxHeight:"70vh",
+            display:"flex", flexDirection:"column", overflow:"hidden",
+            boxShadow:"0 20px 60px rgba(0,0,0,.25)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"16px 20px", borderBottom:"1px solid #e8ebf4", display:"flex", alignItems:"center" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:800, fontSize:14, color:"#0f1729" }}>Choose Starting Stage</div>
+                <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>
+                  Select which stage to place <strong style={{ color:"#0f1729" }}>{recLabel(stagePicker.targetRecord)}</strong>
+                </div>
+              </div>
+              <button onClick={() => setStagePicker(null)}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
+                <Ic n="x" s={16} c="#9ca3af"/>
+              </button>
+            </div>
+            <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+              {stagePicker.steps.map((step, i) => (
+                <div key={step.id || i}
+                  onClick={() => doLink(stagePicker.targetRecord, step)}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 20px",
+                    cursor:"pointer", borderBottom: i < stagePicker.steps.length-1 ? "1px solid #f0f2f8" : "none",
+                    transition:"background .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background="#f5f7ff"}
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:"#eef2ff", border:"1.5px solid #4361ee30",
+                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                    fontSize:13, fontWeight:800, color:"#4361ee" }}>{i + 1}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#0f1729" }}>{step.name || `Stage ${i+1}`}</div>
+                    {step.category_id && <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{step.category_id}</div>}
+                  </div>
+                  <span style={{ fontSize:11, color:"#4361ee", fontWeight:700 }}>Select →</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:"10px 20px", borderTop:"1px solid #e8ebf4", fontSize:11, color:"#9ca3af", textAlign:"center" }}>
+              Only stages marked as "Entry points" in the workflow builder are shown
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1480,6 +1529,23 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
         <input value={step.name || ""} onChange={e => setName(e.target.value)} placeholder="Stage name…"
           onClick={e => e.stopPropagation()}
           style={{ flex: 1, border: "none", outline: "none", fontSize: 13, fontWeight: 700, color: C.text1, background: "transparent", fontFamily: F, minWidth: 0 }}/>
+
+        {/* Allow entry checkbox */}
+        <label
+          title="When checked, users can link a person directly into this stage"
+          onClick={e => e.stopPropagation()}
+          style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer", flexShrink:0, userSelect:"none" }}>
+          <div
+            style={{
+              width:16, height:16, borderRadius:4, border:`2px solid ${step.allow_entry ? '#4361EE' : '#d1d5db'}`,
+              background: step.allow_entry ? '#4361EE' : 'white', display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0, transition:"all .12s",
+            }}
+            onClick={e => { e.stopPropagation(); onChange({ ...step, allow_entry: !step.allow_entry }); }}>
+            {step.allow_entry && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>}
+          </div>
+          <span style={{ fontSize:11, fontWeight:600, color: step.allow_entry ? '#4361EE' : '#9ca3af', whiteSpace:"nowrap" }}>Entry point</span>
+        </label>
 
         {/* Category picker — custom styled dropdown */}
         {categories.length > 0 && (
@@ -4509,6 +4575,8 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
     setAddingLink(true);
   };
 
+  const [stagePicker, setStagePicker] = useState(null); // { targetRecord, steps }
+
   const linkToRecord = async (targetRecord) => {
     const existing = links.find(l => l.target_record_id === targetRecord.id);
     if (existing) { setAddingLink(false); return; }
@@ -4520,15 +4588,28 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
       window.__toast?.alert(`"${recLabel(targetRecord)}" doesn't have a Linked Person workflow with stages assigned. Set one up in that record's Pipeline panel first.`);
       return;
     }
-    const firstStep = wfSteps[0];
+    // Filter to entry-point steps; fall back to all steps if none are flagged
+    const entrySteps = wfSteps.filter(s => s.allow_entry);
+    const choiceSteps = entrySteps.length > 0 ? entrySteps : wfSteps;
+    // If only one step, skip the picker and link directly
+    if (choiceSteps.length === 1) {
+      await doLink(targetRecord, choiceSteps[0]);
+      return;
+    }
+    // Show stage picker
+    setStagePicker({ targetRecord, steps: choiceSteps });
+  };
+
+  const doLink = async (targetRecord, step) => {
     await api.post("/workflows/people-links", {
       person_record_id: record.id,
       target_record_id: targetRecord.id,
       target_object_id: targetRecord.object_id,
-      stage_id:   firstStep?.id   || null,
-      stage_name: firstStep?.name || "Linked",
+      stage_id:   step?.id   || null,
+      stage_name: step?.name || "Linked",
       environment_id: environment.id,
     });
+    setStagePicker(null);
     setAddingLink(false);
     await load();
   };
