@@ -1361,54 +1361,6 @@ function CategoryPicker({ categories, value, onChange }) {
         document.body
       )}
 
-      {/* ── Stage picker modal — shown when linking to a record with multiple entry points ── */}
-      {stagePicker && createPortal(
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2100,
-          display:"flex", alignItems:"center", justifyContent:"center" }}
-          onClick={() => setStagePicker(null)}>
-          <div style={{ background:"#fff", borderRadius:16, width:400, maxHeight:"70vh",
-            display:"flex", flexDirection:"column", overflow:"hidden",
-            boxShadow:"0 20px 60px rgba(0,0,0,.25)" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #e8ebf4", display:"flex", alignItems:"center" }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:800, fontSize:14, color:"#0f1729" }}>Choose Starting Stage</div>
-                <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>
-                  Select which stage to place <strong style={{ color:"#0f1729" }}>{recLabel(stagePicker.targetRecord)}</strong>
-                </div>
-              </div>
-              <button onClick={() => setStagePicker(null)}
-                style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
-                <Ic n="x" s={16} c="#9ca3af"/>
-              </button>
-            </div>
-            <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
-              {stagePicker.steps.map((step, i) => (
-                <div key={step.id || i}
-                  onClick={() => doLink(stagePicker.targetRecord, step)}
-                  style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 20px",
-                    cursor:"pointer", borderBottom: i < stagePicker.steps.length-1 ? "1px solid #f0f2f8" : "none",
-                    transition:"background .1s" }}
-                  onMouseEnter={e => e.currentTarget.style.background="#f5f7ff"}
-                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                  <div style={{ width:32, height:32, borderRadius:9, background:"#eef2ff", border:"1.5px solid #4361ee30",
-                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                    fontSize:13, fontWeight:800, color:"#4361ee" }}>{i + 1}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:"#0f1729" }}>{step.name || `Stage ${i+1}`}</div>
-                    {step.category_id && <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{step.category_id}</div>}
-                  </div>
-                  <span style={{ fontSize:11, color:"#4361ee", fontWeight:700 }}>Select →</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ padding:"10px 20px", borderTop:"1px solid #e8ebf4", fontSize:11, color:"#9ca3af", textAlign:"center" }}>
-              Only stages marked as "Entry points" in the workflow builder are shown
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
@@ -4860,6 +4812,53 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
           </div>
         </div>
       , document.body)}
+
+      {/* ── Stage picker modal — entry point selector ── */}
+      {stagePicker && createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2100,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={() => setStagePicker(null)}>
+          <div style={{ background:"#fff", borderRadius:16, width:400, maxHeight:"70vh",
+            display:"flex", flexDirection:"column", overflow:"hidden",
+            boxShadow:"0 20px 60px rgba(0,0,0,.25)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"16px 20px", borderBottom:"1px solid #e8ebf4", display:"flex", alignItems:"center" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:800, fontSize:14, color:"#0f1729" }}>Choose Starting Stage</div>
+                <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>
+                  Select which stage to place <strong style={{ color:"#0f1729" }}>{recLabel(stagePicker.targetRecord)}</strong>
+                </div>
+              </div>
+              <button onClick={() => setStagePicker(null)}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
+                <Ic n="x" s={16} c="#9ca3af"/>
+              </button>
+            </div>
+            <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+              {stagePicker.steps.map((step, i) => (
+                <div key={step.id || i}
+                  onClick={() => doLink(stagePicker.targetRecord, step)}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 20px",
+                    cursor:"pointer", borderBottom: i < stagePicker.steps.length-1 ? "1px solid #f0f2f8" : "none" }}
+                  onMouseEnter={e => e.currentTarget.style.background="#f5f7ff"}
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:"#eef2ff", border:"1.5px solid #4361ee30",
+                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                    fontSize:13, fontWeight:800, color:"#4361ee" }}>{i + 1}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#0f1729" }}>{step.name || `Stage ${i+1}`}</div>
+                  </div>
+                  <span style={{ fontSize:11, color:"#4361ee", fontWeight:700 }}>Select →</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:"10px 20px", borderTop:"1px solid #e8ebf4", fontSize:11, color:"#9ca3af", textAlign:"center" }}>
+              Only stages marked as "Entry points" in the workflow builder are shown
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
