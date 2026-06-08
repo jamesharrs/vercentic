@@ -955,7 +955,23 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
           // Handle both plain strings and legacy {name, level} objects
           const label = typeof v === "object" && v !== null ? (v.name || "") : String(v || "");
           if (!label) return null;
-          return <span key={`${label}-${i}`} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:99,background:"#F59F0018",border:"1px solid #F59F0028",fontSize:11,fontWeight:600,color:"#F59F00"}}>⚡ {label}</span>;
+          return (
+            <span
+              key={`${label}-${i}`}
+              title={`Find others with: ${label}`}
+              onClick={e => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+                  detail: { fieldKey: field.api_key, fieldValue: label, objectSlug: null }
+                }));
+              }}
+              style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:99,
+                background:"#F59F0018",border:"1px solid #F59F0028",fontSize:11,fontWeight:600,color:"#F59F00",
+                cursor:"pointer",transition:"opacity .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity="0.7"}
+              onMouseLeave={e=>e.currentTarget.style.opacity="1"}
+            >⚡ {label}</span>
+          );
         })}
       </div>;
     }
@@ -3963,18 +3979,10 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   );
 }
 
-// ─── Double-Confirm Delete (type count to confirm, super_admin only) ─────────
+// ─── Double-Confirm Delete (type count to confirm) ───────────────────────────
 const DeleteConfirmInline = ({ count, session, onConfirm, onCancel }) => {
   const [typed, setTyped] = useState("");
-  const isSuperAdmin = session?.role?.slug === "super_admin";
-  if (!isSuperAdmin) {
-    return (
-      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-        <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Only super administrators can bulk delete.</span>
-        <button onClick={onCancel} style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>OK</button>
-      </div>
-    );
-  }
+  // Allow any user whose role has delete permission (checked upstream in guardedBulkAction)
   return (
     <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
       <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Type <strong>{count}</strong> to confirm deletion:</span>
@@ -10953,7 +10961,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               Linked Forms
             </span>
             <button
-              onClick={() => { if(window.__openFormPicker) window.__openFormPicker(record?.id); }}
+              onClick={() => setShowFormPicker(true)}
               style={{
                 display:"inline-flex", alignItems:"center", gap:4,
                 padding:"4px 10px", borderRadius:7,
@@ -10970,6 +10978,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             </button>
           </div>
           <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={formJobFilter==="all"?null:formJobFilter==="general"?null:formJobFilter}/>
+          {showFormPicker && (
+            <FormPickerModal
+              environment={environment}
+              record={record}
+              onClose={() => setShowFormPicker(false)}
+              onLinked={() => { setShowFormPicker(false); load(); }}
+            />
+          )}
         </div>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;

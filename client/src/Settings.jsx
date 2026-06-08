@@ -645,7 +645,9 @@ const RolesSection = ({ environment }) => {
   const savePermissions = async () => {
     if (!selectedRole) return;
     setSaving(true);
-    const payload = OBJECTS.flatMap(obj => ACTIONS.map(action => ({object_slug:obj.slug,action,allowed:getPerm(obj.slug,action)})));
+    // Use dynamic objects (includes custom) — fall back to static OBJECTS if not loaded yet
+    const objList = dynamicObjects.length > 0 ? dynamicObjects : OBJECTS;
+    const payload = objList.flatMap(obj => ACTIONS.map(action => ({object_slug:obj.slug,action,allowed:getPerm(obj.slug,action)})));
     await api.put(`/roles/${selectedRole.id}/permissions`, {permissions:payload});
     setSaving(false);
   };
@@ -744,7 +746,7 @@ const RolesSection = ({ environment }) => {
                             </tr>
                           </thead>
                           <tbody>
-                            {OBJECTS.map(obj=>(
+                            {(dynamicObjects.length > 0 ? dynamicObjects : OBJECTS).map(obj=>(
                               <tr key={obj.slug} style={{borderBottom:`1px solid ${C.border}`}}>
                                 <td style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:C.text1}}>{obj.label}</td>
                                 {ACTIONS.map(action=>(
@@ -770,7 +772,7 @@ const RolesSection = ({ environment }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {OBJECTS.map((obj,i)=>(
+                        {(dynamicObjects.length > 0 ? dynamicObjects : OBJECTS).map((obj,i)=>(
                           <tr key={obj.slug} style={{borderBottom:`1px solid ${C.border}`}}>
                             <td style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:C.text1}}>{obj.label}</td>
                             {ACTIONS.map(action=>{
