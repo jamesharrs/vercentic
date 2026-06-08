@@ -112,7 +112,7 @@ export default function StyledSelect({
           maxHeight, overflowY: "auto",
           background: "white", border: "1.5px solid #e5e7eb",
           borderRadius: 12, boxShadow: "0 8px 28px rgba(0,0,0,.13)",
-          zIndex: 9900, fontFamily: F, padding: "4px 0",
+          zIndex: 10100, fontFamily: F, padding: "4px 0",
         }}>
           {/* Clear option */}
           {allowClear && value && (

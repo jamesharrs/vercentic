@@ -4192,7 +4192,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           <Ic n="layers" s={12} c="white"/> Compare {count}
         </button>
       )}
-      {!confirming ? (
+      {onDelete && (!confirming ? (
         <button onClick={() => setConfirming(true)}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.15)", color:"#fca5a5", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
           <Ic n="trash" s={12} c="#fca5a5"/> Delete {count}
@@ -4201,7 +4201,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
         <DeleteConfirmInline count={selectAllMatching ? totalFilteredCount : count} session={session}
           onConfirm={() => { onDelete(); setConfirming(false); }}
           onCancel={() => setConfirming(false)}/>
-      )}
+      ))}
       {showNoteModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => e.target === e.currentTarget && setShowNoteModal(false)}>
@@ -11755,7 +11755,7 @@ function buildListContext(object, records, total, fields) {
 
 // ── Talent Card Grid View ─────────────────────────────────────────────────────
 // Renders records as cards using visible list columns as the card layout
-function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfile }) {
+function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfile, selectedIds, onToggleSelect }) {
   const F2 = F; // same font
   const accent = objectColor || C.accent;
 
@@ -11832,13 +11832,29 @@ function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfi
         const primaryVal = record.data?.[primaryField?.api_key] || "";
         const secondaryVal = secondaryField ? record.data?.[secondaryField.api_key] || "" : "";
 
+        const isChecked = selectedIds?.has(record.id);
         return (
-          <div key={record.id} onClick={() => onProfile?.(record)}
-            style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`,
-              padding:"16px", cursor:"pointer", transition:"all .15s", position:"relative",
-              boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}
-            onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.10)`; e.currentTarget.style.borderColor=accent+"60"; e.currentTarget.style.transform="translateY(-1px)"; }}
-            onMouseLeave={e=>{ e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)"; e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform="none"; }}>
+          <div key={record.id}
+              style={{ background:isChecked?`${accent}08`:C.surface, borderRadius:14,
+                border:`1.5px solid ${isChecked?accent:C.border}`,
+                padding:"16px", cursor:"pointer", transition:"all .15s", position:"relative",
+                boxShadow: isChecked?"0 0 0 2px "+accent+"30":"0 1px 4px rgba(0,0,0,.04)" }}
+              onClick={() => onProfile?.(record)}
+              onMouseEnter={e=>{ if(!isChecked){e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.10)`; e.currentTarget.style.borderColor=accent+"60"; e.currentTarget.style.transform="translateY(-1px)";} }}
+              onMouseLeave={e=>{ if(!isChecked){e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)"; e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform="none";} }}>
+              {/* Selection checkbox */}
+              {onToggleSelect && (
+                <div style={{ position:"absolute", top:10, right:10, zIndex:2 }}
+                  onClick={e=>{ e.stopPropagation(); onToggleSelect(record.id); }}>
+                  <div style={{ width:18, height:18, borderRadius:5,
+                    border:`2px solid ${isChecked?accent:C.border}`,
+                    background:isChecked?accent:"white",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    transition:"all .12s", cursor:"pointer" }}>
+                    {isChecked && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                  </div>
+                </div>
+              )}
 
             {/* Avatar + name row */}
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
@@ -12980,7 +12996,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           allObjects={allObjects}
           onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
           onClearAll={() => setSelectedIds(new Set())}
-          onDelete={() => guardedBulkAction("delete")}
+          onDelete={can("delete") ? () => guardedBulkAction("delete") : null}
           onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
           onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
           onBulkAction={handleBulkPeopleAction}
@@ -12998,6 +13014,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             visibleFieldIds={visibleFieldIds}
             objectColor={object.color||C.accent}
             onProfile={r=>onOpenRecord?.(r.id, object.id, r.record_number)}
+            selectedIds={ff.bulk_actions ? selectedIds : undefined}
+            onToggleSelect={ff.bulk_actions ? (id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })) : undefined}
           />
         ) : (
           <TableView records={displayedRecords} fields={fields} visibleFieldIds={visibleFieldIds} objectColor={object.color||C.accent}
