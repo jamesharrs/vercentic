@@ -12090,6 +12090,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Clear selection when object/page/search/filters change
   useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
+  // When filters change, reset to page 1 and trigger a server reload so filtering covers all pages
+  useEffect(() => {
+    if (!object?.id) return;
+    setPage(1);
+    setReloadKey(k => k + 1);
+  }, [activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setAiFilter(null); setActiveFilters([]); }, [object?.id]);
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
@@ -12463,6 +12469,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // ── Bulk people actions (communicate, note, interview, link) ───────────────
   const handleBulkPeopleAction = async (action, payload) => {
     const ids = [...selectedIds];
+    // Apply bulk-action threshold warning for all people actions except link (which is always intentional)
+    if (action !== "link" && !payload?.__confirmed) {
+      const threshold = getBulkThreshold();
+      if (ids.length > threshold) {
+        // Re-use the same BulkConfirmModal pattern by setting bulkConfirm state
+        // We store the deferred action and payload for after confirmation
+        setBulkConfirm({ action: `people_${action}`, _action: action, _payload: payload, count: ids.length });
+        return;
+      }
+    }
     if (action === "communicate") {
       // Fire event with full recipient records so the modal can render names/emails
       const recipientRecords = records.filter(r => ids.includes(r.id));
@@ -12739,7 +12755,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             // When a named list is active, the filtered count IS the total for that list
             if (activeListName || filterChip) return `${shown}`;
             // No list — show "N of total" when advanced filters narrow the results
-            if (activeFilters.length && shown < total) return `${shown} of ${total}`;
+            if (activeFilters.length) return `${shown} of ${total}`;
             return total;
           })()} record{(activeListName || filterChip ? displayedRecords.length : total)!==1?"s":""}
         </span>
@@ -12976,9 +12992,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           value={bulkConfirm.value}
           fields={fields}
           onConfirm={() => {
+            const bc = bulkConfirm;
             setBulkConfirm(null);
-            if (bulkConfirm.action === "delete") handleBulkDelete();
-            if (bulkConfirm.action === "edit")   handleBulkEdit(bulkConfirm.fieldId, bulkConfirm.value);
+            if (bc.action === "delete") handleBulkDelete();
+            if (bc.action === "edit")   handleBulkEdit(bc.fieldId, bc.value);
+            // People actions (note, communicate, interview) confirmed via threshold modal
+            if (bc.action?.startsWith("people_")) handleBulkPeopleAction(bc._action, { ...bc._payload, __confirmed: true });
           }}
           onCancel={() => setBulkConfirm(null)}
         />
