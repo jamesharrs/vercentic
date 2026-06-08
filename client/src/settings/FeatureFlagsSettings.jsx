@@ -455,10 +455,10 @@ export default function FeatureFlagsSettings({ environment }) {
       <div style={{ marginBottom:24 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16 }}>
           <div>
-            <h2 style={{ margin:'0 0 6px', fontSize:18, fontWeight:700, color:C.text1 }}>Feature Flags</h2>
+            <h2 style={{ margin:'0 0 6px', fontSize:18, fontWeight:700, color:C.text1 }}>Platform Features</h2>
             <p style={{ margin:0, fontSize:13, color:C.text2, lineHeight:1.6 }}>
-              Control which features are enabled for <strong>{environment?.name || 'this environment'}</strong>.
-              Changes take effect immediately across the app.
+              Environment-level switches — disabling a feature here removes it for <strong>all users</strong> in <strong>{environment?.name || 'this environment'}</strong>, regardless of role.
+              To control access per role, use <em>Roles &amp; Permissions → Feature Access</em>.
             </p>
           </div>
           <div style={{ display:'flex', gap:6, flexShrink:0, paddingTop:2 }}>

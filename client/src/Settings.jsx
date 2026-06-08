@@ -2938,7 +2938,7 @@ const NAV_GROUPS = [
     label: "System",
     items: [
       { id:"integration_hub", icon:"zap",      label:"Integrations",   perm:"manage_integrations" },
-      { id:"feature-flags",   icon:"flag",     label:"Feature Flags",  perm:"manage_roles" },
+      { id:"feature-flags",   icon:"flag",     label:"Platform Features",  perm:"manage_roles" },
       { id:"config",          icon:"refresh",  label:"Import / Export",perm:"manage_roles" },
     ],
   },
@@ -3511,7 +3511,7 @@ const FeatureAccessSection = ({ selectedRole, environment }) => {
       <div style={{marginBottom:14,padding:"10px 14px",borderRadius:8,background:"#f8f9fb",border:"1px solid #e5e7eb",display:"flex",alignItems:"flex-start",gap:8}}>
         <Ic n="info" s={14} c="#6b7280" style={{marginTop:1,flexShrink:0}}/>
         <p style={{margin:0,fontSize:12,color:"#6b7280",lineHeight:1.5}}>
-          These settings control what this role can access. Features disabled globally in <strong>Feature Flags</strong> are unavailable to all roles regardless of this setting.
+          These settings control what this role can access. Features disabled globally in <strong>Platform Features</strong> (under System) are unavailable to all roles regardless of this setting.
         </p>
       </div>
 
@@ -3530,7 +3530,7 @@ const FeatureAccessSection = ({ selectedRole, environment }) => {
               return (
                 <div key={feature.id}
                   onClick={() => !locked && toggle(feature.id)}
-                  title={locked ? 'Disabled globally in Feature Flags' : on ? 'Click to revoke access' : 'Click to grant access'}
+                  title={locked ? 'Disabled globally in Platform Features (System settings)' : on ? 'Click to revoke access' : 'Click to grant access'}
                   style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
                     padding:'6px 10px', borderRadius:8, cursor: locked ? 'not-allowed' : 'pointer',
                     border:`1.5px solid ${locked ? '#f3f4f6' : on ? roleColor+'40' : C.border}`,
