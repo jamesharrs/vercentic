@@ -4514,7 +4514,7 @@ export function LinkedRecordsPanel({ record, environment, onNavigate, activeJobC
     if (existing) { setAddingLink(false); return; }
     // Require the target to have a Linked Person workflow with at least one stage
     const assignments = await api.get(`/workflows/assignments?record_id=${targetRecord.id}`);
-    const plAssignment = (Array.isArray(assignments) ? assignments : []).find(a => a.type === "people_link");
+    const plAssignment = (Array.isArray(assignments) ? assignments : []).find(a => ["people_link","linked_person"].includes(a.type));
     const wfSteps = plAssignment?.workflow?.steps || [];
     if (!plAssignment || wfSteps.length === 0) {
       window.__toast?.alert(`"${recLabel(targetRecord)}" doesn't have a Linked Person workflow with stages assigned. Set one up in that record's Pipeline panel first.`);
