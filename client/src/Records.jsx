@@ -4073,7 +4073,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
         const wf = a.workflow;
         if (!wf) return;
         // Match on assignment type OR workflow_type — handles both storage patterns
-        const isPeopleLink = a.type === "people_link" || wf.workflow_type === "people_link";
+        const isPeopleLink = ["people_link","linked_person"].includes(a.type) || ["people_link","linked_person"].includes(wf.workflow_type);
         if (!isPeopleLink) return;
         const steps = wf.steps || [];
         peopleLinkMap[a.record_id] = steps;
