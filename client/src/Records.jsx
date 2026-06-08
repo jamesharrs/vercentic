@@ -2834,7 +2834,11 @@ const ColumnFilterPopover = ({ field, filterId, initialOp, initialVal, rect, onA
   const ops           = getOpsCF(field);
 
   useEffect(() => {
-    const onDown = e => { if (popRef.current && !popRef.current.contains(e.target)) onClose(); };
+    const onDown = e => {
+      // Don't close if clicking inside a StyledSelect portal dropdown (child of this popover's select)
+      if (e.target?.closest?.('[data-styled-select-dropdown="true"]')) return;
+      if (popRef.current && !popRef.current.contains(e.target)) onClose();
+    };
     const onKey  = e => { if (e.key === "Escape") onClose(); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -3903,8 +3907,19 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   const field = fields?.find(f => f.id === fieldId);
   const isDanger = action === "delete";
 
-  const summary = action === "delete"
+  // People actions (communicate, note, interview) use action like "people_communicate"
+  const isPeopleAction = action?.startsWith?.("people_");
+  const peopleActionLabel = {
+    people_communicate: "communicate",
+    people_note:        "add note",
+    people_interview:   "schedule interview",
+  }[action] || action?.replace("people_","") || "";
+
+  const title  = isDanger ? "Confirm Bulk Delete" : isPeopleAction ? `Confirm Bulk Action` : "Confirm Bulk Edit";
+  const summary = isDanger
     ? [`Permanently delete ${count} ${objectName} records`, "This cannot be undone"]
+    : isPeopleAction
+    ? [`${peopleActionLabel.charAt(0).toUpperCase()+peopleActionLabel.slice(1)} ${count} ${objectName} records`]
     : [
         `Update ${count} ${objectName} records`,
         field ? `Set "${field.name}" to: ${value ?? "—"}` : "Apply field change to all selected records",
@@ -3929,7 +3944,7 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
           </div>
           <div>
             <div style={{ fontSize:16, fontWeight:800, color:"#111827" }}>
-              {isDanger ? "Confirm Bulk Delete" : "Confirm Bulk Edit"}
+              {title}
             </div>
             <div style={{ fontSize:12, color:"#6b7280", marginTop:1 }}>
               {count} records selected — above your warning threshold
@@ -3971,7 +3986,7 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
             style={{ flex:2, padding:"10px", borderRadius:9, border:"none",
               background: isDanger?"#ef4444":"#3b82f6", color:"white",
               fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-            {isDanger ? `Delete ${count} Records` : `Update ${count} Records`}
+            {isDanger ? `Delete ${count} Records` : isPeopleAction ? `Confirm — ${count} Records` : `Update ${count} Records`}
           </button>
         </div>
       </div>

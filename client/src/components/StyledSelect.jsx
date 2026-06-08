@@ -106,7 +106,7 @@ export default function StyledSelect({
 
       {/* Dropdown portal */}
       {open && createPortal(
-        <div ref={dropRef} style={{
+        <div ref={dropRef} data-styled-select-dropdown="true" style={{
           position: "fixed", top: pos.top, left: pos.left,
           width: dropdownWidth || Math.max(pos.width, 220),
           maxHeight, overflowY: "auto",
