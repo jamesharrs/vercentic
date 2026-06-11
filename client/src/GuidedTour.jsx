@@ -31,17 +31,17 @@ const STEPS = [
   },
   {
     id:"dashboard",
-    target:"[data-tour='main-content']",
+    target:null,
     title:"Your Dashboard",
     body:"Your home page shows live pipeline stats, hiring activity, open reqs by department, and a real-time activity feed. Every chart and stat is clickable — it takes you straight to the matching records.",
     placement:"center",
   },
   {
     id:"people-prompt",
-    target:null,
+    target:"[data-tour='nav-people']",
     title:"Exploring People",
     body:"Now let's look at your People list — click People in the left sidebar to open it.",
-    placement:"center",
+    placement:"right",
     waitForClick:"[data-tour='nav-people']",
     ctaLabel:null, // hide Next — user must click People
     hideNext:true,
