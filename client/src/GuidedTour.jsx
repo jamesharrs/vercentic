@@ -279,13 +279,29 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
     if (selector) {
       const el = document.querySelector(selector);
       if (el) {
-        // Lift element above overlay (9997) so it's visible and clickable
-        const cs = window.getComputedStyle(el);
-        el.dataset.tourOrigPosition = cs.position;
-        el.dataset.tourOrigZIndex   = cs.zIndex;
-        el.dataset.tourLifted       = "1";
-        if (cs.position === "static") el.style.position = "relative";
-        el.style.zIndex = "10000";
+        // Walk up to find the highest stacking context root that needs lifting.
+        // Stop at: position:fixed (nav), or positioned+z-index (top bar inside main-content).
+        // We skip the main-content div itself (isolation:auto during tour).
+        let liftEl = el;
+        let p = el.parentElement;
+        while (p && p !== document.body) {
+          const pcs = window.getComputedStyle(p);
+          if (pcs.position === "fixed") { liftEl = p; break; }
+          if (pcs.position !== "static" && pcs.zIndex !== "auto") {
+            // This is a stacking context — lift it so children escape the overlay
+            liftEl = p;
+            break;
+          }
+          p = p.parentElement;
+        }
+
+        // Lift above overlay (9997) so it's visible and clickable
+        const cs = window.getComputedStyle(liftEl);
+        liftEl.dataset.tourOrigPosition = cs.position;
+        liftEl.dataset.tourOrigZIndex   = cs.zIndex;
+        liftEl.dataset.tourLifted       = "1";
+        if (cs.position === "static") liftEl.style.position = "relative";
+        liftEl.style.zIndex = "10000";
 
         el.scrollIntoView({ behavior:"smooth", block:"center" });
         clearTimeout(scrollRef.current);
