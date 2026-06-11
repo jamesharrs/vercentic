@@ -272,6 +272,13 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
       delete prev.dataset.tourOrigZIndex;
     }
 
+    // Immediately clear spotlight when this step has no target
+    const hasTarget = step?.target || step?.waitForClick;
+    if (!hasTarget) {
+      setSpotRect(null);
+      setPos({ top:"50%", left:"50%", transform:"translate(-50%,-50%)" });
+    }
+
     if (step?.navigateTo && !navigated.current) {
       navigated.current = true;
       window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: step.navigateTo }));
