@@ -893,13 +893,25 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
         }
       } catch(e) { console.error("notif fetch failed", e); }
       try {
-        const rel = await api.get(`/release-notes`);
-        setReleases(Array.isArray(rel) ? rel : []);
+        // Cache release-notes for 5 min — they rarely change
+        const _rnCached = sessionStorage.getItem('vrc_rn_cache');
+        const _rnTs     = parseInt(sessionStorage.getItem('vrc_rn_ts') || '0', 10);
+        if (_rnCached && Date.now() - _rnTs < 5 * 60 * 1000) {
+          setReleases(JSON.parse(_rnCached));
+        } else {
+          const rel = await api.get(`/release-notes`);
+          const arr = Array.isArray(rel) ? rel : [];
+          setReleases(arr);
+          sessionStorage.setItem('vrc_rn_cache', JSON.stringify(arr));
+          sessionStorage.setItem('vrc_rn_ts', Date.now().toString());
+        }
       } catch(e) {}
     };
-    load();
-    const timer = setInterval(load, 30000);
-    return () => clearInterval(timer);
+    // Defer first load by 3s — notifications are non-critical and should not
+    // race with page-load requests (objects, records, environments).
+    const initial = setTimeout(load, 3000);
+    const timer = setInterval(load, 60000);
+    return () => { clearTimeout(initial); clearInterval(timer); };
   }, [userId]); // re-run after login
 
   useEffect(() => { const h = e => { if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
