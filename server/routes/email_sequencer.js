@@ -186,7 +186,14 @@ router.get('/send-log', (req,res) => {
   let log=getCol('email_send_log').sort((a,b)=>b.sent_at.localeCompare(a.sent_at));
   if(req.query.client_id) log=log.filter(l=>l.client_id===req.query.client_id);
   if(req.query.sequence_id) log=log.filter(l=>l.sequence_id===req.query.sequence_id);
-  res.json(log.slice(0,200));
+  // Enrich older log entries that were saved before sequence_name was stored
+  const sequences=getCol('email_sequences');
+  const enriched=log.slice(0,200).map(l=>{
+    if(l.sequence_name) return l;
+    const seq=sequences.find(s=>s.id===l.sequence_id);
+    return seq ? {...l, sequence_name:seq.name} : l;
+  });
+  res.json(enriched);
 });
 
 router.post('/send-log/:id/opened', (req,res) => {
@@ -284,10 +291,15 @@ async function fireMilestone(milestoneId, { client_id, email, client_name, admin
         .replace(/\{\{email\}\}/g, email || '')
         .replace(/\{\{login_url\}\}/g, login_url || '');
       try {
+        // logId defined below after result — pre-generate it here for pixel URL
+        const logId = uuidv4();
+        const _appUrl = process.env.APP_URL || 'https://talentos-production-4045.up.railway.app';
+        const _pixelUrl = `${_appUrl}/api/superadmin/sequencer/track-open?log_id=${logId}`;
+        const _trackedHtml = interpolate(template.body_html) + `<img src="${_pixelUrl}" width="1" height="1" alt="" style="display:none"/>`;
         const result = await messaging.sendEmail({
           to:       email,
           subject:  interpolate(firstStep.subject_override || template.subject),
-          html:     interpolate(template.body_html),
+          html:     _trackedHtml,
           text:     interpolate(template.body_text || ''),
           fromName: template.from_name,
           from:     template.from_email,
@@ -299,14 +311,18 @@ async function fireMilestone(milestoneId, { client_id, email, client_name, admin
           ? getCol('email_enrolments').find(e => e.client_id === client_id && e.sequence_id === seq.id)
           : null;
         const log = getCol('email_send_log');
+        const _appUrl2 = process.env.APP_URL || 'https://talentos-production-4045.up.railway.app';
+        const _trackedHtml2 = interpolate(template.body_html) + `<img src="${_appUrl2}/api/superadmin/sequencer/track-open?log_id=${logId}" width="1" height="1" alt="" style="display:none"/>`;
         log.push({
-          id:           uuidv4(),
+          id:           logId,
           enrolment_id: enr?.id || null,
           client_id:    client_id || null,
           sequence_id:  seq.id,
+          sequence_name:seq.name || null,
           step_id:      firstStep.id,
           to_email:     email,
           subject:      interpolate(firstStep.subject_override || template.subject),
+          body_html:    _trackedHtml2,
           status:       result.simulated ? 'simulated' : 'sent',
           sent_at:      now(),
         });

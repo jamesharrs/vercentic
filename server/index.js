@@ -312,6 +312,7 @@ const AUTH_EXEMPT = [
   '/superadmin', '/bot',
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
+  '/sequencer/track-open',           // open-tracking pixel (no auth — email clients fetch without credentials)
   '/records/by-number',  // used for URL routing before session is established
   '/cv-parse',
   '/comms/webhook',

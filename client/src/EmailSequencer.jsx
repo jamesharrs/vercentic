@@ -264,6 +264,7 @@ export default function EmailSequencer() {
   const [editTemplate, setEditTemplate] = useState(null);
   const [editSequence, setEditSequence] = useState(null);
   const [statsFor, setStatsFor] = useState(null);
+  const [previewLog, setPreviewLog] = useState(null);
   const [stats, setStats] = useState(null);
 
   const load = useCallback(async () => {
@@ -440,15 +441,22 @@ export default function EmailSequencer() {
           {sendLog.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:C.text3,fontSize:13}}>No emails sent yet</div>}
           <div style={{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
             {sendLog.slice(0,100).map((log,i)=>(
-              <div key={log.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:i<sendLog.length-1?`1px solid ${C.border}`:"none"}}>
+              <div key={log.id} onClick={()=>setPreviewLog(log)}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:i<sendLog.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.bg}
+                onMouseLeave={e=>e.currentTarget.style.background=""}>
                 <div style={{width:8,height:8,borderRadius:"50%",background:log.opened?C.green:C.text3,flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.subject}</div>
-                  <div style={{fontSize:11,color:C.text3,marginTop:2}}>To: {log.to_email} · {fmtDate(log.sent_at)}</div>
+                  <div style={{fontSize:11,color:C.text3,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+                    <span>To: {log.to_email} · {fmtDate(log.sent_at)}</span>
+                    {log.sequence_name && <span style={{padding:"1px 7px",borderRadius:99,background:C.accentLight||"#eef1ff",color:C.accent,fontWeight:700,fontSize:10}}>{log.sequence_name}</span>}
+                  </div>
                 </div>
-                <div style={{display:"flex",gap:6}}>
-                  {log.opened && <Badge color={C.green}>Opened</Badge>}
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {log.opened && <Badge color={C.green}>Opened {log.opened_at?fmtDate(log.opened_at):""}</Badge>}
                   {!log.opened && <Badge color={C.text3}>Sent</Badge>}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
               </div>
             ))}
@@ -456,7 +464,38 @@ export default function EmailSequencer() {
         </div>
       )}
 
-      {/* ── MODALS ── */}
+      {/* ── EMAIL PREVIEW MODAL ── */}
+      {previewLog && (
+        <div onClick={()=>setPreviewLog(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,width:"100%",maxWidth:700,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text1,marginBottom:4,wordBreak:"break-word"}}>{previewLog.subject}</div>
+                <div style={{fontSize:11,color:C.text3,display:"flex",gap:12,flexWrap:"wrap"}}>
+                  <span>To: {previewLog.to_email}</span>
+                  <span>Sent: {fmtDate(previewLog.sent_at)}</span>
+                  {previewLog.sequence_name && <span style={{padding:"1px 7px",borderRadius:99,background:C.accentLight||"#eef1ff",color:C.accent,fontWeight:700}}>{previewLog.sequence_name}</span>}
+                  {previewLog.opened
+                    ? <span style={{padding:"1px 7px",borderRadius:99,background:"#d1fae5",color:"#065f46",fontWeight:700}}>Opened {previewLog.opened_at?fmtDate(previewLog.opened_at):""}</span>
+                    : <span style={{padding:"1px 7px",borderRadius:99,background:C.border,color:C.text3,fontWeight:700}}>Not opened</span>}
+                </div>
+              </div>
+              <button onClick={()=>setPreviewLog(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:20,lineHeight:1,flexShrink:0}}>×</button>
+            </div>
+            {/* Body */}
+            <div style={{flex:1,overflow:"auto",padding:0}}>
+              {previewLog.body_html
+                ? <iframe srcDoc={previewLog.body_html} style={{width:"100%",height:480,border:"none",display:"block"}} title="Email preview" sandbox="allow-same-origin"/>
+                : <div style={{padding:32,textAlign:"center",color:C.text3,fontSize:13}}>
+                    Email body not available for emails sent before this feature was added.
+                  </div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* ── MODALS ── */}
       {editTemplate !== null && (
         <TemplateEditor
           template={editTemplate?.id ? editTemplate : null}
