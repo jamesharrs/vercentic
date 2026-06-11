@@ -296,8 +296,14 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             </div>
           )}
 
-          <input placeholder="Or paste URL…" value={editedProfile.logo_url||""} onChange={e=>setEditedProfile(p=>({...p,logo_url:e.target.value}))}
-            style={{width:"100%",padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:10,fontFamily:F,boxSizing:"border-box",color:C.text2}}/>
+          {/* Paste logo URL */}
+          <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5,padding:"6px 8px",borderRadius:8,border:`1.5px dashed ${C.border}`,background:"#F9FAFB",cursor:"text",width:"100%",boxSizing:"border-box"}}
+            onClick={e=>e.currentTarget.querySelector("input").focus()}>
+            <Ic n="link" s={11} c={C.text3}/>
+            <input placeholder="Paste logo URL…" value={editedProfile.logo_url||""} onChange={e=>setEditedProfile(p=>({...p,logo_url:e.target.value}))}
+              style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:10,fontFamily:F,color:C.text1,minWidth:0}}/>
+          </div>
+          <div style={{fontSize:9,color:C.text3,marginTop:3,textAlign:"center",letterSpacing:"0.02em"}}>or paste URL above</div>
         </div>
 
         {/* Company info */}
