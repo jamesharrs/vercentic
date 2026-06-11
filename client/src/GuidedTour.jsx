@@ -37,6 +37,7 @@ const STEPS = [
     body:"Your home page shows live pipeline stats, hiring activity, open reqs by department, and a real-time activity feed. Every chart and stat is clickable — it takes you straight to the matching records.",
     placement:"center",
     navigateTo:"dashboard",
+    dim:false,
   },
   {
     id:"people-prompt",
@@ -55,6 +56,7 @@ const STEPS = [
     title:"The People list",
     body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team.",
     placement:"center",
+    dim:false,
   },
   {
     id:"jobs",
@@ -356,7 +358,7 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
   return createPortal(
     <>
       <style>{`@keyframes tSlideIn{from{opacity:0;transform:translateY(8px) scale(0.97)}to{opacity:1;transform:none}}`}</style>
-      <Overlay spotRect={spotRect} dim={step?.dim !== false}/>
+      <Overlay spotRect={spotRect} dim={step?.dim === true}/>
       <Tooltip step={step} stepIndex={stepIndex} total={STEPS.length}
         onNext={next} onPrev={prev} onSkip={onClose}
         position={pos} isFirst={isFirst} isLast={isLast}/>
