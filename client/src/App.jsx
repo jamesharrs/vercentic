@@ -1611,7 +1611,7 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App({ onEnvReady }) {
   // ── ALL hooks must be called unconditionally before any early returns ────────
-  const { TourPortal, startTour } = useTour();
+  const { TourPortal, startTour, tourActive } = useTour();
   const { prefs, update } = useTheme();
   const { t, isRTL } = useI18n();
 
@@ -2840,7 +2840,7 @@ activeNavRef.current = activeNav;
       )}
 
       {/* Main content */}
-      <div data-tour="main-content" style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: "isolate" }}>
+      <div data-tour="main-content" style={{ marginLeft: NAV_W, flex: 1, height: "100vh", display: "flex", flexDirection: "column", background: "var(--t-bg)", paddingRight: copilotDocked ? 420 : historyOpen ? 300 : 0, paddingTop: selectedEnv?.is_sandbox ? 22 : 0, transition: "margin-left 0.2s cubic-bezier(0.4,0,0.2,1), padding-right 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden", position: "relative", isolation: tourActive ? "auto" : "isolate" }}>
         {/* Top bar */}
         <GlobalSearch selectedEnv={selectedEnv} navObjects={navObjects}
              showAchievements={!!(featAchievements && canGlobal('access_achievements'))}
