@@ -984,7 +984,7 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
   const OBJECT_COLORS = { people: "#3b5bdb", jobs: "#0ca678", "talent-pools": "#7c3aed" };
 
   return (
-    <div ref={ref} style={{ position: "relative", zIndex: 1000, flexShrink: 0, background: "var(--t-surface)", borderBottom: "1px solid var(--t-border)", padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+    <div ref={ref} data-tour="top-bar" style={{ position: "relative", zIndex: 1000, flexShrink: 0, background: "var(--t-surface)", borderBottom: "1px solid var(--t-border)", padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
 
       {/* Dashboard dropdown */}
       <div ref={dashRef} style={{ position: "relative", flexShrink: 0 }}>
@@ -2707,7 +2707,8 @@ activeNavRef.current = activeNav;
       <div
         onMouseEnter={() => navCollapsed && setNavHovered(true)}
         onMouseLeave={() => setNavHovered(false)}
-        style={{ width: NAV_W, background: "var(--t-nav-bg)", borderRight: "1px solid var(--t-border2)", display: "flex", flexDirection: "column", padding: "0 0 16px", position: "fixed", height: "100vh", top: 0, left: 0, zIndex: 100, overflowY: "hidden", overflowX: "hidden", transition: "width 0.2s cubic-bezier(0.4,0,0.2,1)" }}>
+        style={{ width: NAV_W, background: "var(--t-nav-bg)", borderRight: "1px solid var(--t-border2)", display: "flex", flexDirection: "column", padding: "0 0 16px", position: "fixed", height: "100vh", top: 0, left: 0, zIndex: 100, overflowY: "hidden", overflowX: "hidden", transition: "width 0.2s cubic-bezier(0.4,0,0.2,1)" }}
+        data-tour="nav-container">
         {/* Logo — click to toggle collapse */}
         <div
           style={{ padding: "0 12px", borderBottom: "1px solid var(--t-border2)", display: "flex", alignItems: "center", gap: 10, height: 56, flexShrink: 0, overflow: "hidden" }}>
