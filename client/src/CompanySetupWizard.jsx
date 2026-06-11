@@ -10,7 +10,6 @@ const C = {
 const F = "'DM Sans', -apple-system, sans-serif";
 const FW = "'Space Grotesk', sans-serif";
 
-// Vercentic logo — white version (matches LoginPage)
 const VIcon = ({ size = 28 }) => (
   <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
     <path d="M8 52 L40 36 L72 52 L40 68 Z" stroke="white" strokeWidth="2" strokeLinejoin="round" fill="none"/>
@@ -37,6 +36,9 @@ const PATHS = {
   sparkle:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17zM19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z",
   loader:"M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83",
   building:"M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+  palette:"M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 01-4.95-14.32A8 8 0 0112 4c4.42 0 8 3.58 8 8 0 1.1-.22 2.15-.6 3.12-.38.96-1.13 1.88-2.4 1.88-1.38 0-2-1-2-2V9.5c0-.28-.22-.5-.5-.5h-1c-.28 0-.5.22-.5.5V15c0 1.66 1.34 3 3 3 .97 0 1.84-.44 2.43-1.13A8 8 0 0112 20z",
+  link:"M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71",
+  type:"M4 6h16M4 12h16M4 18h7",
 };
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const d = PATHS[n]; if (!d) return null;
@@ -66,7 +68,6 @@ const StepIndicator = ({ steps, current }) => (
   <div style={{display:"flex",alignItems:"center",marginBottom:24,padding:"0 4px"}}>
     {steps.map((s,i)=>(
       <React.Fragment key={i}>
-        {/* Step circle + label */}
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
             background:i<current?C.green:i===current?C.accent:"#E5E7EB",
@@ -75,7 +76,6 @@ const StepIndicator = ({ steps, current }) => (
           </div>
           <div style={{fontSize:11,fontWeight:700,color:i===current?C.accent:i<current?C.green:C.text3,whiteSpace:"nowrap"}}>{s}</div>
         </div>
-        {/* Connector line */}
         {i<steps.length-1&&(
           <div style={{flex:1,height:2,background:i<current?C.green:"#E5E7EB",margin:"0 8px",minWidth:16,transition:"background 0.3s"}}/>
         )}
@@ -120,21 +120,37 @@ const LogoCandidate = ({ candidate, selected, onSelect }) => {
   return (
     <div onClick={() => loaded && onSelect(candidate.url)}
       title={candidate.label}
-      style={{ width:36,height:36,borderRadius:8,border:`1.5px solid ${selected?"#4361EE":"#E5E7EB"}`,
+      style={{ width:52,height:52,borderRadius:10,border:`2px solid ${selected?"#4361EE":"#E5E7EB"}`,
         background:selected?"#EEF0FD":"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",
-        overflow:"hidden",cursor:loaded?"pointer":"default",transition:"border-color 0.15s",
-        opacity:loaded?1:0.4 }}>
+        overflow:"hidden",cursor:loaded?"pointer":"default",transition:"all 0.15s",
+        opacity:loaded?1:0.4,
+        boxShadow:selected?"0 0 0 3px rgba(67,97,238,0.15)":"none",
+        transform:selected?"scale(1.05)":"scale(1)" }}>
       <img src={candidate.url} alt={candidate.label}
-        style={{width:"100%",height:"100%",objectFit:"contain",padding:3}}
+        style={{width:"100%",height:"100%",objectFit:"contain",padding:4}}
         onLoad={()=>setLoaded(true)}
         onError={()=>setFailed(true)}/>
     </div>
   );
 };
 
+// Swatch for brand kit colour picker
+const ColorSwatch = ({ color, label, onChange }) => (
+  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+    <label style={{position:"relative",cursor:"pointer"}}>
+      <div style={{width:40,height:40,borderRadius:10,background:color||"#E5E7EB",border:"1.5px solid rgba(0,0,0,0.1)",boxShadow:"0 1px 4px rgba(0,0,0,0.1)",transition:"transform 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}/>
+      <input type="color" value={color||"#4361EE"} onChange={e=>onChange(e.target.value)}
+        style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%",height:"100%"}}/>
+    </label>
+    <div style={{fontSize:9,color:C.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em",textAlign:"center",maxWidth:44,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>
+  </div>
+);
+
 export default function CompanySetupWizard({ environmentId, environmentName, onComplete, onSkip }) {
   const [step, setStep] = useState(0);
-  const [query, setQuery] = useState("");  // will be set after profile load
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -144,17 +160,36 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   const [editedProfile, setEditedProfile] = useState(null);
   const [selectedTemplates, setSelectedTemplates] = useState(new Set());
   const [selectedFields, setSelectedFields] = useState(new Set());
-  const STEPS = ["Search","Company Profile","Configure","Apply"];
+  const [createBrandKit, setCreateBrandKit] = useState(true);
 
-  // Pre-fill with existing company name if profile exists, otherwise blank
+  // Brand kit state — pre-filled from research data
+  const [brandKit, setBrandKit] = useState({
+    name:"", primaryColor:"#4361EE", secondaryColor:"#7C3AED",
+    accentColor:"#F79009", bgColor:"#FFFFFF", textColor:"#0F1729",
+    fontFamily:"Inter", logo_url:"",
+  });
+
+  const STEPS = ["Search","Company Profile","Configure","Brand Kit","Apply"];
+
   useEffect(() => {
     if (!environmentId) return;
     api.get(`/company-research?environment_id=${environmentId}`)
-      .then(data => {
-        if (data?.name) setQuery(data.name);
-      })
+      .then(data => { if (data?.name) setQuery(data.name); })
       .catch(() => {});
   }, [environmentId]);
+
+  // Sync brand kit when profile loads/changes
+  useEffect(() => {
+    if (!editedProfile) return;
+    setBrandKit(prev => ({
+      ...prev,
+      name: editedProfile.name || prev.name,
+      logo_url: editedProfile.logo_url || prev.logo_url,
+      primaryColor: editedProfile.brand_color || prev.primaryColor,
+      company_name: editedProfile.name || prev.company_name,
+      company_website: editedProfile.website || prev.company_website,
+    }));
+  }, [editedProfile]);
 
   const handleResearch = async () => {
     if (!query.trim()) return;
@@ -169,48 +204,51 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       setSelectedTemplates(new Set((data.email_templates||[]).map((_,i)=>i)));
       setSelectedFields(new Set((data.suggested_fields||[]).map((_,i)=>i)));
       setStep(1);
-      // AUTO-SAVE draft profile immediately so Settings page survives refresh
       api.post('/company-research/save', {
-        environment_id: environmentId,
-        profile: data.profile,
-        email_templates: [],
-        apply_templates: false,
+        environment_id: environmentId, profile: data.profile,
+        email_templates: [], apply_templates: false,
       }).catch(e => console.warn('[Wizard] draft save failed:', e));
     } catch(e) { setError(e.message||"Research failed. Please try again."); }
     finally { setLoading(false); }
   };
 
   const handleApply = async () => {
-    setSaving(true);
+    setSaving(true); setError(null);
     try {
       const selectedTpls = emailTemplates.filter((_,i)=>selectedTemplates.has(i));
       await api.post('/company-research/save', {
         environment_id: environmentId, profile: editedProfile,
         email_templates: selectedTpls, apply_templates: selectedTpls.length > 0,
       });
-      setStep(3);
+      // Create brand kit if toggled on
+      if (createBrandKit && brandKit.name) {
+        try {
+          await api.post('/brand-kits', {
+            ...brandKit,
+            environment_id: environmentId,
+            is_default: true,
+            ai_generated: true,
+            source: 'setup_wizard',
+          });
+        } catch(bkErr) { console.warn('[Wizard] Brand kit creation failed:', bkErr); }
+      }
+      setStep(4);
     } catch(e) { setError(e.message); }
     finally { setSaving(false); }
   };
 
-  // Step 0: Search
+  // ── Step 0: Search ─────────────────────────────────────────────────────────
   if (step===0) return (
     <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 32px",fontFamily:F,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#1a1a2e 0%,#3b5bdb 100%)"}}>
-      {/* Radial glow — matches login page */}
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 20% 30%,rgba(99,102,241,0.35) 0%,transparent 55%),radial-gradient(ellipse at 80% 70%,rgba(67,97,238,0.25) 0%,transparent 50%)",pointerEvents:"none"}}/>
-      {/* Subtle grid overlay */}
       <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px)",backgroundSize:"60px 60px",pointerEvents:"none"}}/>
-
       <div style={{maxWidth:560,width:"100%",textAlign:"center",position:"relative",zIndex:1}}>
-        {/* Vercentic logo */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:32}}>
           <VIcon size={36}/>
           <span style={{fontFamily:FW,fontSize:22,fontWeight:700,letterSpacing:"-0.5px",color:"white"}}>Vercentic</span>
         </div>
-
         <h1 style={{fontSize:30,fontWeight:800,color:"white",margin:"0 0 12px",fontFamily:FW,letterSpacing:"-0.5px"}}>Set up your workspace</h1>
         <p style={{fontSize:15,color:"rgba(255,255,255,0.6)",lineHeight:1.7,margin:"0 0 40px"}}>Enter your company name and our AI will research your organisation — finding your logo, locations, EVP, and setting up personalised email templates.</p>
-
         <div style={{display:"flex",gap:12,background:"rgba(255,255,255,0.1)",borderRadius:16,padding:8,border:"1.5px solid rgba(255,255,255,0.15)",backdropFilter:"blur(10px)"}}>
           <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleResearch()}
             placeholder="Enter your company name…" autoFocus
@@ -220,7 +258,6 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             <Ic n="sparkle" s={16} c="white"/>Research
           </button>
         </div>
-
         {loading&&<PulseLoader/>}
         {error&&<div style={{marginTop:20,padding:"12px 16px",borderRadius:10,background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",color:"#fca5a5",fontSize:13}}>{error}</div>}
         {onSkip&&!loading&&<button onClick={onSkip} style={{marginTop:24,background:"none",border:"none",color:"rgba(255,255,255,0.4)",fontSize:13,cursor:"pointer",fontFamily:F}}>Skip for now →</button>}
@@ -228,26 +265,29 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     </div>
   );
 
-  // Step 1: Review profile
+  // ── Step 1: Company Profile ────────────────────────────────────────────────
   if (step===1&&editedProfile) return (
     <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={1}/>
       <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:24}}>
 
-        {/* Logo picker */}
-        <div style={{flexShrink:0}}>
+        {/* Logo picker — left column */}
+        <div style={{flexShrink:0,width:88}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Logo</div>
-          {/* Selected logo preview */}
-          <div style={{width:80,height:80,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",
-            display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:8}}>
+
+          {/* Preview box — clicking a candidate updates this */}
+          <div style={{width:88,height:88,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",
+            display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:10,
+            boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
             {editedProfile.logo_url
-              ? <img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:8}}
-                  onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="flex");}}/>
+              ? <img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:10}}
+                  onError={e=>{e.target.style.display="none";}}/>
               : <Ic n="building" s={32} c={C.text3}/>}
           </div>
-          {/* Candidate thumbnails */}
+
+          {/* Candidate thumbnails — click to set preview */}
           {(editedProfile.logo_candidates||[]).length > 0 && (
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,width:80}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,width:88,marginBottom:8}}>
               {(editedProfile.logo_candidates||[]).map((cand,i)=>(
                 <LogoCandidate key={i} candidate={cand}
                   selected={editedProfile.logo_url===cand.url}
@@ -255,9 +295,12 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
               ))}
             </div>
           )}
+
           <input placeholder="Or paste URL…" value={editedProfile.logo_url||""} onChange={e=>setEditedProfile(p=>({...p,logo_url:e.target.value}))}
-            style={{marginTop:8,width:80,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:10,fontFamily:F,boxSizing:"border-box",color:C.text2}}/>
+            style={{width:"100%",padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontSize:10,fontFamily:F,boxSizing:"border-box",color:C.text2}}/>
         </div>
+
+        {/* Company info */}
         <div style={{flex:1}}>
           <h2 style={{fontSize:22,fontWeight:800,color:C.text1,margin:"0 0 4px"}}>{editedProfile.name}</h2>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
@@ -269,6 +312,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           <p style={{fontSize:14,color:C.text2,lineHeight:1.6,margin:0}}>{editedProfile.description}</p>
         </div>
       </div>
+
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:28}}>
         <div style={{padding:20,borderRadius:14,border:`1.5px solid ${C.border}`,background:C.card,gridColumn:"1 / -1"}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:12}}>Employer Value Proposition</div>
@@ -287,6 +331,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(editedProfile.typical_roles||[]).map((r,i)=><span key={i} style={{padding:"4px 10px",borderRadius:99,background:"#F3F4F6",color:C.text2,fontSize:12}}>{r}</span>)}</div>
         </div>
       </div>
+
       <div style={{padding:"10px 16px",borderRadius:10,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E",marginBottom:28}}>
         Review the information above — researched by AI and may need adjustments. You can edit everything in Settings after setup.
       </div>
@@ -297,16 +342,20 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     </div>
   );
 
-  // Step 2: Configure
+  // ── Step 2: Configure ──────────────────────────────────────────────────────
   if (step===2) return (
     <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={2}/>
       <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Configure your workspace</h2>
       <p style={{fontSize:14,color:C.text3,margin:"0 0 32px"}}>Choose which AI-generated content to apply. You can change these any time in Settings.</p>
+
       {emailTemplates.length>0&&(
         <div style={{marginBottom:32}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <div><div style={{fontSize:14,fontWeight:700,color:C.text1}}>✉️ Email Templates</div><div style={{fontSize:12,color:C.text3}}>AI-generated in your company's voice</div></div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text1}}>✉️ Email Templates</div>
+              <div style={{fontSize:12,color:C.text3}}>AI-generated in your company's voice</div>
+            </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setSelectedTemplates(new Set(emailTemplates.map((_,i)=>i)))} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",fontFamily:F}}>All</button>
               <span style={{color:C.border}}>|</span>
@@ -318,10 +367,14 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           </div>
         </div>
       )}
+
       {suggestedFields.length>0&&(
         <div style={{marginBottom:32}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <div><div style={{fontSize:14,fontWeight:700,color:C.text1}}>📋 Suggested Fields</div><div style={{fontSize:12,color:C.text3}}>Industry-specific fields for your People records</div></div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text1}}>📋 Suggested Fields</div>
+              <div style={{fontSize:12,color:C.text3}}>Industry-specific fields for your People records</div>
+            </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setSelectedFields(new Set(suggestedFields.map((_,i)=>i)))} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",fontFamily:F}}>All</button>
               <span style={{color:C.border}}>|</span>
@@ -333,9 +386,94 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           </div>
         </div>
       )}
+
       {error&&<div style={{padding:"12px 16px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",color:C.red,fontSize:13,marginBottom:20}}>{error}</div>}
       <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
         <button onClick={()=>setStep(1)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
+        <button onClick={()=>setStep(3)} style={{padding:"10px 24px",borderRadius:10,border:"none",background:C.accent,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F}}>Next → Brand Kit</button>
+      </div>
+    </div>
+  );
+
+  // ── Step 3: Brand Kit ──────────────────────────────────────────────────────
+  if (step===3) return (
+    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
+      <StepIndicator steps={STEPS} current={3}/>
+      <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Brand Kit</h2>
+      <p style={{fontSize:14,color:C.text3,margin:"0 0 24px"}}>We've pre-filled your brand colours and logo from our research. Adjust anything before saving to Brand Kits.</p>
+
+      {/* Toggle */}
+      <label style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:12,border:`1.5px solid ${createBrandKit?C.accent:C.border}`,background:createBrandKit?C.accentLight:C.card,cursor:"pointer",marginBottom:24,transition:"all 0.15s"}}>
+        <input type="checkbox" checked={createBrandKit} onChange={e=>setCreateBrandKit(e.target.checked)} style={{accentColor:C.accent,width:18,height:18}}/>
+        <div>
+          <div style={{fontSize:14,fontWeight:700,color:C.text1}}>Create brand kit for {editedProfile?.name||"this workspace"}</div>
+          <div style={{fontSize:12,color:C.text3}}>Saved to Settings → Brand Kits. Used for portals, emails and career sites.</div>
+        </div>
+      </label>
+
+      {createBrandKit && (
+        <>
+          {/* Logo preview + name */}
+          <div style={{display:"flex",alignItems:"center",gap:16,padding:"16px",borderRadius:12,background:"#F9FAFB",border:`1.5px solid ${C.border}`,marginBottom:24}}>
+            <div style={{width:60,height:60,borderRadius:12,border:`1.5px solid ${C.border}`,background:"white",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+              {brandKit.logo_url
+                ? <img src={brandKit.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:6}} onError={e=>e.target.style.display="none"}/>
+                : <Ic n="building" s={28} c={C.text3}/>}
+            </div>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:4}}>Kit Name</label>
+              <input value={brandKit.name} onChange={e=>setBrandKit(p=>({...p,name:e.target.value}))}
+                placeholder={`${editedProfile?.name||""} Brand Kit`}
+                style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:14,fontFamily:F,color:C.text1,boxSizing:"border-box",outline:"none"}}/>
+            </div>
+          </div>
+
+          {/* Colour swatches */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>
+              <Ic n="palette" s={15} c={C.accent}/> Brand Colours
+            </div>
+            <div style={{fontSize:12,color:C.text3,marginBottom:14}}>Click any swatch to change the colour.</div>
+            <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
+              <ColorSwatch color={brandKit.primaryColor}   label="Primary"   onChange={v=>setBrandKit(p=>({...p,primaryColor:v}))}/>
+              <ColorSwatch color={brandKit.secondaryColor} label="Secondary" onChange={v=>setBrandKit(p=>({...p,secondaryColor:v}))}/>
+              <ColorSwatch color={brandKit.accentColor}    label="Accent"    onChange={v=>setBrandKit(p=>({...p,accentColor:v}))}/>
+              <ColorSwatch color={brandKit.bgColor}        label="Background" onChange={v=>setBrandKit(p=>({...p,bgColor:v}))}/>
+              <ColorSwatch color={brandKit.textColor}      label="Text"      onChange={v=>setBrandKit(p=>({...p,textColor:v}))}/>
+            </div>
+          </div>
+
+          {/* Font */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+              <Ic n="type" s={15} c={C.accent}/> Font Family
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {["Inter","DM Sans","Space Grotesk","Geist","Roboto","Poppins","Lato","Nunito"].map(font=>(
+                <button key={font} onClick={()=>setBrandKit(p=>({...p,fontFamily:font}))}
+                  style={{padding:"6px 14px",borderRadius:8,border:`1.5px solid ${brandKit.fontFamily===font?C.accent:C.border}`,background:brandKit.fontFamily===font?C.accentLight:"transparent",color:brandKit.fontFamily===font?C.accent:C.text2,fontSize:13,fontWeight:brandKit.fontFamily===font?700:400,cursor:"pointer",fontFamily:font,transition:"all 0.1s"}}>
+                  {font}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preview strip */}
+          <div style={{padding:16,borderRadius:12,border:`1.5px solid ${C.border}`,background:brandKit.bgColor||"#fff",marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+              {brandKit.logo_url&&<img src={brandKit.logo_url} alt="" style={{height:24,maxWidth:80,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>}
+              <span style={{fontSize:16,fontWeight:700,color:brandKit.primaryColor,fontFamily:brandKit.fontFamily}}>{brandKit.name||editedProfile?.name}</span>
+            </div>
+            <p style={{fontSize:13,color:brandKit.textColor,fontFamily:brandKit.fontFamily,margin:"0 0 12px",lineHeight:1.5}}>This is how your brand will look in emails and portals.</p>
+            <button style={{padding:"8px 18px",borderRadius:8,border:"none",background:brandKit.primaryColor,color:"white",fontSize:13,fontWeight:600,fontFamily:brandKit.fontFamily,cursor:"default"}}>Primary Button</button>
+            <button style={{marginLeft:8,padding:"8px 18px",borderRadius:8,border:`1.5px solid ${brandKit.accentColor}`,background:"transparent",color:brandKit.accentColor,fontSize:13,fontWeight:600,fontFamily:brandKit.fontFamily,cursor:"default"}}>Accent Button</button>
+          </div>
+        </>
+      )}
+
+      {error&&<div style={{padding:"12px 16px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",color:C.red,fontSize:13,marginBottom:20}}>{error}</div>}
+      <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
+        <button onClick={()=>setStep(2)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
         <button onClick={handleApply} disabled={saving} style={{padding:"10px 28px",borderRadius:10,border:"none",background:C.green,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:8}}>
           {saving?<><Ic n="loader" s={14} c="white"/>Applying…</>:<><Ic n="check" s={14} c="white"/>Apply & Finish</>}
         </button>
@@ -343,8 +481,8 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     </div>
   );
 
-  // Step 3: Success
-  if (step===3) return (
+  // ── Step 4: Success ────────────────────────────────────────────────────────
+  if (step===4) return (
     <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center",background:"#ffffff",minHeight:"100%"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
         <Ic n="check" s={36} c={C.green}/>
@@ -354,8 +492,13 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
         Your workspace has been personalised with your company's brand, locations, EVP, and templates.
         The AI Copilot will now use this context when writing emails and job descriptions.
       </p>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:32}}>
-        {[{label:"Locations",value:(editedProfile?.locations||[]).length,icon:"map"},{label:"Templates",value:selectedTemplates.size,icon:"mail"},{label:"Fields Added",value:selectedFields.size,icon:"star"}].map((s,i)=>(
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:32}}>
+        {[
+          {label:"Locations",    value:(editedProfile?.locations||[]).length, icon:"map"},
+          {label:"Templates",    value:selectedTemplates.size,                icon:"mail"},
+          {label:"Fields Added", value:selectedFields.size,                   icon:"star"},
+          {label:"Brand Kit",    value:createBrandKit?"✓":"—",                icon:"palette"},
+        ].map((s,i)=>(
           <div key={i} style={{padding:"16px 12px",borderRadius:12,background:C.card,border:`1.5px solid ${C.border}`}}>
             <Ic n={s.icon} s={20} c={C.accent}/>
             <div style={{fontSize:24,fontWeight:800,color:C.text1,margin:"8px 0 4px"}}>{s.value}</div>
