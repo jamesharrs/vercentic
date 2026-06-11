@@ -48,7 +48,7 @@ const STEPS = [
   },
   {
     id:"people-list",
-    target:"[data-tour='main-content']",
+    target:null,
     title:"The People list",
     body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team. Bulk-select rows for mass edits or exports.",
     placement:"center",
@@ -121,11 +121,11 @@ function resolvePos(rect, placement, tw = 360, th = 240) {
 // ─── Overlay — four bands leave a transparent window over the target ──────────
 function Overlay({ spotRect }) {
   const BG = "rgba(10,14,33,0.82)";
-  const base = { position:"fixed", zIndex:9997, background:BG, pointerEvents:"none" };
+  const base = { position:"fixed", zIndex:500, background:BG, pointerEvents:"none" };
   if (!spotRect) return <div style={{ ...base, inset:0, backdropFilter:"blur(2px)" }} />;
   const { x, y, w, h } = spotRect;
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:9997, pointerEvents:"none" }}>
+    <div style={{ position:"fixed", inset:0, zIndex:500, pointerEvents:"none" }}>
       <div style={{ ...base, top:0,   left:0,   right:0,  height:y }}/>
       <div style={{ ...base, top:y+h, left:0,   right:0,  bottom:0 }}/>
       <div style={{ ...base, top:y,   left:0,   width:x,  height:h }}/>
@@ -136,7 +136,7 @@ function Overlay({ spotRect }) {
         borderRadius:16,
         border:"2px solid rgba(67,97,238,0.85)",
         boxShadow:"0 0 0 4px rgba(67,97,238,0.12), 0 0 28px rgba(67,97,238,0.4)",
-        zIndex:9998, pointerEvents:"none",
+        zIndex:502, pointerEvents:"none",
       }}/>
     </div>
   );
@@ -163,7 +163,7 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
   const showBack = !isFirst && !step.isDone;
   return (
     <div style={{
-      position:"fixed", zIndex:9999, width:360, ...position,
+      position:"fixed", zIndex:503, width:360, ...position,
       background:"linear-gradient(135deg,#0d1117 0%,#0f1629 100%)",
       border:"1px solid rgba(67,97,238,0.25)", borderRadius:18,
       boxShadow:"0 24px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04) inset",
@@ -289,11 +289,16 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
 
         el.scrollIntoView({ behavior:"smooth", block:"center" });
         clearTimeout(scrollRef.current);
-        scrollRef.current = setTimeout(compute, 350);
+        // Use longer delay for top-bar elements (already visible, but dimensions
+        // may not be settled until after first paint transition completes)
+        const delay = selector.includes("search") ? 200 : 350;
+        scrollRef.current = setTimeout(compute, delay);
         return;
       }
     }
-    compute();
+    // No element found — defer compute so React finishes painting before we read positions
+    clearTimeout(scrollRef.current);
+    scrollRef.current = setTimeout(compute, 100);
   }, [stepIndex, active, compute]);
 
   useEffect(() => {
