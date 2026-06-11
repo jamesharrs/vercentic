@@ -1,18 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 
-// ─── Steps ────────────────────────────────────────────────────────────────────
-// navigateTo: navId   → dispatch talentos:navigate before showing the step
-// waitForClick: sel   → hide Next; advance when user clicks the selector
-// waitForEvent: name  → advance when window event fires
-// hideNext: true      → hide the Next button (combined with wait*)
 const STEPS = [
   {
     id:"welcome",
     target:null,
     title:"Welcome to Vercentic",
     body:"This quick tour shows you the key areas of the platform in about 2 minutes. You can skip at any time and restart from the Help centre.",
-    icon:"✦",
+    icon:"\u2746",
     placement:"center",
     ctaLabel:"Start the tour",
   },
@@ -21,7 +16,7 @@ const STEPS = [
     target:"[data-tour='sidebar-nav']",
     title:"Navigation",
     body:"The left sidebar is your main navigation. Records holds your People, Jobs and Talent Pools. Tools gives you Campaigns, Reports, Search and more.",
-    placement:"right",
+    placement:"bottom",
     navigateTo:"dashboard",
   },
   {
@@ -45,7 +40,7 @@ const STEPS = [
     target:"[data-tour='nav-people']",
     title:"Exploring People",
     body:"Now let's look at your People list — click People in the left sidebar to open it.",
-    placement:"right",
+    placement:"bottom",
     navigateTo:"dashboard",
     waitForClick:"[data-tour='nav-people']",
     hideNext:true,
@@ -54,7 +49,7 @@ const STEPS = [
     id:"people-list",
     target:null,
     title:"The People list",
-    body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team. Bulk-select rows for mass edits or exports.",
+    body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team.",
     placement:"center",
   },
   {
@@ -62,7 +57,7 @@ const STEPS = [
     target:"[data-tour='nav-jobs']",
     title:"Jobs",
     body:"Manage every open role from here. The linked pipeline bar at the top of each job shows all candidates by stage — click a count to expand and advance candidates without leaving the page.",
-    placement:"right",
+    placement:"bottom",
   },
   {
     id:"copilot-prompt",
@@ -82,27 +77,30 @@ const STEPS = [
   },
   {
     id:"done",
-    target:"[data-tour='nav-logo']",
+    target:null,
     title:"You're all set!",
     body:"Click the Vercentic logo any time to return to your dashboard. Find detailed guides in the Help section — and remember the Copilot is always there if you get stuck.",
-    icon:"✓",
-    placement:"right",
+    icon:"\u2713",
+    placement:"center",
     isDone:true,
     ctaLabel:"Start exploring",
   },
 ];
 
 const PAD = 10;
+const DBG = false;
+function log(...a) { if(DBG) console.log('[Tour]',...a); }
 
 function getSpotRect(selector) {
   if (!selector) return null;
   const el = document.querySelector(selector);
   if (!el) return null;
   const r = el.getBoundingClientRect();
-  return { x: r.left - PAD, y: r.top - PAD, w: r.width + PAD * 2, h: r.height + PAD * 2 };
+  if (r.width === 0) return null;
+  return { x: r.left - PAD, y: r.top - PAD, w: r.width + PAD*2, h: r.height + PAD*2 };
 }
 
-function resolvePos(rect, placement, tw = 360, th = 240) {
+function resolvePos(rect, placement, tw=360, th=240) {
   if (!rect || placement === "center") return { top:"50%", left:"50%", transform:"translate(-50%,-50%)" };
   const vw = window.innerWidth, vh = window.innerHeight, G = 20;
   const fits = {
@@ -112,12 +110,13 @@ function resolvePos(rect, placement, tw = 360, th = 240) {
     top:    rect.y - G - th > 0,
   };
   let p = placement;
-  if (!fits[p]) p = ["right","bottom","left","top"].find(x => fits[x]) || "right";
-  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-  if (p === "right")  return { top: Math.min(Math.max(cy - th/2, G), vh - th - G), left: rect.x + rect.w + G };
-  if (p === "left")   return { top: Math.min(Math.max(cy - th/2, G), vh - th - G), left: Math.max(rect.x - tw - G, G) };
-  if (p === "bottom") return { top: rect.y + rect.h + G, left: Math.min(Math.max(cx - tw/2, G), vw - tw - G) };
-  return              { top: Math.max(rect.y - th - G, G), left: Math.min(Math.max(cx - tw/2, G), vw - tw - G) };
+  if (!fits[p]) p = ["right","bottom","left","top"].find(x => fits[x]) || "center";
+  if (p === "center") return { top:"50%", left:"50%", transform:"translate(-50%,-50%)" };
+  const cx = rect.x + rect.w/2, cy = rect.y + rect.h/2;
+  if (p === "right")  return { top: Math.min(Math.max(cy-th/2, G), vh-th-G), left: rect.x+rect.w+G };
+  if (p === "left")   return { top: Math.min(Math.max(cy-th/2, G), vh-th-G), left: Math.max(rect.x-tw-G, G) };
+  if (p === "bottom") return { top: rect.y+rect.h+G, left: Math.min(Math.max(cx-tw/2, G), vw-tw-G) };
+  return { top: Math.max(rect.y-th-G, G), left: Math.min(Math.max(cx-tw/2, G), vw-tw-G) };
 }
 
 function Overlay({ spotRect }) {
@@ -127,14 +126,13 @@ function Overlay({ spotRect }) {
   const { x, y, w, h } = spotRect;
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9997, pointerEvents:"none" }}>
-      <div style={{ ...base, top:0,   left:0,   right:0,  height:y }}/>
-      <div style={{ ...base, top:y+h, left:0,   right:0,  bottom:0 }}/>
-      <div style={{ ...base, top:y,   left:0,   width:x,  height:h }}/>
-      <div style={{ ...base, top:y,   left:x+w, right:0,  height:h }}/>
+      <div style={{ ...base, top:0,   left:0, right:0,  height:y }}/>
+      <div style={{ ...base, top:y+h, left:0, right:0,  bottom:0 }}/>
+      <div style={{ ...base, top:y,   left:0, width:x,  height:h }}/>
+      <div style={{ ...base, top:y,   left:x+w, right:0, height:h }}/>
       <div style={{
         position:"fixed", top:y-3, left:x-3, width:w+6, height:h+6,
-        borderRadius:16,
-        border:"2px solid rgba(67,97,238,0.85)",
+        borderRadius:12, border:"2px solid rgba(67,97,238,0.85)",
         boxShadow:"0 0 0 4px rgba(67,97,238,0.12), 0 0 28px rgba(67,97,238,0.4)",
         zIndex:9998, pointerEvents:"none",
       }}/>
@@ -145,11 +143,11 @@ function Overlay({ spotRect }) {
 function Dots({ total, current }) {
   return (
     <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-      {Array.from({ length:total }).map((_,i) => (
+      {Array.from({length:total}).map((_,i) => (
         <div key={i} style={{
-          width: i === current ? 18 : 6, height:6, borderRadius:99,
-          background: i === current ? "#4361EE" : i < current ? "rgba(67,97,238,0.4)" : "rgba(255,255,255,0.15)",
-          transition:"all 0.3s cubic-bezier(0.4,0,0.2,1)",
+          width: i===current ? 18 : 6, height:6, borderRadius:99,
+          background: i===current ? "#4361EE" : i<current ? "rgba(67,97,238,0.4)" : "rgba(255,255,255,0.15)",
+          transition:"all 0.3s",
         }}/>
       ))}
     </div>
@@ -157,8 +155,6 @@ function Dots({ total, current }) {
 }
 
 function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isFirst }) {
-  const showNext = !step.hideNext;
-  const showBack = !isFirst && !step.isDone;
   return (
     <div style={{
       position:"fixed", zIndex:9999, width:360, ...position,
@@ -183,12 +179,10 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
               <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:"#ffffff", lineHeight:1.2 }}>{step.title}</h3>
             </div>
           </div>
-          <button
-            onClick={onSkip}
-            title="Skip tour"
+          <button onClick={onSkip} title="Skip tour"
             style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 6px", borderRadius:6, color:"rgba(255,255,255,0.35)", fontSize:18, lineHeight:1, flexShrink:0, marginTop:-2 }}
-            onMouseEnter={e => e.currentTarget.style.color="rgba(255,255,255,0.7)"}
-            onMouseLeave={e => e.currentTarget.style.color="rgba(255,255,255,0.35)"}
+            onMouseEnter={e=>e.currentTarget.style.color="rgba(255,255,255,0.7)"}
+            onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.35)"}
           >x</button>
         </div>
         <p style={{ margin:"0 0 20px", fontSize:13.5, color:"rgba(255,255,255,0.65)", lineHeight:1.65 }}>{step.body}</p>
@@ -201,21 +195,17 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <Dots total={total} current={stepIndex}/>
           <div style={{ display:"flex", gap:8 }}>
-            {showBack && (
-              <button
-                onClick={onPrev}
+            {!isFirst && !step.isDone && (
+              <button onClick={onPrev}
                 style={{ padding:"8px 16px", borderRadius:9, border:"1px solid rgba(255,255,255,0.12)", background:"transparent", color:"rgba(255,255,255,0.6)", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
-                onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.06)"; e.currentTarget.style.color="#fff"; }}
-                onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(255,255,255,0.6)"; }}
-              >Back</button>
+                onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)";e.currentTarget.style.color="#fff";}}
+                onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,0.6)";}}>Back</button>
             )}
-            {showNext && (
-              <button
-                onClick={onNext}
+            {!step.hideNext && (
+              <button onClick={onNext}
                 style={{ padding:"8px 20px", borderRadius:9, border:"none", background:"linear-gradient(135deg,#4361EE,#6d28d9)", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 4px 14px rgba(67,97,238,0.35)" }}
-                onMouseEnter={e => { e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow="0 6px 20px rgba(67,97,238,0.5)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="0 4px 14px rgba(67,97,238,0.35)"; }}
-              >
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(67,97,238,0.5)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 4px 14px rgba(67,97,238,0.35)";}}>
                 {step.ctaLabel || (step.isDone ? "Finish" : "Next")}
               </button>
             )}
@@ -226,7 +216,7 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
   );
 }
 
-export default function GuidedTour({ active, onClose, initialStep = 0 }) {
+export default function GuidedTour({ active, onClose, initialStep=0 }) {
   const [stepIndex, setStepIndex] = useState(initialStep);
   const [spotRect,  setSpotRect]  = useState(null);
   const [pos,       setPos]       = useState({ top:"50%", left:"50%", transform:"translate(-50%,-50%)" });
@@ -245,6 +235,11 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
       return;
     }
     const r = getSpotRect(selector);
+    if (!r) {
+      setSpotRect(null);
+      setPos({ top:"50%", left:"50%", transform:"translate(-50%,-50%)" });
+      return;
+    }
     setSpotRect(r);
     setPos(resolvePos(r, step.placement));
   }, [step]);
@@ -252,7 +247,7 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
   useEffect(() => {
     if (!active) return;
 
-    // Restore any previously-lifted stacking context
+    // Restore any previously-lifted element
     const prev = document.querySelector("[data-tour-lifted]");
     if (prev) {
       prev.style.zIndex = prev.dataset.tourOrigZIndex || "";
@@ -260,24 +255,24 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
       delete prev.dataset.tourOrigZIndex;
     }
 
-    // Navigate to the right page (reuses existing talentos:navigate listener in App.jsx)
+    // Navigate to the right page
     if (step?.navigateTo && !navigated.current) {
       navigated.current = true;
       window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: step.navigateTo }));
     }
 
-    // Find and lift the target's stacking context root above the overlay
+    // Find target and lift its stacking context root
     const selector = step?.target || step?.waitForClick || null;
     if (selector) {
       const el = document.querySelector(selector);
       if (el) {
+        // Walk up to find position:fixed or positioned+z-index ancestor
         let liftEl = el;
         let p = el.parentElement;
         while (p && p !== document.body) {
           const pcs = window.getComputedStyle(p);
           if (pcs.position === "fixed" || (pcs.position !== "static" && pcs.zIndex !== "auto")) {
-            liftEl = p;
-            break;
+            liftEl = p; break;
           }
           p = p.parentElement;
         }
@@ -294,7 +289,7 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
 
     clearTimeout(scrollRef.current);
     scrollRef.current = setTimeout(compute, 150);
-  }, [stepIndex, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stepIndex, active]); // eslint-disable-line
 
   useEffect(() => { navigated.current = false; }, [stepIndex]);
 
@@ -303,12 +298,13 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
     return () => window.removeEventListener("resize", compute);
   }, [compute]);
 
+  // Wait-for-click
   useEffect(() => {
     if (!active || !step?.waitForClick) return;
     const attach = () => {
       const el = document.querySelector(step.waitForClick);
       if (!el) return null;
-      const handler = () => setStepIndex(i => i + 1);
+      const handler = () => setStepIndex(i => i+1);
       el.addEventListener("click", handler);
       return () => el.removeEventListener("click", handler);
     };
@@ -316,14 +312,15 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
     if (cleanup) return cleanup;
     const t = setTimeout(() => attach(), 600);
     return () => clearTimeout(t);
-  }, [active, stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, stepIndex]); // eslint-disable-line
 
+  // Wait-for-event
   useEffect(() => {
     if (!active || !step?.waitForEvent) return;
-    const handler = () => setStepIndex(i => i + 1);
+    const handler = () => setStepIndex(i => i+1);
     window.addEventListener(step.waitForEvent, handler);
     return () => window.removeEventListener(step.waitForEvent, handler);
-  }, [active, stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, stepIndex]); // eslint-disable-line
 
   if (!active) {
     const prev = document.querySelector("[data-tour-lifted]");
@@ -334,20 +331,16 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
     return null;
   }
 
-  const next = () => { if (isLast) { onClose(); return; } setStepIndex(i => i + 1); };
-  const prev = () => setStepIndex(i => Math.max(0, i - 1));
+  const next = () => { if (isLast) { onClose(); return; } setStepIndex(i => i+1); };
+  const prev = () => setStepIndex(i => Math.max(0, i-1));
 
   return createPortal(
     <>
-      <style>{`
-        @keyframes tSlideIn { from { opacity:0; transform:translateY(8px) scale(0.97) } to { opacity:1; transform:translateY(0) scale(1) } }
-      `}</style>
+      <style>{`@keyframes tSlideIn{from{opacity:0;transform:translateY(8px) scale(0.97)}to{opacity:1;transform:none}}`}</style>
       <Overlay spotRect={spotRect}/>
-      <Tooltip
-        step={step} stepIndex={stepIndex} total={STEPS.length}
+      <Tooltip step={step} stepIndex={stepIndex} total={STEPS.length}
         onNext={next} onPrev={prev} onSkip={onClose}
-        position={pos} isFirst={isFirst} isLast={isLast}
-      />
+        position={pos} isFirst={isFirst} isLast={isLast}/>
     </>,
     document.body
   );
@@ -357,7 +350,7 @@ export function useTour() {
   const [tourActive, setTourActive] = useState(false);
   const [tourStep,   setTourStep]   = useState(0);
 
-  const startTour = useCallback((step = 0) => {
+  const startTour = useCallback((step=0) => {
     setTourStep(step);
     setTourActive(true);
   }, []);
