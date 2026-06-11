@@ -121,7 +121,7 @@ function resolvePos(rect, placement, tw = 360, th = 240) {
 // ─── Overlay — four bands leave a transparent window over the target ──────────
 function Overlay({ spotRect }) {
   const BG = "rgba(10,14,33,0.82)";
-  const base = { position:"fixed", zIndex:9997, background:BG };
+  const base = { position:"fixed", zIndex:9997, background:BG, pointerEvents:"none" };
   if (!spotRect) return <div style={{ ...base, inset:0, backdropFilter:"blur(2px)" }} />;
   const { x, y, w, h } = spotRect;
   return (
@@ -247,24 +247,46 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
   const isFirst = stepIndex === 0;
   const isLast  = stepIndex === STEPS.length - 1;
 
-  // Recompute spotlight position
+  // Recompute spotlight position — uses target, or waitForClick selector if no target
   const compute = useCallback(() => {
-    if (!step?.target) {
+    const selector = step?.target || (step?.waitForClick ? step.waitForClick : null);
+    if (!selector) {
       setSpotRect(null);
       setPos({ top:"50%", left:"50%", transform:"translate(-50%,-50%)" });
       return;
     }
-    const r = getSpotRect(step.target);
+    const r = getSpotRect(selector);
     setSpotRect(r);
     setPos(resolvePos(r, step.placement));
   }, [step]);
 
-  // Scroll target into view then compute
+  // Scroll target into view, compute spotlight, and lift element above overlay
   useEffect(() => {
     if (!active) return;
-    if (step?.target) {
-      const el = document.querySelector(step.target);
+
+    // Restore any previously-lifted element
+    const prev = document.querySelector("[data-tour-lifted]");
+    if (prev) {
+      prev.style.position = prev.dataset.tourOrigPosition || "";
+      prev.style.zIndex   = prev.dataset.tourOrigZIndex   || "";
+      prev.removeAttribute("data-tour-lifted");
+      delete prev.dataset.tourOrigPosition;
+      delete prev.dataset.tourOrigZIndex;
+    }
+
+    // Determine which element to spotlight (target or waitForClick target)
+    const selector = step?.target || step?.waitForClick || null;
+    if (selector) {
+      const el = document.querySelector(selector);
       if (el) {
+        // Lift element above overlay (9997) so it's visible and clickable
+        const cs = window.getComputedStyle(el);
+        el.dataset.tourOrigPosition = cs.position;
+        el.dataset.tourOrigZIndex   = cs.zIndex;
+        el.dataset.tourLifted       = "1";
+        if (cs.position === "static") el.style.position = "relative";
+        el.style.zIndex = "10000";
+
         el.scrollIntoView({ behavior:"smooth", block:"center" });
         clearTimeout(scrollRef.current);
         scrollRef.current = setTimeout(compute, 350);
@@ -297,7 +319,16 @@ export default function GuidedTour({ active, onClose, initialStep = 0 }) {
     return () => window.removeEventListener(step.waitForEvent, handler);
   }, [active, step]);
 
-  if (!active) return null;
+  if (!active) {
+    // Clean up any lifted element when tour is dismissed
+    const prev = document.querySelector("[data-tour-lifted]");
+    if (prev) {
+      prev.style.position = prev.dataset.tourOrigPosition || "";
+      prev.style.zIndex   = prev.dataset.tourOrigZIndex   || "";
+      prev.removeAttribute("data-tour-lifted");
+    }
+    return null;
+  }
 
   const next = () => { if (isLast) { onClose(); return; } setStepIndex(i => i + 1); };
   const prev = () => setStepIndex(i => Math.max(0, i - 1));
@@ -332,6 +363,8 @@ export function useTour() {
   const endTour = useCallback(() => {
     setTourActive(false);
     localStorage.setItem("vercentic_tour_done", "1");
+    // Signal to App that the tour is done — WelcomeModal can now show
+    window.dispatchEvent(new CustomEvent("vercentic:tour-done"));
   }, []);
 
   useEffect(() => {
