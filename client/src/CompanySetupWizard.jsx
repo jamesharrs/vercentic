@@ -169,6 +169,13 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       setSelectedTemplates(new Set((data.email_templates||[]).map((_,i)=>i)));
       setSelectedFields(new Set((data.suggested_fields||[]).map((_,i)=>i)));
       setStep(1);
+      // AUTO-SAVE draft profile immediately so Settings page survives refresh
+      api.post('/company-research/save', {
+        environment_id: environmentId,
+        profile: data.profile,
+        email_templates: [],
+        apply_templates: false,
+      }).catch(e => console.warn('[Wizard] draft save failed:', e));
     } catch(e) { setError(e.message||"Research failed. Please try again."); }
     finally { setLoading(false); }
   };

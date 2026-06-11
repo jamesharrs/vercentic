@@ -122,8 +122,8 @@ router.post('/research', async (req, res) => {
       { source: 'favicon',     url: `https://${domain}/favicon.ico`,                          label: 'Site favicon' },
     ] : [];
 
-    // Use clearbit as the default logo_url (best quality)
-    if (domain && !profile.logo_url) {
+    // Always use Clearbit when available — more reliable than AI-returned URLs
+    if (domain) {
       profile.logo_url = `https://logo.clearbit.com/${domain}`;
     }
     profile.domain = domain;
