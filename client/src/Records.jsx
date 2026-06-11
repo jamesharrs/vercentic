@@ -10450,6 +10450,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const liveData = { ...record.data, ...editing };
   // Multi-condition evaluator (replaces legacy single condition_field/condition_value)
   const evaluateFieldConditions = (f, data) => {
+    if (!f) return false; // guard against undefined entries during re-render
     // New multi-rule conditions object
     if (f.conditions?.rules?.length) {
       const { logic='AND', rules } = f.conditions;
@@ -10485,7 +10486,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // NOT on every editing keystroke — `editing` state changes every character but
   // field visibility conditions only matter after save. Keeps panels stable while typing.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const visibleFields = useMemo(() => fields.filter(f => evaluateFieldConditions(f, record.data)),
+  const visibleFields = useMemo(() => (fields || []).filter(f => evaluateFieldConditions(f, record.data)),
     [fields, record.id, record.updated_at]); // updated_at changes on save → recomputes
 
   // Build sections dynamically from section_separator fields.
@@ -10495,7 +10496,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const inline = [];   // sections shown inside the "fields" panel
     const panels = [];   // sections that become independent draggable panels
     let current = { label: "Details", fs: [], collapsible: false, separatorId: null, asPanel: false };
-    for (const f of visibleFields) {
+    for (const f of (visibleFields || [])) {
       if (f.field_type === "section_separator") {
         if (current.fs.length || current.separatorId === null) {
           if (current.asPanel && current.fs.length) panels.push(current);
