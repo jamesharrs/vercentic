@@ -4823,7 +4823,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
       {/* Chat panel — float or docked sidebar */}
       {open&&(
-        <div style={docked ? {
+        <div data-tour="copilot-panel" style={docked ? {
           // Docked sidebar mode
           position:"fixed",top:0,right:0,width:420,height:"100vh",
           background:"#fafbff",borderLeft:"1px solid rgba(124,58,237,.15)",
