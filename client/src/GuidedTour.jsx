@@ -10,14 +10,16 @@ const STEPS = [
     icon:"\u2746",
     placement:"center",
     ctaLabel:"Start the tour",
+    dim:false,
   },
   {
     id:"sidebar",
     target:"[data-tour='sidebar-nav']",
     title:"Navigation",
     body:"The left sidebar is your main navigation. Records holds your People, Jobs and Talent Pools. Tools gives you Campaigns, Reports, Search and more.",
-    placement:"bottom",
+    placement:"right",
     navigateTo:"dashboard",
+    dim:true,
   },
   {
     id:"search-create",
@@ -26,6 +28,7 @@ const STEPS = [
     body:"Search across every record from anywhere in the platform. The + Create button lets you add a new person, job or any record in one click.",
     placement:"bottom",
     navigateTo:"dashboard",
+    dim:true,
   },
   {
     id:"dashboard",
@@ -34,16 +37,18 @@ const STEPS = [
     body:"Your home page shows live pipeline stats, hiring activity, open reqs by department, and a real-time activity feed. Every chart and stat is clickable — it takes you straight to the matching records.",
     placement:"center",
     navigateTo:"dashboard",
+    dim:true,
   },
   {
     id:"people-prompt",
     target:"[data-tour='nav-people']",
     title:"Exploring People",
     body:"Now let's look at your People list — click People in the left sidebar to open it.",
-    placement:"bottom",
+    placement:"right",
     navigateTo:"dashboard",
     waitForClick:"[data-tour='nav-people']",
     hideNext:true,
+    dim:true,
   },
   {
     id:"people-list",
@@ -51,22 +56,25 @@ const STEPS = [
     title:"The People list",
     body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team.",
     placement:"center",
+    dim:true,
   },
   {
     id:"jobs",
     target:"[data-tour='nav-jobs']",
     title:"Jobs",
     body:"Manage every open role from here. The linked pipeline bar at the top of each job shows all candidates by stage — click a count to expand and advance candidates without leaving the page.",
-    placement:"bottom",
+    placement:"right",
+    dim:true,
   },
   {
     id:"copilot-prompt",
-    target:null,
+    target:"[data-tour='copilot-button']",
     title:"Meet the AI Copilot",
     body:"The purple button in the bottom-right corner is your AI Copilot. Click it now to open it.",
-    placement:"center",
+    placement:"top",
     waitForEvent:"vercentic:copilot-opened",
     hideNext:true,
+    dim:true,
   },
   {
     id:"copilot-open",
@@ -74,6 +82,7 @@ const STEPS = [
     title:"What the Copilot can do",
     body:"Ask it anything in plain language — find candidates, draft emails, create records, schedule interviews, or run reports. It knows your live data and can take action directly.",
     placement:"center",
+    dim:true,
   },
   {
     id:"done",
@@ -84,12 +93,11 @@ const STEPS = [
     placement:"center",
     isDone:true,
     ctaLabel:"Start exploring",
+    dim:false,
   },
 ];
 
-const PAD = 10;
-const DBG = false;
-function log(...a) { if(DBG) console.log('[Tour]',...a); }
+const PAD = 12;
 
 function getSpotRect(selector) {
   if (!selector) return null;
@@ -100,40 +108,50 @@ function getSpotRect(selector) {
   return { x: r.left - PAD, y: r.top - PAD, w: r.width + PAD*2, h: r.height + PAD*2 };
 }
 
-function resolvePos(rect, placement, tw=360, th=240) {
+function resolvePos(rect, placement, tw=360, th=260) {
   if (!rect || placement === "center") return { top:"50%", left:"50%", transform:"translate(-50%,-50%)" };
-  const vw = window.innerWidth, vh = window.innerHeight, G = 20;
+  const vw = window.innerWidth, vh = window.innerHeight, G = 16;
+  // For nav items on the left edge, force placement to right
+  const forceRight = rect.x < 220;
   const fits = {
     right:  rect.x + rect.w + G + tw < vw,
     left:   rect.x - G - tw > 0,
     bottom: rect.y + rect.h + G + th < vh,
     top:    rect.y - G - th > 0,
   };
-  let p = placement;
+  let p = forceRight ? "right" : placement;
   if (!fits[p]) p = ["right","bottom","left","top"].find(x => fits[x]) || "center";
   if (p === "center") return { top:"50%", left:"50%", transform:"translate(-50%,-50%)" };
   const cx = rect.x + rect.w/2, cy = rect.y + rect.h/2;
-  if (p === "right")  return { top: Math.min(Math.max(cy-th/2, G), vh-th-G), left: rect.x+rect.w+G };
+  if (p === "right")  return { top: Math.min(Math.max(cy-th/2, G), vh-th-G), left: Math.min(rect.x+rect.w+G, vw-tw-G) };
   if (p === "left")   return { top: Math.min(Math.max(cy-th/2, G), vh-th-G), left: Math.max(rect.x-tw-G, G) };
-  if (p === "bottom") return { top: rect.y+rect.h+G, left: Math.min(Math.max(cx-tw/2, G), vw-tw-G) };
+  if (p === "bottom") return { top: Math.min(rect.y+rect.h+G, vh-th-G), left: Math.min(Math.max(cx-tw/2, G), vw-tw-G) };
   return { top: Math.max(rect.y-th-G, G), left: Math.min(Math.max(cx-tw/2, G), vw-tw-G) };
 }
 
-function Overlay({ spotRect }) {
-  const BG = "rgba(10,14,33,0.82)";
+function Overlay({ spotRect, dim }) {
+  const BG = "rgba(10,14,33,0.75)";
   const base = { position:"fixed", zIndex:9997, background:BG, pointerEvents:"none" };
-  if (!spotRect) return null;
+
+  // No spotlight target — show soft dim or nothing
+  if (!spotRect) {
+    if (!dim) return null;
+    // Soft semi-transparent backdrop so tooltip stands out but page is still visible
+    return <div style={{ position:"fixed", inset:0, zIndex:9997, background:"rgba(10,14,33,0.45)", pointerEvents:"none" }} />;
+  }
+
   const { x, y, w, h } = spotRect;
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9997, pointerEvents:"none" }}>
-      <div style={{ ...base, top:0,   left:0, right:0,  height:y }}/>
+      <div style={{ ...base, top:0,   left:0, right:0,  height:Math.max(0,y) }}/>
       <div style={{ ...base, top:y+h, left:0, right:0,  bottom:0 }}/>
-      <div style={{ ...base, top:y,   left:0, width:x,  height:h }}/>
+      <div style={{ ...base, top:y,   left:0, width:Math.max(0,x), height:h }}/>
       <div style={{ ...base, top:y,   left:x+w, right:0, height:h }}/>
+      {/* Glow ring around spotlight */}
       <div style={{
         position:"fixed", top:y-3, left:x-3, width:w+6, height:h+6,
-        borderRadius:12, border:"2px solid rgba(67,97,238,0.85)",
-        boxShadow:"0 0 0 4px rgba(67,97,238,0.12), 0 0 28px rgba(67,97,238,0.4)",
+        borderRadius:12, border:"2px solid rgba(67,97,238,0.9)",
+        boxShadow:"0 0 0 4px rgba(67,97,238,0.15), 0 0 32px rgba(67,97,238,0.5)",
         zIndex:9998, pointerEvents:"none",
       }}/>
     </div>
@@ -145,8 +163,8 @@ function Dots({ total, current }) {
     <div style={{ display:"flex", gap:5, alignItems:"center" }}>
       {Array.from({length:total}).map((_,i) => (
         <div key={i} style={{
-          width: i===current ? 18 : 6, height:6, borderRadius:99,
-          background: i===current ? "#4361EE" : i<current ? "rgba(67,97,238,0.4)" : "rgba(255,255,255,0.15)",
+          width:i===current?18:6, height:6, borderRadius:99,
+          background:i===current?"#4361EE":i<current?"rgba(67,97,238,0.4)":"rgba(255,255,255,0.15)",
           transition:"all 0.3s",
         }}/>
       ))}
@@ -159,8 +177,8 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
     <div style={{
       position:"fixed", zIndex:9999, width:360, ...position,
       background:"linear-gradient(135deg,#0d1117 0%,#0f1629 100%)",
-      border:"1px solid rgba(67,97,238,0.25)", borderRadius:18,
-      boxShadow:"0 24px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04) inset",
+      border:"1px solid rgba(67,97,238,0.3)", borderRadius:18,
+      boxShadow:"0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04) inset",
       overflow:"hidden",
       animation:"tSlideIn .28s cubic-bezier(0.34,1.3,0.64,1)",
       fontFamily:"Geist,'Geist Sans',system-ui,sans-serif",
@@ -174,7 +192,7 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
             )}
             <div>
               <div style={{ fontSize:10, fontWeight:700, color:"rgba(67,97,238,0.8)", letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:2 }}>
-                {step.isDone ? "Tour Complete" : `Step ${stepIndex+1} of ${total}`}
+                {step.isDone?"Tour Complete":`Step ${stepIndex+1} of ${total}`}
               </div>
               <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:"#ffffff", lineHeight:1.2 }}>{step.title}</h3>
             </div>
@@ -183,7 +201,7 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
             style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 6px", borderRadius:6, color:"rgba(255,255,255,0.35)", fontSize:18, lineHeight:1, flexShrink:0, marginTop:-2 }}
             onMouseEnter={e=>e.currentTarget.style.color="rgba(255,255,255,0.7)"}
             onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.35)"}
-          >x</button>
+          >×</button>
         </div>
         <p style={{ margin:"0 0 20px", fontSize:13.5, color:"rgba(255,255,255,0.65)", lineHeight:1.65 }}>{step.body}</p>
         {step.hideNext && (
@@ -206,7 +224,7 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
                 style={{ padding:"8px 20px", borderRadius:9, border:"none", background:"linear-gradient(135deg,#4361EE,#6d28d9)", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 4px 14px rgba(67,97,238,0.35)" }}
                 onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(67,97,238,0.5)";}}
                 onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 4px 14px rgba(67,97,238,0.35)";}}>
-                {step.ctaLabel || (step.isDone ? "Finish" : "Next")}
+                {step.ctaLabel||(step.isDone?"Finish":"Next")}
               </button>
             )}
           </div>
@@ -247,7 +265,6 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
   useEffect(() => {
     if (!active) return;
 
-    // Restore any previously-lifted element
     const prev = document.querySelector("[data-tour-lifted]");
     if (prev) {
       prev.style.zIndex = prev.dataset.tourOrigZIndex || "";
@@ -255,18 +272,23 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
       delete prev.dataset.tourOrigZIndex;
     }
 
-    // Navigate to the right page
     if (step?.navigateTo && !navigated.current) {
       navigated.current = true;
       window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: step.navigateTo }));
     }
 
-    // Find target and lift its stacking context root
     const selector = step?.target || step?.waitForClick || null;
     if (selector) {
-      const el = document.querySelector(selector);
-      if (el) {
-        // Walk up to find position:fixed or positioned+z-index ancestor
+      // Retry finding element (may not be in DOM yet after navigation)
+      const tryLift = (attempt) => {
+        const el = document.querySelector(selector);
+        if (!el && attempt < 5) {
+          setTimeout(() => tryLift(attempt + 1), 200);
+          return;
+        }
+        if (!el) { compute(); return; }
+
+        // Walk up to stacking context root
         let liftEl = el;
         let p = el.parentElement;
         while (p && p !== document.body) {
@@ -280,11 +302,12 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
         liftEl.dataset.tourLifted = "1";
         liftEl.style.zIndex = "10000";
 
-        el.scrollIntoView({ behavior:"smooth", block:"center" });
+        el.scrollIntoView({ behavior:"smooth", block:"nearest" });
         clearTimeout(scrollRef.current);
-        scrollRef.current = setTimeout(compute, 350);
-        return;
-      }
+        scrollRef.current = setTimeout(compute, 300);
+      };
+      tryLift(0);
+      return;
     }
 
     clearTimeout(scrollRef.current);
@@ -298,7 +321,6 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
     return () => window.removeEventListener("resize", compute);
   }, [compute]);
 
-  // Wait-for-click
   useEffect(() => {
     if (!active || !step?.waitForClick) return;
     const attach = () => {
@@ -314,7 +336,6 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
     return () => clearTimeout(t);
   }, [active, stepIndex]); // eslint-disable-line
 
-  // Wait-for-event
   useEffect(() => {
     if (!active || !step?.waitForEvent) return;
     const handler = () => setStepIndex(i => i+1);
@@ -337,7 +358,7 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
   return createPortal(
     <>
       <style>{`@keyframes tSlideIn{from{opacity:0;transform:translateY(8px) scale(0.97)}to{opacity:1;transform:none}}`}</style>
-      <Overlay spotRect={spotRect}/>
+      <Overlay spotRect={spotRect} dim={step?.dim !== false}/>
       <Tooltip step={step} stepIndex={stepIndex} total={STEPS.length}
         onNext={next} onPrev={prev} onSkip={onClose}
         position={pos} isFirst={isFirst} isLast={isLast}/>
