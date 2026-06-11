@@ -2167,14 +2167,38 @@ activeNavRef.current = activeNav;
   }, [session?.user?.id, selectedEnv?.id]);
 
   // First-run welcome modal (Getting Started)
+  // Only show AFTER the product tour is done (or already done on a previous session).
   useEffect(() => {
     if (!selectedEnv?.id || welcomeChecked) return;
     setWelcomeChecked(true);
+    const tourDone = !!localStorage.getItem('vercentic_tour_done');
     api.get(`/onboarding-progress?environment_id=${selectedEnv.id}`)
-      .then(res => { if (res && !res.welcome_shown && !res.dismissed) setShowWelcomeModal(true); })
+      .then(res => {
+        if (res && !res.welcome_shown && !res.dismissed) {
+          if (tourDone) {
+            // Tour already completed in a previous session — show immediately
+            setShowWelcomeModal(true);
+          }
+          // else: defer until vercentic:tour-done fires (see listener below)
+        }
+      })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEnv?.id, welcomeChecked]);
+
+  // When the tour finishes, show the Getting Started welcome modal (if pending)
+  useEffect(() => {
+    const handler = () => {
+      // Only show if the modal hasn't been shown/dismissed yet
+      if (!selectedEnv?.id) return;
+      api.get(`/onboarding-progress?environment_id=${selectedEnv.id}`)
+        .then(res => { if (res && !res.welcome_shown && !res.dismissed) setShowWelcomeModal(true); })
+        .catch(() => {});
+    };
+    window.addEventListener('vercentic:tour-done', handler);
+    return () => window.removeEventListener('vercentic:tour-done', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEnv?.id]);
 
   // Manual launch from Settings
   useEffect(() => {
