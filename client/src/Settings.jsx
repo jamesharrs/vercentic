@@ -603,22 +603,28 @@ const RolesSection = ({ environment }) => {
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
-  const [roleTab, setRoleTab] = useState("permissions"); // "permissions" | "field_visibility"
+  const [roleTab, setRoleTab] = useState("permissions");
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dynamicObjects, setDynamicObjects] = useState([]); // includes custom objects
 
   const [users, setUsers] = useState([]);
 
   const load = useCallback(async () => {
-    // Load both roles and users together so we can show user assignments on each role card
-    const [r, u] = await Promise.all([
+    const [r, u, objs] = await Promise.all([
       api.get("/roles"),
       api.get("/users"),
+      environment?.id ? api.get(`/objects?environment_id=${environment.id}`) : Promise.resolve([]),
     ]);
     setRoles(Array.isArray(r) ? r : []);
     setUsers(Array.isArray(u) ? u : []);
+    const rawObjs = Array.isArray(objs) ? objs : (objs?.objects || []);
+    setDynamicObjects(rawObjs
+      .filter(o => o.slug)
+      .map(o => ({ slug: o.slug, label: o.plural_name || o.name || o.slug }))
+    );
     setLoading(false);
-  }, []);
+  }, [environment?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -645,7 +651,9 @@ const RolesSection = ({ environment }) => {
   const savePermissions = async () => {
     if (!selectedRole) return;
     setSaving(true);
-    const payload = OBJECTS.flatMap(obj => ACTIONS.map(action => ({object_slug:obj.slug,action,allowed:getPerm(obj.slug,action)})));
+    // Use dynamic objects (includes custom) — fall back to static OBJECTS if not loaded yet
+    const objList = dynamicObjects.length > 0 ? dynamicObjects : OBJECTS;
+    const payload = objList.flatMap(obj => ACTIONS.map(action => ({object_slug:obj.slug,action,allowed:getPerm(obj.slug,action)})));
     await api.put(`/roles/${selectedRole.id}/permissions`, {permissions:payload});
     setSaving(false);
   };
@@ -744,7 +752,7 @@ const RolesSection = ({ environment }) => {
                             </tr>
                           </thead>
                           <tbody>
-                            {OBJECTS.map(obj=>(
+                            {(dynamicObjects.length > 0 ? dynamicObjects : OBJECTS).map(obj=>(
                               <tr key={obj.slug} style={{borderBottom:`1px solid ${C.border}`}}>
                                 <td style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:C.text1}}>{obj.label}</td>
                                 {ACTIONS.map(action=>(
@@ -770,7 +778,7 @@ const RolesSection = ({ environment }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {OBJECTS.map((obj,i)=>(
+                        {(dynamicObjects.length > 0 ? dynamicObjects : OBJECTS).map((obj,i)=>(
                           <tr key={obj.slug} style={{borderBottom:`1px solid ${C.border}`}}>
                             <td style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:C.text1}}>{obj.label}</td>
                             {ACTIONS.map(action=>{
@@ -2930,7 +2938,7 @@ const NAV_GROUPS = [
     label: "System",
     items: [
       { id:"integration_hub", icon:"zap",      label:"Integrations",   perm:"manage_integrations" },
-      { id:"feature-flags",   icon:"flag",     label:"Feature Flags",  perm:"manage_roles" },
+      { id:"feature-flags",   icon:"flag",     label:"Platform Features",  perm:"manage_roles" },
       { id:"config",          icon:"refresh",  label:"Import / Export",perm:"manage_roles" },
     ],
   },
@@ -3503,7 +3511,7 @@ const FeatureAccessSection = ({ selectedRole, environment }) => {
       <div style={{marginBottom:14,padding:"10px 14px",borderRadius:8,background:"#f8f9fb",border:"1px solid #e5e7eb",display:"flex",alignItems:"flex-start",gap:8}}>
         <Ic n="info" s={14} c="#6b7280" style={{marginTop:1,flexShrink:0}}/>
         <p style={{margin:0,fontSize:12,color:"#6b7280",lineHeight:1.5}}>
-          These settings control what this role can access. Features disabled globally in <strong>Feature Flags</strong> are unavailable to all roles regardless of this setting.
+          These settings control what this role can access. Features disabled globally in <strong>Platform Features</strong> (under System) are unavailable to all roles regardless of this setting.
         </p>
       </div>
 
@@ -3522,7 +3530,7 @@ const FeatureAccessSection = ({ selectedRole, environment }) => {
               return (
                 <div key={feature.id}
                   onClick={() => !locked && toggle(feature.id)}
-                  title={locked ? 'Disabled globally in Feature Flags' : on ? 'Click to revoke access' : 'Click to grant access'}
+                  title={locked ? 'Disabled globally in Platform Features (System settings)' : on ? 'Click to revoke access' : 'Click to grant access'}
                   style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
                     padding:'6px 10px', borderRadius:8, cursor: locked ? 'not-allowed' : 'pointer',
                     border:`1.5px solid ${locked ? '#f3f4f6' : on ? roleColor+'40' : C.border}`,

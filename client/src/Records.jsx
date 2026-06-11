@@ -955,7 +955,23 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
           // Handle both plain strings and legacy {name, level} objects
           const label = typeof v === "object" && v !== null ? (v.name || "") : String(v || "");
           if (!label) return null;
-          return <span key={`${label}-${i}`} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:99,background:"#F59F0018",border:"1px solid #F59F0028",fontSize:11,fontWeight:600,color:"#F59F00"}}>⚡ {label}</span>;
+          return (
+            <span
+              key={`${label}-${i}`}
+              title={`Find others with: ${label}`}
+              onClick={e => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+                  detail: { fieldKey: field.api_key, fieldValue: label, objectSlug: null }
+                }));
+              }}
+              style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:99,
+                background:"#F59F0018",border:"1px solid #F59F0028",fontSize:11,fontWeight:600,color:"#F59F00",
+                cursor:"pointer",transition:"opacity .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity="0.7"}
+              onMouseLeave={e=>e.currentTarget.style.opacity="1"}
+            >⚡ {label}</span>
+          );
         })}
       </div>;
     }
@@ -2818,7 +2834,11 @@ const ColumnFilterPopover = ({ field, filterId, initialOp, initialVal, rect, onA
   const ops           = getOpsCF(field);
 
   useEffect(() => {
-    const onDown = e => { if (popRef.current && !popRef.current.contains(e.target)) onClose(); };
+    const onDown = e => {
+      // Don't close if clicking inside a StyledSelect portal dropdown (child of this popover's select)
+      if (e.target?.closest?.('[data-styled-select-dropdown="true"]')) return;
+      if (popRef.current && !popRef.current.contains(e.target)) onClose();
+    };
     const onKey  = e => { if (e.key === "Escape") onClose(); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -3887,8 +3907,19 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   const field = fields?.find(f => f.id === fieldId);
   const isDanger = action === "delete";
 
-  const summary = action === "delete"
+  // People actions (communicate, note, interview) use action like "people_communicate"
+  const isPeopleAction = action?.startsWith?.("people_");
+  const peopleActionLabel = {
+    people_communicate: "communicate",
+    people_note:        "add note",
+    people_interview:   "schedule interview",
+  }[action] || action?.replace("people_","") || "";
+
+  const title  = isDanger ? "Confirm Bulk Delete" : isPeopleAction ? `Confirm Bulk Action` : "Confirm Bulk Edit";
+  const summary = isDanger
     ? [`Permanently delete ${count} ${objectName} records`, "This cannot be undone"]
+    : isPeopleAction
+    ? [`${peopleActionLabel.charAt(0).toUpperCase()+peopleActionLabel.slice(1)} ${count} ${objectName} records`]
     : [
         `Update ${count} ${objectName} records`,
         field ? `Set "${field.name}" to: ${value ?? "—"}` : "Apply field change to all selected records",
@@ -3913,7 +3944,7 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
           </div>
           <div>
             <div style={{ fontSize:16, fontWeight:800, color:"#111827" }}>
-              {isDanger ? "Confirm Bulk Delete" : "Confirm Bulk Edit"}
+              {title}
             </div>
             <div style={{ fontSize:12, color:"#6b7280", marginTop:1 }}>
               {count} records selected — above your warning threshold
@@ -3955,7 +3986,7 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
             style={{ flex:2, padding:"10px", borderRadius:9, border:"none",
               background: isDanger?"#ef4444":"#3b82f6", color:"white",
               fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-            {isDanger ? `Delete ${count} Records` : `Update ${count} Records`}
+            {isDanger ? `Delete ${count} Records` : isPeopleAction ? `Confirm — ${count} Records` : `Update ${count} Records`}
           </button>
         </div>
       </div>
@@ -3963,18 +3994,10 @@ function BulkConfirmModal({ action, count, objectName, fieldId, value, fields, o
   );
 }
 
-// ─── Double-Confirm Delete (type count to confirm, super_admin only) ─────────
+// ─── Double-Confirm Delete (type count to confirm) ───────────────────────────
 const DeleteConfirmInline = ({ count, session, onConfirm, onCancel }) => {
   const [typed, setTyped] = useState("");
-  const isSuperAdmin = session?.role?.slug === "super_admin";
-  if (!isSuperAdmin) {
-    return (
-      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-        <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Only super administrators can bulk delete.</span>
-        <button onClick={onCancel} style={{ padding:"5px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,0.2)", background:"transparent", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>OK</button>
-      </div>
-    );
-  }
+  // Allow any user whose role has delete permission (checked upstream in guardedBulkAction)
   return (
     <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
       <span style={{ fontSize:12, color:"#fca5a5", fontWeight:600 }}>Type <strong>{count}</strong> to confirm deletion:</span>
@@ -4050,7 +4073,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
         const wf = a.workflow;
         if (!wf) return;
         // Match on assignment type OR workflow_type — handles both storage patterns
-        const isPeopleLink = a.type === "people_link" || wf.workflow_type === "people_link";
+        const isPeopleLink = ["people_link","linked_person"].includes(a.type) || ["people_link","linked_person"].includes(wf.workflow_type);
         if (!isPeopleLink) return;
         const steps = wf.steps || [];
         peopleLinkMap[a.record_id] = steps;
@@ -4184,7 +4207,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           <Ic n="layers" s={12} c="white"/> Compare {count}
         </button>
       )}
-      {!confirming ? (
+      {onDelete && (!confirming ? (
         <button onClick={() => setConfirming(true)}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.15)", color:"#fca5a5", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:F }}>
           <Ic n="trash" s={12} c="#fca5a5"/> Delete {count}
@@ -4193,7 +4216,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
         <DeleteConfirmInline count={selectAllMatching ? totalFilteredCount : count} session={session}
           onConfirm={() => { onDelete(); setConfirming(false); }}
           onCancel={() => setConfirming(false)}/>
-      )}
+      ))}
       {showNoteModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => e.target === e.currentTarget && setShowNoteModal(false)}>
@@ -10953,7 +10976,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
               Linked Forms
             </span>
             <button
-              onClick={() => { if(window.__openFormPicker) window.__openFormPicker(record?.id); }}
+              onClick={() => setShowFormPicker(true)}
               style={{
                 display:"inline-flex", alignItems:"center", gap:4,
                 padding:"4px 10px", borderRadius:7,
@@ -10970,6 +10993,14 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
             </button>
           </div>
           <RecordFormPanel record={record} objectSlug={currentObject.slug||'people'} environment={environment} currentUser={null} activeJobContext={formJobFilter==="all"?null:formJobFilter==="general"?null:formJobFilter}/>
+          {showFormPicker && (
+            <FormPickerModal
+              environment={environment}
+              record={record}
+              onClose={() => setShowFormPicker(false)}
+              onLinked={() => { setShowFormPicker(false); load(); }}
+            />
+          )}
         </div>;
     if (id==="linked") return <LinkedRecordsPanel record={record} environment={environment} onNavigate={onNavigate} activeJobContext={activeJobContext} onSetJobContext={setActiveJobContext}/>;
     if (id==="reporting") return <ReportingPanel record={record} environment={environment}/>;
@@ -11739,7 +11770,7 @@ function buildListContext(object, records, total, fields) {
 
 // ── Talent Card Grid View ─────────────────────────────────────────────────────
 // Renders records as cards using visible list columns as the card layout
-function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfile }) {
+function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfile, selectedIds, onToggleSelect }) {
   const F2 = F; // same font
   const accent = objectColor || C.accent;
 
@@ -11816,13 +11847,29 @@ function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfi
         const primaryVal = record.data?.[primaryField?.api_key] || "";
         const secondaryVal = secondaryField ? record.data?.[secondaryField.api_key] || "" : "";
 
+        const isChecked = selectedIds?.has(record.id);
         return (
-          <div key={record.id} onClick={() => onProfile?.(record)}
-            style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`,
-              padding:"16px", cursor:"pointer", transition:"all .15s", position:"relative",
-              boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}
-            onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.10)`; e.currentTarget.style.borderColor=accent+"60"; e.currentTarget.style.transform="translateY(-1px)"; }}
-            onMouseLeave={e=>{ e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)"; e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform="none"; }}>
+          <div key={record.id}
+              style={{ background:isChecked?`${accent}08`:C.surface, borderRadius:14,
+                border:`1.5px solid ${isChecked?accent:C.border}`,
+                padding:"16px", cursor:"pointer", transition:"all .15s", position:"relative",
+                boxShadow: isChecked?"0 0 0 2px "+accent+"30":"0 1px 4px rgba(0,0,0,.04)" }}
+              onClick={() => onProfile?.(record)}
+              onMouseEnter={e=>{ if(!isChecked){e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.10)`; e.currentTarget.style.borderColor=accent+"60"; e.currentTarget.style.transform="translateY(-1px)";} }}
+              onMouseLeave={e=>{ if(!isChecked){e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.04)"; e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform="none";} }}>
+              {/* Selection checkbox */}
+              {onToggleSelect && (
+                <div style={{ position:"absolute", top:10, right:10, zIndex:2 }}
+                  onClick={e=>{ e.stopPropagation(); onToggleSelect(record.id); }}>
+                  <div style={{ width:18, height:18, borderRadius:5,
+                    border:`2px solid ${isChecked?accent:C.border}`,
+                    background:isChecked?accent:"white",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    transition:"all .12s", cursor:"pointer" }}>
+                    {isChecked && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                  </div>
+                </div>
+              )}
 
             {/* Avatar + name row */}
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
@@ -12058,6 +12105,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Clear selection when object/page/search/filters change
   useEffect(() => { setSelectedIds(new Set()); }, [object?.id, page, search, activeFilters.length]);
+  // When filters change, reset to page 1 and trigger a server reload so filtering covers all pages
+  useEffect(() => {
+    if (!object?.id) return;
+    setPage(1);
+    setReloadKey(k => k + 1);
+  }, [activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setAiFilter(null); setActiveFilters([]); }, [object?.id]);
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
@@ -12431,6 +12484,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // ── Bulk people actions (communicate, note, interview, link) ───────────────
   const handleBulkPeopleAction = async (action, payload) => {
     const ids = [...selectedIds];
+    // Apply bulk-action threshold warning for all people actions except link (which is always intentional)
+    if (action !== "link" && !payload?.__confirmed) {
+      const threshold = getBulkThreshold();
+      if (ids.length > threshold) {
+        // Re-use the same BulkConfirmModal pattern by setting bulkConfirm state
+        // We store the deferred action and payload for after confirmation
+        setBulkConfirm({ action: `people_${action}`, _action: action, _payload: payload, count: ids.length });
+        return;
+      }
+    }
     if (action === "communicate") {
       // Fire event with full recipient records so the modal can render names/emails
       const recipientRecords = records.filter(r => ids.includes(r.id));
@@ -12707,7 +12770,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             // When a named list is active, the filtered count IS the total for that list
             if (activeListName || filterChip) return `${shown}`;
             // No list — show "N of total" when advanced filters narrow the results
-            if (activeFilters.length && shown < total) return `${shown} of ${total}`;
+            if (activeFilters.length) return `${shown} of ${total}`;
             return total;
           })()} record{(activeListName || filterChip ? displayedRecords.length : total)!==1?"s":""}
         </span>
@@ -12944,9 +13007,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           value={bulkConfirm.value}
           fields={fields}
           onConfirm={() => {
+            const bc = bulkConfirm;
             setBulkConfirm(null);
-            if (bulkConfirm.action === "delete") handleBulkDelete();
-            if (bulkConfirm.action === "edit")   handleBulkEdit(bulkConfirm.fieldId, bulkConfirm.value);
+            if (bc.action === "delete") handleBulkDelete();
+            if (bc.action === "edit")   handleBulkEdit(bc.fieldId, bc.value);
+            // People actions (note, communicate, interview) confirmed via threshold modal
+            if (bc.action?.startsWith("people_")) handleBulkPeopleAction(bc._action, { ...bc._payload, __confirmed: true });
           }}
           onCancel={() => setBulkConfirm(null)}
         />
@@ -12964,7 +13030,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
           allObjects={allObjects}
           onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
           onClearAll={() => setSelectedIds(new Set())}
-          onDelete={() => guardedBulkAction("delete")}
+          onDelete={can("delete") ? () => guardedBulkAction("delete") : null}
           onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
           onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
           onBulkAction={handleBulkPeopleAction}
@@ -12982,6 +13048,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             visibleFieldIds={visibleFieldIds}
             objectColor={object.color||C.accent}
             onProfile={r=>onOpenRecord?.(r.id, object.id, r.record_number)}
+            selectedIds={ff.bulk_actions ? selectedIds : undefined}
+            onToggleSelect={ff.bulk_actions ? (id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })) : undefined}
           />
         ) : (
           <TableView records={displayedRecords} fields={fields} visibleFieldIds={visibleFieldIds} objectColor={object.color||C.accent}

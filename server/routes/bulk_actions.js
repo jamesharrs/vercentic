@@ -55,9 +55,25 @@ router.post('/bulk-action', (req, res) => {
       return res.status(400).json({ error: 'object_id, environment_id, and action required' });
     }
 
-    // Permission check: delete requires super_admin
-    if (action === 'delete' && user_role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only super administrators can perform bulk deletions.' });
+    // Permission check: delete requires either super_admin OR a role with delete permission
+    if (action === 'delete') {
+      const isSuperAdmin = user_role === 'super_admin' || user_role === 'admin';
+      if (!isSuperAdmin) {
+        // Check if this role has delete permission for this object
+        const store = getStore();
+        const objectDef = (store.objects || []).find(o => o.id === object_id);
+        const objectSlug = objectDef?.slug || '';
+        const role = (store.roles || []).find(r => r.slug === user_role);
+        const hasDeletePerm = role && (store.permissions || []).some(p =>
+          p.role_id === role.id &&
+          (p.object_slug === objectSlug || p.object_slug === '__global__') &&
+          p.action === 'delete' &&
+          p.allowed
+        );
+        if (!hasDeletePerm) {
+          return res.status(403).json({ error: 'You do not have permission to bulk delete records.' });
+        }
+      }
     }
 
     const store = getStore();

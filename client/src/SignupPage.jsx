@@ -131,7 +131,11 @@ function Field({ label, type = "text", value, onChange, placeholder, error, hint
 export default function SignupPage() {
   const [step,     setStep]     = useState(0);
   const [plan,     setPlan]     = useState("growth");
-  const [form,     setForm]     = useState({ company: "", firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
+  const [form,     setForm]     = useState(() => {
+    // Pre-fill company from URL param (?company=Acme+Corp) passed by the marketing site
+    const params = new URLSearchParams(window.location.search);
+    return { company: params.get("company") || "", firstName: "", lastName: "", email: "", password: "", confirmPassword: "" };
+  });
   const [payment,  setPayment]  = useState({ card: "", expiry: "", cvc: "", name: "" });
   const [loadDemo, setLoadDemo] = useState(true);
   const [errors,   setErrors]   = useState({});

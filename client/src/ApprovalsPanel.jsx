@@ -69,7 +69,7 @@ function ApproverRow({ cfg, index, users, fields, onChange, onRemove, onMove, to
         {cfg.type==="field"&&(
           <select value={cfg.field_key||""} onChange={e=>{const f=fields.find(f2=>f2.api_key===e.target.value);onChange({...cfg,field_key:e.target.value,label:f?.name||e.target.value});}} style={{...inp,flex:1}}>
             <option value="">Select field…</option>
-            {fields.filter(f=>["people","text","email"].includes(f.field_type)).map(f=><option key={f.api_key} value={f.api_key}>{f.name} ({f.field_type})</option>)}
+            {fields.filter(f=>["people","lookup","multi_lookup"].includes(f.field_type)).map(f=><option key={f.api_key} value={f.api_key}>{f.name} ({f.field_type})</option>)}
           </select>
         )}
       </div>
