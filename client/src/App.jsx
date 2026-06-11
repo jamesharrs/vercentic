@@ -3311,12 +3311,16 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
             <div style={{padding:"4px 0"}}>
               <button onClick={()=>{
                 // Clear both possible keys (handles legacy raw key from old switcher)
-                try { localStorage.removeItem(_sessionKey()); } catch {}
-                try { localStorage.removeItem('talentos_session'); } catch {}
-                try { localStorage.removeItem('talentos_session_default'); } catch {}
-                clearSession();
-                setSession(null);
                 setOpen(false);
+                // Defer session clear by one tick — prevents React error #426
+                // (setState on unmounting component during logout render)
+                setTimeout(() => {
+                  try { localStorage.removeItem(_sessionKey()); } catch {}
+                  try { localStorage.removeItem('talentos_session'); } catch {}
+                  try { localStorage.removeItem('talentos_session_default'); } catch {}
+                  clearSession();
+                  setSession(null);
+                }, 0);
               }}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,
                   padding:"9px 14px",border:"none",background:"transparent",
