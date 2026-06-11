@@ -348,13 +348,18 @@ router.post('/login', validate(loginSchema), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
-  // Try current store first (set by tenant middleware based on subdomain/header)
-  let u = findOne('users', u => u.email === email);
+  // Resolve tenant from the current store (set by middleware from subdomain/header).
+  // SECURITY: NEVER search other tenant stores from here.
+  // A user from jimco5 must NOT be able to log in at john-lewis.vercentic.com.
+  // If no user is found in the current store, return 401 — do not fall back cross-tenant.
   let resolvedTenantSlug = (() => { const t = getCurrentTenant(); return (t && t !== 'master') ? t : null; })();
+  let u = findOne('users', u => u.email === email);
 
-  // Search all tenant stores if no tenant resolved yet (e.g. localhost with no subdomain)
-  // or if user wasn't found in the current (master) store
-  if (!resolvedTenantSlug || !u) {
+  // On localhost with no subdomain (dev only): allow cross-store search so devs
+  // can log in without needing a ?tenant= param.  This path is blocked in production
+  // because every request there has a resolved subdomain slug.
+  const isDev = process.env.NODE_ENV !== 'production' && !resolvedTenantSlug;
+  if (isDev && !u) {
     const tenants = listTenants ? listTenants() : [];
     for (const slug of tenants) {
       const ts = loadTenantStore(slug);
