@@ -122,7 +122,7 @@ function resolvePos(rect, placement, tw=360, th=240) {
 function Overlay({ spotRect }) {
   const BG = "rgba(10,14,33,0.82)";
   const base = { position:"fixed", zIndex:9997, background:BG, pointerEvents:"none" };
-  if (!spotRect) return <div style={{ ...base, inset:0, backdropFilter:"blur(2px)" }} />;
+  if (!spotRect) return null;
   const { x, y, w, h } = spotRect;
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9997, pointerEvents:"none" }}>
