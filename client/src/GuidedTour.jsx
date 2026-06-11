@@ -37,7 +37,6 @@ const STEPS = [
     body:"Your home page shows live pipeline stats, hiring activity, open reqs by department, and a real-time activity feed. Every chart and stat is clickable — it takes you straight to the matching records.",
     placement:"center",
     navigateTo:"dashboard",
-    dim:true,
   },
   {
     id:"people-prompt",
@@ -56,7 +55,6 @@ const STEPS = [
     title:"The People list",
     body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team.",
     placement:"center",
-    dim:true,
   },
   {
     id:"jobs",
@@ -78,10 +76,10 @@ const STEPS = [
   },
   {
     id:"copilot-open",
-    target:null,
+    target:"[data-tour='copilot-panel']",
     title:"What the Copilot can do",
     body:"Ask it anything in plain language — find candidates, draft emails, create records, schedule interviews, or run reports. It knows your live data and can take action directly.",
-    placement:"center",
+    placement:"left",
     dim:true,
   },
   {
