@@ -20,7 +20,6 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => req.ip,
   message: {
     error: 'Too many login attempts. Please wait 15 minutes before trying again.',
     code: 'RATE_LIMITED',
@@ -32,7 +31,6 @@ const apiLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
   message: { error: 'Too many requests. Please slow down.', code: 'RATE_LIMITED' },
   skip: (req) => req.path === '/api/health' || req.method === 'OPTIONS',
 });
