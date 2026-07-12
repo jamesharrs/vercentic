@@ -578,11 +578,43 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           {lbl("Company logo URL")}<input value={portal.nav?.logoUrl||""} onChange={e=>onChange({...portal,nav:{...(portal.nav||{}),logoUrl:e.target.value}})} placeholder="https://…/logo.svg" style={inp}/>
           {(portal.nav?.logoUrl)&&<img src={portal.nav.logoUrl} alt="logo preview" style={{maxHeight:40,maxWidth:160,objectFit:"contain",borderRadius:4}} onError={e=>e.target.style.display="none"}/>}
           {lbl("Tagline / description")}<input value={br.tagline||""} onChange={e=>setBr("tagline",e.target.value)} placeholder="Building the future, one hire at a time" style={inp}/>
-          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text2,marginTop:4}}>
-            <input type="checkbox" checked={!!br.auto_header_images} onChange={e=>setBr("auto_header_images",e.target.checked)} style={{accentColor:C.accent}}/>
-            Auto-select header images for jobs that don't have one set
-          </label>
-          <div style={{fontSize:11,color:C.text3,marginTop:-6}}>Matches an image from the Media Library by department/title — set a manual image on the job to override.</div>
+          {(() => {
+            const showHeaderImages = br.show_header_images===undefined ? !!br.auto_header_images : !!br.show_header_images;
+            return (
+          <div style={{marginTop:6,padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2||"#F9FAFB"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,fontWeight:600,color:C.text1}}>
+              <input type="checkbox" checked={showHeaderImages}
+                onChange={e=>{
+                  const on=e.target.checked;
+                  onChange({...portal,branding:{...br,show_header_images:on,
+                    header_images_on_list: br.header_images_on_list===undefined?true:br.header_images_on_list,
+                    header_images_on_detail: br.header_images_on_detail===undefined?true:br.header_images_on_detail}});
+                }}
+                style={{accentColor:C.accent}}/>
+              Show job header images
+            </label>
+            {showHeaderImages&&<div style={{marginTop:10,paddingLeft:24,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"flex",gap:20}}>
+                <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:C.text2}}>
+                  <input type="checkbox" checked={br.header_images_on_list!==false} onChange={e=>setBr("header_images_on_list",e.target.checked)} style={{accentColor:C.accent}}/>
+                  On job list
+                </label>
+                <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:C.text2}}>
+                  <input type="checkbox" checked={br.header_images_on_detail!==false} onChange={e=>setBr("header_images_on_detail",e.target.checked)} style={{accentColor:C.accent}}/>
+                  On job detail
+                </label>
+              </div>
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text2}}>
+                  <input type="checkbox" checked={!!br.auto_header_images} onChange={e=>setBr("auto_header_images",e.target.checked)} style={{accentColor:C.accent}}/>
+                  Auto-select header images for jobs that don't have one set
+                </label>
+                <div style={{fontSize:11,color:C.text3,marginTop:4,paddingLeft:24}}>Matches an image from the Media Library by department/title — set a manual image on the job to override.</div>
+              </div>
+            </div>}
+          </div>
+            );
+          })()}
           {lbl("Portal name (internal)")}<input value={portal.name||""} onChange={e=>onChange({...portal,name:e.target.value})} style={inp}/>
         </>}
         {tab==="access"&&<>

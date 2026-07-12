@@ -385,17 +385,26 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
   const isJobs = objMeta?.slug === 'jobs';
   const isPeople = objMeta?.slug === 'people';
 
-  // Media library — only fetched when this portal has auto header images enabled.
+  // Master switch — falls back to the older auto_header_images flag for portals
+  // saved before this on/off toggle existed, so nothing regresses silently.
+  const showHeaderImages = theme.show_header_images === undefined ? !!theme.auto_header_images : !!theme.show_header_images;
+  const showOnList   = showHeaderImages && theme.header_images_on_list   !== false;
+  const showOnDetail = showHeaderImages && theme.header_images_on_detail !== false;
+
+  // Media library — only fetched when this portal has header images enabled at all.
   useEffect(() => {
-    if (!isJobs || !theme.auto_header_images || !portal?.environment_id) return;
+    if (!isJobs || !showHeaderImages || !portal?.environment_id) return;
     api.get(`/media-library?environment_id=${portal.environment_id}`)
       .then(d => setMediaAssets(Array.isArray(d?.assets) ? d.assets : []))
       .catch(() => {});
-  }, [isJobs, theme.auto_header_images, portal?.environment_id]);
+  }, [isJobs, showHeaderImages, portal?.environment_id]);
 
   // Resolves the best header image for a job: manual field value first,
   // otherwise a fast client-side keyword match against the media library.
+  // Returns null entirely when the master switch is off, regardless of
+  // whether the job has a manually-set image — full kill switch for the feature.
   const resolveHeaderImage = (record) => {
+    if (!showHeaderImages) return null;
     const d = record?.data || {};
     if (d.header_image) return typeof d.header_image === 'object' ? d.header_image.url : d.header_image;
     if (!theme.auto_header_images || !mediaAssets.length) return null;
@@ -516,7 +525,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
 
   if (selected && isJobs) {
     const d = selected.data || {};
-    const heroImg = heroFailed ? null : resolveHeaderImage(selected);
+    const heroImg = (heroFailed || !showOnDetail) ? null : resolveHeaderImage(selected);
     return (
       <div style={{ fontFamily:ff }}>
         <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:12 }}>← Back</button>
@@ -656,7 +665,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
             onMouseEnter={e=>e.currentTarget.style.background=pr+'08'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
             <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
               {isPeople && <div style={{ width:36, height:36, borderRadius:'50%', background:pr+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:pr, flexShrink:0 }}>{getName(r).split(' ').map(w=>w[0]).join('').slice(0,2)}</div>}
-              {isJobs && resolveHeaderImage(r) && <img src={resolveHeaderImage(r)} alt="" style={{ width:52, height:40, objectFit:'cover', borderRadius:6, flexShrink:0 }} onError={e=>{e.currentTarget.style.display='none'}}/>}
+              {isJobs && showOnList && resolveHeaderImage(r) && <img src={resolveHeaderImage(r)} alt="" style={{ width:52, height:40, objectFit:'cover', borderRadius:6, flexShrink:0 }} onError={e=>{e.currentTarget.style.display='none'}}/>}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:tc }}>{getName(r)}</div>
                 {cfg.listFields?.length > 0 ? (
