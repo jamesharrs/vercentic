@@ -255,6 +255,61 @@ Return ONLY valid JSON, no markdown, no preamble:
   }
 }));
 
+// ── AI auto-tag: suggests name, category, tags from the image itself ────────
+router.post('/:id/ai-tag', ah(async (req, res) => {
+  const asset = (getStore().media_assets || []).find(a => a.id === req.params.id && !a.deleted_at);
+  if (!asset) return res.status(404).json({ error: 'Not found' });
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return res.status(400).json({ error: 'AI tagging requires ANTHROPIC_API_KEY to be configured' });
+
+  try {
+    let base64, mediaType;
+    if (asset.filename) {
+      // Custom upload — read straight from disk
+      const filePath = path.join(UPLOAD_DIR, asset.filename);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File missing on disk' });
+      base64 = fs.readFileSync(filePath).toString('base64');
+      mediaType = asset.mimetype && asset.mimetype.startsWith('image/') ? asset.mimetype : 'image/jpeg';
+    } else {
+      // Stock asset — fetch the URL
+      const https = require('https');
+      const chunks = await new Promise((resolve, reject) => {
+        https.get(asset.url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, r => {
+          const c = []; r.on('data', d => c.push(d)); r.on('end', () => resolve(c)); r.on('error', reject);
+        }).on('error', reject);
+      });
+      base64 = Buffer.concat(chunks).toString('base64');
+      mediaType = 'image/jpeg';
+    }
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: `This image will be used as a header photo on a recruiting careers site.
+
+Suggest metadata for it. Pick the category from EXACTLY this list (copy one verbatim): ${JSON.stringify(CATEGORIES)}
+
+Return ONLY valid JSON, no markdown, no preamble:
+{"name":"<short descriptive name, 3-6 words>","category":"<one of the categories above>","tags":["<4-6 lowercase single-word or short-phrase tags describing what's visually in the photo and what job types it would suit>"]}` }
+        ]}],
+      }),
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    if (!CATEGORIES.includes(parsed.category)) parsed.category = 'Other';
+    res.json({ name: parsed.name, category: parsed.category, tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 6) : [] });
+  } catch (e) {
+    console.warn('[media-library] AI tag failed:', e.message);
+    res.status(500).json({ error: 'Could not analyse image' });
+  }
+}));
+
 router.use(handleMulterError);
 
 module.exports = router;

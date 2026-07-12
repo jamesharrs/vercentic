@@ -79,9 +79,19 @@ function useMediaAssets(environment, initialCategory) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Suggests name/category/tags for an existing asset by analysing the image
+  // itself with Claude Vision. Returns the suggestion — caller decides whether
+  // to apply it (manual button) or persist it directly (auto-tag on upload).
+  const aiTag = useCallback(async (assetId) => {
+    const res = await api.post(`/media-library/${assetId}/ai-tag`, {});
+    if (res?.error) throw new Error(res.error);
+    return res; // { name, category, tags }
+  }, []);
+
   const upload = useCallback(async (files) => {
     if (!environment?.id || !files?.length) return;
     setUploading(true);
+    const failures = [];
     for (const file of files) {
       const fd = new FormData();
       fd.append("file", file);
@@ -89,12 +99,23 @@ function useMediaAssets(environment, initialCategory) {
       fd.append("name", file.name.replace(/\.[^.]+$/, ""));
       try {
         const res = await tFetch("/api/media-library/upload", { method: "POST", body: fd });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); window.__toast?.alert?.(e.error || "Upload failed"); }
-      } catch { window.__toast?.alert?.("Upload failed"); }
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          failures.push(`${file.name}: ${e.error || `Upload failed (${res.status})`}`);
+          continue;
+        }
+        const asset = await res.json();
+        // Auto-tag in the background — doesn't block the upload loop; refreshes
+        // the grid once the suggestion lands so the name/tags appear live.
+        aiTag(asset.id).then(sugg => api.patch(`/media-library/${asset.id}`, sugg)).then(load).catch(() => {});
+      } catch (e) {
+        failures.push(`${file.name}: ${e.message || "Upload failed"}`);
+      }
     }
     setUploading(false);
     load();
-  }, [environment?.id, load]);
+    if (failures.length) window.__toast?.alert?.(failures.join("\n"));
+  }, [environment?.id, load, aiTag]);
 
   const remove = useCallback(async (id) => {
     await api.del(`/media-library/${id}`);
@@ -106,7 +127,7 @@ function useMediaAssets(environment, initialCategory) {
     load();
   }, [load]);
 
-  return { assets, categories, loading, uploading, search, setSearch, category, setCategory, typeFilter, setTypeFilter, upload, remove, editAsset, reload: load };
+  return { assets, categories, loading, uploading, search, setSearch, category, setCategory, typeFilter, setTypeFilter, upload, remove, editAsset, aiTag, reload: load };
 }
 
 // ── Asset tile ─────────────────────────────────────────────────────────────
@@ -174,10 +195,21 @@ const UploadDropzone = ({ onFiles, uploading }) => {
 };
 
 // ── Edit metadata modal ────────────────────────────────────────────────────
-const EditAssetModal = ({ asset, categories, onSave, onClose }) => {
+const EditAssetModal = ({ asset, categories, onSave, onClose, onAiTag }) => {
   const [name, setName] = useState(asset.name);
   const [category, setCategory] = useState(asset.category);
   const [tags, setTags] = useState((asset.tags || []).join(", "));
+  const [tagging, setTagging] = useState(false);
+  const handleAiTag = async () => {
+    setTagging(true);
+    try {
+      const sugg = await onAiTag(asset.id);
+      setName(sugg.name || name);
+      setCategory(sugg.category || category);
+      setTags((sugg.tags || []).join(", "));
+    } catch (e) { window.__toast?.alert?.(e.message || "Could not analyse image"); }
+    setTagging(false);
+  };
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ background: C.surface, borderRadius: 16, width: "100%", maxWidth: 420, padding: 22, fontFamily: F }}>
@@ -185,7 +217,12 @@ const EditAssetModal = ({ asset, categories, onSave, onClose }) => {
           <div style={{ fontSize: 15, fontWeight: 800, color: C.text1 }}>Edit Image</div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><Ic n="x" s={16} c={C.text3} /></button>
         </div>
-        <img src={asset.url} alt="" style={{ width: "100%", height: 130, objectFit: "cover", borderRadius: 10, marginBottom: 14 }} />
+        <img src={asset.url} alt="" style={{ width: "100%", height: 130, objectFit: "cover", borderRadius: 10, marginBottom: 12 }} />
+        {onAiTag && (
+          <Btn v="ai" onClick={handleAiTag} disabled={tagging} style={{ width: "100%", justifyContent: "center", marginBottom: 14 }}>
+            <Ic n="sparkles" s={13} c="#fff" />{tagging ? "Analysing…" : "Auto-tag with AI"}
+          </Btn>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div><label style={{ fontSize: 11, fontWeight: 700, color: C.text3, display: "block", marginBottom: 4 }}>Name</label><input value={name} onChange={e => setName(e.target.value)} style={inpSt} /></div>
           <div>
@@ -352,6 +389,7 @@ export default function MediaLibrarySettings({ environment }) {
           categories={m.categories}
           onClose={() => setEditing(null)}
           onSave={async (patch) => { await m.editAsset(editing.id, patch); setEditing(null); }}
+          onAiTag={m.aiTag}
         />
       )}
     </div>
