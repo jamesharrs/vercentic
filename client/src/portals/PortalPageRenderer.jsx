@@ -335,6 +335,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
   const [selected, setSelected] = useState(null);
   const [applying, setApplying] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [mediaAssets, setMediaAssets] = useState([]);
   // Pagination and extra-filter state — declared here (before any early returns) to satisfy rules-of-hooks
   const [page, setPage] = useState(1);
   const [extraVals, setExtraVals] = useState({});
@@ -383,6 +384,33 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
 
   const isJobs = objMeta?.slug === 'jobs';
   const isPeople = objMeta?.slug === 'people';
+
+  // Media library — only fetched when this portal has auto header images enabled.
+  useEffect(() => {
+    if (!isJobs || !theme.auto_header_images || !portal?.environment_id) return;
+    api.get(`/media-library?environment_id=${portal.environment_id}`)
+      .then(d => setMediaAssets(Array.isArray(d?.assets) ? d.assets : []))
+      .catch(() => {});
+  }, [isJobs, theme.auto_header_images, portal?.environment_id]);
+
+  // Resolves the best header image for a job: manual field value first,
+  // otherwise a fast client-side keyword match against the media library.
+  const resolveHeaderImage = (record) => {
+    const d = record?.data || {};
+    if (d.header_image) return typeof d.header_image === 'object' ? d.header_image.url : d.header_image;
+    if (!theme.auto_header_images || !mediaAssets.length) return null;
+    const qText = [d.job_title, d.department, d.description || d.job_description].filter(Boolean).join(' ').toLowerCase();
+    const words = qText.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+    let best = null, bestScore = -1;
+    for (const a of mediaAssets) {
+      const hay = [a.name, a.category, ...(a.tags || [])].join(' ').toLowerCase();
+      let score = 0;
+      for (const w of words) if (hay.includes(w)) score++;
+      if (score > bestScore) { bestScore = score; best = a; }
+    }
+    if (!best || bestScore <= 0) best = mediaAssets.find(a => a.category === 'Team & Culture') || mediaAssets[0];
+    return best?.url || null;
+  };
 
   // Listen for vrc:openJob events fired by FeaturedJobsWidget / other widgets
   useEffect(() => {
@@ -485,9 +513,16 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
 
   if (selected && isJobs) {
     const d = selected.data || {};
+    const heroImg = resolveHeaderImage(selected);
     return (
       <div style={{ fontFamily:ff }}>
         <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:12 }}>← Back</button>
+        {heroImg && (
+          <div style={{ width:'100%', height:200, overflow:'hidden', borderRadius:br, marginBottom:16, background:'#0F1729' }}>
+            <img src={heroImg} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+              onError={e=>{ e.currentTarget.parentElement.style.display = 'none' }}/>
+          </div>
+        )}
         <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
         <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
         {renderDetailFields(d)}
@@ -609,6 +644,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
             onMouseEnter={e=>e.currentTarget.style.background=pr+'08'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
             <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
               {isPeople && <div style={{ width:36, height:36, borderRadius:'50%', background:pr+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:pr, flexShrink:0 }}>{getName(r).split(' ').map(w=>w[0]).join('').slice(0,2)}</div>}
+              {isJobs && resolveHeaderImage(r) && <img src={resolveHeaderImage(r)} alt="" style={{ width:52, height:40, objectFit:'cover', borderRadius:6, flexShrink:0 }} onError={e=>{e.currentTarget.style.display='none'}}/>}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:tc }}>{getName(r)}</div>
                 {cfg.listFields?.length > 0 ? (
@@ -3273,7 +3309,11 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
 };
 
 export default function PortalPageRenderer({ portal, api }) {
-  const theme = portal.theme || portal.branding || {}
+  // Merge rather than pick one wholesale — legacy portals store config under
+  // `theme`, newer saves (and any field-level admin toggle) land in `branding`.
+  // `branding` wins per-key so newly-added fields (like auto_header_images)
+  // aren't silently discarded just because `theme` also exists.
+  const theme = { ...(portal.theme||{}), ...(portal.branding||{}) }
   const rawPages = portal.pages || []
 
   // ── Inject the hub as a virtual page when enabled ───────────────────────

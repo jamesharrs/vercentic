@@ -58,7 +58,7 @@ router.get('/slug/:slug', (req, res) => {
     (p.slug === norm || p.slug === slug || p.slug === '/' + slug)
   );
   if (!portal) return res.status(404).json({ error: 'Portal not found or not published' });
-  res.json({ ...portal, branding: portal.theme || portal.branding || {}, type: portal.type || 'career_site' });
+  res.json({ ...portal, branding: { ...(portal.theme||{}), ...(portal.branding||{}) }, type: portal.type || 'career_site' });
 });
 
 // ── Job listings ──────────────────────────────────────────────────────────────
