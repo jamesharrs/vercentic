@@ -578,6 +578,11 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           {lbl("Company logo URL")}<input value={portal.nav?.logoUrl||""} onChange={e=>onChange({...portal,nav:{...(portal.nav||{}),logoUrl:e.target.value}})} placeholder="https://…/logo.svg" style={inp}/>
           {(portal.nav?.logoUrl)&&<img src={portal.nav.logoUrl} alt="logo preview" style={{maxHeight:40,maxWidth:160,objectFit:"contain",borderRadius:4}} onError={e=>e.target.style.display="none"}/>}
           {lbl("Tagline / description")}<input value={br.tagline||""} onChange={e=>setBr("tagline",e.target.value)} placeholder="Building the future, one hire at a time" style={inp}/>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text2,marginTop:4}}>
+            <input type="checkbox" checked={!!br.auto_header_images} onChange={e=>setBr("auto_header_images",e.target.checked)} style={{accentColor:C.accent}}/>
+            Auto-select header images for jobs that don't have one set
+          </label>
+          <div style={{fontSize:11,color:C.text3,marginTop:-6}}>Matches an image from the Media Library by department/title — set a manual image on the job to override.</div>
           {lbl("Portal name (internal)")}<input value={portal.name||""} onChange={e=>onChange({...portal,name:e.target.value})} style={inp}/>
         </>}
         {tab==="access"&&<>

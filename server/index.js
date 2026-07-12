@@ -423,6 +423,7 @@ app.use('/api/relationships',     require('./routes/relationships'));
 app.use('/api/notes',             require('./routes/notes'));
 app.use('/api/attachments',       require('./routes/attachments'));
 app.use('/api/file-types',        require('./routes/file_types'));
+app.use('/api/media-library',     require('./routes/media_library'));
 app.use('/api/file-index',        require('./routes/file_index'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
 app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));

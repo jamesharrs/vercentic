@@ -509,7 +509,7 @@ module.exports = { getStore, saveStore, saveStoreNow, withBatch, query, findOne,
 // Migrations are expensive (scan every tenant's store, write to disk).
 // Only run them once: track a version stamp in the master store.
 // Bump MIGRATION_VERSION when you add a new migration.
-const MIGRATION_VERSION = 13;
+const MIGRATION_VERSION = 14;
 
 function runMigrationsIfNeeded() {
   const store = storeCache['master'];
@@ -883,6 +883,7 @@ function migrateStandardJobFields() {
     // ── POSTING ──────────────────────────────────────────────────────────────
     [50, 'section_posting',     'Posting',             'section_separator', null],
     [51, 'posting_status',      'Posting Status',      'select',            ['Not Posted','Draft','Live','Paused','Closed']],
+    [51.5,'header_image',       'Header Image',        'image',             null],
     [52, 'career_site_visible', 'Career Site Visible', 'boolean',           null],
     [53, 'internal_only',       'Internal Only',       'boolean',           null],
     [54, 'job_boards',          'Job Boards',          'multi_select',      ['LinkedIn','Indeed','Glassdoor','Bayt','Naukri','Monster','Reed','Total Jobs','Company Website','Referral','Other']],

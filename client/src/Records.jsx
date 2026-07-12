@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
 import { usePermissions as usePermCtx } from "./PermissionContext.jsx";
 import ReactDOM from "react-dom";
 import RichTextEditor from "./RichTextEditor.jsx";
@@ -21,6 +21,7 @@ import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
 import { RecordFormPanel } from "./Forms.jsx";
+import { MediaPickerModal } from "./MediaLibrary.jsx";
 const CampaignLinksModal = lazy(() => import("./CampaignLinks.jsx").then(m => ({ default: m.CampaignLinksModal })));
 import { evaluateFormula, formatFormulaResult } from "./utils/formula.js";
 import { COUNTRIES, COUNTRY_MAP, PHONE_CODES, formatPhone,
@@ -496,7 +497,7 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
       <div style={{border:"1.5px solid #e8eaed",borderRadius:8,overflow:"hidden",background:"#f9fafb",cursor:"pointer"}} onClick={handleClick}>
         {isPdf
           ? <div style={{padding:16,textAlign:"center"}}>
-              <FilePageThumb url={fileUrl}/>
+              <FilePageThumb url={fileUrl} scale={1.6}/>
               <div style={{fontSize:12,fontWeight:600,color:C.accent,marginTop:6,cursor:"pointer"}}>Click to preview</div>
             </div>
           : <div style={{padding:16,textAlign:"center"}}><Ic n="paperclip" s={32} c={C.text3}/><div style={{fontSize:12,color:C.text3,marginTop:6}}>{label}</div></div>}
@@ -509,7 +510,7 @@ const FilePreviewWidget = ({ field, recordId, compact = false }) => {
 };
 
 // Renders the first page of a PDF as a tiny image using pdf.js canvas
-const FilePageThumb = ({ url }) => {
+const FilePageThumb = ({ url, scale = 0.3 }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
     if (!url || !canvasRef.current) return;
@@ -521,7 +522,8 @@ const FilePageThumb = ({ url }) => {
         const pdf  = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         if (cancelled || !canvasRef.current) return;
-        const vp     = page.getViewport({ scale: 0.3 });
+        const dpr    = Math.min(window.devicePixelRatio || 1, 2);
+        const vp     = page.getViewport({ scale: scale * dpr });
         const canvas = canvasRef.current;
         canvas.width  = vp.width;
         canvas.height = vp.height;
@@ -844,6 +846,11 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
         {[1,2,3,4,5].map(i=><Ic key={i} n="star" s={14} c={i<=value?"#f59f00":"#e5e7eb"}/>)}
       </div>
     );
+    case "image": {
+      const url = typeof value === "object" && value ? value.url : value;
+      if (!url) return <span style={{color:C.text3,fontSize:12}}>— no image —</span>;
+      return <img src={url} alt="" style={{width:"100%",maxWidth:280,height:100,objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`,display:"block"}} onError={e=>{e.target.style.display="none";}}/>;
+    }
     case "people":
     case "lookup":
     case "multi_lookup": {
@@ -1150,6 +1157,9 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
     case "people": {
       return <PeoplePicker field={field} value={value} onChange={onChange}/>;
     }
+    case "image": {
+      return <ImageFieldEditor field={field} value={value} onChange={onChange} environment={environment} recordData={recordData}/>;
+    }
     case "table":
       return <TableFieldEditor field={field} value={value} onChange={onChange}/>;
     case "multi_lookup": {
@@ -1240,6 +1250,72 @@ export const clearPickerCache = () => { Object.keys(_pickerCache).forEach(k => d
 // Module-level cache for dataset options and skills
 const _datasetCache = {};
 const _skillsCache = {};
+
+/* ─── Image Field Editor ─────────────────────────────────────────────────────
+   Used by field_type === "image" (e.g. Job "Header Image"). Lets an admin pick
+   from the Media Library (stock or custom), upload a new image inline, or let
+   AI choose the best match based on the record's own title/department/description. */
+const ImageFieldEditor = ({ field, value, onChange, environment, recordData }) => {
+  const [showPicker, setShowPicker] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const url = typeof value === "object" && value ? value.url : value;
+  const d = recordData || {};
+
+  // Best-effort generic context — works for Jobs (job_title/department/description)
+  // and reasonably for other objects with similar-shaped fields.
+  const aiContext = {
+    title: d.job_title || d.title || d.name || field.name,
+    department: d.department || d.category || "",
+    description: d.job_description || d.description || d.summary || "",
+  };
+
+  const applyAsset = (asset) => {
+    onChange(asset.url);
+    api.post(`/media-library/${asset.id}/track-use`, {}).catch(()=>{});
+  };
+
+  const handleAiSelect = async () => {
+    setSuggesting(true);
+    try {
+      const res = await api.post("/media-library/ai-select", {
+        environment_id: environment?.id, title: aiContext.title, department: aiContext.department, description: aiContext.description,
+      });
+      if (res?.asset) applyAsset(res.asset);
+      else window.__toast?.alert?.(res?.error || "No images available yet — add some to the Media Library first");
+    } catch { window.__toast?.alert?.("AI selection failed"); }
+    setSuggesting(false);
+  };
+
+  return (
+    <div>
+      {url ? (
+        <img src={url} alt="" style={{width:"100%",maxWidth:320,height:110,objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`,display:"block",marginBottom:8}}/>
+      ) : (
+        <div style={{width:"100%",maxWidth:320,height:80,borderRadius:8,border:`1.5px dashed ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:8,color:C.text3,fontSize:12}}>
+          No image selected
+        </div>
+      )}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button onClick={()=>setShowPicker(true)} style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:5}}>
+          <Ic n="image" s={12} c={C.text2}/>Choose Image
+        </button>
+        <button onClick={handleAiSelect} disabled={suggesting} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#4361EE)",color:"#fff",fontSize:12,fontWeight:700,cursor:suggesting?"wait":"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:5,opacity:suggesting?0.7:1}}>
+          <Ic n="sparkles" s={12} c="#fff"/>{suggesting?"Thinking…":"AI Select"}
+        </button>
+        {url && <button onClick={()=>onChange("")} style={{padding:"6px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"transparent",color:"#ef4444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Remove</button>}
+      </div>
+      {showPicker && (
+        <MediaPickerModal
+          environment={environment}
+          title={`Choose ${field.name || "an image"}`}
+          aiContext={aiContext}
+          onSelect={applyAsset}
+          onClose={()=>setShowPicker(false)}
+        />
+      )}
+    </div>
+  );
+};
 
 const PeoplePicker = ({ field, value, onChange }) => {
   const [search, setSearch] = useState("");
@@ -4217,7 +4293,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           onConfirm={() => { onDelete(); setConfirming(false); }}
           onCancel={() => setConfirming(false)}/>
       ))}
-      {showNoteModal && (
+      {showNoteModal && ReactDOM.createPortal(
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => e.target === e.currentTarget && setShowNoteModal(false)}>
           <div style={{ background:"white", borderRadius:14, padding:24, width:440, boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
@@ -4230,11 +4306,11 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
             </div>
           </div>
         </div>
-      )}
-      {showLinkModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
+      , document.body)}
+      {showLinkModal && ReactDOM.createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:9000, display:"flex", alignItems:"flex-start", justifyContent:"center", overflowY:"auto", padding:"5vh 20px" }}
           onClick={e => e.target === e.currentTarget && (setShowLinkModal(false), setLinkStaging(null))}>
-          <div style={{ background:"white", borderRadius:16, width:520, maxHeight:"80vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+          <div style={{ background:"white", borderRadius:16, width:520, maxWidth:"100%", maxHeight:"90vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.2)", flexShrink:0 }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
               <div style={{ fontSize:14, fontWeight:700, color:C.text1 }}>Link {count} {count===1?"person":"people"} to…</div>
               <button onClick={() => { setShowLinkModal(false); setLinkStaging(null); }} style={{ background:"none", border:"none", cursor:"pointer" }}>
@@ -4244,7 +4320,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
 
             {/* Stage picker sub-panel */}
             {linkStaging ? (
-              <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
+              <div style={{ flex:1, minHeight:0, display:"flex", flexDirection:"column" }}>
                 {/* Back row */}
                 <div style={{ padding:"10px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
                   <button onClick={() => setLinkStaging(null)}
@@ -4356,7 +4432,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
                 </div>
 
                 {/* Record list */}
-                <div style={{ flex:1, overflowY:"auto" }}>
+                <div style={{ flex:1, minHeight:0, overflowY:"auto" }}>
                   {linkLoading ? (
                     <div style={{ padding:24, textAlign:"center", color:C.text3, fontSize:13 }}>Loading…</div>
                   ) : (() => {
@@ -4421,7 +4497,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
             )}
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };
@@ -11984,6 +12060,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const filterBtnRef = useRef(null);
   const [selectedIds, setSelectedIds]         = useState(new Set());
+  const toolbarRef = useRef(null);
+  const [toolbarH, setToolbarH] = useState(0);
+  useLayoutEffect(() => {
+    const measure = () => { if (toolbarRef.current) setToolbarH(toolbarRef.current.offsetHeight); };
+    measure();
+    window.addEventListener("resize", measure);
+    const ro = new ResizeObserver(measure);
+    if (toolbarRef.current) ro.observe(toolbarRef.current);
+    return () => { window.removeEventListener("resize", measure); ro.disconnect(); };
+  }, []);
   const [showViewsMenu, setShowViewsMenu]     = useState(false);
   const skipColRestoreRef = useRef(false);
   const [showExport,    setShowExport]        = useState(false);
@@ -12760,7 +12846,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   return (
     <div style={{ flex:1, minHeight:0, overflow:"auto", padding:"0 32px" }}>
       {/* Toolbar */}
-      <div data-tour="records-toolbar" style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", position:"sticky", top:0, zIndex:50, background:"var(--t-bg, #f4f5f8)", paddingBottom:12, paddingTop:24, marginTop:0 }}>
+      <div ref={toolbarRef} data-tour="records-toolbar" style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", position:"sticky", top:0, zIndex:50, background:"var(--t-bg, #f4f5f8)", paddingBottom:12, paddingTop:24, marginTop:0 }}>
         <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.text1, flex:"none", fontFamily:"'Space Grotesk', sans-serif", letterSpacing:"-0.4px" }}>
           {object.plural_name}
           {activeListName && <span style={{ fontWeight:400, color:C.accent, fontSize:15, marginLeft:8 }}>/ {activeListName}</span>}
@@ -13019,23 +13105,25 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         />
       )}
 
-      {/* Bulk action bar */}
+      {/* Bulk action bar — sticky just below the toolbar so it stays visible while scrolling */}
       {ff.bulk_actions && selectedIds.size > 0 && (
-        <BulkActionBar
-          count={selectedIds.size}
-          total={displayedRecords.length}
-          fields={fields}
-          objectSlug={object.slug}
-          selectedRecords={displayedRecords.filter(r => selectedIds.has(r.id))}
-          environment={environment}
-          allObjects={allObjects}
-          onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
-          onClearAll={() => setSelectedIds(new Set())}
-          onDelete={can("delete") ? () => guardedBulkAction("delete") : null}
-          onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
-          onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
-          onBulkAction={handleBulkPeopleAction}
-        />
+        <div style={{ position:"sticky", top:toolbarH, zIndex:49, marginBottom:10 }}>
+          <BulkActionBar
+            count={selectedIds.size}
+            total={displayedRecords.length}
+            fields={fields}
+            objectSlug={object.slug}
+            selectedRecords={displayedRecords.filter(r => selectedIds.has(r.id))}
+            environment={environment}
+            allObjects={allObjects}
+            onSelectAll={() => setSelectedIds(new Set(displayedRecords.map(r => r.id)))}
+            onClearAll={() => setSelectedIds(new Set())}
+            onDelete={can("delete") ? () => guardedBulkAction("delete") : null}
+            onEdit={(fieldId, value) => guardedBulkAction("edit", { fieldId, value })}
+            onCompare={selectedIds.size >= 2 && selectedIds.size <= 5 ? () => setShowCompare(true) : null}
+            onBulkAction={handleBulkPeopleAction}
+          />
+        </div>
       )}
 
       {/* Content */}

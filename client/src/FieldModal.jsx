@@ -40,6 +40,7 @@ const ICON_PATHS = {
   x:          "M18 6L6 18M6 6l12 12",
   eyeOff:     "M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22",
   eye:        "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+  image:      "M21 3H3v18h18V3zM8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM21 15l-5-5L5 21",
 };
 const Ic = ({n,s=16,c="currentColor"}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -94,6 +95,7 @@ const FIELD_TYPE_GROUPS = [
     {value:"rollup",       label:"Rollup",       icon:"sigma",      desc:"Aggregate data across related records"},
     {value:"country",      label:"Country",      icon:"flag",       desc:"Country picker with flag display"},
     {value:"file_preview", label:"File Preview", icon:"paperclip",  desc:"Inline preview of an attached file or PDF — reads from the Files panel"},
+    {value:"image",        label:"Image",        icon:"image",      desc:"Pick an image from the Media Library — stock photos, custom uploads, or AI-selected"},
   ]},
   { key:"advanced", label:"Advanced", types:[
     {value:"table",       label:"Table",       icon:"table",       desc:"Multi-row table with configurable columns — work history, education, languages"},
@@ -1337,6 +1339,7 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
       "dataset_id","dataset_multi","skills_input","skills_multi","show_proficiency","max_skills",
       "skills_categories","section_label","collapsible","as_panel",
       "table_columns","table_template","conditions",
+      "fp_file_type_name","fp_selection","fp_size","fp_click","fp_show_name","fp_show_date",
     ];
     extras.forEach(k => { if (field?.[k] !== undefined) base[k] = field[k]; });
     return base;
@@ -1441,7 +1444,7 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
         ));
       }
 
-      onSaved();
+      onSaved(result);
       onClose();
     } catch (e) { alert(`Could not save field: ${e.message}`); }
     setSaving(false);

@@ -2286,6 +2286,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [allJobs,      setAllJobs]      = useState([]);
   const [allPools,     setAllPools]     = useState([]);
   const [allPeople,    setAllPeople]    = useState([]);
+  const [allPeopleTotal, setAllPeopleTotal] = useState(null);
   const [searchResults,setSearchResults]= useState({}); // keyed by message index
   const [taskSearchResults,setTaskSearchResults]= useState({}); // keyed by message index
   const [adminRoles,   setAdminRoles]   = useState([]);
@@ -2368,7 +2369,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const pplObj   = objs.find(o=>o.slug==='people');
       if(jobsObj)  api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllJobs(r.records||[])).catch(()=>{});
       if(poolsObj) api.get(`/records?object_id=${poolsObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPools(r.records||[])).catch(()=>{});
-      if(pplObj)   api.get(`/records?object_id=${pplObj.id}&environment_id=${environment.id}&limit=200`).then(r=>setAllPeople(r.records||[])).catch(()=>{});
+      if(pplObj)   api.get(`/records?object_id=${pplObj.id}&environment_id=${environment.id}&limit=200`).then(r=>{setAllPeople(r.records||[]); setAllPeopleTotal(r.pagination?.total ?? (r.records||[]).length);}).catch(()=>{});
       api.get(`/agents?environment_id=${environment.id}`).then(r=>setAllAgents(Array.isArray(r)?r:[])).catch(()=>{});
     });
   },[environment?.id]);
@@ -2540,8 +2541,14 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         const tb = (b.data?.person_type||'').toLowerCase();
         return (TYPE_ORDER[ta]??3) - (TYPE_ORDER[tb]??3);
       });
+      const trueTotal = allPeopleTotal ?? allPeople.length;
+      const shown = Math.min(100, sorted.length);
       parts.push('');
-      parts.push('ALL PEOPLE IN PLATFORM (employees listed first — use person_type to identify roles):');
+      if(trueTotal > shown){
+        parts.push(`PEOPLE SAMPLE — showing ${shown} of ${trueTotal} TOTAL people records in the platform (list truncated, do NOT count these rows to answer "how many" questions — use the stated total of ${trueTotal} instead). Employees listed first — use person_type to identify roles:`);
+      } else {
+        parts.push(`ALL PEOPLE IN PLATFORM (${trueTotal} total — employees listed first — use person_type to identify roles):`);
+      }
       sorted.slice(0,100).forEach(p=>{
         const d=p.data||{};
         const name=[d.first_name,d.last_name].filter(Boolean).join(' ')||d.email||'Unnamed';
@@ -2638,7 +2645,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     }
 
     setContext(parts.length?parts.join('\n'):null);
-  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPeople,allPools,settingsSection,editorContext,companyDocs]);
+  },[currentRecord,currentObject,activeNav,navObjects,pageContext,allJobs,allPeople,allPeopleTotal,allPools,settingsSection,editorContext,companyDocs]);
 
   // Receive live list summary from RecordsView so copilot knows what's visible
   useEffect(() => {

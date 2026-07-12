@@ -54,7 +54,7 @@ router.post('/', validate(createFieldSchema), (req, res) => {
   if (findOne('fields', f=>f.object_id===object_id&&f.api_key===api_key&&f.environment_id===environment_id)) return res.status(409).json({error:'api_key already exists on this object'});
   const maxOrder = Math.max(0, ...query('fields', f=>f.object_id===object_id&&f.environment_id===environment_id).map(f=>f.sort_order));
   const { conditions, table_columns, table_template } = req.body;
-  const newField = insert('fields', {id:uuidv4(),object_id,environment_id,name,api_key,field_type,is_required:is_required?1:0,is_unique:is_unique?1:0,is_system:0,show_in_list:show_in_list!==undefined?(show_in_list?1:0):1,show_in_form:show_in_form!==undefined?(show_in_form?1:0):1,options:options||null,lookup_object_id:lookup_object_id||null,default_value:default_value||null,placeholder:placeholder||null,help_text:help_text||null,sort_order:sort_order!==undefined?sort_order:maxOrder+1,conditions:conditions||null,table_columns:table_columns||null,table_template:table_template||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  const newField = insert('fields', {...req.body,id:uuidv4(),object_id,environment_id,name,api_key,field_type,is_required:is_required?1:0,is_unique:is_unique?1:0,is_system:0,show_in_list:show_in_list!==undefined?(show_in_list?1:0):1,show_in_form:show_in_form!==undefined?(show_in_form?1:0):1,options:options||null,lookup_object_id:lookup_object_id||null,default_value:default_value||null,placeholder:placeholder||null,help_text:help_text||null,sort_order:sort_order!==undefined?sort_order:maxOrder+1,conditions:conditions||null,table_columns:table_columns||null,table_template:table_template||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
   invalidatePath('fields');
   invalidatePath('objects');
   res.status(201).json(newField);
@@ -71,6 +71,36 @@ router.patch('/:id', validate(patchFieldSchema), (req, res) => {
     console.error('[fields PATCH] Unexpected error:', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Impact check before delete — how many records already have data in this field ──
+router.get('/:id/delete-impact', (req, res) => {
+  if (checkGlobal(req, res, 'manage_settings') === false) return;
+  const f = findOne('fields', x => x.id === req.params.id);
+  if (!f) return res.status(404).json({ error: 'Not found' });
+
+  const envId = req.query.environment_id;
+  const key = f.api_key;
+
+  const isEmpty = (v) => v === undefined || v === null || v === '' ||
+    (Array.isArray(v) && v.length === 0);
+
+  const allRecords = query('records', r =>
+    r.object_id === f.object_id &&
+    (envId ? r.environment_id === envId : true) &&
+    !r.deleted_at
+  );
+
+  const filledCount = allRecords.filter(r => !isEmpty(r.data?.[key])).length;
+
+  res.json({
+    field_id: f.id,
+    field_name: f.name,
+    total_records: allRecords.length,
+    filled_count: filledCount,
+    is_system: !!f.is_system,
+    is_required: !!f.is_required,
+  });
 });
 
 router.delete('/:id', (req, res) => {

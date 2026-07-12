@@ -28,6 +28,7 @@ const EnterpriseSettings = lazy(() => import("./EnterpriseSettings.jsx"));
 const BrandKitSettings = lazy(() => import("./settings/BrandKitSettings.jsx"));
 const EmailTemplateBuilder = lazy(() => import("./settings/EmailTemplateBuilder.jsx"));
 const FileTypesSettings = lazy(() => import("./settings/FileTypesSettings.jsx"));
+const MediaLibrarySettings = lazy(() => import("./MediaLibrary.jsx"));
 const TaskGroupsSettings = lazy(() => import("./settings/TaskGroupsSettings.jsx"));
 const CompanyDocuments = lazy(() => import("./settings/CompanyDocuments.jsx"));
 const DuplicatesSettings = lazy(() => import("./settings/DuplicatesSettings.jsx"));
@@ -150,6 +151,7 @@ const PATHS = {
   "key":"M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
   "database":"M12 2C6.48 2 2 4.02 2 6.5v11C2 19.98 6.48 22 12 22s10-2.02 10-4.5v-11C22 4.02 17.52 2 12 2zM2 6.5C2 8.98 6.48 11 12 11s10-2.02 10-4.5M2 12c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5",
   "paperclip":"M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48",
+  "image":"M21 3H3v18h18V3zM8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM21 15l-5-5L5 21",
   "form":"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M8 13h8M8 17h8M8 9h2",
   "workflow":"M22 12h-4l-3 9L9 3l-3 9H2",
   "video":"M15 10l4.553-2.276A1 1 0 0121 8.72v6.56a1 1 0 01-1.447.9L15 14v-4zm-2-4H4a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2z",
@@ -1636,10 +1638,11 @@ const PersonTypeConfig = ({ object, onUpdate }) => {
 };
 
 // ─── FieldList — drag-to-reorder + order-number input ────────────────────────
-const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
+const FieldList = ({ fields, onReorder, onInsertAt, onEdit, onDelete }) => {
   const [dragIdx,    setDragIdx]    = useState(null);
   const [overIdx,    setOverIdx]    = useState(null);
   const [orderInputs, setOrderInputs] = useState({}); // fieldId -> string while editing
+  const [hoverGap,   setHoverGap]   = useState(null); // index of the hovered insert-between gap
 
   // Commit a numeric order input: supports decimals like "2.5"
   const commitOrder = (f, raw) => {
@@ -1679,8 +1682,39 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
   };
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
 
+  // Thin hover-activated divider that lets you insert a new field at this exact position,
+  // rather than only being able to append at the bottom and drag it into place.
+  const InsertGap = ({ idx }) => {
+    if (!onInsertAt) return null;
+    const active = hoverGap === idx;
+    return (
+      <div
+        onMouseEnter={() => setHoverGap(idx)}
+        onMouseLeave={() => setHoverGap(h => (h === idx ? null : h))}
+        style={{ position:"relative", height: active ? 18 : 6, transition:"height .1s" }}
+      >
+        <div style={{ position:"absolute", left:0, right:0, top:"50%", height:1, background: active ? C.accent : "transparent", transition:"background .1s" }}/>
+        {active && (
+          <button
+            title="Insert field here"
+            onClick={() => onInsertAt(idx)}
+            style={{
+              position:"absolute", left:24, top:"50%", transform:"translateY(-50%)",
+              width:18, height:18, borderRadius:"50%", border:"none",
+              background:C.accent, color:"#fff", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:13, fontWeight:700, lineHeight:1, padding:0,
+              boxShadow:"0 1px 4px rgba(0,0,0,.2)",
+            }}
+          >+</button>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+      <InsertGap idx={0}/>
       {fields.map((f, idx) => {
         const isSep = f.field_type === "section_separator";
         const isOver = overIdx === idx && dragIdx !== idx;
@@ -1688,98 +1722,102 @@ const FieldList = ({ fields, onReorder, onEdit, onDelete }) => {
         const orderVal = orderInputs.hasOwnProperty(f.id) ? orderInputs[f.id] : String(idx + 1);
 
         return (
-          <div
-            key={f.id}
-            draggable
-            onDragStart={e => handleDragStart(e, idx)}
-            onDragOver={e => handleDragOver(e, idx)}
-            onDrop={e => handleDrop(e, idx)}
-            onDragEnd={handleDragEnd}
-            onClick={() => onEdit(f)}
-            style={{
-              display:"flex", alignItems:"center", gap:8,
-              padding: isSep ? "8px 12px" : "9px 12px",
-              borderRadius:10,
-              border: isOver
-                ? `2px solid ${C.accent}`
-                : isSep
-                ? "1.5px dashed #93c5fd"
-                : `1px solid ${C.border}`,
-              background: isDragging ? "#f0f4ff" : isSep ? "#f0f4ff" : "#fff",
-              opacity: isDragging ? 0.5 : 1,
-              transition: "border .1s, background .1s",
-              cursor: "pointer",
-            }}
-            onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = C.accent; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = isOver ? C.accent : isSep ? "#93c5fd" : C.border; }}
-          >
-            {/* Drag handle — stops click so dragging doesn't open edit */}
+          <React.Fragment key={f.id}>
             <div
-              title="Drag to reorder"
-              onMouseDown={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
+              draggable
+              onDragStart={e => handleDragStart(e, idx)}
+              onDragOver={e => handleDragOver(e, idx)}
+              onDrop={e => handleDrop(e, idx)}
+              onDragEnd={handleDragEnd}
+              onClick={() => onEdit(f)}
               style={{
-                display:"flex", flexDirection:"column", gap:2,
-                padding:"2px 4px", cursor:"grab", flexShrink:0, color:C.text3,
-                opacity: 0.5,
+                display:"flex", alignItems:"center", gap:6,
+                padding: isSep ? "7px 10px" : "7px 10px",
+                borderRadius:9,
+                minWidth:0,
+                border: isOver
+                  ? `2px solid ${C.accent}`
+                  : isSep
+                  ? "1.5px dashed #93c5fd"
+                  : `1px solid ${C.border}`,
+                background: isDragging ? "#f0f4ff" : isSep ? "#f0f4ff" : "#fff",
+                opacity: isDragging ? 0.5 : 1,
+                transition: "border .1s, background .1s",
+                cursor: "pointer",
               }}
+              onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = C.accent; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = isOver ? C.accent : isSep ? "#93c5fd" : C.border; }}
             >
-              {[0,1,2].map(i => (
-                <div key={i} style={{width:12,height:2,borderRadius:1,background:"currentColor"}}/>
-              ))}
-            </div>
-
-            {/* Order number input */}
-            <input
-              type="text"
-              value={orderVal}
-              title="Order number (decimals like 2.5 allowed)"
-              onChange={e => setOrderInputs(p => ({...p, [f.id]: e.target.value}))}
-              onBlur={e => commitOrder(f, e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } if (e.key === "Escape") { setOrderInputs(p => { const n={...p}; delete n[f.id]; return n; }); } }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                width:34, textAlign:"center", padding:"3px 4px",
-                border:`1px solid ${C.border}`, borderRadius:6,
-                fontSize:11, fontWeight:700, color:C.text2,
-                background:"#f8f9fc", fontFamily:F,
-                flexShrink:0,
-              }}
-            />
-
-            {/* Content */}
-            {isSep ? (
-              <div style={{flex:1, minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:12,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.07em"}}>━ {f.section_label||f.name}</span>
-                  <span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:"#dbeafe",color:"#3b82f6",fontWeight:600}}>section</span>
-                </div>
-                <div style={{fontSize:11,color:C.text3,marginTop:1}}>Fields below collapse under this header</div>
+              {/* Drag handle — stops click so dragging doesn't open edit */}
+              <div
+                title="Drag to reorder"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display:"flex", flexDirection:"column", gap:2,
+                  padding:"2px 2px", cursor:"grab", flexShrink:0, color:C.text3,
+                  opacity: 0.5,
+                }}
+              >
+                {[0,1,2].map(i => (
+                  <div key={i} style={{width:10,height:2,borderRadius:1,background:"currentColor"}}/>
+                ))}
               </div>
-            ) : (
-              <div style={{flex:1, minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text1}}>{f.name}</span>
-                  {f.is_system&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:"#f1f5f9",color:"#64748b",fontWeight:600}}>system</span>}
-                  {!!f.is_required&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:"#fef2f2",color:"#ef4444",fontWeight:600}}>required</span>}
-                </div>
-                <div style={{fontSize:11,color:C.text3,marginTop:2}}>
-                  <code style={{fontFamily:"monospace"}}>{f.api_key}</code> · {f.field_type}
-                </div>
-              </div>
-            )}
 
-            {/* Actions */}
-            <div style={{display:"flex",gap:4,flexShrink:0}} onClick={e => e.stopPropagation()}>
-              <Btn v="ghost" sz="sm" icon="edit" onClick={()=>onEdit(f)}/>
-              {!f.is_system && <Btn v="ghost" sz="sm" icon="trash" onClick={()=>onDelete(f)} style={{color:"#ef4444"}}/>}
+              {/* Order number input */}
+              <input
+                type="text"
+                value={orderVal}
+                title="Order number (decimals like 2.5 allowed)"
+                onChange={e => setOrderInputs(p => ({...p, [f.id]: e.target.value}))}
+                onBlur={e => commitOrder(f, e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } if (e.key === "Escape") { setOrderInputs(p => { const n={...p}; delete n[f.id]; return n; }); } }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  width:24, textAlign:"center", padding:"2px 2px",
+                  border:`1px solid ${C.border}`, borderRadius:5,
+                  fontSize:10, fontWeight:700, color:C.text2,
+                  background:"#f8f9fc", fontFamily:F,
+                  flexShrink:0,
+                }}
+              />
+
+              {/* Content */}
+              {isSep ? (
+                <div style={{flex:1, minWidth:0, overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                    <span style={{fontSize:11,fontWeight:800,color:"#374151",textTransform:"uppercase",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>━ {f.section_label||f.name}</span>
+                    <span style={{fontSize:9,padding:"1px 5px",borderRadius:99,background:"#dbeafe",color:"#3b82f6",fontWeight:600,flexShrink:0}}>section</span>
+                  </div>
+                  <div style={{fontSize:10,color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Fields below collapse under this header</div>
+                </div>
+              ) : (
+                <div style={{flex:1, minWidth:0, overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+                    <span style={{fontSize:12,fontWeight:600,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{f.name}</span>
+                    {f.is_system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:99,background:"#f1f5f9",color:"#64748b",fontWeight:600,flexShrink:0}}>system</span>}
+                    {!!f.is_required&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:99,background:"#fef2f2",color:"#ef4444",fontWeight:600,flexShrink:0}}>required</span>}
+                  </div>
+                  <div style={{fontSize:10,color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <code style={{fontFamily:"monospace"}}>{f.api_key}</code> · {f.field_type}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions — reserved min-width so they never get squeezed out in narrow panels */}
+              <div style={{display:"flex",gap:2,flexShrink:0,minWidth: f.is_system ? 28 : 56}} onClick={e => e.stopPropagation()}>
+                <Btn v="ghost" sz="sm" icon="edit" onClick={()=>onEdit(f)} style={{padding:"4px 6px"}}/>
+                {!f.is_system && <Btn v="ghost" sz="sm" icon="trash" onClick={()=>onDelete(f)} style={{color:"#ef4444",padding:"4px 6px"}}/>}
+              </div>
             </div>
-          </div>
+            <InsertGap idx={idx+1}/>
+          </React.Fragment>
         );
       })}
     </div>
   );
 };
+
 
 
 // ─── EditObjectModal ───────────────────────────────────────────────────────────
@@ -2057,6 +2095,8 @@ const DataModelSection = ({ environment: activeEnv }) => {
   const [showCreate, setShowCreate] = useState(false);
   const [showField,  setShowField]  = useState(false);
   const [editField,  setEditField]  = useState(null);
+  const [insertAtIdx, setInsertAtIdx] = useState(null); // index to splice a newly-created field into, or null = append
+  const skipNextReloadRef = useRef(false); // set when the insert-splice already updated state+server, so onClose shouldn't refetch
   const [loading,    setLoading]    = useState(false);
 
   // Load envs for the picker dropdown — but don't override selEnv if already set from app context
@@ -2101,9 +2141,26 @@ const DataModelSection = ({ environment: activeEnv }) => {
   };
 
   const deleteField = async (f) => {
-    if (!(await window.__confirm({ title:`Delete field "${f.name}"? This removes data from all records.`, danger:true }))) return;
+    let message = "This removes the field and its data from all records.";
+    try {
+      const impact = await api.get(`/fields/${f.id}/delete-impact?environment_id=${selEnv?.id}`);
+      if (impact && typeof impact.filled_count === "number") {
+        message = impact.filled_count > 0
+          ? `${impact.filled_count} of ${impact.total_records} record${impact.total_records===1?"":"s"} already ${impact.filled_count===1?"has":"have"} data in this field. That data will be permanently lost.`
+          : `No records currently have data in this field — safe to delete.`;
+      }
+    } catch { /* fall back to generic message if impact check fails */ }
+    if (!(await window.__confirm({ title:`Delete field "${f.name}"?`, message, danger:true, confirmLabel:"Delete field" }))) return;
     await api.del(`/fields/${f.id}`);
     reloadFields();
+  };
+
+  // Persist a full reordered field list to the server (used for drag-reorder and insert-between)
+  const persistFieldOrder = async (reordered) => {
+    setFields(reordered);
+    await api.post("/fields/reorder", {
+      field_orders: reordered.map((f, i) => ({ id: f.id, sort_order: i + 1 }))
+    });
   };
 
   const openDeleteObject = async (o, e) => {
@@ -2163,7 +2220,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
           </select>
           {selObj && <Btn v="ghost" sz="sm" icon="x" onClick={()=>setSelObj(null)}>Back to Objects</Btn>}
           {!selObj && <Btn sz="sm" icon="plus" onClick={()=>setShowCreate(true)}>New Object</Btn>}
-          {selObj  && <Btn sz="sm" icon="plus" onClick={()=>setShowField(true)}>Add Field</Btn>}
+          {selObj  && <Btn sz="sm" icon="plus" onClick={()=>{setInsertAtIdx(null);setShowField(true);}}>Add Field</Btn>}
         </div>
       </div>
 
@@ -2224,12 +2281,8 @@ const DataModelSection = ({ environment: activeEnv }) => {
               )}
               <FieldList
                 fields={fields}
-                onReorder={async (reordered) => {
-                  setFields(reordered);
-                  await api.post("/fields/reorder", {
-                    field_orders: reordered.map((f, i) => ({ id: f.id, sort_order: i + 1 }))
-                  });
-                }}
+                onReorder={persistFieldOrder}
+                onInsertAt={idx => { setInsertAtIdx(idx); setShowField(true); }}
                 onEdit={f => setEditField(f)}
                 onDelete={deleteField}
               />
@@ -2239,7 +2292,22 @@ const DataModelSection = ({ environment: activeEnv }) => {
       )}
 
       {showCreate && <CreateObjectModal selEnv={selEnv} onCreated={()=>{ reloadObjects(); }} onClose={()=>setShowCreate(false)}/>}
-      {(showField||editField) && <FieldModal field={editField} selEnv={selEnv} selObj={selObj} onSaved={()=>{}} onClose={()=>{setShowField(false);setEditField(null);setTimeout(reloadFields,150);}}/>}
+      {(showField||editField) && <FieldModal field={editField} selEnv={selEnv} selObj={selObj} onSaved={async (saved) => {
+        // If this was a brand-new field created via the "insert here" (+) affordance,
+        // splice it into the chosen position and persist the new order — this fully
+        // replaces the need for onClose's generic reload, so we mark it handled.
+        if (!editField && insertAtIdx !== null && saved?.id) {
+          skipNextReloadRef.current = true;
+          const withoutNew = fields.filter(f => f.id !== saved.id);
+          const idx = Math.min(insertAtIdx, withoutNew.length);
+          const reordered = [...withoutNew.slice(0, idx), saved, ...withoutNew.slice(idx)];
+          await persistFieldOrder(reordered);
+        }
+      }} onClose={()=>{
+        setShowField(false); setEditField(null); setInsertAtIdx(null);
+        if (skipNextReloadRef.current) { skipNextReloadRef.current = false; }
+        else { setTimeout(reloadFields, 150); }
+      }}/>}
       {editObj && <EditObjectModal obj={editObj} onSave={handleEditObject} onClose={()=>setEditObj(null)}/>}
       {deleteObj && <DeleteObjectDialog obj={deleteObj} impact={impact} loading={impactLoad} deleting={deleting} onConfirm={confirmDeleteObject} onClose={()=>{setDeleteObj(null);setImpact(null);}}/>}
     </div>
@@ -2902,6 +2970,7 @@ const NAV_GROUPS = [
       { id:"datamodel",    icon:"database",    label:"Data model",        perm:"manage_settings" },
       { id:"duplicates",   icon:"users",       label:"Duplicates",        perm:"manage_settings" },
       { id:"file_types",   icon:"paperclip",   label:"File types",        perm:"manage_settings" },
+      { id:"media_library",icon:"image",       label:"Media Library",     perm:"manage_settings" },
       { id:"task_groups",  icon:"check-square",label:"Task Groups",        perm:"manage_settings" },
       { id:"company_docs", icon:"file",        label:"Company Documents" },
       { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms" },
@@ -3142,6 +3211,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="ai_governance" && <LazyTab><AiGovernance environment={environment}/></LazyTab>}
         {activeSection==="ai_matching"  && <LazyTab><AiMatchingSettings/></LazyTab>}
         {activeSection==="file_types"   && <LazyTab><FileTypesSettings environment={environment} objects={[]}/></LazyTab>}
+        {activeSection==="media_library"&& <LazyTab><MediaLibrarySettings environment={environment}/></LazyTab>}
         {activeSection==="task_groups"  && <LazyTab><TaskGroupsSettings environment={environment}/></LazyTab>}
         {activeSection==="company_docs" && <LazyTab><CompanyDocuments environment={environment}/></LazyTab>}
         {activeSection==="duplicates" && <LazyTab><DuplicatesSettings environment={environment}/></LazyTab>}
