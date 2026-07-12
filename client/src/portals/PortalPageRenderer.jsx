@@ -511,20 +511,32 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
     );
   };
 
+  const [heroFailed, setHeroFailed] = useState(false);
+  useEffect(() => { setHeroFailed(false); }, [selected?.id]);
+
   if (selected && isJobs) {
     const d = selected.data || {};
-    const heroImg = resolveHeaderImage(selected);
+    const heroImg = heroFailed ? null : resolveHeaderImage(selected);
     return (
       <div style={{ fontFamily:ff }}>
         <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:12 }}>← Back</button>
-        {heroImg && (
-          <div style={{ width:'100%', height:200, overflow:'hidden', borderRadius:br, marginBottom:16, background:'#0F1729' }}>
+        {heroImg ? (
+          <div style={{ position:'relative', width:'100%', height:260, overflow:'hidden', borderRadius:br, marginBottom:20, background:'#0F1729' }}>
             <img src={heroImg} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
-              onError={e=>{ e.currentTarget.parentElement.style.display = 'none' }}/>
+              onError={() => setHeroFailed(true)}/>
+            {/* Dark gradient scrim — guarantees text contrast regardless of what's in the photo */}
+            <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.8) 100%)' }}/>
+            <div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'20px 24px' }}>
+              <h2 style={{ margin:'0 0 4px', fontSize:30, fontWeight:800, color:'#fff', textShadow:'0 1px 8px rgba(0,0,0,0.4)', lineHeight:1.15 }}>{d.job_title || d.name || 'Untitled'}</h2>
+              <div style={{ fontSize:14, color:'rgba(255,255,255,0.92)', textShadow:'0 1px 6px rgba(0,0,0,0.4)' }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+            </div>
           </div>
+        ) : (
+          <>
+            <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
+            <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+          </>
         )}
-        <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
-        <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
         {renderDetailFields(d)}
         <div style={{ marginTop:20 }} id="vrc-apply-section">
           {wizardOpen ? (
