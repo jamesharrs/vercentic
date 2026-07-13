@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
+import { mergePortalBranding } from './portalBranding.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -2765,6 +2766,12 @@ const CandidateHubWidget = ({ cfg, theme, portal }) => {
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab,     setTab]     = useState('applications');
+  // Hoisted out of the Messages tab's render branch below — hooks can't be
+  // called conditionally, and this helper only renders the currently active
+  // tab's content, so a hook declared inside one tab's `if` block would be
+  // skipped whenever a different tab is active.
+  const [reply,   setReply]   = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!token) { setError('No access token in URL. Use the link sent by your recruiter.'); setLoading(false); return; }
@@ -2878,7 +2885,6 @@ const CandidateHubWidget = ({ cfg, theme, portal }) => {
     }
 
     if (tabId === 'messages') {
-      const [reply, setReply] = useState(''); const [sending, setSending] = useState(false);
       return (
         <>
           {!items.length ? <HubEmpty text="No messages yet."/> : items.map(m => (
@@ -3156,7 +3162,6 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 // ── Portal Copilot (inline, reads portal.copilot config) ─────────────────────
 const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const cop = portal.copilot || {};
-  if (!cop.enabled) return null;
 
   const pr  = portal.theme?.primaryColor || portal.branding?.primary_color || '#4361EE';
   const ff  = portal.theme?.fontFamily   || 'sans-serif';
@@ -3176,6 +3181,12 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const [busy, setBusy]   = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
+
+  // Hooks must run on every render regardless of config — the enabled check
+  // happens here, after all hooks, not before them (was previously an early
+  // return above the hook calls, which breaks if `cop.enabled` ever changes
+  // for an already-mounted instance).
+  if (!cop.enabled) return null;
 
   // Parse <JOB_CARDS>[...]</JOB_CARDS> out of assistant replies
   const parseReply = (raw) => {
@@ -3330,11 +3341,8 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
 };
 
 export default function PortalPageRenderer({ portal, api }) {
-  // Merge rather than pick one wholesale — legacy portals store config under
-  // `theme`, newer saves (and any field-level admin toggle) land in `branding`.
-  // `branding` wins per-key so newly-added fields (like auto_header_images)
-  // aren't silently discarded just because `theme` also exists.
-  const theme = { ...(portal.theme||{}), ...(portal.branding||{}) }
+  // Merge rather than pick one wholesale — see portalBranding.js for why.
+  const theme = mergePortalBranding(portal)
   const rawPages = portal.pages || []
 
   // ── Inject the hub as a virtual page when enabled ───────────────────────
