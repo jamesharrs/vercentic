@@ -81,6 +81,83 @@ function getStore() {
 let _saveTimers = {};
 let _batchMode = false; // suppress individual saves during migration/seeding
 
+// ── PG delta flush ─────────────────────────────────────────────────────────────
+// Instead of rewriting every row of the tenant on each save (O(N) writes per
+// mutation — the old behaviour), we keep a per-tenant snapshot of row hashes
+// and push only the rows that actually changed. Handles both helper-mediated
+// mutations (insert/update/remove) AND direct store mutations by routes,
+// because the diff is computed from the live store, not from tracked ops.
+// First flush after boot does one full saveTenant to guarantee PG == memory,
+// then everything after is delta-only. On any PG error the snapshot is dropped
+// so the next flush self-heals with a full reconcile.
+const _pgSnapshots = {};   // key → { [table]: Map<id, hash> }
+const _pgInFlight  = {};   // key → Promise chain (serializes flushes per tenant)
+
+function _rowHash(str) {   // FNV-1a — fast, good enough for change detection
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+  return h;
+}
+
+function _computeDeltas(store, snapshot) {
+  const upserts = [], deletes = [], next = {};
+  for (const [tableName, items] of Object.entries(store)) {
+    if (!Array.isArray(items)) continue;
+    const prev = snapshot[tableName] || new Map();
+    const cur  = new Map();
+    for (const item of items) {
+      if (!item || !item.id) continue;
+      const id = String(item.id);
+      const h  = _rowHash(JSON.stringify(item));
+      cur.set(id, h);
+      if (prev.get(id) !== h) upserts.push({ tableName, id, data: item });
+    }
+    const gone = [];
+    for (const id of prev.keys()) if (!cur.has(id)) gone.push(id);
+    if (gone.length) deletes.push({ tableName, ids: gone });
+    next[tableName] = cur;
+  }
+  // Tables that existed in the snapshot but were removed from the store entirely
+  for (const [tableName, prev] of Object.entries(snapshot)) {
+    if (next[tableName]) continue;
+    const gone = [...prev.keys()];
+    if (gone.length) deletes.push({ tableName, ids: gone });
+  }
+  return { upserts, deletes, next };
+}
+
+function _buildSnapshot(store) {
+  const snap = {};
+  for (const [tableName, items] of Object.entries(store)) {
+    if (!Array.isArray(items)) continue;
+    const m = new Map();
+    for (const item of items) { if (item?.id) m.set(String(item.id), _rowHash(JSON.stringify(item))); }
+    snap[tableName] = m;
+  }
+  return snap;
+}
+
+function flushToPg(key, store) {
+  if (!pg.isEnabled()) return;
+  // Serialize flushes per tenant so an in-flight write never races a newer one
+  _pgInFlight[key] = (_pgInFlight[key] || Promise.resolve()).then(async () => {
+    try {
+      if (!_pgSnapshots[key]) {
+        await pg.saveTenant(key, store);            // full reconcile — first flush / after error
+        _pgSnapshots[key] = _buildSnapshot(store);
+        return;
+      }
+      const { upserts, deletes, next } = _computeDeltas(store, _pgSnapshots[key]);
+      if (upserts.length || deletes.length) await pg.applyDeltas(key, upserts, deletes);
+      _pgSnapshots[key] = next;
+    } catch (e) {
+      console.error(`[PG] flush error (${key}) — will full-reconcile on next save:`, e.message);
+      delete _pgSnapshots[key];
+    }
+  });
+  return _pgInFlight[key];
+}
+
 // Call withBatch(fn) to run fn with all insert/update/remove calls buffered.
 // A single saveStoreNow() is called at the end instead of one debounced write per op.
 async function withBatch(fn, slugOverride) {
@@ -112,10 +189,8 @@ function saveStore(slugOverride) {
       await fs.promises.writeFile(tmp, json);
       await fs.promises.rename(tmp, file);   // atomic on same filesystem
     } catch(e) { /* ignore fs errors in read-only environments */ }
-    // Postgres write (non-blocking)
-    if (pg.isEnabled()) {
-      pg.saveTenant(key, store).catch(e => console.error('PG saveStore error:', e.message));
-    }
+    // Postgres write (non-blocking, delta-only after first flush)
+    flushToPg(key, store);
   }, 150);
 }
 
@@ -128,9 +203,7 @@ function saveStoreNow(slugOverride) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(tenantDbPath(key === 'master' ? null : key), JSON.stringify(store, null, 2));
   } catch(e) { /* ignore */ }
-  if (pg.isEnabled()) {
-    pg.saveTenant(key, store).catch(e => console.error('PG saveStoreNow error:', e.message));
-  }
+  flushToPg(key, store);
 }
 
 function query(table, predicate) {
@@ -231,6 +304,7 @@ async function initDB() {
       if (pgStore && Object.keys(pgStore).length > 0) {
         const base = { ...EMPTY_STORE() };
         storeCache['master'] = { ...base, ...pgStore };
+        _pgSnapshots['master'] = _buildSnapshot(storeCache['master']); // memory == PG → first save can be delta-only
         console.log('[PG] Master store loaded from PostgreSQL');
 
       // Pre-load all tenant stores from PG so token/agent lookups work without filesystem
@@ -242,6 +316,7 @@ async function initDB() {
             const ts = await pg.loadTenant(slug);
             if (ts && Object.keys(ts).length > 0) {
               storeCache[slug] = { ...EMPTY_STORE(), ...ts };
+              _pgSnapshots[slug] = _buildSnapshot(storeCache[slug]);
             }
           } catch (e) {
             console.error(`[PG] Failed to pre-load tenant ${slug}:`, e.message);

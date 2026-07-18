@@ -1,8 +1,10 @@
 // client/src/LinkedInFinder.jsx
 import { useState, useCallback, useEffect } from "react";
+import { authHeaders } from "./apiClient.js";
 
 const tFetch = (path, opts = {}) =>
-  fetch(path.startsWith("http") ? path : `/api${path.startsWith("/") ? "" : "/"}${path}`, opts);
+  fetch(path.startsWith("http") ? path : `/api${path.startsWith("/") ? "" : "/"}${path}`,
+    { credentials: 'include', ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
 
 function LinkedInIcon({ color = "#0077b5", size = 16 }) {
   return (

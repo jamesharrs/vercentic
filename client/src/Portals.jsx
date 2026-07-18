@@ -2056,7 +2056,7 @@ Output ONLY valid HTML — no markdown fences, no explanation.`
         : `You are an expert HTML developer. Write clean HTML with minimal styling.
 Output ONLY valid HTML — no markdown fences, no explanation.`;
       const res  = await fetch('/api/ai/chat', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', credentials:'include', headers: jsonHeaders(),
         body: JSON.stringify({ messages:[{role:'user',content:prompt}], system, max_tokens:2000 }),
       });
       const data = await res.json();

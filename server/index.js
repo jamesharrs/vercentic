@@ -296,7 +296,7 @@ app.use((req, res, next) => {
 const AUTH_EXEMPT = [
   '/auth/login', '/auth/me',
   '/users/login', '/users/auth/login', '/users/ensure-test-users', '/users/logout', '/users/exchange-impersonation',
-  '/health', '/environments',
+  '/health',
   '/favicon.ico', '/favicon.svg', '/robots.txt',
   '/events/stream', '/events/status',
   '/notification-preferences/digest',
@@ -323,7 +323,6 @@ const AUTH_EXEMPT = [
   '/cases/magic-verify',
   '/signup',        // public self-serve signup — no auth needed
   '/setup-status',  // polled before first login to check if provisioning is complete
-  '/error-logs', '/ai', '/translate', '/linkedin-search',
   '/chrome-import',
   '/hub/request-link', '/hub/verify', '/hub/portal-branding',
   '/reschedule',
@@ -345,6 +344,9 @@ app.use('/api', (req, res, next) => {
   for (let i = 0; i < AUTH_EXEMPT_PREFIXES.length; i++) {
     if (path.startsWith(AUTH_EXEMPT_PREFIXES[i])) return next();
   }
+  // ErrorBoundary reports crashes before login — allow anonymous WRITE only.
+  // Reading/managing logs still requires auth (GET/PATCH/DELETE fall through).
+  if (req.method === 'POST' && path === '/error-logs') return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/check-email$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/send-otp$/)) return next();

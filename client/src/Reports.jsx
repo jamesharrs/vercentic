@@ -6,7 +6,7 @@ import {
   FunnelChart, Funnel, LabelList,
   XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
 } from "recharts";
-import api from "./apiClient";
+import api, { jsonHeaders } from "./apiClient";
 
 const B = {
   purple:"#7F77DD", purpleLight:"#AFA9EC", rose:"#D4537E", teal:"#1D9E75",
@@ -109,7 +109,7 @@ function AIExpressionBuilder({ fields, onInsert, onClose }) {
     setLoading(true); setResult(null);
     try {
       const res = await fetch("/api/ai/chat", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", credentials:"include", headers: jsonHeaders(),
         body: JSON.stringify({
           messages:[{role:"user",content:prompt}],
           system:`You are a formula assistant for a recruitment reporting tool.
