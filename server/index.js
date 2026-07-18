@@ -552,7 +552,6 @@ app.use('/api/security',          require('./routes/security'));
 app.use('/api/security-audit',    require('./routes/security_audit'));
 app.use('/api/field-visibility',  require('./routes/field_visibility'));
 app.use('/api/integrations',      require('./routes/integrations'));
-app.use('/api/email-domains',     require('./routes/email_domains'));
 app.use('/api/connector-actions', require('./routes/connector_actions'));
 app.use('/api/brand-kits',        require('./routes/brand_kits'));
 app.use('/api/talent-profile',    require('./routes/talent_profile'));

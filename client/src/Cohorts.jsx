@@ -1,16 +1,6 @@
 // client/src/Cohorts.jsx — Cohort Community Portal admin UI
 import { useState, useEffect, useCallback } from "react";
-
-const apiClient = window._apiClient || {
-  get: (p) => fetch(`/api${p}`, { credentials:'include', headers: window._authHeaders?.() || {} }).then(r=>r.json()),
-  post: (p,b) => fetch(`/api${p}`, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json', ...(window._authHeaders?.() || {})}, body:JSON.stringify(b) }).then(r=>r.json()),
-  patch: (p,b) => fetch(`/api${p}`, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json', ...(window._authHeaders?.() || {})}, body:JSON.stringify(b) }).then(r=>r.json()),
-  delete: (p,b) => fetch(`/api${p}`, { method:'DELETE', credentials:'include', headers:{'Content-Type':'application/json', ...(window._authHeaders?.() || {})}, body:b?JSON.stringify(b):undefined }).then(r=>r.json()),
-};
-
-// Try to use the project's apiClient if available
-let api;
-try { api = require('./utils/apiClient').default; } catch { api = apiClient; }
+import api from "./apiClient.js";
 
 const C = { accent:'#8B7EC8', accentLight:'#F3F0FF', bg:'#F8F7FF', text1:'#0D0D0F', text2:'#374151', text3:'#6B7280', border:'#E5E7EB', green:'#10B981', red:'#EF4444' };
 const F = "'Space Grotesk','DM Sans',sans-serif";

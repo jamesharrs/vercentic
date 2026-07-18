@@ -518,7 +518,6 @@ export const PORTAL_TEMPLATES = [
   hmDashboard, hmReviewBoard, hmMinimal,
   onboardJourney, onboardHub, onboardTimeline,
   agencySubmission, agencyDashboard, agencyMarketplace,
-,
 // ── CAMPAIGN PAGE TEMPLATES ───────────────────────────────────────────────────
 {
   id: 'campaign_1',

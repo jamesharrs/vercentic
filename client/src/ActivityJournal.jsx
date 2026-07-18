@@ -55,7 +55,7 @@ function calDate(iso) {
   return new Date(iso).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
 }
 
-const stripEmoji = s => (s||"").replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F300}-\u{1F9FF}🧪]/gu,"").trim();
+const stripEmoji = s => (s||"").replace(/\p{Extended_Pictographic}|\p{Variation_Selector}/gu,"").trim();
 
 const OBJ_ICON = { people:"users", jobs:"briefcase", "talent-pools":"layers" };
 

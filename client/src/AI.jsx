@@ -322,7 +322,7 @@ const MatchResultsList = ({ matches, onNavigate, selectable=false, selectedIds=n
                 if (selectable) { onToggleSelect?.(m.item.id); return; }
                 window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:m.item.id,objectId:m.item.object_id}}));
               }}
-              style={{background:C.surface,borderRadius:8,border:`1.5px solid ${selectable&&isChecked?C.accent:C.border}`,display:"flex",alignItems:"center",minHeight:48,transition:"all .12s",cursor:"pointer",position:"relative",
+              style={{borderRadius:8,border:`1.5px solid ${selectable&&isChecked?C.accent:C.border}`,display:"flex",alignItems:"center",minHeight:48,transition:"all .12s",cursor:"pointer",position:"relative",
                 background:selectable&&isChecked?C.accentLight:C.surface}}
               onMouseEnter={e=>{if(!selectable){e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,.07)";e.currentTarget.style.borderColor=C.accent+"44";}}}
               onMouseLeave={e=>{if(!selectable){e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=C.border;}}}>

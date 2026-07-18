@@ -307,7 +307,7 @@ export default function BiasScanner({ record, environment }) {
               Suggested Rewrite
             </span>
             <button onClick={copyRewrite}
-              style={{ fontSize:11, fontWeight:600, color:"#0ca678", background:"none",
+              style={{ fontSize:11, fontWeight:600, color:"#0ca678",
                 border:"none", cursor:"pointer", fontFamily:F, padding:"2px 6px",
                 borderRadius:6, background: copied ? "#dcfce7" : "transparent" }}>
               {copied ? "Copied ✓" : "Copy"}

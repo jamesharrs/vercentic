@@ -74,36 +74,6 @@ const C  = {
 };
 
 /* ─── tiny helpers ─────────────────────────────────────────────────────────── */
-/* ─── CSV helpers ────────────────────────────────────────────────────────────── */
-const downloadCSV = async (objectId, environmentId, objectSlug) => {
-  const url = `/csv/export?object_id=${objectId}&environment_id=${environmentId}`;
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${objectSlug}-export.csv`;
-  a.click();
-};
-
-const downloadTemplate = async (objectId, objectSlug) => {
-  const url = `/csv/template?object_id=${objectId}`;
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${objectSlug}-template.csv`;
-  a.click();
-};
-
-const importCSV = async (objectId, environmentId, file, mode='create') => {
-  const text = await file.text();
-  const res = await fetch(`/csv/import?object_id=${objectId}&environment_id=${environmentId}&mode=${mode}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/csv' },
-    body: text,
-  });
-  return res.json();
-};
 
 const Ic = ({ n, s=16, c="currentColor" }) => {
   const P = {

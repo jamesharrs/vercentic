@@ -387,7 +387,7 @@ You'll see these values come through in our interview process - we're looking fo
                 <Lock size={20} />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '16px' }}>Internal Copilot</div>
-                  <div style={{ fontSize: '12px', opacity: 0.9' }}>Full access to all documents</div>
+                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Full access to all documents</div>
                 </div>
               </div>
 
@@ -449,7 +449,7 @@ You'll see these values come through in our interview process - we're looking fo
                 <Users size={20} />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '16px' }}>Candidate Portal Copilot</div>
-                  <div style={{ fontSize: '12px', opacity: 0.9' }}>Candidate-safe documents only</div>
+                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Candidate-safe documents only</div>
                 </div>
               </div>
 
