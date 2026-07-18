@@ -175,7 +175,7 @@ function FeaturePacksSection() {
   const Cs = { surface2:'#1C2035', border:'#2A2F4A', text1:'#F0F4FF', text3:'#6B7599' };
 
   useEffect(() => {
-    fetch('/api/environments').then(r => r.json()).then(data => {
+    fetch('/api/environments', { credentials:'include' }).then(r => r.json()).then(data => {
       const envs = Array.isArray(data) ? data : [];
       setEnvironments(envs);
       if (envs.length > 0) setSelectedEnvId(envs[0].id);
@@ -424,7 +424,7 @@ function PlatformEvents() {
   const clearLogs = async () => {
     if (!window.confirm('Clear all platform event logs?')) return;
     setClearing(true);
-    await fetch('/api/superadmin/clients/platform-logs', { method:'DELETE' });
+    await fetch('/api/superadmin/clients/platform-logs', { method:'DELETE', credentials:'include', headers:_saHeaders(true) });
     setClearing(false); load();
   };
 
@@ -536,7 +536,7 @@ function EnvDiagnoseSection() {
   const [selName, setSelName] = useState('');
   const isMobile = useIsMobile();
   useEffect(() => {
-    fetch('/api/environments').then(r=>r.json()).then(data => {
+    fetch('/api/environments', { credentials:'include' }).then(r=>r.json()).then(data => {
       const list = Array.isArray(data) ? data : [];
       setEnvs(list);
       if (list.length) { setSelEnv(list[0].id); setSelName(list[0].name); }

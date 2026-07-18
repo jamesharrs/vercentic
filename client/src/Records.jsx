@@ -3503,7 +3503,7 @@ function FilterSkillsPicker({ value, onSelect }) {
     setLoading(true);
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/enterprise/skills/search?q=${encodeURIComponent(query)}&limit=20`);
+        const res = await fetch(`/api/enterprise/skills/search?q=${encodeURIComponent(query)}&limit=20`, { headers: authHeaders(), credentials: 'include' });
         const d   = await res.json();
         // API returns { results: [{name, category}], total } or plain array
         const arr = Array.isArray(d) ? d : (Array.isArray(d.results) ? d.results : (Array.isArray(d.skills) ? d.skills : []));
