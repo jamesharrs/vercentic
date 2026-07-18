@@ -18,7 +18,36 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const { getStore, saveStore, query, findOne, insert } = require('../db/init');
+const { mergePortalBranding } = require('../utils/portalBranding');
 const uid = () => crypto.randomUUID();
+
+// ── Header image resolution ───────────────────────────────────────────────────
+// Fast, deterministic (no LLM call) keyword-overlap match against the
+// environment's Media Library — safe to run on every public page view.
+// The richer Claude-based selection lives in /api/media-library/ai-select and
+// is used from the authenticated admin UI (one-click, cached onto the record).
+function resolveHeaderImage(job, portal) {
+  const manual = job.data?.header_image;
+  if (manual) return manual;
+  if (!portal.theme?.auto_header_images && !portal.branding?.auto_header_images) return null;
+
+  const store  = getStore();
+  const assets = (store.media_assets || []).filter(a => a.environment_id === portal.environment_id && !a.deleted_at);
+  if (!assets.length) return null;
+
+  const query_ = [job.data?.job_title, job.data?.department, job.data?.job_description || job.data?.description]
+    .filter(Boolean).join(' ').toLowerCase();
+  const words = query_.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+  let best = null, bestScore = -1;
+  for (const a of assets) {
+    const haystack = [a.name, a.category, ...(a.tags || [])].join(' ').toLowerCase();
+    let score = 0;
+    for (const w of words) if (haystack.includes(w)) score += 1;
+    if (score > bestScore) { bestScore = score; best = a; }
+  }
+  if (!best || bestScore <= 0) best = assets.find(a => a.category === 'Team & Culture') || assets[0];
+  return best?.url || null;
+}
 
 // ── Slug lookup ───────────────────────────────────────────────────────────────
 router.get('/slug/:slug', (req, res) => {
@@ -30,7 +59,7 @@ router.get('/slug/:slug', (req, res) => {
     (p.slug === norm || p.slug === slug || p.slug === '/' + slug)
   );
   if (!portal) return res.status(404).json({ error: 'Portal not found or not published' });
-  res.json({ ...portal, branding: portal.theme || portal.branding || {}, type: portal.type || 'career_site' });
+  res.json({ ...portal, branding: mergePortalBranding(portal), type: portal.type || 'career_site' });
 });
 
 // ── Job listings ──────────────────────────────────────────────────────────────
@@ -75,6 +104,7 @@ router.get('/:portalId/jobs', (req, res) => {
       salary_max:   j.data?.salary_max,
       currency:     j.data?.currency   || 'USD',
       description:  j.data?.job_description || j.data?.description || '',
+      header_image: resolveHeaderImage(j, portal),
       posted_at:    j.created_at,
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -101,6 +131,7 @@ router.get('/:portalId/job/:jobId', (req, res) => {
       salary_max:   record.data?.salary_max,
       currency:     record.data?.currency   || 'USD',
       description:  record.data?.job_description || record.data?.description || '',
+      header_image: resolveHeaderImage(record, portal),
       requirements: record.data?.requirements || '',
       benefits:     record.data?.benefits    || '',
       posted_at:    record.created_at,

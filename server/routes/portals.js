@@ -12,6 +12,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { getStore, saveStore } = require('../db/init');
+const { mergePortalBranding } = require('../utils/portalBranding');
 
 const uid = () => crypto.randomUUID();
 
@@ -57,7 +58,10 @@ router.get('/slug/:slug', (req, res) => {
     new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)
   )[0];
 
-  res.json({ ...portal, branding: portal.theme || portal.branding || {}, type: portal.type || 'career_site' });
+  // Merge theme + branding rather than picking one wholesale — legacy portals
+  // store their config under `theme`, the current admin UI writes to `branding`.
+  // `branding` wins per-key when both exist, since it reflects the latest edit.
+  res.json({ ...portal, branding: mergePortalBranding(portal), type: portal.type || 'career_site' });
 });
 
 

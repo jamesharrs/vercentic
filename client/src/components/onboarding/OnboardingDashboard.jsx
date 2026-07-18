@@ -1,6 +1,7 @@
 // client/src/OnboardingDashboard.jsx
 import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import api from "../../apiClient.js";
 
 const C = { card:"#fff", accent:"var(--t-accent,#4361ee)", text1:"#111827", text2:"#374151", text3:"#9ca3af", border:"#f0f0f0", green:"#0ca678", amber:"#f59f00", red:"#e03131", purple:"#7c3aed", blue:"#3b82f6", teal:"#0d9488" };
 const F = "'DM Sans',-apple-system,sans-serif";

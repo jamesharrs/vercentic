@@ -94,7 +94,7 @@ const StepBar = ({ steps, current, color }) => (
   </div>
 )
 
-const JobDetail = ({ job, portal, onApply, onBack }) => {
+const JobDetail = ({ job, portal, headerImage, onApply, onBack }) => {
   const c = css(portal.branding)
   const d = job.data || {}
   return (
@@ -102,6 +102,12 @@ const JobDetail = ({ job, portal, onApply, onBack }) => {
       <div style={{ background:c.primary, padding:'14px 0' }}>
         <Section><button onClick={onBack} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.85)', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:c.font }}>← Back to jobs</button></Section>
       </div>
+      {headerImage && (
+        <div style={{ width:'100%', height:220, overflow:'hidden', background:'#0F1729' }}>
+          <img src={headerImage} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+            onError={e=>{ e.currentTarget.parentElement.style.display = 'none' }}/>
+        </div>
+      )}
       <Section style={{ padding:'40px 24px' }}>
         <div style={{ maxWidth:680, margin:'0 auto' }}>
           <h1 style={{ fontSize:28, fontWeight:900, color:'#0F1729', marginBottom:8, letterSpacing:'-0.5px' }}>{d.job_title}</h1>
@@ -473,6 +479,7 @@ export default function CareerSite({ portal, objects, api }) {
   const c = css(portal.branding)
   const br = portal.branding || {}
   const [jobs, setJobs] = useState([])
+  const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [dept, setDept] = useState('')
@@ -487,6 +494,37 @@ export default function CareerSite({ portal, objects, api }) {
       .then(d => { setJobs((d.records||[]).filter(j=>j.data?.status==='Open'||!j.data?.status)); setLoading(false) })
       .catch(() => setLoading(false))
   }, [jobObj?.id])
+
+  // Only fetch the media library if this portal has auto header images enabled —
+  // avoids an extra network call for portals that don't use the feature.
+  useEffect(() => {
+    if (!br.auto_header_images) return
+    api.get(`/media-library?environment_id=${portal.environment_id}`)
+      .then(d => setAssets(Array.isArray(d?.assets) ? d.assets : []))
+      .catch(() => {})
+  }, [br.auto_header_images, portal.environment_id])
+
+  // Resolves the best header image for a job: manual override first,
+  // otherwise a fast client-side keyword match against the media library
+  // (same heuristic used server-side — no LLM call needed for the public site).
+  const resolveHeaderImage = (job) => {
+    const manual = job.data?.header_image
+    if (manual) return manual
+    if (!br.auto_header_images || !assets.length) return null
+    const qText = [job.data?.job_title, job.data?.department, job.data?.job_description || job.data?.description]
+      .filter(Boolean).join(' ').toLowerCase()
+    const words = qText.split(/[^a-z0-9]+/).filter(w => w.length > 2)
+    let best = null, bestScore = -1
+    for (const a of assets) {
+      const hay = [a.name, a.category, ...(a.tags || [])].join(' ').toLowerCase()
+      let score = 0
+      for (const w of words) if (hay.includes(w)) score++
+      if (score > bestScore) { bestScore = score; best = a }
+    }
+    if (!best || bestScore <= 0) best = assets.find(a => a.category === 'Team & Culture') || assets[0]
+    return best?.url || null
+  }
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -505,7 +543,7 @@ export default function CareerSite({ portal, objects, api }) {
   const filtered = jobs.filter(j=>(!search||(j.data?.job_title||'').toLowerCase().includes(search.toLowerCase()))&&(!dept||j.data?.department===dept))
 
   if (view==='apply') return <ApplyForm job={selected} portal={portal} api={api} onBack={()=>setView('detail')} onSuccess={()=>setView('list')}/>
-  if (view==='detail') return <JobDetail job={selected} portal={portal} onApply={()=>setView('apply')} onBack={()=>setView('list')}/>
+  if (view==='detail') return <JobDetail job={selected} portal={portal} headerImage={resolveHeaderImage(selected)} onApply={()=>setView('apply')} onBack={()=>setView('list')}/>
 
   return (
     <div style={{ minHeight:'100vh', background:c.bg, fontFamily:c.font }}>
@@ -527,13 +565,15 @@ export default function CareerSite({ portal, objects, api }) {
             <div style={{ fontSize:13, color:'#9CA3AF', marginBottom:4 }}>{filtered.length} open role{filtered.length!==1?'s':''}</div>
             {filtered.map(job=>{
               const d=job.data||{}
+              const thumb=resolveHeaderImage(job)
               return (
                 <div key={job.id} onClick={()=>{setSelected(job);setView('detail');}}
                   style={{ background:'white', borderRadius:14, border:'1.5px solid #E8ECF8', padding:'20px 24px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
                   onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)';e.currentTarget.style.borderColor=c.primary;}}
                   onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)';e.currentTarget.style.borderColor='#E8ECF8';}}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
-                    <div>
+                    {thumb && <img src={thumb} alt="" style={{ width:64, height:48, objectFit:'cover', borderRadius:8, flexShrink:0 }} onError={e=>{e.currentTarget.style.display='none'}}/>}
+                    <div style={{flex:1}}>
                       <div style={{ fontSize:17, fontWeight:700, color:'#0F1729', marginBottom:6 }}>{d.job_title}</div>
                       <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                         {d.department&&<Badge color="#6366F1">{d.department}</Badge>}

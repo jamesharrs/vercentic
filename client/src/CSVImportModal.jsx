@@ -1,7 +1,6 @@
 // CSVImportModal.jsx — extracted from Records.jsx
-import React, { useState, useRef, useCallback } from 'react';
-import api from './apiClient.js';
-import { C, F, Ic, Btn } from './RecordShared.jsx';
+import React, { useState } from 'react';
+import { importCSV, downloadTemplate } from './RecordShared.jsx';
 
 const CSVImportModal = ({ object, environment, onClose, onDone }) => {
   const [file, setFile] = useState(null);

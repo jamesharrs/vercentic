@@ -296,7 +296,7 @@ app.use((req, res, next) => {
 const AUTH_EXEMPT = [
   '/auth/login', '/auth/me',
   '/users/login', '/users/auth/login', '/users/ensure-test-users', '/users/logout', '/users/exchange-impersonation',
-  '/health', '/environments',
+  '/health',
   '/favicon.ico', '/favicon.svg', '/robots.txt',
   '/events/stream', '/events/status',
   '/notification-preferences/digest',
@@ -323,7 +323,6 @@ const AUTH_EXEMPT = [
   '/cases/magic-verify',
   '/signup',        // public self-serve signup — no auth needed
   '/setup-status',  // polled before first login to check if provisioning is complete
-  '/error-logs', '/ai', '/translate', '/linkedin-search',
   '/chrome-import',
   '/hub/request-link', '/hub/verify', '/hub/portal-branding',
   '/reschedule',
@@ -345,6 +344,9 @@ app.use('/api', (req, res, next) => {
   for (let i = 0; i < AUTH_EXEMPT_PREFIXES.length; i++) {
     if (path.startsWith(AUTH_EXEMPT_PREFIXES[i])) return next();
   }
+  // ErrorBoundary reports crashes before login — allow anonymous WRITE only.
+  // Reading/managing logs still requires auth (GET/PATCH/DELETE fall through).
+  if (req.method === 'POST' && path === '/error-logs') return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/check-email$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/send-otp$/)) return next();
@@ -423,6 +425,7 @@ app.use('/api/relationships',     require('./routes/relationships'));
 app.use('/api/notes',             require('./routes/notes'));
 app.use('/api/attachments',       require('./routes/attachments'));
 app.use('/api/file-types',        require('./routes/file_types'));
+app.use('/api/media-library',     require('./routes/media_library'));
 app.use('/api/file-index',        require('./routes/file_index'));
 app.use('/api/saved-views',       require('./routes/saved_views'));
 app.use('/api/scheduled-reports', require('./routes/scheduled_reports'));
@@ -551,7 +554,6 @@ app.use('/api/security',          require('./routes/security'));
 app.use('/api/security-audit',    require('./routes/security_audit'));
 app.use('/api/field-visibility',  require('./routes/field_visibility'));
 app.use('/api/integrations',      require('./routes/integrations'));
-app.use('/api/email-domains',     require('./routes/email_domains'));
 app.use('/api/connector-actions', require('./routes/connector_actions'));
 app.use('/api/brand-kits',        require('./routes/brand_kits'));
 app.use('/api/talent-profile',    require('./routes/talent_profile'));

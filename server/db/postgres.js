@@ -82,7 +82,33 @@ async function saveTenant(slug, store) {
     for (const [tableName, items] of Object.entries(store)) {
       if (!Array.isArray(items) || items.length === 0) continue;
       const ids = items.filter(i => i?.id).map(i => String(i.id)); if (ids.length === 0) continue;
-      await client.query(`DELETE FROM tenant_store WHERE tenant_slug = $1 AND table_name = $2 AND record_id NOT IN (${ids.map((_, k) => `$${k+3}`).join(',')})`, [slug, tableName, ...ids]);
+      // Array param counts as ONE bind parameter — safe at any table size
+      // (the old NOT IN ($3,$4,...) exploded past PG's 65,535-param limit at ~65k rows)
+      await client.query(`DELETE FROM tenant_store WHERE tenant_slug = $1 AND table_name = $2 AND NOT (record_id = ANY($3::text[]))`, [slug, tableName, ids]);
+    }
+    await client.query('COMMIT');
+  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+}
+
+// ── Delta writes ──────────────────────────────────────────────────────────────
+// Applies only changed rows instead of rewriting the whole tenant.
+// upserts: [{ tableName, id, data }]   deletes: [{ tableName, ids: [...] }]
+async function applyDeltas(slug, upserts = [], deletes = []) {
+  const p = getPool(); if (!p) return;
+  if (upserts.length === 0 && deletes.length === 0) return;
+  const client = await p.connect();
+  try {
+    await client.query('BEGIN');
+    const CHUNK = 500;
+    for (let i = 0; i < upserts.length; i += CHUNK) {
+      const chunk = upserts.slice(i, i + CHUNK);
+      const values = chunk.map((r, idx) => { const b = idx * 4; return `($${b+1}, $${b+2}, $${b+3}, $${b+4}::jsonb)`; }).join(', ');
+      const params = chunk.flatMap(r => [slug, r.tableName, String(r.id), JSON.stringify(r.data)]);
+      await client.query(`INSERT INTO tenant_store (tenant_slug, table_name, record_id, data) VALUES ${values} ON CONFLICT (tenant_slug, table_name, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, params);
+    }
+    for (const d of deletes) {
+      if (!d.ids?.length) continue;
+      await client.query(`DELETE FROM tenant_store WHERE tenant_slug = $1 AND table_name = $2 AND record_id = ANY($3::text[])`, [slug, d.tableName, d.ids.map(String)]);
     }
     await client.query('COMMIT');
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -141,6 +167,6 @@ function startKeepAlive() {
   console.log('[PG] Keep-alive started (4 min interval)');
 }
 
-module.exports = { getPool, isEnabled, bootstrap, initSchema, loadTenant, saveTenant, upsertRecord, deleteRecord, queryRecordsDirect, migrateFromJson, startKeepAlive,
+module.exports = { getPool, isEnabled, bootstrap, initSchema, loadTenant, saveTenant, applyDeltas, upsertRecord, deleteRecord, queryRecordsDirect, migrateFromJson, startKeepAlive,
   saveCollection: async () => {},
 };

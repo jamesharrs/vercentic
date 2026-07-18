@@ -423,7 +423,7 @@ const CompanySettings = () => {
                     Brand voice, EVP, values, benefits, interview process
                   </div>
                 </div>
-                <div style={{ padding: '4px 12px', background: '#10b981', color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 600' }}>
+                <div style={{ padding: '4px 12px', background: '#10b981', color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
                   Active
                 </div>
               </div>
@@ -437,7 +437,7 @@ const CompanySettings = () => {
                     {documents.length} documents • {documents.reduce((sum, d) => sum + d.chunks, 0)} searchable chunks
                   </div>
                 </div>
-                <div style={{ padding: '4px 12px', background: '#10b981', color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 600' }}>
+                <div style={{ padding: '4px 12px', background: '#10b981', color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
                   Active
                 </div>
               </div>

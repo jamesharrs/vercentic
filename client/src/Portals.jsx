@@ -35,8 +35,8 @@ const COLUMN_PRESETS = [
 
 const WIDGET_TYPES = [
   { type:"hero",         label:"Hero",          icon:"mountain",  desc:"Headline, subheading & CTA" },
-  { type:"text",         label:"Rich Text",      icon:"align",     desc:"Copy & content blocks" },
-  { type:"rich_text",    label:"Article",        icon:"fileText",  desc:"Markdown content with headings" },
+  { type:"text",         label:"Simple Text",    icon:"align",     desc:"Plain paragraph copy — no headings, just body text" },
+  { type:"rich_text",    label:"Article",        icon:"fileText",  desc:"Long-form content with headings, bold, links (Markdown)" },
   { type:"image",        label:"Image",          icon:"image",     desc:"Photo or illustration" },
   { type:"jobs",         label:"Job List",       icon:"briefcase", desc:"Open positions with filters" },
   { type:"people",       label:"People List",    icon:"users2",    desc:"Candidates or team members" },
@@ -49,10 +49,10 @@ const WIDGET_TYPES = [
   { type:"team",         label:"Team",           icon:"userCheck", desc:"People from records" },
   { type:"video",        label:"Video",          icon:"play",      desc:"YouTube or Vimeo embed" },
   { type:"map_embed",    label:"Map",            icon:"map",       desc:"Google Maps office location" },
-  { type:"cta_banner",   label:"CTA Banner",     icon:"megaphone", desc:"Full-width call to action" },
+  { type:"cta_banner",   label:"CTA Banner",     icon:"megaphone", desc:"Bold, full-width banner with up to two buttons — for a big moment like a page footer" },
   { type:"dept_grid",     label:"Dept Grid",      icon:"grid",      desc:"Clickable department tiles" },
   { type:"benefits_grid", label:"Benefits Grid",  icon:"gift",      desc:"Icon + title + text benefit cards" },
-  { type:"faq",           label:"FAQ",            icon:"help",      desc:"Expandable Q&A accordion" },
+  { type:"faq",           label:"FAQ",            icon:"help",      desc:"Recruiting Q&A accordion, pre-filled with sensible defaults" },
   { type:"featured_jobs", label:"Featured Jobs",  icon:"star",      desc:"Latest or pinned job cards/list" },
   { type:"trust_bar",     label:"Stats Bar",      icon:"award",     desc:"Company stats strip (500+ employees…)" },
   { type:"job_alerts",    label:"Job Alerts",     icon:"bell",      desc:"Email sign-up for new role notifications" },
@@ -61,9 +61,9 @@ const WIDGET_TYPES = [
   { type:"saved_jobs",    label:"Saved Jobs",     icon:"bookmark",  desc:"Candidate's bookmarked roles" },
   { type:"candidate_hub", label:"Candidate Hub",  icon:"inbox",     desc:"Full self-service hub — applications, interviews, offers, messages" },
   { type:"tabs",          label:"Tabs",           icon:"layout",    desc:"Tabbed content sections" },
-  { type:"content",      label:"Content Block",  icon:"align",     desc:"Heading, text, cards & CTA" },
-  { type:"accordion",   label:"Accordion",       icon:"list",      desc:"Collapsible FAQ-style items" },
-  { type:"cta",          label:"CTA Section",    icon:"zap",       desc:"Bold call-to-action with button" },
+  { type:"content",      label:"Content Block",  icon:"align",     desc:"Most flexible option — heading + text + optional cards and button, all in one" },
+  { type:"accordion",   label:"Accordion",       icon:"list",      desc:"Generic collapsible list for any content (use FAQ instead for hiring questions)" },
+  { type:"cta",          label:"CTA Section",    icon:"zap",       desc:"Compact inline card with one button — for a lighter nudge mid-page" },
   { type:"divider",      label:"Divider",        icon:"minus",     desc:"Horizontal separator" },
   { type:"spacer",       label:"Spacer",         icon:"square",    desc:"Blank vertical space" },
   { type:"files",        label:"Files / Docs",   icon:"paperclip", desc:"Display record attachments by file type" },
@@ -300,10 +300,7 @@ const ThemeDrawer = ({ theme, onChange, onClose }) => {
           <Ic n="palette" s={16} c={C.accent}/>
           <span style={{fontSize:15,fontWeight:800,color:C.text1}}>Design Tokens</span>
         </div>
-        <button onClick={()=>{
-          if(isDirty&&!window.confirm("You have unsaved changes. Leave without saving?")){return;}
-          onClose();
-        }} style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,
+        <button onClick={onClose} style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,
           cursor:"pointer",color:C.text2,padding:"5px 10px",display:"flex",alignItems:"center",gap:4,
           fontSize:12,fontWeight:600,fontFamily:F}}>
           <Ic n="x" s={12}/> Close
@@ -578,6 +575,43 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
           {lbl("Company logo URL")}<input value={portal.nav?.logoUrl||""} onChange={e=>onChange({...portal,nav:{...(portal.nav||{}),logoUrl:e.target.value}})} placeholder="https://…/logo.svg" style={inp}/>
           {(portal.nav?.logoUrl)&&<img src={portal.nav.logoUrl} alt="logo preview" style={{maxHeight:40,maxWidth:160,objectFit:"contain",borderRadius:4}} onError={e=>e.target.style.display="none"}/>}
           {lbl("Tagline / description")}<input value={br.tagline||""} onChange={e=>setBr("tagline",e.target.value)} placeholder="Building the future, one hire at a time" style={inp}/>
+          {(() => {
+            const showHeaderImages = br.show_header_images===undefined ? !!br.auto_header_images : !!br.show_header_images;
+            return (
+          <div style={{marginTop:6,padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2||"#F9FAFB"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,fontWeight:600,color:C.text1}}>
+              <input type="checkbox" checked={showHeaderImages}
+                onChange={e=>{
+                  const on=e.target.checked;
+                  onChange({...portal,branding:{...br,show_header_images:on,
+                    header_images_on_list: br.header_images_on_list===undefined?true:br.header_images_on_list,
+                    header_images_on_detail: br.header_images_on_detail===undefined?true:br.header_images_on_detail}});
+                }}
+                style={{accentColor:C.accent}}/>
+              Show job header images
+            </label>
+            {showHeaderImages&&<div style={{marginTop:10,paddingLeft:24,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"flex",gap:20}}>
+                <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:C.text2}}>
+                  <input type="checkbox" checked={br.header_images_on_list!==false} onChange={e=>setBr("header_images_on_list",e.target.checked)} style={{accentColor:C.accent}}/>
+                  On job list
+                </label>
+                <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:C.text2}}>
+                  <input type="checkbox" checked={br.header_images_on_detail!==false} onChange={e=>setBr("header_images_on_detail",e.target.checked)} style={{accentColor:C.accent}}/>
+                  On job detail
+                </label>
+              </div>
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text2}}>
+                  <input type="checkbox" checked={!!br.auto_header_images} onChange={e=>setBr("auto_header_images",e.target.checked)} style={{accentColor:C.accent}}/>
+                  Auto-select header images for jobs that don't have one set
+                </label>
+                <div style={{fontSize:11,color:C.text3,marginTop:4,paddingLeft:24}}>Matches an image from the Media Library by department/title — set a manual image on the job to override.</div>
+              </div>
+            </div>}
+          </div>
+            );
+          })()}
           {lbl("Portal name (internal)")}<input value={portal.name||""} onChange={e=>onChange({...portal,name:e.target.value})} style={inp}/>
         </>}
         {tab==="access"&&<>
@@ -797,11 +831,12 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
 // ─── Widget Picker Modal ───────────────────────────────────────────────────────
 const WIDGET_CATEGORIES = [
   { id:"layout",     label:"Layout",      color:"#64748b", icon:"grid",      widgets:["divider","spacer","tabs"] },
-  { id:"content",    label:"Content",     color:"#7c3aed", icon:"align",     widgets:["hero","text","rich_text","image","image_gallery","video","stats","trust_bar","testimonials","benefits_grid","faq","cta_banner","content","accordion","cta","html_embed"] },
-  { id:"recruitment",label:"Recruitment", color:"#0891b2", icon:"briefcase", widgets:["jobs","featured_jobs","dept_grid","job_alerts","app_status","saved_jobs","hm_widget"] },
+  { id:"content",    label:"Content",     color:"#7c3aed", icon:"align",     widgets:["hero","text","rich_text","content","image","image_gallery","video","html_embed"] },
+  { id:"marketing",  label:"Marketing",   color:"#db2777", icon:"megaphone", widgets:["stats","trust_bar","testimonials","benefits_grid","faq","accordion","cta_banner","cta"] },
+  { id:"recruitment",label:"Recruitment", color:"#0891b2", icon:"briefcase", widgets:["jobs","featured_jobs","dept_grid","job_alerts","app_status","saved_jobs","hm_widget","candidate_hub"] },
   { id:"people",     label:"People",      color:"#059669", icon:"users2",    widgets:["people","team"] },
   { id:"forms",      label:"Forms",       color:"#d97706", icon:"form",      widgets:["form","multistep_form","files","map_embed"] },
-  { id:"insights",   label:"Insights",    color:"#7c3aed", icon:"sparkles",  widgets:["ai_summary","report_widget","hm_widget"] },
+  { id:"insights",   label:"Insights",    color:"#7c3aed", icon:"sparkles",  widgets:["ai_summary","report_widget","hm_widget","find_your_fit"] },
 ];
 const WIDGET_TYPE_MAP = Object.fromEntries(WIDGET_TYPES.map(w=>[w.type,w]));
 
@@ -1989,101 +2024,6 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
       </div>
     </div>
   );
-  return (
-    <div style={{display:'flex',flexDirection:'column',gap:16}}>
-      {/* Title + Colour */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'end'}}>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Widget Title</div>
-          <input value={cfg.widget_title||''} onChange={e=>set('widget_title',e.target.value)}
-            placeholder="My Candidates"
-            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}
-            onFocus={e=>e.target.style.borderColor=accentColor} onBlur={e=>e.target.style.borderColor=C.border}/>
-        </div>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Accent</div>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <input type="color" value={accentColor} onChange={e=>set('accent_color',e.target.value)}
-              style={{width:36,height:36,padding:2,borderRadius:8,border:`1.5px solid ${C.border}`,cursor:'pointer'}}/>
-            <span style={{fontSize:11,color:C.text3,fontFamily:'monospace'}}>{accentColor}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Data source */}
-      <div>
-        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Data Source (Saved List)</div>
-        <select value={cfg.list_id||''} onChange={e=>set('list_id',e.target.value)}
-          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
-          <option value=''>— Select a saved list —</option>
-          {savedLists.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-        {savedLists.length===0&&(
-          <div style={{fontSize:11,color:'#D97706',marginTop:4}}>
-            ⚠ Mark lists as "Portal Visible" in the Lists panel to use them here.
-          </div>
-        )}
-      </div>
-
-      {/* Display mode pills */}
-      <div>
-        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Display Mode</div>
-        <div style={{display:'flex',gap:8}}>
-          {['card','table','kanban'].map(m=>(
-            <button key={m} onClick={()=>set('display_mode',m)} style={{
-              flex:1,padding:'8px 0',borderRadius:9,cursor:'pointer',fontFamily:F,
-              border:`1.5px solid ${(cfg.display_mode||'card')===m?accentColor:C.border}`,
-              background:(cfg.display_mode||'card')===m?`${accentColor}14`:C.surface,
-              color:(cfg.display_mode||'card')===m?accentColor:C.text2,
-              fontSize:12,fontWeight:700,textTransform:'capitalize',transition:'all .12s'
-            }}>{m}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Kanban stages */}
-      {cfg.display_mode==='kanban'&&(
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Kanban Stages</div>
-          <input value={(cfg.stages||[]).join(', ')} onChange={e=>set('stages',e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}
-            placeholder="Applied, Screening, Interview, Offer"
-            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
-        </div>
-      )}
-
-      {/* CTA Actions */}
-      <div>
-        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>CTA Actions</div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-          {HM_CTA_OPTIONS.map(opt=>{
-            const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
-            return (
-              <button key={opt.action} onClick={()=>{
-                const btns=active
-                  ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
-                  :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
-                set('cta_buttons',btns);
-              }} style={{
-                padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
-                border:`1.5px solid ${active?accentColor:C.border}`,
-                background:active?`${accentColor}14`:C.surface,
-                color:active?accentColor:C.text2,
-                fontSize:12,fontWeight:600,transition:'all .12s'
-              }}>{active?'✓ ':''}{opt.label}</button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Empty state */}
-      <div>
-        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Empty State Message</div>
-        <input value={cfg.empty_message||''} onChange={e=>set('empty_message',e.target.value)}
-          placeholder="No candidates to show"
-          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box'}}/>
-      </div>
-    </div>
-  );
 };
 
 // ─── HTML Embed Config ─────────────────────────────────────────────────────────
@@ -2116,7 +2056,7 @@ Output ONLY valid HTML — no markdown fences, no explanation.`
         : `You are an expert HTML developer. Write clean HTML with minimal styling.
 Output ONLY valid HTML — no markdown fences, no explanation.`;
       const res  = await fetch('/api/ai/chat', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', credentials:'include', headers: jsonHeaders(),
         body: JSON.stringify({ messages:[{role:'user',content:prompt}], system, max_tokens:2000 }),
       });
       const data = await res.json();
@@ -3252,7 +3192,14 @@ const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
   const safeRows = page?.rows || [];
 
   const updateRow = (i, updated) => onUpdate({...page, rows:safeRows.map((r,j)=>j===i?updated:r)});
-  const deleteRow = (i) => onUpdate({...page, rows:safeRows.filter((_,j)=>j!==i)});
+  const deleteRow = async (i) => {
+    const row = safeRows[i];
+    const hasContent = (row?.cells||[]).some(c => c.widgetType);
+    // Only interrupt with a confirm when there's actually something to lose —
+    // an empty row (no widget picked yet) can be removed instantly.
+    if (hasContent && !(await window.__confirm({ title:"Delete this row?", message:"Everything in it will be removed. This can't be undone.", danger:true }))) return;
+    onUpdate({...page, rows:safeRows.filter((_,j)=>j!==i)});
+  };
   const addRow = (preset, afterIdx) => {
     const rows = [...safeRows];
     rows.splice(afterIdx+1, 0, defaultRow(preset));
@@ -4621,7 +4568,16 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         {/* RIGHT — tools + primary actions */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
 
-          {/* Tools dropdown (Theme / Brand Kit / Sections / Settings) */}
+          {/* Theme — surfaced as its own button since it's the most-used tool */}
+          <button onClick={()=>setShowTheme(s=>!s)} title="Theme"
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:600,
+              border:`1px solid ${showTheme?C.accent:C.border}`,background:showTheme?C.accentLight:"transparent",color:showTheme?C.accent:C.text2,transition:"all .15s"}}
+            onMouseEnter={e=>{if(!showTheme)e.currentTarget.style.background=C.surface2;}}
+            onMouseLeave={e=>{if(!showTheme)e.currentTarget.style.background="transparent";}}>
+            <Ic n="palette" s={12} c={showTheme?C.accent:C.text2}/>Theme
+          </button>
+
+          {/* Tools dropdown (Brand Kit / Sections / Settings) */}
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowMoreMenu(m=>!m)}
               style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,cursor:"pointer",fontFamily:F,fontSize:12,fontWeight:600,
@@ -4635,7 +4591,6 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
               <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.surface,borderRadius:12,
                 boxShadow:"0 8px 32px rgba(0,0,0,.15)",border:`1px solid ${C.border}`,zIndex:700,minWidth:160,padding:4,overflow:"hidden"}}>
                 {[
-                  {icon:"palette",  label:"Theme",     onClick:()=>{setShowTheme(s=>!s);setShowMoreMenu(false);}},
                   {icon:"sparkles", label:"Brand Kit",  onClick:()=>{setShowBrandKit(true);setShowMoreMenu(false);}},
                   {icon:"library",  label:"Sections",   onClick:()=>{setShowLibrary(true);setShowMoreMenu(false);}},
                   {icon:"settings", label:"Settings",   onClick:()=>{setShowPortalSettings(s=>!s);setShowMoreMenu(false);}},
@@ -4674,7 +4629,11 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
           {/* Publish */}
           <button onClick={async()=>{
-              const newStatus = portal.status==="published"?"draft":"published";
+              const goingLive = portal.status!=="published";
+              // Publishing a draft is low-stakes; taking a live site down is not —
+              // only interrupt with a confirm in the unpublish direction.
+              if (!goingLive && !(await window.__confirm({ title:"Unpublish this portal?", message:"The public URL will stop working immediately. Anyone visiting it — including candidates mid-application — will see a 'not found' page.", danger:true, confirmLabel:"Unpublish" }))) return;
+              const newStatus = goingLive?"published":"draft";
               const updated = {...portal, status: newStatus};
               setPortal(updated);
               if (updated.id && !String(updated.id).startsWith("new_")) {

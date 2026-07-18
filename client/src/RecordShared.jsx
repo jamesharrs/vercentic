@@ -1,6 +1,7 @@
 // RecordShared.jsx — shared UI primitives used across Records module
 // Import from here in extracted sub-components to avoid duplicating code
 import React from 'react';
+import { API_ORIGIN, authHeaders, getCsrfToken } from './apiClient.js';
 
 export const F  = "'Plus Jakarta Sans', -apple-system, sans-serif";
 export const C  = {
@@ -11,31 +12,30 @@ export const C  = {
 
 /* ─── tiny helpers ─────────────────────────────────────────────────────────── */
 /* ─── CSV helpers ────────────────────────────────────────────────────────────── */
-const downloadCSV = async (objectId, environmentId, objectSlug) => {
-  const url = `/csv/export?object_id=${objectId}&environment_id=${environmentId}`;
-  const res = await fetch(url);
+const csvBlobDownload = async (url, filename) => {
+  const res = await fetch(url, { credentials: 'include', headers: authHeaders() });
+  if (!res.ok) { console.error('CSV download failed:', res.status); return; }
   const blob = await res.blob();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${objectSlug}-export.csv`;
+  a.download = filename;
   a.click();
+  URL.revokeObjectURL(a.href);
 };
 
-const downloadTemplate = async (objectId, objectSlug) => {
-  const url = `/csv/template?object_id=${objectId}`;
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${objectSlug}-template.csv`;
-  a.click();
-};
+export const downloadCSV = (objectId, environmentId, objectSlug) =>
+  csvBlobDownload(`${API_ORIGIN}/api/csv/export?object_id=${objectId}&environment_id=${environmentId}`, `${objectSlug}-export.csv`);
 
-const importCSV = async (objectId, environmentId, file, mode='create') => {
+export const downloadTemplate = (objectId, objectSlug) =>
+  csvBlobDownload(`${API_ORIGIN}/api/csv/template?object_id=${objectId}`, `${objectSlug}-template.csv`);
+
+export const importCSV = async (objectId, environmentId, file, mode='create') => {
   const text = await file.text();
-  const res = await fetch(`/csv/import?object_id=${objectId}&environment_id=${environmentId}&mode=${mode}`, {
+  const csrf = getCsrfToken();
+  const res = await fetch(`${API_ORIGIN}/api/csv/import?object_id=${objectId}&environment_id=${environmentId}&mode=${mode}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/csv' },
+    credentials: 'include',
+    headers: { 'Content-Type': 'text/csv', ...authHeaders(), ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
     body: text,
   });
   return res.json();

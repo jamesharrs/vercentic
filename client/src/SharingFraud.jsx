@@ -105,8 +105,6 @@ function buildShareUrl(token,jobTitle,applyUrl){
 // SHARING PANEL
 // ════════════════════════════════════════════════════════════════════════════
 export function SharingPanel({record,object,environment,canRecord=()=>true}){
-  if(!canRecord("record_share_job")) return <FeatureDisabled label="Share & Promote"/>;
-
   const [tokens,   setTokens]   =useState([]);
   const [analytics,setAnalytics]=useState(null);
   const [loading,  setLoading]  =useState(true);
@@ -142,6 +140,7 @@ export function SharingPanel({record,object,environment,canRecord=()=>true}){
   };
   useEffect(()=>{load();},[load]);
 
+  if(!canRecord("record_share_job")) return <FeatureDisabled label="Share & Promote"/>;
   if(loading) return <div style={{padding:"24px 0",textAlign:"center",color:C.text3,fontSize:13}}>Loading sharing…</div>;
 
   if(!tokens.length) return(
@@ -292,8 +291,6 @@ const REC_CFG={
 };
 
 export function FraudPanel({record,fields,environment,canRecord=()=>true}){
-  if(!canRecord("record_fraud_analysis")) return <FeatureDisabled label="AI Verification"/>;
-
   const [analysis, setAnalysis] =useState(null);
   const [loading,  setLoading]  =useState(true);
   const [analysing,setAnalysing]=useState(false);
@@ -337,6 +334,7 @@ export function FraudPanel({record,fields,environment,canRecord=()=>true}){
 
   const name=[record?.data?.first_name,record?.data?.last_name].filter(Boolean).join(" ")||"this person";
 
+  if(!canRecord("record_fraud_analysis")) return <FeatureDisabled label="AI Verification"/>;
   if(loading) return <div style={{padding:"20px 0",textAlign:"center",color:C.text3,fontSize:13}}>Loading…</div>;
 
   if(!analysis) return(

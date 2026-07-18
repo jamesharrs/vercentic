@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
+import { mergePortalBranding } from './portalBranding.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -335,6 +336,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
   const [selected, setSelected] = useState(null);
   const [applying, setApplying] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [mediaAssets, setMediaAssets] = useState([]);
   // Pagination and extra-filter state — declared here (before any early returns) to satisfy rules-of-hooks
   const [page, setPage] = useState(1);
   const [extraVals, setExtraVals] = useState({});
@@ -383,6 +385,42 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
 
   const isJobs = objMeta?.slug === 'jobs';
   const isPeople = objMeta?.slug === 'people';
+
+  // Master switch — falls back to the older auto_header_images flag for portals
+  // saved before this on/off toggle existed, so nothing regresses silently.
+  const showHeaderImages = theme.show_header_images === undefined ? !!theme.auto_header_images : !!theme.show_header_images;
+  const showOnList   = showHeaderImages && theme.header_images_on_list   !== false;
+  const showOnDetail = showHeaderImages && theme.header_images_on_detail !== false;
+
+  // Media library — only fetched when this portal has header images enabled at all.
+  useEffect(() => {
+    if (!isJobs || !showHeaderImages || !portal?.environment_id) return;
+    api.get(`/media-library?environment_id=${portal.environment_id}`)
+      .then(d => setMediaAssets(Array.isArray(d?.assets) ? d.assets : []))
+      .catch(() => {});
+  }, [isJobs, showHeaderImages, portal?.environment_id]);
+
+  // Resolves the best header image for a job: manual field value first,
+  // otherwise a fast client-side keyword match against the media library.
+  // Returns null entirely when the master switch is off, regardless of
+  // whether the job has a manually-set image — full kill switch for the feature.
+  const resolveHeaderImage = (record) => {
+    if (!showHeaderImages) return null;
+    const d = record?.data || {};
+    if (d.header_image) return typeof d.header_image === 'object' ? d.header_image.url : d.header_image;
+    if (!theme.auto_header_images || !mediaAssets.length) return null;
+    const qText = [d.job_title, d.department, d.description || d.job_description].filter(Boolean).join(' ').toLowerCase();
+    const words = qText.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+    let best = null, bestScore = -1;
+    for (const a of mediaAssets) {
+      const hay = [a.name, a.category, ...(a.tags || [])].join(' ').toLowerCase();
+      let score = 0;
+      for (const w of words) if (hay.includes(w)) score++;
+      if (score > bestScore) { bestScore = score; best = a; }
+    }
+    if (!best || bestScore <= 0) best = mediaAssets.find(a => a.category === 'Team & Culture') || mediaAssets[0];
+    return best?.url || null;
+  };
 
   // Listen for vrc:openJob events fired by FeaturedJobsWidget / other widgets
   useEffect(() => {
@@ -483,13 +521,32 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
     );
   };
 
+  const [heroFailed, setHeroFailed] = useState(false);
+  useEffect(() => { setHeroFailed(false); }, [selected?.id]);
+
   if (selected && isJobs) {
     const d = selected.data || {};
+    const heroImg = (heroFailed || !showOnDetail) ? null : resolveHeaderImage(selected);
     return (
       <div style={{ fontFamily:ff }}>
         <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:pr, fontSize:13, fontWeight:600, fontFamily:ff, padding:0, marginBottom:12 }}>← Back</button>
-        <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
-        <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+        {heroImg ? (
+          <div style={{ position:'relative', width:'100%', height:260, overflow:'hidden', borderRadius:br, marginBottom:20, background:'#0F1729' }}>
+            <img src={heroImg} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+              onError={() => setHeroFailed(true)}/>
+            {/* Dark gradient scrim — guarantees text contrast regardless of what's in the photo */}
+            <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.8) 100%)' }}/>
+            <div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'20px 24px' }}>
+              <h2 style={{ margin:'0 0 4px', fontSize:30, fontWeight:800, color:'#fff', textShadow:'0 1px 8px rgba(0,0,0,0.4)', lineHeight:1.15 }}>{d.job_title || d.name || 'Untitled'}</h2>
+              <div style={{ fontSize:14, color:'rgba(255,255,255,0.92)', textShadow:'0 1px 6px rgba(0,0,0,0.4)' }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:700, color:tc }}>{d.job_title || d.name || 'Untitled'}</h2>
+            <div style={{ fontSize:13, color:tc+'99', marginBottom:16 }}>{[d.department, d.location, d.work_type].filter(Boolean).join(' · ')}</div>
+          </>
+        )}
         {renderDetailFields(d)}
         <div style={{ marginTop:20 }} id="vrc-apply-section">
           {wizardOpen ? (
@@ -609,6 +666,7 @@ const JobsWidget = ({ cfg, theme, portal, api, track, defaultSlug }) => {
             onMouseEnter={e=>e.currentTarget.style.background=pr+'08'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
             <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
               {isPeople && <div style={{ width:36, height:36, borderRadius:'50%', background:pr+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:pr, flexShrink:0 }}>{getName(r).split(' ').map(w=>w[0]).join('').slice(0,2)}</div>}
+              {isJobs && showOnList && resolveHeaderImage(r) && <img src={resolveHeaderImage(r)} alt="" style={{ width:52, height:40, objectFit:'cover', borderRadius:6, flexShrink:0 }} onError={e=>{e.currentTarget.style.display='none'}}/>}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:tc }}>{getName(r)}</div>
                 {cfg.listFields?.length > 0 ? (
@@ -2708,6 +2766,12 @@ const CandidateHubWidget = ({ cfg, theme, portal }) => {
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab,     setTab]     = useState('applications');
+  // Hoisted out of the Messages tab's render branch below — hooks can't be
+  // called conditionally, and this helper only renders the currently active
+  // tab's content, so a hook declared inside one tab's `if` block would be
+  // skipped whenever a different tab is active.
+  const [reply,   setReply]   = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!token) { setError('No access token in URL. Use the link sent by your recruiter.'); setLoading(false); return; }
@@ -2821,7 +2885,6 @@ const CandidateHubWidget = ({ cfg, theme, portal }) => {
     }
 
     if (tabId === 'messages') {
-      const [reply, setReply] = useState(''); const [sending, setSending] = useState(false);
       return (
         <>
           {!items.length ? <HubEmpty text="No messages yet."/> : items.map(m => (
@@ -3099,7 +3162,6 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 // ── Portal Copilot (inline, reads portal.copilot config) ─────────────────────
 const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const cop = portal.copilot || {};
-  if (!cop.enabled) return null;
 
   const pr  = portal.theme?.primaryColor || portal.branding?.primary_color || '#4361EE';
   const ff  = portal.theme?.fontFamily   || 'sans-serif';
@@ -3119,6 +3181,12 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const [busy, setBusy]   = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
+
+  // Hooks must run on every render regardless of config — the enabled check
+  // happens here, after all hooks, not before them (was previously an early
+  // return above the hook calls, which breaks if `cop.enabled` ever changes
+  // for an already-mounted instance).
+  if (!cop.enabled) return null;
 
   // Parse <JOB_CARDS>[...]</JOB_CARDS> out of assistant replies
   const parseReply = (raw) => {
@@ -3273,7 +3341,8 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
 };
 
 export default function PortalPageRenderer({ portal, api }) {
-  const theme = portal.theme || portal.branding || {}
+  // Merge rather than pick one wholesale — see portalBranding.js for why.
+  const theme = mergePortalBranding(portal)
   const rawPages = portal.pages || []
 
   // ── Inject the hub as a virtual page when enabled ───────────────────────
