@@ -4,11 +4,14 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom";
+import api from "./apiClient.js";
 
-const BASE = (import.meta.env.VITE_API_URL || "") + "/api";
-const apiGet    = p        => fetch(`${BASE}${p}`).then(r=>r.json());
-const apiPost   = (p,b)    => fetch(`${BASE}${p}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json());
-const apiDelete = p        => fetch(`${BASE}${p}`,{method:"DELETE"}).then(r=>r.json());
+// Delegate to the shared apiClient so every call carries auth + CSRF headers.
+// (The old local fetch wrappers sent neither — every POST/DELETE 403'd with
+// "CSRF token missing", and reads 403'd after the auth-gate hardening.)
+const apiGet    = p     => api.get(p);
+const apiPost   = (p,b) => api.post(p, b || {});
+const apiDelete = p     => api.delete(p);
 
 const C = {
   accent:"#4361EE", accentLight:"#EEF2FF", green:"#16a34a", greenLight:"#dcfce7",

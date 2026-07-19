@@ -306,6 +306,7 @@ const AUTH_EXEMPT = [
   '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout', '/portal-auth/users',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/people-links',
+  '/approvals/token',   // public approve/decline via emailed token — no session
   '/campaign-links',
   '/feature-packs',
   '/release-notes',  // public read — published notes shown to all logged-in users
