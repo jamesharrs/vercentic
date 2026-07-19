@@ -1908,15 +1908,25 @@ activeNavRef.current = activeNav;
     // Poll every 30s — detects server restarts so nav objects reload automatically
     const poll = setInterval(() => {
       fetch("/api/health")
-        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-        .then(() => setApiOnline(prev => {
-          // Flipping false→true triggers the environments/objects reload via the useEffect below
-          if (prev !== true) {
-            window.dispatchEvent(new CustomEvent('talentos:server-online'));
-            return true;
-          }
-          return prev;
-        }))
+        .then(r => {
+          // 429 = rate-limited, not down. Don't flip offline (that would fire
+          // server-online on recovery → every RecordsView reloads → re-trips the
+          // limiter → loop). Treat as a no-op and wait for the next poll.
+          if (r.status === 429) return null;
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
+        .then((d) => {
+          if (d === null) return; // throttled — leave state as-is
+          setApiOnline(prev => {
+            // Flipping false→true triggers the environments/objects reload via the useEffect below
+            if (prev !== true) {
+              window.dispatchEvent(new CustomEvent('talentos:server-online'));
+              return true;
+            }
+            return prev;
+          });
+        })
         .catch(() => setApiOnline(prev => prev === true ? false : prev));
     }, 30000);
     return () => clearInterval(poll);

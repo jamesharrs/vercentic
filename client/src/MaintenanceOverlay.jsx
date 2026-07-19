@@ -124,6 +124,14 @@ export default function MaintenanceOverlay({ apiUrl = "/api/health" }) {
         const r = await fetch(apiUrl, { signal: controller.signal, cache: "no-store" });
         clearTimeout(timeout);
 
+        // 429 = rate-limited, NOT down. Treat as healthy so we don't flip the
+        // overlay to "offline" and trigger a reload storm (which would re-trip
+        // the limiter — a self-sustaining loop). Just back off and re-poll.
+        if (r.status === 429) {
+          timer = setTimeout(checkHealth, POLL_INTERVAL_UP);
+          return;
+        }
+
         if (r.ok) {
           // API is up
           if (wasDownRef.current) {
