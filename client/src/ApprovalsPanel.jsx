@@ -2,7 +2,7 @@
  * client/src/ApprovalsPanel.jsx
  * Approval requests panel inside RecordDetail
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom";
 import api from "./apiClient.js";
 
@@ -29,9 +29,94 @@ const PATHS = {
   trash:"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
   copy:"M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2M8 4a2 2 0 012-2h4a2 2 0 012 2M8 4h8",
   shield:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  search:"M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35",
+  users:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
 };
 function Ic({ n, s=16, c="currentColor" }) {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={PATHS[n]||""}/></svg>;
+}
+
+/**
+ * SearchSelect — custom searchable dropdown.
+ * options: [{ value, label, sublabel?, icon? }]. List renders via a portal to
+ * document.body so it escapes the modal's overflow:hidden; positioned under the
+ * trigger and reflowed on scroll/resize.
+ */
+function SearchSelect({ value, options, placeholder="Select…", searchPlaceholder="Search…", emptyText="No matches", onChange, minWidth=200 }) {
+  const [open, setOpen]     = useState(false);
+  const [q, setQ]           = useState("");
+  const [rect, setRect]     = useState(null);
+  const ref = useRef(null);
+
+  const selected = options.find(o => o.value === value);
+  const filtered = q.trim()
+    ? options.filter(o => (o.label + " " + (o.sublabel||"")).toLowerCase().includes(q.trim().toLowerCase()))
+    : options;
+
+  const reposition = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, minWidth) });
+  }, [minWidth]);
+
+  useEffect(() => {
+    if (!open) return;
+    reposition();
+    const onScroll = () => reposition();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    const onKey = e => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, reposition]);
+
+  const inp = {padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:"white",color:C.text1};
+
+  return (
+    <div ref={ref} style={{flex:1,minWidth,position:"relative"}}>
+      <button type="button" onClick={()=>{setOpen(o=>!o);setQ("");}} style={{...inp,width:"100%",boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,cursor:"pointer",textAlign:"left"}}>
+        <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:selected?C.text1:C.text3}}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <Ic n="chevD" s={14} c={C.text3}/>
+      </button>
+      {open && rect && ReactDOM.createPortal(
+        <>
+          <div onMouseDown={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:3000}}/>
+          <div style={{position:"fixed",left:rect.left,top:rect.top,width:rect.width,zIndex:3001,background:"white",borderRadius:10,border:`1.5px solid ${C.border}`,boxShadow:"0 12px 32px rgba(15,23,41,.16)",overflow:"hidden"}}>
+            <div style={{padding:8,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:7}}>
+              <Ic n="search" s={13} c={C.text3}/>
+              <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder={searchPlaceholder} style={{border:"none",outline:"none",fontSize:12,fontFamily:F,flex:1,color:C.text1,background:"transparent"}}/>
+            </div>
+            <div style={{maxHeight:220,overflowY:"auto",padding:4}}>
+              {filtered.length===0 && <div style={{padding:"12px",fontSize:12,color:C.text3,textAlign:"center"}}>{emptyText}</div>}
+              {filtered.map(o=>{
+                const active = o.value===value;
+                return (
+                  <button key={o.value} type="button" onMouseDown={e=>{e.preventDefault();onChange(o.value);setOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:7,border:"none",cursor:"pointer",background:active?C.accentLight:"transparent",textAlign:"left",fontFamily:F}}
+                    onMouseEnter={e=>{if(!active)e.currentTarget.style.background=C.surface;}}
+                    onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
+                    {o.icon && <Ic n={o.icon} s={14} c={active?C.accent:C.text3}/>}
+                    <span style={{flex:1,minWidth:0}}>
+                      <span style={{display:"block",fontSize:12,fontWeight:active?700:500,color:active?C.accent:C.text1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.label}</span>
+                      {o.sublabel && <span style={{display:"block",fontSize:11,color:C.text3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.sublabel}</span>}
+                    </span>
+                    {active && <Ic n="check" s={13} c={C.accent}/>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 const SCOLOR = {
@@ -48,32 +133,77 @@ function StatusBadge({ status }) {
 }
 
 // ApproverRow — one row in the approver config list
-function ApproverRow({ cfg, index, users, fields, onChange, onRemove, onMove, total }) {
+function ApproverRow({ cfg, index, users, fields, groups, onChange, onRemove, onMove, total }) {
   const inp = {padding:"7px 10px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",background:"white",color:C.text1};
+  const TYPE_OPTS = [
+    { value:"named", label:"Named person",     icon:"plus"   },
+    { value:"user",  label:"Platform user",    icon:"shield" },
+    { value:"group", label:"From a group",     icon:"users"  },
+    { value:"field", label:"From record field",icon:"copy"   },
+  ];
+  const userOpts = users.map(u=>({
+    value:u.id,
+    label:[u.first_name,u.last_name].filter(Boolean).join(" ")||u.email,
+    sublabel:u.email,
+  }));
+  const groupOpts = (groups||[]).map(g=>({
+    value:g.id,
+    label:g.name,
+    sublabel:`${g.member_count ?? (g.member_ids||[]).length} member${(g.member_count ?? (g.member_ids||[]).length)!==1?"s":""}`,
+    icon:"users",
+  }));
+  const fieldOpts = fields.filter(f=>["people","lookup","multi_lookup"].includes(f.field_type))
+    .map(f=>({ value:f.api_key, label:f.name, sublabel:f.field_type }));
+
   return (
     <div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,background:C.surface,border:`1px solid ${C.border}`,marginBottom:6}}>
       <div style={{width:22,height:22,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:C.accent,flexShrink:0,marginTop:2}}>{index+1}</div>
       <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:8}}>
-        <select value={cfg.type} onChange={e=>onChange({...cfg,type:e.target.value,name:"",email:"",user_id:"",field_key:"",label:""})} style={inp}>
-          <option value="named">Named person</option>
-          <option value="user">Platform user</option>
-          <option value="field">From record field</option>
-        </select>
+        <SearchSelect
+          value={cfg.type}
+          options={TYPE_OPTS}
+          minWidth={150}
+          searchPlaceholder="Search type…"
+          onChange={v=>onChange({...cfg,type:v,name:"",email:"",user_id:"",field_key:"",group_id:"",label:""})}
+        />
         {cfg.type==="named"&&<>
           <input placeholder="Name" value={cfg.name||""} onChange={e=>onChange({...cfg,name:e.target.value})} style={{...inp,flex:1,minWidth:100}}/>
           <input placeholder="Email" type="email" value={cfg.email||""} onChange={e=>onChange({...cfg,email:e.target.value})} style={{...inp,flex:1,minWidth:140}}/>
         </>}
         {cfg.type==="user"&&(
-          <select value={cfg.user_id||""} onChange={e=>onChange({...cfg,user_id:e.target.value})} style={{...inp,flex:1}}>
-            <option value="">Select user…</option>
-            {users.map(u=><option key={u.id} value={u.id}>{[u.first_name,u.last_name].filter(Boolean).join(" ")} ({u.email})</option>)}
-          </select>
+          <SearchSelect
+            value={cfg.user_id||""}
+            options={userOpts}
+            placeholder="Select user…"
+            searchPlaceholder="Search users…"
+            emptyText="No users found"
+            minWidth={200}
+            onChange={v=>onChange({...cfg,user_id:v})}
+          />
+        )}
+        {cfg.type==="group"&&(
+          groupOpts.length===0
+            ? <div style={{flex:1,minWidth:200,fontSize:12,color:C.text3,padding:"7px 10px",borderRadius:8,border:`1.5px dashed ${C.border}`,background:"white"}}>No saved groups yet — create one in Settings → Groups</div>
+            : <SearchSelect
+                value={cfg.group_id||""}
+                options={groupOpts}
+                placeholder="Select group…"
+                searchPlaceholder="Search groups…"
+                emptyText="No groups found"
+                minWidth={200}
+                onChange={v=>{const g=groups.find(g2=>g2.id===v);onChange({...cfg,group_id:v,label:g?.name||""});}}
+              />
         )}
         {cfg.type==="field"&&(
-          <select value={cfg.field_key||""} onChange={e=>{const f=fields.find(f2=>f2.api_key===e.target.value);onChange({...cfg,field_key:e.target.value,label:f?.name||e.target.value});}} style={{...inp,flex:1}}>
-            <option value="">Select field…</option>
-            {fields.filter(f=>["people","lookup","multi_lookup"].includes(f.field_type)).map(f=><option key={f.api_key} value={f.api_key}>{f.name} ({f.field_type})</option>)}
-          </select>
+          <SearchSelect
+            value={cfg.field_key||""}
+            options={fieldOpts}
+            placeholder="Select field…"
+            searchPlaceholder="Search fields…"
+            emptyText="No people/lookup fields"
+            minWidth={200}
+            onChange={v=>{const f=fields.find(f2=>f2.api_key===v);onChange({...cfg,field_key:v,label:f?.name||v});}}
+          />
         )}
       </div>
       <div style={{display:"flex",gap:3,flexShrink:0}}>
@@ -166,7 +296,7 @@ function ApprovalCard({ approval, onWithdraw, onRemind, onDelete }) {
 }
 
 // NewApprovalModal
-function NewApprovalModal({ record, object, environment, users, fields, onClose, onCreated }) {
+function NewApprovalModal({ record, object, environment, users, fields, groups, onClose, onCreated }) {
   const [step,      setStep]      = useState(0);
   const [saving,    setSaving]    = useState(false);
   const [title,     setTitle]     = useState("");
@@ -197,7 +327,13 @@ function NewApprovalModal({ record, object, environment, users, fields, onClose,
     setApprovers(t.approver_configs||[]);
   };
 
-  const canProceed=[title.trim().length>0,approvers.length>0,true,true][step];
+  const approverValid = a =>
+    a.type==="named" ? !!(a.email||"").trim()
+    : a.type==="user"  ? !!a.user_id
+    : a.type==="group" ? !!a.group_id
+    : a.type==="field" ? !!a.field_key
+    : false;
+  const canProceed=[title.trim().length>0, approvers.length>0&&approvers.every(approverValid), true, true][step];
   const steps=["Details","Approvers","Options","Review"];
 
   const handleCreate=async()=>{
@@ -266,7 +402,7 @@ function NewApprovalModal({ record, object, environment, users, fields, onClose,
                 <span style={{fontSize:12,color:C.text3}}>of {approvers.length||"?"}</span>
               </div>}
               {approvers.length===0&&<div style={{padding:"20px",textAlign:"center",color:C.text3,borderRadius:10,border:`1.5px dashed ${C.border}`,marginBottom:12}}>No approvers yet — add at least one</div>}
-              {approvers.map((cfg,i)=><ApproverRow key={i} cfg={cfg} index={i} total={approvers.length} users={users} fields={fields} onChange={c=>updateApprover(i,c)} onRemove={()=>removeApprover(i)} onMove={(_,dir)=>moveApprover(i,dir)}/>)}
+              {approvers.map((cfg,i)=><ApproverRow key={i} cfg={cfg} index={i} total={approvers.length} users={users} fields={fields} groups={groups} onChange={c=>updateApprover(i,c)} onRemove={()=>removeApprover(i)} onMove={(_,dir)=>moveApprover(i,dir)}/>)}
               <button onClick={addApprover} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:9,border:`1.5px dashed ${C.border}`,background:"transparent",color:C.text3,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:F}}><Ic n="plus" s={12}/>Add approver</button>
             </div>
           )}
@@ -333,20 +469,23 @@ export default function ApprovalsPanel({ record, object, environment }) {
   const [showNew,   setShowNew]   = useState(false);
   const [users,     setUsers]     = useState([]);
   const [fields,    setFields]    = useState([]);
+  const [groups,    setGroups]    = useState([]);
 
   const load = useCallback(async()=>{
     if(!record?.id){setLoading(false);return;}
     setLoading(true);
-    const [list,u,f]=await Promise.all([
+    const [list,u,f,g]=await Promise.all([
       apiGet(`/approvals?record_id=${record.id}`),
       apiGet("/users"),
       object?.id?apiGet(`/fields?object_id=${object.id}`):Promise.resolve([]),
+      apiGet(`/groups?environment_id=${environment?.id||""}`).catch(()=>[]),
     ]);
     setApprovals(Array.isArray(list)?list:[]);
     setUsers(Array.isArray(u)?u:[]);
     setFields(Array.isArray(f)?f:[]);
+    setGroups(Array.isArray(g)?g:[]);
     setLoading(false);
-  },[record?.id,object?.id]);
+  },[record?.id,object?.id,environment?.id]);
 
   useEffect(()=>{load();},[load]);
 
@@ -396,7 +535,7 @@ export default function ApprovalsPanel({ record, object, environment }) {
         </div>
       )}
 
-      {showNew&&<NewApprovalModal record={record} object={object} environment={environment} users={users} fields={fields} onClose={()=>setShowNew(false)} onCreated={()=>{setShowNew(false);load();}}/>}
+      {showNew&&<NewApprovalModal record={record} object={object} environment={environment} users={users} fields={fields} groups={groups} onClose={()=>setShowNew(false)} onCreated={()=>{setShowNew(false);load();}}/>}
     </div>
   );
 }

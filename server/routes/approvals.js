@@ -91,6 +91,21 @@ function resolveApprovers(approverConfigs, record, store) {
           status: 'pending', token: uuidv4(), responded_at: null, note: null,
         });
       }
+    } else if (cfg.type === 'group') {
+      // Expand a saved user group into one approver per member.
+      const group = (store.groups || []).find(g => g.id === cfg.group_id && !g.deleted_at);
+      if (!group) continue;
+      const label = cfg.label || group.name || 'Group';
+      for (const uid of (group.member_ids || [])) {
+        const user = (store.users || []).find(u => u.id === uid && !u.deleted_at);
+        if (!user?.email) continue;
+        resolved.push({
+          id: uuidv4(),
+          name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
+          email: user.email, source_label: label, order: order++,
+          status: 'pending', token: uuidv4(), responded_at: null, note: null,
+        });
+      }
     } else if (cfg.type === 'field') {
       const fieldValue = record?.data?.[cfg.field_key];
       if (!fieldValue) continue;
