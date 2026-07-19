@@ -32,7 +32,14 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests. Please slow down.', code: 'RATE_LIMITED' },
-  skip: (req) => req.path === '/api/health' || req.method === 'OPTIONS',
+  // NOTE: this limiter is mounted at app.use('/api', apiLimiter), so Express strips
+  // the '/api' prefix — req.path here is '/health', NOT '/api/health'. Match both
+  // so the liveness probe is never throttled (a 429 on /health makes the client
+  // think the server is DOWN and trigger reload storms — a self-sustaining loop).
+  skip: (req) =>
+    req.method === 'OPTIONS' ||
+    req.path === '/health' || req.path === '/api/health' ||
+    req.originalUrl === '/api/health' || req.originalUrl.startsWith('/api/health?'),
 });
 
 function secureHeaders(req, res, next) {

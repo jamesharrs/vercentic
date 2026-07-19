@@ -12374,8 +12374,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
 
   // Re-trigger load when the server comes back online after a restart.
   // App.jsx fires 'talentos:server-online' when apiOnline flips false → true.
+  // Guard against rapid re-fires (a flapping connection) — at most one reload
+  // per 10s — so a recovering server can't be hammered by a reload storm.
   useEffect(() => {
-    const handler = () => { setReloadKey(k => k + 1); };
+    let lastReload = 0;
+    const handler = () => {
+      const now = Date.now();
+      if (now - lastReload < 10000) return;
+      lastReload = now;
+      setReloadKey(k => k + 1);
+    };
     window.addEventListener('talentos:server-online', handler);
     return () => window.removeEventListener('talentos:server-online', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
