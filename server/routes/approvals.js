@@ -91,6 +91,21 @@ function resolveApprovers(approverConfigs, record, store) {
           status: 'pending', token: uuidv4(), responded_at: null, note: null,
         });
       }
+    } else if (cfg.type === 'group') {
+      // Expand a saved user group into one approver per member.
+      const group = (store.groups || []).find(g => g.id === cfg.group_id && !g.deleted_at);
+      if (!group) continue;
+      const label = cfg.label || group.name || 'Group';
+      for (const uid of (group.member_ids || [])) {
+        const user = (store.users || []).find(u => u.id === uid && !u.deleted_at);
+        if (!user?.email) continue;
+        resolved.push({
+          id: uuidv4(),
+          name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
+          email: user.email, source_label: label, order: order++,
+          status: 'pending', token: uuidv4(), responded_at: null, note: null,
+        });
+      }
     } else if (cfg.type === 'field') {
       const fieldValue = record?.data?.[cfg.field_key];
       if (!fieldValue) continue;
@@ -214,15 +229,24 @@ async function sendApprovalEmail({ approval, approver, baseUrl, isReminder = fal
 
   if (messaging?.sendEmail) {
     try {
-      await messaging.sendEmail({ to: approver.email, subject, html,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@vercentic.com',
-        fromName: process.env.SENDGRID_FROM_NAME || 'Vercentic' });
-      return { sent: true, simulated: false };
-    } catch (err) { console.warn('[approvals] Email send failed, simulating:', err.message); }
+      // Do NOT hardcode `from` — let the mailer resolve a Resend-verified sender
+      // (custom domain → per-tenant subdomain → noreply@mail.vercentic.com).
+      // Passing an unverified from (e.g. a gmail.com address) makes Resend reject
+      // the send, which used to be swallowed and mis-reported as "sent".
+      const r = await messaging.sendEmail({
+        to: approver.email, subject, html,
+        tags: { environment_id: approval.environment_id },
+      });
+      if (r && r.simulated) return { sent: false, simulated: true };
+      return { sent: true, simulated: false, id: r?.messageId || r?.id };
+    } catch (err) {
+      console.warn('[approvals] Email send FAILED:', err.message);
+      return { sent: false, simulated: false, error: err.message };
+    }
   }
   console.log(`[approvals] SIMULATED EMAIL to ${approver.email}: ${subject}`);
   console.log(`  Portal URL: ${url}`);
-  return { sent: true, simulated: true };
+  return { sent: false, simulated: true };
 }
 
 // PUBLIC: load approval page data
@@ -344,10 +368,19 @@ router.post('/', async (req, res) => {
   insert('approvals', approval);
   if (send_immediately !== false) {
     const toSend = pendingApprovers(approval);
+    let anySent = false, anyFailed = false, lastErr = null;
     for (const approver of toSend) {
-      await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL }).catch(console.warn);
+      const r = await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL })
+        .catch(err => ({ sent: false, error: err.message }));
+      if (r?.sent) anySent = true; else { anyFailed = true; lastErr = r?.error || (r?.simulated ? 'email not configured (simulated)' : 'unknown'); }
     }
-    updateOne('approvals', a => a.id === approval.id, { emails_sent_at: now });
+    // Only stamp emails_sent_at when a real send actually succeeded; surface failures.
+    updateOne('approvals', a => a.id === approval.id, {
+      emails_sent_at: anySent ? now : null,
+      last_email_error: anyFailed ? lastErr : null,
+    });
+    approval.emails_sent_at = anySent ? now : null;
+    approval.last_email_error = anyFailed ? lastErr : null;
   }
   return res.status(201).json(approval);
 });
@@ -375,14 +408,17 @@ router.post('/:id/send', async (req, res) => {
   if (!approval) return res.status(404).json({ error: 'Not found' });
   const toSend = pendingApprovers(approval);
   if (!toSend.length) return res.json({ ok: true, sent: 0, message: 'No pending approvers' });
-  let sent = 0, simulated = 0;
+  let sent = 0, simulated = 0, failed = 0, lastErr = null;
   for (const approver of toSend) {
-    const r = await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL }).catch(() => ({ sent: false, simulated: true }));
+    const r = await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL }).catch(err => ({ sent: false, error: err.message }));
     if (r.sent) sent++;
-    if (r.simulated) simulated++;
+    else { failed++; if (r.simulated) simulated++; lastErr = r.error || (r.simulated ? 'email not configured (simulated)' : lastErr); }
   }
-  updateOne('approvals', a => a.id === req.params.id, { emails_sent_at: new Date().toISOString() });
-  return res.json({ ok: true, sent, simulated });
+  updateOne('approvals', a => a.id === req.params.id, {
+    emails_sent_at: sent > 0 ? new Date().toISOString() : approval.emails_sent_at || null,
+    last_email_error: failed > 0 ? lastErr : null,
+  });
+  return res.json({ ok: sent > 0, sent, simulated, failed, error: failed > 0 ? lastErr : null });
 });
 
 // REMIND
@@ -391,14 +427,17 @@ router.post('/:id/remind', async (req, res) => {
   const approval = findOne('approvals', a => a.id === req.params.id);
   if (!approval) return res.status(404).json({ error: 'Not found' });
   const toSend = pendingApprovers(approval);
-  let sent = 0, simulated = 0;
+  let sent = 0, simulated = 0, failed = 0, lastErr = null;
   for (const approver of toSend) {
-    const r = await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL, isReminder: true }).catch(() => ({ sent: false, simulated: true }));
+    const r = await sendApprovalEmail({ approval, approver, baseUrl: req.headers.origin || process.env.APP_URL, isReminder: true }).catch(err => ({ sent: false, error: err.message }));
     if (r.sent) sent++;
-    if (r.simulated) simulated++;
+    else { failed++; if (r.simulated) simulated++; lastErr = r.error || (r.simulated ? 'email not configured (simulated)' : lastErr); }
   }
-  updateOne('approvals', a => a.id === req.params.id, { last_reminder_at: new Date().toISOString() });
-  return res.json({ ok: true, sent, simulated });
+  updateOne('approvals', a => a.id === req.params.id, {
+    last_reminder_at: new Date().toISOString(),
+    last_email_error: failed > 0 ? lastErr : null,
+  });
+  return res.json({ ok: sent > 0, sent, simulated, failed, error: failed > 0 ? lastErr : null });
 });
 
 // WITHDRAW
