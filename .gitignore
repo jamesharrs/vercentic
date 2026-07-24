@@ -6,7 +6,14 @@ build/
 .vercel/
 .env
 .env.local
-.env.production
+
+# Backups of .env carry live keys. Match every variant, then re-allow the
+# committed example and the client build config, which hold no secrets.
+.env.*
+*.env.bak*
+*.bak
+!.env.example
+!client/.env.production
 .DS_Store
 *.log
 npm-debug.log*
