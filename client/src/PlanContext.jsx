@@ -50,8 +50,9 @@ export function PlanProvider({ children, environmentId }) {
   useEffect(()=>{
     if (!environmentId) return;
     setLoading(true);
+    // tFetch (apiClient) already resolves to parsed JSON — calling .json() here threw
+    // and the silent catch pinned every environment to the starter feature set.
     tFetch(`/api/plan/features?environment_id=${environmentId}`)
-      .then(r=>r.json())
       .then(d=>{
         if (d.plan) setPlan(d.plan);
         if (d.features) setFeatures(d.features);

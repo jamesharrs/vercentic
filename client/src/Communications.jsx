@@ -96,12 +96,11 @@ function AIComposeModal({ type, record, objectName, template, onUse, onClose }) 
 The recipient is ${personName}. Keep it professional, warm and concise.
 ${type==="email" ? "Return JSON: {\"subject\":\"...\",\"body\":\"...\"}." : "Return JSON: {\"body\":\"...\"}." }
 No markdown, no preamble, just the JSON object.`;
-      const r = await tFetch(`/api/ai/chat`, {
+      const d = await tFetch(`/api/ai/chat`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ messages:[{role:"user", content: prompt || `Write a follow-up ${type} to ${personName}`}], system: systemPrompt })
       });
-      const d = await r.json();
       const text = d.content?.[0]?.text || d.reply || "";
       try {
         const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
@@ -246,8 +245,12 @@ export function ComposeModal({
 
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
-    tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
-      .then(r => r.json()).then(d => setLinkedJobs(Array.isArray(d) ? d : [])).catch(() => {});
+    // open_only=false — the Linked Records panel shows every link regardless of job
+    // status, so the "Related to" picker must offer the same set or they disagree.
+    // NOTE: tFetch (apiClient) already resolves to parsed JSON — never call .json() on it.
+    tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}&open_only=false`)
+      .then(d => setLinkedJobs(Array.isArray(d) ? d : []))
+      .catch(e => { console.warn('[compose] linked-jobs load failed', e); setLinkedJobs([]); });
   }, [record?.id, environment?.id]);
 
   useEffect(() => {
@@ -1518,10 +1521,9 @@ export default function CommunicationsPanel({ record, environment, externalCompo
   // Load linked jobs for context filter tabs
   useEffect(() => {
     if (!record?.id || !environment?.id) return;
-    tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
-      .then(r => r.json())
+    tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}&open_only=false`)
       .then(d => setLinkedJobs(Array.isArray(d) ? d : []))
-      .catch(() => setLinkedJobs([]));
+      .catch(e => { console.warn('[comms] linked-jobs load failed', e); setLinkedJobs([]); });
   }, [record?.id, environment?.id]);
 
   // Debounced search
