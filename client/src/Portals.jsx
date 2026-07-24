@@ -4443,20 +4443,23 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const updatePage = (updated) => setPortal(p=>({...p,pages:p.pages.map((pg,i)=>i===activePageIdx?updated:pg)}));
   const addPage = () => {
     const np = {...defaultPage(),id:uid(),name:`Page ${portal.pages.length+1}`,slug:`/page-${portal.pages.length+1}`};
-    setPortal(p=>({...p,pages:[...p.pages,np]}));
+    setPortal(p=>({...p,pages:[...p.pages,np],
+      nav:{...(p.nav||{}),links:[...((p.nav||{}).links||[]),{id:uid(),label:np.name,href:np.slug,pageId:np.id}]}}));
     setActivePageIdx(portal.pages.length);
   };
 
   const handleDuplicatePage = (pg) => {
     const copy = {...JSON.parse(JSON.stringify(pg)),id:uid(),name:pg.name+" (copy)",slug:pg.slug+"-copy",seo:{title:"",description:"",ogImage:""}};
     const pages = [...portal.pages,copy];
-    setPortal(p=>({...p,pages}));
+    setPortal(p=>({...p,pages,
+      nav:{...(p.nav||{}),links:[...((p.nav||{}).links||[]),{id:uid(),label:copy.name,href:copy.slug,pageId:copy.id}]}}));
     setActivePageIdx(pages.length-1);
     setPageActionsFor(null);
   };
   const handleDeletePage = (pg) => {
     const pages = portal.pages.filter(x=>x.id!==pg.id);
-    setPortal(p=>({...p,pages}));
+    setPortal(p=>({...p,pages,
+      nav:{...(p.nav||{}),links:((p.nav||{}).links||[]).filter(l=>l.pageId!==pg.id)}}));
     setActivePageIdx(Math.max(0,activePageIdx-1));
     setPageActionsFor(null);
   };
@@ -4691,7 +4694,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
       {pageActionsFor&&<PageActionsMenu
         page={pageActionsFor} allPages={portal.pages}
-        onUpdate={updated=>{setPortal(p=>({...p,pages:p.pages.map(x=>x.id===updated.id?updated:x)}));setPageActionsFor(updated);if(page?.id===updated.id)updatePage(updated);}}
+        onUpdate={updated=>{setPortal(p=>({...p,pages:p.pages.map(x=>x.id===updated.id?updated:x),
+          nav:{...(p.nav||{}),links:((p.nav||{}).links||[]).map(l=>l.pageId===updated.id?{...l,href:updated.slug}:l)}}));setPageActionsFor(updated);if(page?.id===updated.id)updatePage(updated);}}
         onDuplicate={()=>handleDuplicatePage(pageActionsFor)}
         onDelete={()=>handleDeletePage(pageActionsFor)}
         onClose={()=>setPageActionsFor(null)}/>}
