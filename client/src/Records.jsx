@@ -792,7 +792,60 @@ const TableFieldEditor = ({ field, value, onChange }) => {
   );
 };
 
-const FieldValue = ({ field, value, allFieldValues = {} }) => {
+// ── ExpandableText — clamps long copy to N lines with an inline More/Less ─────
+// Used for textarea / long free-text fields so list rows stay uniform height
+// but the full content is one click away without leaving the list.
+const ExpandableText = ({ text, children, lines = 2, size = 13 }) => {
+  const [open, setOpen]       = useState(false);
+  const [overflows, setOver]  = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // measured while clamped, so this stays true once toggled open
+    setOver(el.scrollHeight > el.clientHeight + 1);
+  }, [text, lines]);
+
+  const clampStyle = open ? {} : {
+    display: "-webkit-box",
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  };
+
+  return (
+    <div style={{ minWidth:0, maxWidth:"100%" }}>
+      <div ref={ref}
+        style={{ fontSize:size, color:C.text1, lineHeight:1.5,
+          whiteSpace: children ? "normal" : "pre-wrap",
+          wordBreak:"break-word", ...clampStyle }}>
+        {children ?? text}
+      </div>
+      {(overflows || open) && (
+        <button
+          onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          style={{ background:"none", border:"none", padding:0, marginTop:3, cursor:"pointer",
+            fontSize:11, fontWeight:700, color:C.accent, fontFamily:F,
+            display:"inline-flex", alignItems:"center", gap:3 }}>
+          {open ? "Less" : "More"}
+          <Ic n={open ? "chevU" : "chevD"} s={10} c={C.accent}/>
+        </button>
+      )}
+    </div>
+  );
+};
+
+// Field types that hold free-flowing prose and should wrap rather than truncate
+const LONG_TEXT_TYPES = new Set(["textarea", "long_text", "rich_text"]);
+const LONG_TEXT_MIN   = 90; // chars — below this a plain single-line render is fine
+// Lines of prose shown in a list row before the inline More toggle appears.
+// Keeps rows a uniform height without hiding content behind an ellipsis.
+const PROSE_CLAMP_LINES = 2;
+
+// `clamp` = number of lines to show before a "More" toggle (list views).
+// Omit it — as the record detail panel does — to always render in full.
+const FieldValue = ({ field, value, allFieldValues = {}, clamp = null }) => {
   if (value===null||value===undefined||value==="") return <span style={{color:C.text3,fontSize:12}}>—</span>;
 
   switch(field.field_type) {
@@ -887,6 +940,11 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
     }
     case "rich_text": {
       const html = sanitizeHtml(String(value));
+      if (clamp) return (
+        <ExpandableText lines={clamp}>
+          <div className="rich-text-preview" dangerouslySetInnerHTML={{ __html: html }}/>
+        </ExpandableText>
+      );
       return (
         <div style={{ fontSize:13, lineHeight:1.65, color:"#111827" }}
           className="rich-text-preview"
@@ -954,7 +1012,17 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
     }
     case "table":        return <TableFieldValue field={field} value={value}/>;
     case "file_preview": return <FilePreviewWidget field={field} recordId={allFieldValues?.__record_id} compact={false}/>;
-    default:        return <span style={{fontSize:13,color:C.text1,lineHeight:1.5}}>{String(value)}</span>;
+    case "textarea":
+    case "long_text":
+    default: {
+      const txt = String(value);
+      // Long prose in a list gets clamped with an inline More toggle so rows
+      // stay a uniform height but nothing is lost behind an ellipsis.
+      if (clamp && txt.length > LONG_TEXT_MIN) return <ExpandableText text={txt} lines={clamp}/>;
+      const isProse = LONG_TEXT_TYPES.has(field.field_type);
+      return <span style={{fontSize:13,color:C.text1,lineHeight:1.5,
+        ...(isProse ? {whiteSpace:"pre-wrap",wordBreak:"break-word",display:"block"} : {})}}>{txt}</span>;
+    }
   }
 };
 
@@ -5282,11 +5350,16 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                     ? getSystemValue(record, f.apiKey, linkedJobs)
                     : record.data?.[f.api_key];
                   const w = colWidths?.[f.id] || null;
+                  // Prose columns wrap and clamp instead of truncating to one line
+                  const isProse = !f.isSystem && fi > 0 &&
+                    (LONG_TEXT_TYPES.has(f.field_type) || (typeof val === "string" && val.length > LONG_TEXT_MIN));
                   return (
                     <td key={f.id}
                       style={{ padding:"var(--t-row-pad, 12px) 14px", cursor: fi===0 ? "pointer" : "default",
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                        ...(w ? { maxWidth:w, width:w } : { maxWidth:220 }) }}
+                        overflow:"hidden", verticalAlign: isProse ? "top" : "middle",
+                        ...(isProse
+                          ? { whiteSpace:"normal", ...(w ? { maxWidth:w, width:w } : { maxWidth:340, minWidth:240 }) }
+                          : { textOverflow:"ellipsis", whiteSpace:"nowrap", ...(w ? { maxWidth:w, width:w } : { maxWidth:220 }) }) }}
                       onClick={fi===0 ? () => onProfile(record) : undefined}>
                       {fi === 0
                         ? <span style={{ fontWeight:700, color:"#4361EE" }}
@@ -5360,7 +5433,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             })()
                           : f.isSystem
                             ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
-                            : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
+                            : <FieldValue field={f} value={val} clamp={isProse ? PROSE_CLAMP_LINES : null} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
                       }
                     </td>
                   );
@@ -11054,7 +11127,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="hub")  return <CandidateHubPanel record={record} environment={environment}/>;
     if (id==="scorecard") return ff.interviews ? <ScorecardPanel record={record} environment={environment}/> : null;
-    if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
+    if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;
+    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment} activeJobId={activeJobContext}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="job_tasks") return <JobTasksPanel record={record} environment={environment}/>;
@@ -11876,7 +11950,9 @@ function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfi
     if (field.field_type === "currency") return <span style={{ fontWeight:600, fontSize:12 }}>${Number(val).toLocaleString()}</span>;
     if (field.field_type === "date") return <span style={{ fontSize:11, color:C.text2 }}>{new Date(val).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</span>;
     const str = String(val);
-    return <span style={{ fontSize:12, color:C.text1, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:1, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{str}</span>;
+    // Prose gets a few lines in a card (there's vertical room); everything else stays on one
+    const cardLines = (LONG_TEXT_TYPES.has(field.field_type) || str.length > LONG_TEXT_MIN) ? 3 : 1;
+    return <span style={{ fontSize:12, color:C.text1, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:cardLines, WebkitBoxOrient:"vertical", overflow:"hidden", wordBreak:"break-word" }}>{str}</span>;
   };
 
   if (!records.length) return (
