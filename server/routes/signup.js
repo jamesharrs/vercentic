@@ -97,7 +97,7 @@ router.post('/', async (req, res) => {
       ts.environments = [{ id: envId, name: 'Production', slug: 'production', is_default: 1, color: '#6941C6', setup_complete: false, created_at: now, updated_at: now }];
 
       // Seed objects + fields using the default template (recruitment_starter for web signups)
-      const { objects: tplObjects, tier: tplTier } = resolveTemplate(getDefaultTemplateKey());
+      const { objects: tplObjects, tier: tplTier, feature_profile: tplProfile } = resolveTemplate(getDefaultTemplateKey());
       ts.objects = []; ts.fields = [];
       for (let i = 0; i < tplObjects.length; i++) {
         const obj   = tplObjects[i];
@@ -183,6 +183,13 @@ router.post('/', async (req, res) => {
         });
       }
 
+      // Feature flags — apply the default template's lean feature profile
+      // (Basic ships most modules OFF so first-time users aren't overwhelmed).
+      if (tplProfile?.keep_on) {
+        const { overridesForKeepOn } = require('./feature-flags');
+        ts.feature_flags = overridesForKeepOn(envId, tplProfile.keep_on);
+      }
+
       ts.security_settings = { password_min_length:8, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, updated_at:now };
       saveStoreNow(tenantSlug); // synchronous — ensures data is written before response
     });
@@ -209,7 +216,7 @@ router.post('/', async (req, res) => {
       ms.provision_log.push({
         id: uuidv4(), client_id: clientId, environment_id: envId,
         action: 'signup', admin_email: email.toLowerCase(),
-        template: 'recruitment_starter', source: 'self_serve',
+        template: getDefaultTemplateKey(), source: 'self_serve',
         provisioned_at: now, created_at: now,
       });
       saveStore('master');

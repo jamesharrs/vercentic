@@ -64,11 +64,19 @@ function tenantMiddleware(req, res, next) {
   }
 
   // ── 2. No active session — resolve from client hints (login, signup, portal) ─
-  const slug =
+  let slug =
     req.headers['x-tenant-slug'] ||
     req.query.tenant              ||
     slugFromHost(req.hostname)    ||
     null;
+
+  // Dev tenant pin — in local dev, default anonymous requests to DEV_TENANT so
+  // localhost can browse a specific provisioned environment (e.g. a Basic
+  // template env). Unset DEV_TENANT (or set 'master') for the normal view.
+  if ((!slug || slug === 'master') && process.env.NODE_ENV !== 'production'
+      && process.env.DEV_TENANT && process.env.DEV_TENANT !== 'master') {
+    slug = process.env.DEV_TENANT;
+  }
 
   if (!slug || slug === 'master') {
     return tenantStorage.run('master', next);

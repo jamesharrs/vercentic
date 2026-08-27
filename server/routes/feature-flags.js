@@ -25,6 +25,9 @@ const DEFAULT_FLAGS = {
   panel_tasks: true, panel_assessments: true, panel_engagement: true,
   panel_reporting: true, panel_agents: true, panel_user: true,
   panel_insights: true, panel_questions: true,
+  // Advanced admin settings sections — on by default, hidden in lean templates (Basic)
+  agents: true, ai_governance: true, data_sets: true, test_scripts: true,
+  sandbox: true, enterprise_settings: true,
   // Beta — off by default, enable per client
   linkedin_finder: false, document_extraction: false,
   // Experimental — off everywhere
@@ -131,6 +134,23 @@ function isEnabled(flagKey, environmentId) {
   return DEFAULT_FLAGS[flagKey] ?? false;
 }
 
+// Build feature_flags override rows for a template "keep on" allowlist.
+// Any default flag whose desired state differs from its default becomes an
+// override row. Used at provisioning time to ship a lean environment (Basic).
+function overridesForKeepOn(environmentId, keepOn = []) {
+  const keep = new Set(keepOn);
+  const now  = new Date().toISOString();
+  const rows = [];
+  for (const [key, def] of Object.entries(DEFAULT_FLAGS)) {
+    const desired = keep.has(key);
+    if (desired !== def) {
+      rows.push({ id: uuidv4(), environment_id: environmentId, flag_key: key, enabled: desired, created_at: now, updated_at: now });
+    }
+  }
+  return rows;
+}
+
 module.exports = router;
 module.exports.isEnabled = isEnabled;
 module.exports.DEFAULT_FLAGS = DEFAULT_FLAGS;
+module.exports.overridesForKeepOn = overridesForKeepOn;

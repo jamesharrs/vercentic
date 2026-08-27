@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext, lazy, Suspense } from "react";
 import api, { tFetch } from "./apiClient.js";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
+import { useFeatures } from "./hooks/useFeature.jsx";
 import ReactDOM from "react-dom";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import StyledSelect from "./components/StyledSelect.jsx";
@@ -2951,7 +2952,7 @@ const NAV_GROUPS = [
       { id:"users",  icon:"users",  label:"Users",               perm:"manage_users" },
       { id:"groups", icon:"layers", label:"Groups",              perm:"manage_users" },
       { id:"roles",  icon:"shield", label:"Roles & permissions", perm:"manage_roles" },
-      { id:"org",    icon:"layers", label:"Org structure",       perm:"manage_org_structure" },
+      { id:"org",    icon:"layers", label:"Org structure",       perm:"manage_org_structure", feature:"org_chart" },
     ],
   },
   {
@@ -2968,38 +2969,38 @@ const NAV_GROUPS = [
     label: "Data & schema",
     items: [
       { id:"datamodel",    icon:"database",    label:"Data model",        perm:"manage_settings" },
-      { id:"duplicates",   icon:"users",       label:"Duplicates",        perm:"manage_settings" },
+      { id:"duplicates",   icon:"users",       label:"Duplicates",        perm:"manage_settings", feature:"duplicate_detection" },
       { id:"file_types",   icon:"paperclip",   label:"File types",        perm:"manage_settings" },
-      { id:"media_library",icon:"image",       label:"Media Library",     perm:"manage_settings" },
-      { id:"task_groups",  icon:"check-square",label:"Task Groups",        perm:"manage_settings" },
-      { id:"company_docs", icon:"file",        label:"Company Documents" },
-      { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms" },
-      { id:"questions",    icon:"help-circle", label:"Question library" },
-      { id:"datasets",     icon:"layers",      label:"Data Sets" },
-      { id:"enterprise",   icon:"briefcase",   label:"Enterprise Settings", perm:"manage_roles" },
+      { id:"media_library",icon:"image",       label:"Media Library",     perm:"manage_settings", feature:"portals" },
+      { id:"task_groups",  icon:"check-square",label:"Task Groups",        perm:"manage_settings", feature:"workflows" },
+      { id:"company_docs", icon:"file",        label:"Company Documents", feature:"access_documents" },
+      { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms", feature:"forms" },
+      { id:"questions",    icon:"help-circle", label:"Question library", feature:"forms" },
+      { id:"datasets",     icon:"layers",      label:"Data Sets", feature:"data_sets" },
+      { id:"enterprise",   icon:"briefcase",   label:"Enterprise Settings", perm:"manage_roles", feature:"enterprise_settings" },
     ],
   },
   {
     id: "processes",
     label: "Processes",
     items: [
-      { id:"brand_kits",      icon:"palette",  label:"Brand Kits" },
+      { id:"brand_kits",      icon:"palette",  label:"Brand Kits", feature:"portals" },
       { id:"email_templates",   icon:"mail",     label:"Email Templates" },
       { id:"default_signature", icon:"mail",     label:"Default Signature", perm:"manage_settings" },
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
-      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows" },
-      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews" },
-      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals" },
-      { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles" },
+      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows", feature:"workflows" },
+      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews", feature:"interviews" },
+      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals", feature:"portals" },
+      { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles", feature:"sandbox" },
     ],
   },
   {
     id: "ai",
     label: "AI",
     items: [
-      { id:"ai_governance", icon:"sparkles", label:"AI governance" },
-      { id:"ai_matching",   icon:"zap",      label:"Recommendations" },
-      { id:"agents",        icon:"bot",      label:"Agents" },
+      { id:"ai_governance", icon:"sparkles", label:"AI governance", feature:"ai_governance" },
+      { id:"ai_matching",   icon:"zap",      label:"Recommendations", feature:"ai_matching" },
+      { id:"agents",        icon:"bot",      label:"Agents", feature:"agents" },
     ],
   },
   {
@@ -3016,6 +3017,7 @@ const NAV_GROUPS = [
 export default function SettingsPage({ currentUser, environment, initialSection, onSectionChange, appVersion, appEnv }) {
   const [activeSection, setActiveSectionState] = useState(initialSection || null);
   const { canGlobal } = usePermissions();
+  const { features } = useFeatures();
   const [fullScreenMode, setFullScreenMode] = useState(false);
 
   const setActiveSection = (id) => {
@@ -3058,6 +3060,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
     ...g,
     // Filter by: (1) search query, (2) permission — items with no perm are always shown
     items: g.items.filter(i => {
+      if (i.feature && !features.has(i.feature)) return false;
       if (i.perm && !canGlobal(i.perm)) return false;
       if (q && !i.label.toLowerCase().includes(q)) return false;
       return true;

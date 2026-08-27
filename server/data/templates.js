@@ -561,6 +561,52 @@ const DEFAULT_ROLES = [
 // ─────────────────────────────────────────────────────────────────────────────
 const TEMPLATES = {
 
+  // ── Basic ─────────────────────────────────────────────────────────────────
+  // The leanest environment — a clean applicant tracker. People, Jobs and
+  // Talent Pools with the simplified Starter field sets, one pipeline, and a
+  // feature_profile that ships most modules OFF so first-time users aren't
+  // overwhelmed. Default for self-serve signups.
+  recruitment_basic: {
+    key:         'recruitment_basic',
+    label:       'Basic',
+    description: 'A clean, simple recruitment tracker — candidates, jobs and talent pools, one pipeline, and just the essentials switched on. Everything else is one toggle away in settings.',
+    tier:        'basic',
+    icon:        'rocket',
+    is_default:  true,   // default for self-serve signups
+    default_roles: DEFAULT_ROLES,
+    // Feature profile — only these flags stay ON. Provisioning writes OFF
+    // overrides for every other default-on module/panel/nav flag.
+    // (see overridesForKeepOn in routes/feature-flags.js)
+    feature_profile: {
+      keep_on: [
+        // Modules
+        'ai_copilot', 'interviews', 'reports', 'portals',
+        'cv_parsing', 'bulk_actions', 'duplicate_detection',
+        // Nav sections
+        'access_search', 'access_calendar',
+        // Record panels
+        'panel_notes', 'panel_files', 'panel_activity', 'panel_linked_records',
+      ],
+    },
+    objects: [
+      {
+        slug: 'people', name: 'Person', plural_name: 'People',
+        icon: 'user', color: '#4361EE', is_system: true,
+        fields: PEOPLE_STARTER,
+      },
+      {
+        slug: 'jobs', name: 'Job', plural_name: 'Jobs',
+        icon: 'briefcase', color: '#0CAF77', is_system: true,
+        fields: JOBS_STARTER,
+      },
+      {
+        slug: 'talent-pools', name: 'Talent Pool', plural_name: 'Talent Pools',
+        icon: 'users', color: '#C87E8B', is_system: true,
+        fields: TALENT_POOL_FIELDS,
+      },
+    ],
+  },
+
   // ── Recruitment Starter ───────────────────────────────────────────────────
   // Default for web signups. Simplified data model, focused on essentials.
   recruitment_starter: {
@@ -569,7 +615,7 @@ const TEMPLATES = {
     description: 'Simple recruitment tracking — candidates, jobs and talent pools. Best for teams getting started.',
     tier:        'starter',
     icon:        'rocket',
-    is_default:  true,   // default for self-serve signups
+    is_default:  false,  // Basic is now the self-serve default
     default_roles: DEFAULT_ROLES,
     objects: [
       {
@@ -768,6 +814,7 @@ function resolveTemplate(key) {
     is_default:    tpl.is_default || false,
     objects,
     roles:         tpl.default_roles || DEFAULT_ROLES,
+    feature_profile: tpl.feature_profile || null,
   };
 }
 

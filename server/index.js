@@ -227,6 +227,25 @@ if (process.env.NODE_ENV !== 'production') {
     if (req.method === 'POST' && req.path === '/api/auth/login') return next();
     if (!storeReady) return next(); // don't attempt auto-login before store is ready
     try {
+      // Dev tenant pin — set DEV_TENANT=<slug> to make localhost auto-login into
+      // a specific provisioned tenant (e.g. a Basic template env) so you can
+      // browse a separate environment without the session snapping back to
+      // master. Unset (or 'master') for the normal master/Production view.
+      const devTenant = process.env.DEV_TENANT && process.env.DEV_TENANT !== 'master'
+        ? process.env.DEV_TENANT : null;
+      if (devTenant) {
+        const { loadTenantStore } = require('./db/init');
+        const ts = loadTenantStore(devTenant);
+        const tAdmin = (ts?.users || []).find(u => {
+          const role = (ts.roles || []).find(r => r.id === u.role_id);
+          return !u.deleted_at && (u.role_name === 'super_admin' || role?.slug === 'super_admin');
+        }) || (ts?.users || []).find(u => !u.deleted_at);
+        if (tAdmin) {
+          req.session.userId     = tAdmin.id;
+          req.session.tenantSlug = devTenant;
+          return req.session.save(() => next());
+        }
+      }
       const store = getStore();
       const admin = (store.users || []).find(u => u.email === 'admin@talentos.io' && !u.deleted_at);
       if (admin) {
