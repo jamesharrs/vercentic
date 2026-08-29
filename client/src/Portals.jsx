@@ -184,6 +184,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     footer2:"M3 3h18v4H3zM3 17h18v4H3zM3 10h18v4H3z",
     externalLink:"M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3",
     monitor:"M20 3H4a1 1 0 00-1 1v12a1 1 0 001 1h7v2H8v2h8v-2h-3v-2h7a1 1 0 001-1V4a1 1 0 00-1-1zm-1 12H5V5h14v10z",
+    maximize:"M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3",
     smartphone:"M17 1H7a2 2 0 00-2 2v18a2 2 0 002 2h10a2 2 0 002-2V3a2 2 0 00-2-2zm0 18H7V5h10v14zm-5 2a1 1 0 100-2 1 1 0 000 2z",    more:"M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z",    "play-circle":"M12 22a10 10 0 100-20 10 10 0 000 20zM10 8l6 4-6 4V8z",
 
 
@@ -729,6 +730,21 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
                 {lbl("Avatar / logo URL")}<input value={cop.avatar_url||""} onChange={e=>setCop("avatar_url",e.target.value)} placeholder="https://…/avatar.png" style={inp}/>
                 {cop.avatar_url&&<img src={cop.avatar_url} alt="" style={{width:40,height:40,borderRadius:10,objectFit:"cover",marginTop:6,border:`1px solid ${C.border}`}} onError={e=>e.target.style.display="none"}/>}
               </div>
+              {/* Appearance */}
+              <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="maximize" s={13} c={C.text3}/> Widget Size</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                  {lbl("Panel height")}
+                  <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{cop.widget_height||580}px</span>
+                </div>
+                <input type="range" min={420} max={900} step={20} value={cop.widget_height||580} onChange={e=>setCop("widget_height",parseInt(e.target.value))} style={{width:"100%",accentColor:C.accent,cursor:"pointer"}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.text3,marginTop:2}}><span>Compact</span><span>Tall</span></div>
+                <div style={{display:"flex",gap:6,marginTop:10}}>
+                  {[["Compact",480],["Standard",580],["Tall",700],["Full",860]].map(([label,val])=>(
+                    <button key={label} onClick={()=>setCop("widget_height",val)} style={chipStyle((cop.widget_height||580)===val)}>{label}</button>
+                  ))}
+                </div>
+              </div>
               {/* Messaging */}
               <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
                 <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="messageSquare" s={13} c={C.text3}/> Messaging</div>
@@ -751,6 +767,8 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
                 ))}
                 <button onClick={()=>setCop("quick_actions",[...(cop.quick_actions||[]),{label:"",prompt:""}])} style={{fontSize:11,fontWeight:700,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:"4px 0",fontFamily:F}}>+ Add quick action</button>
               </div>
+              {/* Talent Community — fields collected + which pool sign-ups join */}
+              <TalentCommunityConfig cop={cop} setCop={setCop} environmentId={portal.environment_id}/>
               {/* Preview */}
               <div style={{padding:"14px",borderRadius:12,background:`linear-gradient(135deg, ${br.primary_color||br.primary||C.accent}, ${br.secondary_color||br.secondary||br.primary_color||br.primary||C.accent}dd)`,color:"white"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1878,6 +1896,123 @@ const AISummaryWidgetConfig = ({ cfg, set, environmentId }) => {
       </div>
       <div style={{ padding:10, borderRadius:9, background:'#EEF1FF', border:'1px solid #C7D2FE', fontSize:12, color:'#4338CA' }}>
         <span style={{display:"inline-flex",alignItems:"center",gap:5}}><Ic n="lightbulb" s={13} c="#d97706"/>Claude reads live data and generates a personalised briefing — oldest/most urgent items highlighted first.</span>
+      </div>
+    </div>
+  );
+};
+
+// ─── Talent Community field/pool config (Copilot tab) ─────────────────────────
+// Lets an admin choose which People fields the public Talent Community sign-up
+// form collects (cop.talent_community_fields) and which Talent Pool new
+// sign-ups get linked to (cop.talent_pool_id). This is a separate component —
+// not inline in the Copilot tab's `(() => {...})()` body — because that body
+// is re-invoked on every render as a plain function call, so useState/useEffect
+// can't safely live there; extracting a real component keeps hooks order
+// stable, same pattern as HMWidgetConfig below.
+const DEFAULT_TC_FIELD_KEYS = ["first_name", "last_name", "email", "phone"];
+const ALWAYS_ON_TC_FIELDS = ["first_name", "email"];
+
+const TalentCommunityConfig = ({ cop, setCop, environmentId }) => {
+  const [objects, setObjects] = useState([]);
+  const [peopleFields, setPeopleFields] = useState([]);
+  const [talentPools, setTalentPools] = useState([]);
+  const [loadingPools, setLoadingPools] = useState(false);
+
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/objects?environment_id=${environmentId}`)
+      .then(d => setObjects(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [environmentId]);
+
+  useEffect(() => {
+    const peopleObj = objects.find(o => o.slug === "people");
+    const poolsObj  = objects.find(o => o.slug === "talent-pools");
+    if (peopleObj) {
+      api.get(`/fields?object_id=${peopleObj.id}`)
+        .then(d => setPeopleFields(Array.isArray(d) ? d : []))
+        .catch(() => setPeopleFields([]));
+    }
+    if (poolsObj && environmentId) {
+      setLoadingPools(true);
+      api.get(`/records?object_id=${poolsObj.id}&environment_id=${environmentId}&limit=200`)
+        .then(d => setTalentPools(Array.isArray(d?.records) ? d.records : []))
+        .catch(() => setTalentPools([]))
+        .finally(() => setLoadingPools(false));
+    }
+  }, [objects, environmentId]);
+
+  const selectedKeys = (cop.talent_community_fields && cop.talent_community_fields.length)
+    ? cop.talent_community_fields
+    : DEFAULT_TC_FIELD_KEYS;
+
+  const toggleField = (apiKey) => {
+    if (ALWAYS_ON_TC_FIELDS.includes(apiKey)) return; // always collected, can't turn off
+    const next = selectedKeys.includes(apiKey)
+      ? selectedKeys.filter(k => k !== apiKey)
+      : [...selectedKeys, apiKey];
+    setCop("talent_community_fields", next);
+  };
+
+  const HIDDEN_TC_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id", "talent_community"];
+  const availableFields = peopleFields.filter(f => !HIDDEN_TC_KEYS.includes(f.api_key));
+
+  return (
+    <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+        <Ic n="users" s={13} c={C.text3}/> Talent Community
+      </div>
+      <div style={{fontSize:11,color:C.text3,marginBottom:10}}>
+        When there's no strong-fit open role, the copilot offers to keep the candidate on file instead of a dead end. Choose which fields to collect and which Talent Pool sign-ups join.
+      </div>
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Connects to Talent Pool</div>
+        <select
+          value={cop.talent_pool_id || ""}
+          onChange={e => setCop("talent_pool_id", e.target.value || null)}
+          style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,boxSizing:"border-box"}}>
+          <option value="">— None (just create/update the person record) —</option>
+          {talentPools.map(r => (
+            <option key={r.id} value={r.id}>{r.data?.pool_name || r.data?.name || "Untitled Pool"}</option>
+          ))}
+        </select>
+        {!loadingPools && talentPools.length === 0 && (
+          <div style={{fontSize:11,color:C.text3,marginTop:4}}>No talent pools found in this environment yet.</div>
+        )}
+      </div>
+
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Fields collected</div>
+        {availableFields.length === 0 && (
+          <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+        )}
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {availableFields.map(f => {
+            const active = selectedKeys.includes(f.api_key);
+            const locked = ALWAYS_ON_TC_FIELDS.includes(f.api_key);
+            return (
+              <button
+                key={f.api_key}
+                type="button"
+                onClick={() => toggleField(f.api_key)}
+                disabled={locked}
+                title={locked ? "Always collected" : ""}
+                style={{
+                  padding:"5px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,
+                  cursor: locked ? "default" : "pointer",
+                  border:`1.5px solid ${active ? C.accent : C.border}`,
+                  background: active ? `${C.accent}14` : C.surface,
+                  color: active ? C.accent : C.text3,
+                  opacity: locked ? 0.85 : 1,
+                  display:"flex",alignItems:"center",gap:4,
+                }}>
+                {f.name}
+                {locked && <Ic n="lock" s={9} c={active?C.accent:C.text3}/>}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

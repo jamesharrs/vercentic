@@ -5,6 +5,7 @@ const { v4: uid } = require('uuid');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -114,6 +115,8 @@ CAPABILITIES:
 
 5. DOCUMENT UPLOAD: When a candidate mentions uploading a CV, tell them to use the attachment button next to the input.
 
+6. NO STRONG MATCH → TALENT COMMUNITY: If there is no open role that's a genuinely good match for the candidate — even after considering adjacent or transferable roles — be honest about that rather than forcing a weak recommendation. Warmly invite them to join our Talent Community so we can reach out personally when a better-fit role opens up. Whenever you make this offer, include the tag <TALENT_CTA>true</TALENT_CTA> in your reply (you can still include JOB_CARDS alongside it if you're suggesting a few adjacent roles worth a look, but the community invite should always appear when nothing is a strong fit).
+
 RULES:
 - Never invent jobs not in the list above
 - Never share other candidates' information
@@ -125,12 +128,25 @@ RULES:
   if (!apiKey) return res.status(500).json({ error: 'AI service not configured' });
 
   try {
+    // Anthropic's Messages API rejects message objects with any extra fields
+    // beyond {role, content} — frontend chat state often carries extra UI
+    // metadata (e.g. `cards`, `parsed`) on message objects for rendering,
+    // so strip everything down before forwarding.
+    const cleanMessages = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .slice(-20)
+      .map(m => ({ role: m.role, content: m.content }));
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1024, system: systemPrompt, messages: messages.slice(-20) }),
+      body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens: 1024, system: systemPrompt, messages: cleanMessages }),
     });
-    if (!response.ok) { console.error('[portal-copilot] API error:', response.status); return res.status(500).json({ error: 'AI service temporarily unavailable' }); }
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      console.error('[portal-copilot] API error:', response.status, errBody.slice(0, 500));
+      return res.status(500).json({ error: 'AI service temporarily unavailable' });
+    }
     const data = await response.json();
     const text = (data.content || []).map(c => c.text || '').join('');
     res.json({ reply: text, session_id: session_id || uid() });
@@ -183,6 +199,19 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
       created_at: new Date().toISOString(),
     });
 
+    if (job_id) {
+      if (!store.people_links) store.people_links = [];
+      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === job_id && !l.deleted_at);
+      if (!linked) {
+        store.people_links.push({
+          id: uid(), person_id: personRecord.id, record_id: job_id,
+          environment_id: portal.environment_id,
+          workflow_id: null, stage_id: null, stage_name: 'Applied',
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+      }
+    }
+
     if (cover_note) {
       if (!store.notes) store.notes = [];
       store.notes.push({
@@ -197,6 +226,149 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
   } catch (e) {
     console.error('[portal-copilot] Apply error:', e.message);
     res.status(500).json({ error: 'Failed to submit application' });
+  }
+});
+
+// Resolve which People fields the Talent Community sign-up form should
+// collect for this portal (admin-configured in Portal Settings → Copilot),
+// plus which Talent Pool it connects to — public, read-only, no auth needed
+// since it only returns field labels/types, never candidate data.
+router.get('/talent-community-fields', (req, res) => {
+  const { portal_id } = req.query;
+  if (!portal_id) return res.status(400).json({ error: 'portal_id required' });
+  const portal = getPortal(portal_id);
+  if (!portal) return res.status(404).json({ error: 'Portal not found' });
+  const store = getStore();
+
+  const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
+  if (!peopleObj) return res.json({ fields: [], talent_pool_id: null, talent_pool_name: null });
+
+  const allFields = (store.fields || []).filter(f => f.object_id === peopleObj.id);
+  const cop = portal.copilot || {};
+  const selectedKeys = Array.isArray(cop.talent_community_fields) && cop.talent_community_fields.length
+    ? cop.talent_community_fields
+    : ['first_name', 'last_name', 'email', 'phone'];
+
+  // first_name + email are always collected and required, even if an
+  // admin's saved config predates this feature or omits them by mistake —
+  // the backend won't create a record without them either way.
+  const keySet = new Set([...selectedKeys, 'first_name', 'email']);
+  const orderOf = k => { const i = selectedKeys.indexOf(k); return i === -1 ? 999 : i; };
+  const fields = allFields
+    .filter(f => keySet.has(f.api_key))
+    .map(f => ({
+      api_key: f.api_key,
+      name: f.name,
+      field_type: f.field_type,
+      options: f.options || null,
+      required: f.api_key === 'first_name' || f.api_key === 'email',
+    }))
+    .sort((a, b) => orderOf(a.api_key) - orderOf(b.api_key));
+
+  let poolName = null;
+  const poolId = cop.talent_pool_id || null;
+  if (poolId) {
+    const poolRec = (store.records || []).find(r => r.id === poolId && !r.deleted_at);
+    poolName = poolRec?.data?.pool_name || poolRec?.data?.name || null;
+  }
+
+  res.json({ fields, talent_pool_id: poolId, talent_pool_name: poolName });
+});
+
+// Join the talent community — used when the copilot has no strong-fit open
+// role for a candidate, so they can stay on file for future openings instead
+// of hitting a dead end. Mirrors /apply closely but tags the person record
+// rather than linking them to a specific job.
+router.post('/join-community', upload.single('cv'), async (req, res) => {
+  try {
+    const { portal_id, note } = req.body;
+    if (!portal_id) return res.status(400).json({ error: 'portal_id required' });
+    const portal = getPortal(portal_id);
+    if (!portal) return res.status(404).json({ error: 'Portal not found' });
+    const store = getStore();
+    const { saveStore } = require('../db/init');
+
+    const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
+    if (!peopleObj) return res.status(400).json({ error: 'People object not configured' });
+
+    // Only accept values for fields that are actually defined on the People
+    // object — the admin-configured "fields collected" set (or the default
+    // first/last/email/phone) drives what the widget sends, but this is the
+    // real gate against arbitrary data landing on the record.
+    const peopleFields = (store.fields || []).filter(f => f.object_id === peopleObj.id);
+    const fieldMeta = new Map(peopleFields.map(f => [f.api_key, f]));
+    const fieldValues = {};
+    for (const [k, v] of Object.entries(req.body)) {
+      if (!fieldMeta.has(k) || v === undefined || v === '') continue;
+      const type = fieldMeta.get(k).field_type;
+      if (type === 'multi_select') {
+        try { fieldValues[k] = JSON.parse(v); } catch { fieldValues[k] = [v]; }
+      } else if (type === 'boolean') {
+        fieldValues[k] = v === 'true' || v === true;
+      } else {
+        fieldValues[k] = v;
+      }
+    }
+
+    const email = fieldValues.email;
+    const firstName = fieldValues.first_name;
+    if (!email || !firstName)
+      return res.status(400).json({ error: 'first_name and email required' });
+
+    let personRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
+    if (!personRecord) {
+      personRecord = {
+        id: uid(), object_id: peopleObj.id, environment_id: portal.environment_id,
+        data: { status: 'Active', source: 'Career Site Copilot', person_type: 'Candidate', ...fieldValues, talent_community: true },
+        created_by: 'portal-copilot', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      if (!store.records) store.records = [];
+      store.records.push(personRecord);
+    } else {
+      personRecord.data = { ...personRecord.data, ...fieldValues, talent_community: true };
+      personRecord.updated_at = new Date().toISOString();
+    }
+
+    if (req.file) {
+      if (!store.attachments) store.attachments = [];
+      store.attachments.push({
+        id: uid(), record_id: personRecord.id, object_id: peopleObj.id, environment_id: portal.environment_id,
+        file_name: req.file.originalname, file_path: req.file.path, file_size: req.file.size,
+        mime_type: req.file.mimetype, file_type_name: 'CV / Resume',
+        uploaded_by: 'portal-copilot', created_at: new Date().toISOString(),
+      });
+    }
+
+    if (!store.activity) store.activity = [];
+    store.activity.push({
+      id: uid(), record_id: personRecord.id, object_id: peopleObj.id, environment_id: portal.environment_id,
+      action: 'joined_talent_community', actor: 'portal-copilot',
+      details: { portal_id, portal_name: portal.name, note, has_cv: !!req.file },
+      created_at: new Date().toISOString(),
+    });
+
+    // Optionally link into a specific Talent Pool record, if the portal's
+    // copilot config names one — falls back to just tagging the person
+    // record above when it doesn't (no admin UI for this setting yet).
+    const poolId = portal.copilot?.talent_pool_id;
+    if (poolId) {
+      if (!store.people_links) store.people_links = [];
+      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === poolId && !l.deleted_at);
+      if (!linked) {
+        store.people_links.push({
+          id: uid(), person_id: personRecord.id, record_id: poolId,
+          environment_id: portal.environment_id,
+          workflow_id: null, stage_id: null, stage_name: 'Talent Community',
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    saveStore();
+    res.json({ success: true, person_id: personRecord.id, message: 'Joined talent community' });
+  } catch (e) {
+    console.error('[portal-copilot] join-community error:', e.message);
+    res.status(500).json({ error: 'Failed to join talent community' });
   }
 });
 
