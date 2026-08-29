@@ -75,7 +75,11 @@ router.post('/chat', async (req, res) => {
 
   const jobsList = jobs.length > 0
     ? jobs.map((j, i) => {
-        let line = `${i + 1}. ${j.title}`;
+        // ID is included so the model has a real, exact identifier to copy
+        // into JOB_CARDS/APPLICATION output — without it here, the model
+        // has no grounding for job_id and is forced to guess/invent one,
+        // which silently breaks the job link on submission (see /apply).
+        let line = `${i + 1}. ${j.title} | ID: ${j.id}`;
         if (j.department) line += ` | Dept: ${j.department}`;
         if (j.location) line += ` | Location: ${j.location}`;
         if (j.work_type) line += ` | ${j.work_type}`;
@@ -106,7 +110,7 @@ CAPABILITIES:
 1. SEARCH/RECOMMEND JOBS: When a candidate asks about roles, recommend matching ones from the list above.
    Output job recommendations as:
    <JOB_CARDS>[{"id":"...","title":"...","department":"...","location":"...","work_type":"...","employment_type":"...","summary":"first 200 chars","skills":["skill1"],"salary_min":null,"salary_max":null}]</JOB_CARDS>
-   Include ALL available fields. Show up to 5 relevant jobs. Always include JOB_CARDS when recommending jobs.
+   The "id" MUST be copied EXACTLY from the "ID:" field of that job in the OPEN POSITIONS list above — never invent, shorten, guess, or reuse a title as an id. Include ALL available fields. Show up to 5 relevant jobs. Always include JOB_CARDS when recommending jobs.
    The candidate will see two buttons: "View details" and "Apply now".
 
 2. DESCRIBE A JOB: When asked for details about a role, give a rich description including responsibilities, requirements, team info.
@@ -115,6 +119,7 @@ CAPABILITIES:
 3. START APPLICATION: When a candidate wants to apply, collect: full name, email, phone (optional), brief message of interest.
    Ask if they want to upload a CV. Once you have name + email, output:
    <APPLICATION>{"job_id":"...","job_title":"...","first_name":"...","last_name":"...","email":"...","phone":"...","cover_note":"..."}</APPLICATION>
+   CRITICAL: "job_id" MUST be the exact "ID:" value from the OPEN POSITIONS list above for the specific role they're applying to — copy it character-for-character, never invent, guess, truncate, or leave it blank. If you are not 100% sure which open position they mean, ask them to confirm/pick one from the list before outputting the APPLICATION tag. The APPLICATION block must be valid, strict JSON — no trailing commas, no comments, no unescaped quotes inside string values.
 
 4. ANSWER QUESTIONS: Answer general questions about company, culture, benefits, application process. Be honest if unsure.
 
@@ -204,18 +209,32 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
       created_at: new Date().toISOString(),
     });
 
-    if (job_id) {
+    // Resolve the job to link against. The AI can mishandle an opaque UUID
+    // far more easily than a plain title it read straight off the OPEN
+    // POSITIONS list (this was the actual root cause of applications
+    // silently landing with no job link at all — job_id would come through
+    // missing, blank, or hallucinated). If job_id doesn't match a real
+    // record, fall back to an exact case-insensitive title match among this
+    // portal's open jobs before giving up.
+    let resolvedJobId = (job_id && (store.records || []).some(r => r.id === job_id && !r.deleted_at)) ? job_id : null;
+    if (!resolvedJobId && job_title) {
+      const candidateJobs = getOpenJobs(portal.environment_id);
+      const match = candidateJobs.find(j => j.title.trim().toLowerCase() === String(job_title).trim().toLowerCase());
+      if (match) resolvedJobId = match.id;
+    }
+
+    if (resolvedJobId) {
       if (!store.people_links) store.people_links = [];
-      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === job_id && !l.deleted_at);
+      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === resolvedJobId && !l.deleted_at);
       if (!linked) {
         // Resolve the job's Linked Person workflow so the applicant lands on
         // a real stage — the Application Pipeline widget counts candidates
         // by matching people_links.stage_id against the assigned workflow's
         // step ids, so a null stage_id is never shown in any column.
-        if (hasLinkedPersonWorkflow(store, job_id)) {
-          const { stage_id, stage_name } = resolveFirstStage(store, job_id);
+        if (hasLinkedPersonWorkflow(store, resolvedJobId)) {
+          const { stage_id, stage_name } = resolveFirstStage(store, resolvedJobId);
           store.people_links.push({
-            id: uid(), person_id: personRecord.id, record_id: job_id,
+            id: uid(), person_id: personRecord.id, record_id: resolvedJobId,
             environment_id: portal.environment_id,
             workflow_id: null, stage_id, stage_name,
             created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
@@ -228,11 +247,22 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
           store.activity.push({
             id: uid(), record_id: personRecord.id, object_id: peopleObj.id, environment_id: portal.environment_id,
             action: 'application_unlinked_no_workflow', actor: 'portal-copilot',
-            details: { job_id, job_title, reason: 'Job has no Linked Person workflow attached' },
+            details: { job_id: resolvedJobId, original_job_id: job_id, job_title, reason: 'Job has no Linked Person workflow attached' },
             created_at: new Date().toISOString(),
           });
         }
       }
+    } else if (job_id || job_title) {
+      // Neither the submitted job_id nor a title fallback could be resolved
+      // to a real job — previously this left zero trace anywhere (no
+      // activity entry at all), making it indistinguishable from the
+      // candidate never having mentioned a job. Log it so it's discoverable.
+      store.activity.push({
+        id: uid(), record_id: personRecord.id, object_id: peopleObj.id, environment_id: portal.environment_id,
+        action: 'application_unlinked_no_job_match', actor: 'portal-copilot',
+        details: { job_id, job_title, reason: 'Could not resolve job_id and no open-job title match was found' },
+        created_at: new Date().toISOString(),
+      });
     }
 
     if (cover_note) {

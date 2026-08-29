@@ -179,9 +179,26 @@ const ApplyForm = ({ job, form, setForm, theme, onSubmit, onCancel, submitting, 
 function parseResponse(text) {
   const parts = []; let remaining = text;
   const jobMatch = remaining.match(/<JOB_CARDS>([\s\S]*?)<\/JOB_CARDS>/);
-  if (jobMatch) { remaining = remaining.replace(jobMatch[0], '').trim(); try { parts.push({ type: 'jobs', jobs: JSON.parse(jobMatch[1]) }); } catch (e) {} }
+  if (jobMatch) {
+    remaining = remaining.replace(jobMatch[0], '').trim();
+    try { parts.push({ type: 'jobs', jobs: JSON.parse(jobMatch[1]) }); }
+    catch (e) { console.warn('[CandidateCopilot] Failed to parse JOB_CARDS block:', e.message, jobMatch[1]); }
+  }
   const appMatch = remaining.match(/<APPLICATION>([\s\S]*?)<\/APPLICATION>/);
-  if (appMatch) { remaining = remaining.replace(appMatch[0], '').trim(); try { parts.push({ type: 'application', data: JSON.parse(appMatch[1]) }); } catch (e) {} }
+  if (appMatch) {
+    remaining = remaining.replace(appMatch[0], '').trim();
+    try { parts.push({ type: 'application', data: JSON.parse(appMatch[1]) }); }
+    catch (e) {
+      // Previously this failure was swallowed entirely (empty catch) — the
+      // model's surrounding text (e.g. "Great, submitting that now!") would
+      // still render normally with no visible sign anything went wrong,
+      // while pendingApp never got set, no Submit button ever appeared, and
+      // /apply was never called — a silent "phantom success" with zero
+      // person record or job link created. Surface it instead.
+      console.warn('[CandidateCopilot] Failed to parse APPLICATION block:', e.message, appMatch[1]);
+      parts.push({ type: 'text', content: "Sorry, I had trouble preparing your application just then. Could you tell me your full name and email again so I can try once more?" });
+    }
+  }
   if (remaining.trim()) parts.push({ type: 'text', content: remaining.trim() });
   return parts;
 }
