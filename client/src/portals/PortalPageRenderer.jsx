@@ -3182,6 +3182,16 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit }) => {
     email:      data.email      || '',
     phone:      data.phone      || '',
     cover_note: data.cover_note || '',
+    // job_id/job_title are never edited by the candidate — they're read-only
+    // context carried in from `data` (the parsed <APPLICATION> tag / CV-drop
+    // / "Apply now" click) — but they MUST still live in this form's own
+    // state, because `onSubmit(fields)` below only ever sends this local
+    // `fields` object, not the original `data` prop. Omitting them here was
+    // the actual root cause of applications submitting successfully (person
+    // record created) but never creating a people_links entry to the job:
+    // submitApplication()'s `if (fields.job_id) ...` was always false.
+    job_id:     data.job_id    || '',
+    job_title:  data.job_title || '',
   });
   const [status, setStatus] = useState('idle'); // idle | submitting | done | error
   const [errMsg, setErrMsg] = useState('');
