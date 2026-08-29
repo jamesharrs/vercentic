@@ -1,3 +1,4 @@
+/* global setImmediate */
 /**
  * server/routes/signup.js — Public self-serve signup
  * POST /api/signup — creates client + tenant + admin user in one call.
@@ -52,7 +53,7 @@ router.post('/', async (req, res) => {
   let baseSlug = slugify(company), tenantSlug = baseSlug, n = 1;
   const taken = new Set([
     ...(masterStore.clients || []).map(c => c.tenant_slug).filter(Boolean),
-    'www','app','api','admin','master','vercentic','talentos','localhost',
+    'www','app','api','admin','master','vercentic','localhost',
   ]);
   while (taken.has(tenantSlug)) tenantSlug = `${baseSlug}${++n}`;
 
