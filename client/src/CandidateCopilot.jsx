@@ -22,6 +22,45 @@ const Ic = ({ n, s = 16, c = 'currentColor' }) => {
   </svg>);
 };
 
+// Turns **bold** into real emphasis instead of leaving literal asterisks visible.
+function parseInline(text) {
+  return text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, i) => (
+    part.startsWith('**') && part.endsWith('**') && part.length > 4
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : <span key={i}>{part}</span>
+  ));
+}
+
+// Renders assistant/user chat text: collapses the AI's stray blank lines down to
+// one consistent paragraph gap (instead of whatever whiteSpace:'pre-wrap' preserved
+// verbatim, which is what produced the oversized gaps), turns "- " lines into
+// proper bullets (checked per line, not per paragraph, so a bold heading and its
+// bullet list can share one paragraph without the leading "-" leaking through),
+// and resolves **bold** via parseInline.
+function RichText({ text }) {
+  const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const blocks = normalized.split(/\n\n+/);
+  return blocks.map((block, bi) => {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    return (
+      <div key={bi} style={{ marginTop: bi === 0 ? 0 : 8 }}>
+        {lines.map((l, li) => {
+          const bulletMatch = l.match(/^[-*•]\s+(.*)/);
+          if (bulletMatch) {
+            return (
+              <div key={li} style={{ display: 'flex', gap: 6, marginTop: li === 0 ? 0 : 2 }}>
+                <span style={{ flexShrink: 0 }}>•</span>
+                <span>{parseInline(bulletMatch[1])}</span>
+              </div>
+            );
+          }
+          return <div key={li} style={{ marginTop: li === 0 ? 0 : 2 }}>{parseInline(l)}</div>;
+        })}
+      </div>
+    );
+  });
+}
+
 function buildTheme(branding, copilotConfig) {
   const primary = branding.primary_color || branding.primary || '#4361EE';
   const secondary = branding.secondary_color || branding.secondary || branding.accent || primary;
@@ -89,7 +128,7 @@ const JobDetailInline = ({ job, theme, onApply, onBack }) => (
     {(job.salary_min || job.salary_max) && <div style={{ padding: '8px 12px', borderRadius: theme.buttonRadius, background: theme.primaryLight, fontSize: 13, fontWeight: 700, color: theme.primary, marginBottom: 12, display: 'inline-block' }}>
       {job.salary_min && job.salary_max ? `${Number(job.salary_min).toLocaleString()} – ${Number(job.salary_max).toLocaleString()}` : job.salary_min ? `From ${Number(job.salary_min).toLocaleString()}` : `Up to ${Number(job.salary_max).toLocaleString()}`}
     </div>}
-    {job.summary && <div style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 1.7, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{job.summary}</div>}
+    {job.summary && <div style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 1.7, marginBottom: 14 }}><RichText text={job.summary} /></div>}
     {Array.isArray(job.skills) && job.skills.length > 0 && <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Skills & requirements</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -361,12 +400,12 @@ export default function CandidateCopilot({ portal, api }) {
                   padding: '10px 14px', fontSize: 13, lineHeight: 1.6, border: isUser ? 'none' : `1px solid ${theme.cardBorder}`,
                   boxShadow: isUser ? `0 2px 8px ${theme.primary}25` : '0 1px 3px rgba(0,0,0,0.04)', wordBreak: 'break-word' }}>
                   {msg.parsed ? msg.parsed.map((block, j) => {
-                    if (block.type === 'text') return <div key={j} style={{ whiteSpace: 'pre-wrap' }}>{block.content}</div>;
+                    if (block.type === 'text') return <div key={j}><RichText text={block.content} /></div>;
                     if (block.type === 'jobs') return <div key={j} style={{ marginTop: 8 }}>{block.jobs.map((job, k) => <JobCard key={k} job={job} theme={theme} onView={handleViewJob} onApply={handleApplyFromCard} />)}</div>;
                     if (block.type === 'application') return null;
                     if (block.type === 'success') return <SuccessCard key={j} jobTitle={block.jobTitle} theme={theme} />;
                     return null;
-                  }) : <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>}
+                  }) : <RichText text={msg.content} />}
                 </div>
               </div>
             );

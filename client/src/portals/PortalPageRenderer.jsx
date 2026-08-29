@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
-import { sanitizeInline } from '../sanitize.js'
+import { sanitizeInline, sanitizeCopilot } from '../sanitize.js'
 import { mergePortalBranding } from './portalBranding.js'
 import { API_ORIGIN } from '../apiClient.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -3428,6 +3428,32 @@ const TalentCommunityCard = ({ prefill, pr, ff, onSubmit, portalId }) => {
   );
 };
 
+// Converts the copilot's markdown-ish reply text (and the candidate's own
+// typed messages) into safe HTML: **bold** becomes <strong>, "- "/"* " lines
+// become bullets, "1. " lines become a numbered list, and blank lines
+// collapse into a single small paragraph gap. Previously this content was
+// shown as raw text with whiteSpace:'pre-wrap', which left literal "**"
+// markers visible and preserved every blank line from the AI's output
+// verbatim (producing the oversized gaps between paragraphs). Mirrors the
+// renderMessage()+sanitizeCopilot() pattern already used by the internal
+// recruiter copilot in AI.jsx.
+const renderCopilotMessage = (content) => {
+  if (!content) return '';
+  let html = content;
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/^(\d+)\. (.+)$/gm,
+    `<div style="display:flex;gap:6px;padding:1px 0;"><span style="flex-shrink:0;font-weight:700;">$1.</span><span>$2</span></div>`);
+  html = html.replace(/^[•\-*] (.+)$/gm,
+    `<div style="display:flex;gap:6px;padding:1px 0;"><span style="flex-shrink:0;">•</span><span>$1</span></div>`);
+  html = html.replace(/\n\n+/g, '</p><p style="margin:6px 0 0;">');
+  html = html.replace(/\n/g, '<br/>');
+  // Don't double-space consecutive bullet/numbered rows
+  html = html.replace(/<br\/?>\s*(<div)/g, '$1');
+  html = html.replace(/(<\/div>)\s*<br\/?>/g, '$1');
+  html = `<p style="margin:0;">${html}</p>`;
+  return html;
+};
+
 const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const cop = portal.copilot || {};
 
@@ -3778,9 +3804,8 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
                   // chat bubble, since it's introductory copy, not a reply.
                   <div style={{ ...(i===0 ? { width:'100%' } : { maxWidth:'82%' }), padding:'9px 13px', borderRadius: m.role==='user' ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
                     background: m.role==='user' ? pr : '#F3F4F6', color: m.role==='user' ? 'white' : '#111827', fontSize:13, lineHeight:1.6,
-                    whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
-                    {m.content}
-                  </div>
+                    wordBreak:'break-word' }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeCopilot(renderCopilotMessage(m.content)) }}/>
                 )}
                 {/* Job cards */}
                 {m.cards?.length > 0 && (
