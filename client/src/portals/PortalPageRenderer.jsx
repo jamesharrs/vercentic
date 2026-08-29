@@ -3,6 +3,7 @@ import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
 import { mergePortalBranding } from './portalBranding.js'
+import { API_ORIGIN } from '../apiClient.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -73,10 +74,10 @@ const HeroWidget = ({ cfg, theme }) => {
   return (
     <div style={{
       padding, textAlign: align, position: 'relative', overflow: 'hidden',
-      minHeight: cfg.videoUrl ? 420 : 'auto',
-      display: cfg.videoUrl ? 'flex' : 'block',
-      alignItems: cfg.videoUrl ? 'center' : undefined,
-      justifyContent: cfg.videoUrl ? 'center' : undefined,
+      minHeight: cfg.videoUrl ? 420 : (cfg.bgImage ? 440 : 'auto'),
+      display: (cfg.videoUrl || cfg.bgImage) ? 'flex' : 'block',
+      alignItems: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
+      justifyContent: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
       background: cfg.videoUrl ? '#0F1729'
         : cfg.bgImage ? `url(${cfg.bgImage}) center/cover no-repeat`
         : `linear-gradient(135deg, ${pr}12, ${t.secondaryColor || pr}08)`,
@@ -92,16 +93,16 @@ const HeroWidget = ({ cfg, theme }) => {
       {!cfg.videoUrl && cfg.bgImage && (cfg.overlayOpacity||0) > 0 && (
         <div style={{ position:'absolute', inset:0, background:`rgba(0,0,0,${(cfg.overlayOpacity||0)/100})` }}/>
       )}
-      <div style={{ position:'relative', zIndex:2, maxWidth: cfg.videoUrl ? '720px' : '800px', margin:'0 auto' }}>
+      <div style={{ position:'relative', zIndex:2, maxWidth: (cfg.videoUrl || cfg.bgImage) ? '760px' : '800px', margin:'0 auto' }}>
         {cfg.eyebrow && (
-          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: cfg.videoUrl ? 'rgba(255,255,255,.7)' : pr, marginBottom:12, fontFamily:ff }}>
+          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: (cfg.videoUrl || (cfg.bgImage && (cfg.overlayOpacity||0) > 20)) ? 'rgba(255,255,255,.85)' : pr, marginBottom:12, fontFamily:ff }}>
             {cfg.eyebrow}
           </div>
         )}
-        <h2 style={{ fontSize: cfg.videoUrl ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
+        <h2 style={{ fontSize: (cfg.videoUrl || cfg.bgImage) ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
           {cfg.headline || 'Your Compelling Headline'}
         </h2>
-        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: cfg.videoUrl ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
+        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: (cfg.videoUrl || cfg.bgImage) ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
         <div style={{ display:'flex', gap:12, justifyContent: align === 'center' ? 'center' : 'flex-start', flexWrap:'wrap' }}>
           {cfg.primaryCta && (
             <a href={cfg.primaryCtaLink||'#'} style={{ display:'inline-block', padding: cfg.videoUrl ? '16px 36px' : '14px 32px', borderRadius:br, background:'#FFFFFF', color:pr, fontWeight:700, fontSize: cfg.videoUrl ? 17 : 16, textDecoration:'none', fontFamily:ff }}>
@@ -1149,10 +1150,18 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
           {jobs.map((job, i) => (
-            <button key={job.id||i}
+            // NOTE: intentionally a <div role="button">, not a real <button> — this
+            // card contains a nested bookmark <button>, and a <button> can never
+            // contain another <button> (invalid HTML). Browsers silently "repair"
+            // that nesting in inconsistent ways, which is what broke click-to-open
+            // on these cards. Keyboard operability is preserved via tabIndex+onKeyDown.
+            <div key={job.id||i}
+              role="button"
+              tabIndex={0}
               aria-label={`View job: ${job.data?.job_title||'Untitled role'}${job.data?.department ? ', '+job.data.department : ''}`}
-              style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12, textAlign:'left', fontFamily:'inherit', width:'100%' }}
+              style={{ background:'white', borderRadius:br, border:'1.5px solid #F3F4F6', padding:'20px', cursor:'pointer', transition:'all .15s', boxShadow:'0 1px 4px rgba(0,0,0,.04)', display:'flex', flexDirection:'column', gap:12, textAlign:'left', fontFamily:'inherit', width:'100%', boxSizing:'border-box' }}
               onClick={() => setSelectedJob(job)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedJob(job); } }}
               onMouseEnter={e=>{ e.currentTarget.style.boxShadow=`0 8px 24px ${pr}16`; e.currentTarget.style.borderColor=`${pr}40`; e.currentTarget.style.transform='translateY(-2px)' }}
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; e.currentTarget.style.borderColor='#F3F4F6'; e.currentTarget.style.transform='none' }}
             >
@@ -1170,7 +1179,7 @@ const FeaturedJobsWidget = ({ cfg, theme, portal, api }) => {
                 <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmtDate(job.created_at)}</span>
                 <span style={{ fontSize:11, fontWeight:700, color:pr }}>Apply →</span>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -3160,6 +3169,265 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 }
 
 // ── Portal Copilot (inline, reads portal.copilot config) ─────────────────────
+// ─── Editable, prefillable application-confirmation card ──────────────────────
+// Rendered inline in the copilot transcript whenever we have a candidate's
+// details to confirm — either parsed from an uploaded CV or collected by the
+// AI conversationally via an <APPLICATION> tag. Owns its own local field
+// state (initialised once from `data`) so edits don't need to be lifted into
+// the parent message list.
+const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit }) => {
+  const [fields, setFields] = useState({
+    first_name: data.first_name || '',
+    last_name:  data.last_name  || '',
+    email:      data.email      || '',
+    phone:      data.phone      || '',
+    cover_note: data.cover_note || '',
+  });
+  const [status, setStatus] = useState('idle'); // idle | submitting | done | error
+  const [errMsg, setErrMsg] = useState('');
+
+  const set = (k, v) => setFields(f => ({ ...f, [k]: v }));
+  const canSubmit = fields.first_name.trim() && fields.last_name.trim() && /\S+@\S+\.\S+/.test(fields.email);
+
+  const inputStyle = { width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #E5E7EB',
+    fontSize:12, fontFamily:ff, outline:'none', boxSizing:'border-box' };
+  const labelStyle = { fontSize:10, fontWeight:700, color:'#6B7280', marginBottom:3, textTransform:'uppercase', letterSpacing:.3 };
+
+  if (status === 'done') {
+    return (
+      <div style={{ width:'100%', padding:'14px', borderRadius:12, background:'#F0FDF4', border:'1.5px solid #86EFAC', display:'flex', alignItems:'center', gap:10, boxSizing:'border-box' }}>
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        <div style={{ fontSize:12.5, color:'#166534', fontWeight:600 }}>Application submitted — we'll be in touch soon!</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width:'100%', padding:'14px', borderRadius:12, background:'#F9FAFB', border:`1.5px solid ${pr}30`, boxSizing:'border-box' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+        <div>
+          <div style={labelStyle}>First Name</div>
+          <input style={inputStyle} value={fields.first_name} onChange={e=>set('first_name', e.target.value)} placeholder="First name"/>
+        </div>
+        <div>
+          <div style={labelStyle}>Last Name</div>
+          <input style={inputStyle} value={fields.last_name} onChange={e=>set('last_name', e.target.value)} placeholder="Last name"/>
+        </div>
+      </div>
+      <div style={{ marginBottom:8 }}>
+        <div style={labelStyle}>Email</div>
+        <input style={inputStyle} type="email" value={fields.email} onChange={e=>set('email', e.target.value)} placeholder="you@example.com"/>
+      </div>
+      <div style={{ marginBottom:8 }}>
+        <div style={labelStyle}>Phone</div>
+        <input style={inputStyle} type="tel" value={fields.phone} onChange={e=>set('phone', e.target.value)} placeholder="+971…"/>
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <div style={labelStyle}>Message (optional)</div>
+        <textarea style={{ ...inputStyle, resize:'vertical', minHeight:50, fontFamily:ff }} value={fields.cover_note} onChange={e=>set('cover_note', e.target.value)} placeholder="A short note about your interest…"/>
+      </div>
+      {cvFileName && (
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'6px 10px', borderRadius:8, background:'white', border:'1px solid #E5E7EB' }}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span style={{ fontSize:11.5, color:'#374151', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cvFileName}</span>
+        </div>
+      )}
+      {status === 'error' && (
+        <div style={{ fontSize:11.5, color:'#DC2626', marginBottom:8 }}>{errMsg || 'Something went wrong — please try again.'}</div>
+      )}
+      <button
+        disabled={!canSubmit || status === 'submitting'}
+        onClick={async () => {
+          setStatus('submitting'); setErrMsg('');
+          try {
+            const res = await onSubmit(fields);
+            if (res?.error) { setStatus('error'); setErrMsg(res.error); return; }
+            setStatus('done');
+          } catch {
+            setStatus('error'); setErrMsg('Something went wrong — please try again.');
+          }
+        }}
+        style={{ width:'100%', padding:'9px', borderRadius:8, border:'none', background: canSubmit ? pr : '#D1D5DB',
+          color:'white', fontSize:12.5, fontWeight:700, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily:ff }}>
+        {status === 'submitting' ? 'Submitting…' : 'Submit Application'}
+      </button>
+    </div>
+  );
+};
+
+// ─── Talent Community sign-up card ─────────────────────────────────────────
+// Rendered whenever the assistant decides there's no strong-fit open role
+// for the candidate (flagged via <TALENT_CTA>true</TALENT_CTA>) — offers a
+// low-friction way to stay on file for future openings instead of a dead end.
+// Prefilled from `prefill` (the CV parsed earlier this session, if any).
+const TalentCommunityCard = ({ prefill, pr, ff, onSubmit, portalId }) => {
+  // Sensible shape to render with immediately, before the admin-configured
+  // field list (and which Talent Pool this connects to) has loaded from
+  // /talent-community-fields — avoids a flash of an empty form.
+  const DEFAULT_TC_FIELDS = [
+    { api_key:'first_name', name:'First Name', field_type:'text',  required:true  },
+    { api_key:'last_name',  name:'Last Name',  field_type:'text',  required:false },
+    { api_key:'email',      name:'Email',      field_type:'email', required:true  },
+    { api_key:'phone',      name:'Phone',      field_type:'phone', required:false },
+  ];
+  const [fieldsConfig, setFieldsConfig] = useState(DEFAULT_TC_FIELDS);
+  const [poolName, setPoolName] = useState(null);
+  const [fields, setFields] = useState({
+    first_name: prefill?.first_name || '',
+    last_name:  prefill?.last_name  || '',
+    email:      prefill?.email      || '',
+    phone:      prefill?.phone      || '',
+  });
+  const [status, setStatus] = useState('idle'); // idle | submitting | done | error
+  const [errMsg, setErrMsg] = useState('');
+
+  // Pull the admin-configured "fields to collect" + connected Talent Pool
+  // for this portal (Settings → Copilot → Talent Community). Falls back to
+  // the default 4 fields above on any error, so the form still works.
+  useEffect(() => {
+    if (!portalId) return;
+    let cancelled = false;
+    fetch(`${API_ORIGIN}/api/portal-copilot/talent-community-fields?portal_id=${portalId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled || !Array.isArray(d.fields) || !d.fields.length) return;
+        setFieldsConfig(d.fields);
+        setPoolName(d.talent_pool_name || null);
+        setFields(f => {
+          const next = { ...f };
+          d.fields.forEach(fc => {
+            if (!(fc.api_key in next)) next[fc.api_key] = prefill?.[fc.api_key] || (fc.field_type === 'multi_select' ? [] : '');
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [portalId]);
+
+  const set = (k, v) => setFields(f => ({ ...f, [k]: v }));
+  const canSubmit = (fields.first_name || '').trim() && /\S+@\S+\.\S+/.test(fields.email || '');
+
+  const inputStyle = { width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #E5E7EB',
+    fontSize:12, fontFamily:ff, outline:'none', boxSizing:'border-box' };
+  const labelStyle = { fontSize:10, fontWeight:700, color:'#6B7280', marginBottom:3, textTransform:'uppercase', letterSpacing:.3 };
+
+  if (status === 'done') {
+    return (
+      <div style={{ width:'100%', padding:'14px', borderRadius:12, background:'#F0FDF4', border:'1.5px solid #86EFAC', display:'flex', alignItems:'center', gap:10, boxSizing:'border-box' }}>
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        <div style={{ fontSize:12.5, color:'#166534', fontWeight:600 }}>
+          {poolName ? `You've joined ${poolName} — we'll reach out when a great-fit role opens up!` : `You're on the list — we'll reach out when a great-fit role opens up!`}
+        </div>
+      </div>
+    );
+  }
+
+  // Renders one input for a field, matched to its configured type.
+  const renderField = (fc) => {
+    const val = fields[fc.api_key] ?? (fc.field_type === 'multi_select' ? [] : '');
+    if (fc.field_type === 'select' && Array.isArray(fc.options)) {
+      return (
+        <select style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
+          <option value="">Select…</option>
+          {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    if (fc.field_type === 'multi_select' && Array.isArray(fc.options)) {
+      const arr = Array.isArray(val) ? val : [];
+      return (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+          {fc.options.map(o => {
+            const active = arr.includes(o);
+            return (
+              <button key={o} type="button" onClick={() => set(fc.api_key, active ? arr.filter(x => x !== o) : [...arr, o])}
+                style={{ padding:'4px 9px', borderRadius:99, fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:ff,
+                  border:`1.5px solid ${active ? pr : '#E5E7EB'}`, background: active ? `${pr}15` : 'white', color: active ? pr : '#6B7280' }}>
+                {o}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    if (fc.field_type === 'textarea' || fc.field_type === 'long_text') {
+      return <textarea style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    }
+    if (fc.field_type === 'boolean') {
+      return (
+        <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#374151', cursor:'pointer' }}>
+          <input type="checkbox" checked={!!val} onChange={e => set(fc.api_key, e.target.checked)}/>
+          {fc.name}
+        </label>
+      );
+    }
+    if (fc.field_type === 'date') {
+      return <input style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
+    }
+    const type = fc.field_type === 'email' ? 'email' : fc.field_type === 'phone' ? 'tel' : fc.field_type === 'number' ? 'number' : 'text';
+    return <input style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+  };
+
+  // Keep the familiar compact 2-column first/last name row when both are
+  // configured; everything else (including a solo first or last name)
+  // stacks full-width in the admin-configured order.
+  const firstIdx = fieldsConfig.findIndex(f => f.api_key === 'first_name');
+  const lastIdx  = fieldsConfig.findIndex(f => f.api_key === 'last_name');
+  const pairedNames = firstIdx !== -1 && lastIdx !== -1;
+  const rest = fieldsConfig.filter(f => !(pairedNames && (f.api_key === 'first_name' || f.api_key === 'last_name')));
+
+  return (
+    <div style={{ width:'100%', padding:'14px', borderRadius:12, background:'#F9FAFB', border:`1.5px solid ${pr}30`, boxSizing:'border-box' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+        <div style={{ width:26, height:26, borderRadius:8, background:`${pr}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={pr} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div>
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#111827' }}>Join our Talent Community</div>
+          {poolName && <div style={{ fontSize:10.5, color:'#6B7280', marginTop:1 }}>{poolName}</div>}
+        </div>
+      </div>
+
+      {pairedNames && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+          <div><div style={labelStyle}>First Name</div>{renderField(fieldsConfig[firstIdx])}</div>
+          <div><div style={labelStyle}>Last Name</div>{renderField(fieldsConfig[lastIdx])}</div>
+        </div>
+      )}
+
+      {rest.map(fc => (
+        <div key={fc.api_key} style={{ marginBottom:8 }}>
+          {fc.field_type !== 'boolean' && (
+            <div style={labelStyle}>{fc.name}{!fc.required && ' (optional)'}</div>
+          )}
+          {renderField(fc)}
+        </div>
+      ))}
+
+      {status === 'error' && (
+        <div style={{ fontSize:11.5, color:'#DC2626', marginBottom:8 }}>{errMsg || 'Something went wrong — please try again.'}</div>
+      )}
+      <button
+        disabled={!canSubmit || status === 'submitting'}
+        onClick={async () => {
+          setStatus('submitting'); setErrMsg('');
+          try {
+            const res = await onSubmit(fields);
+            if (res?.error) { setStatus('error'); setErrMsg(res.error); return; }
+            setStatus('done');
+          } catch {
+            setStatus('error'); setErrMsg('Something went wrong — please try again.');
+          }
+        }}
+        style={{ width:'100%', padding:'9px', borderRadius:8, border:'none', background: canSubmit ? pr : '#D1D5DB',
+          color:'white', fontSize:12.5, fontWeight:700, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily:ff }}>
+        {status === 'submitting' ? 'Joining…' : 'Join Talent Community'}
+      </button>
+    </div>
+  );
+};
+
 const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const cop = portal.copilot || {};
 
@@ -3177,10 +3445,40 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
   const [open, setOpen] = useState(false);
   const setOpenAndNotify = (v) => { setOpen(v); onOpenChange?.(v); };
   const [msgs, setMsgs] = useState([{ role:'assistant', content: welcome }]);
+  // Keep a ref mirroring `msgs` so a follow-up send() fired right after a
+  // setMsgs() call (e.g. auto-requesting recommendations after a CV parse)
+  // always reads the latest history instead of a stale closure value.
+  const msgsRef = useRef(msgs);
+  const updateMsgs = (updater) => {
+    setMsgs(m => {
+      const next = typeof updater === 'function' ? updater(m) : updater;
+      msgsRef.current = next;
+      return next;
+    });
+  };
   const [input, setInput] = useState('');
   const [busy, setBusy]   = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
+
+  // CV attach/drag-drop state
+  const fileRef = useRef(null);
+  const ctaFileRef = useRef(null); // dedicated input for the welcome-screen "get recommendations" CTA
+  const dragCounter = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [parsingCv, setParsingCv]   = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null); // last role discussed — used as apply context
+  // Last CV parsed this session (details + the raw File) — kept in a ref so
+  // clicking "Apply now" on a job card later can prefill an application
+  // instantly, and so a "join talent community" card can reuse it too.
+  const parsedCvRef = useRef(null);
+  // Index (in `msgs`) of the message whose TalentCommunityCard the candidate
+  // successfully submitted, or null if they haven't joined yet this session.
+  // Without this, every assistant reply carrying <TALENT_CTA>true</TALENT_CTA>
+  // spawns its own fresh (idle) join card — so if the assistant emits the tag
+  // again later (e.g. in a closing/farewell message), a second empty form
+  // appears underneath the first one's already-shown success confirmation.
+  const [tcJoinedAt, setTcJoinedAt] = useState(null);
 
   // Hooks must run on every render regardless of config — the enabled check
   // happens here, after all hooks, not before them (was previously an early
@@ -3188,38 +3486,226 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
   // for an already-mounted instance).
   if (!cop.enabled) return null;
 
-  // Parse <JOB_CARDS>[...]</JOB_CARDS> out of assistant replies
+  // Parse <JOB_CARDS>[...]</JOB_CARDS>, <APPLICATION>{...}</APPLICATION> and
+  // <TALENT_CTA>true</TALENT_CTA> out of assistant replies.
   const parseReply = (raw) => {
     const tagRe = /<JOB_CARDS>([\s\S]*?)<\/JOB_CARDS>/gi;
+    const appRe = /<APPLICATION>([\s\S]*?)<\/APPLICATION>/gi;
+    const ctaRe = /<TALENT_CTA>([\s\S]*?)<\/TALENT_CTA>/gi;
     const cards = [];
+    let application = null;
+    let talentCta = false;
     let clean = raw;
     let m;
     while ((m = tagRe.exec(raw)) !== null) {
       try { const parsed = JSON.parse(m[1]); if (Array.isArray(parsed)) cards.push(...parsed); } catch {}
       clean = clean.replace(m[0], '').trim();
     }
-    return { text: clean, cards };
+    while ((m = appRe.exec(raw)) !== null) {
+      try { application = JSON.parse(m[1]); } catch {}
+      clean = clean.replace(m[0], '').trim();
+    }
+    while ((m = ctaRe.exec(raw)) !== null) {
+      talentCta = /true/i.test(m[1].trim());
+      clean = clean.replace(m[0], '').trim();
+    }
+    return { text: clean, cards, application, talentCta };
   };
 
   const send = async (text) => {
     const q = text || input.trim();
     if (!q) return;
     setInput(''); setBusy(true);
-    const newMsgs = [...msgs, { role:'user', content: q }];
-    setMsgs(newMsgs);
+    // Read from the ref (not the `msgs` state closure) so a follow-up call
+    // fired right after another setMsgs/updateMsgs (e.g. post-CV-parse
+    // recommendations) always includes the very latest history.
+    const newMsgs = [...msgsRef.current, { role:'user', content: q }];
+    updateMsgs(newMsgs);
     try {
+      // Strip any extra UI fields (e.g. `cards`) before sending — the
+      // Anthropic API rejects message objects with fields beyond role/content.
       const res = await api.post('/portal-copilot/chat', {
         portal_id: portal.id,
-        messages: newMsgs,
+        messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
         context: cop.welcome_context || '',
       });
       const raw = res.reply || res.content || 'Sorry, I had trouble with that.';
-      const { text, cards } = parseReply(raw);
-      setMsgs(m => [...m, { role:'assistant', content: text || raw, cards: cards.length ? cards : undefined }]);
+      const { text, cards, application, talentCta } = parseReply(raw);
+      updateMsgs(m => [...m, { role:'assistant', content: text || raw, cards: cards.length ? cards : undefined, application: application || undefined, talentCta: talentCta || undefined }]);
+      // Remember the role being discussed so a later CV drop / apply has job context
+      if (cards.length === 1) setSelectedJob(j => j || cards[0]);
     } catch {
-      setMsgs(m => [...m, { role:'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
+      updateMsgs(m => [...m, { role:'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
     }
     setBusy(false);
+  };
+
+  // ── CV attach / drag-drop / parse-and-prefill ─────────────────────────────
+  const ACCEPTED_CV_RE = /\.(pdf|docx?|jpe?g|png)$/i;
+
+  const processCvFile = async (file, { forRecommendations } = {}) => {
+    if (!file) return;
+    if (!ACCEPTED_CV_RE.test(file.name)) {
+      updateMsgs(m => [...m, { role:'assistant', content: "I can only read PDF, Word (.doc/.docx) or image files for CVs — could you try again with one of those formats?" }]);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      updateMsgs(m => [...m, { role:'assistant', content: "That file's a bit large — please upload a CV under 10MB." }]);
+      return;
+    }
+    updateMsgs(m => [...m, { role:'user', content: `📎 Uploaded: ${file.name}` }]);
+    setParsingCv(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_ORIGIN}/api/cv-parse`, { method:'POST', body: fd });
+      const data = await res.json();
+      const p = data?.parsed;
+      if (!p) throw new Error('parse failed');
+
+      // Remember the parsed details + the raw file for the rest of this
+      // session — an "Apply now" click on any job card, or a "join talent
+      // community" prompt, can then prefill instantly with no retyping.
+      parsedCvRef.current = {
+        first_name: p.first_name || '',
+        last_name:  p.last_name  || '',
+        email:      p.email      || '',
+        phone:      p.phone      || '',
+        cover_note: p.summary    || '',
+        cvFile: file,
+      };
+
+      if (forRecommendations) {
+        // Recommendations-first entry point: the candidate hasn't chosen a
+        // role yet, so don't jump straight to an application form — just
+        // acknowledge the CV. The follow-up send() below surfaces matching
+        // roles as job cards; "Apply now" on any of them uses parsedCvRef.
+        updateMsgs(m => [...m, { role:'assistant', content: "Thanks! I've reviewed your CV — let me find the roles that best match your background…" }]);
+      } else {
+        // General attach/drop — the candidate's intent here is clearly "I
+        // want to apply", so go straight to a prefilled application card.
+        updateMsgs(m => [...m, {
+          role:'assistant',
+          content: "I've read your CV and pulled out your details below — please check everything's correct, fill in anything missing, then submit your application:",
+          application: {
+            ...parsedCvRef.current,
+            job_id:    selectedJob?.id    || '',
+            job_title: selectedJob?.title || '',
+          },
+          cvFile: file,
+        }]);
+      }
+      setParsingCv(false);
+      // If the CV was dropped via the "get recommendations" entry point,
+      // follow up by asking the assistant to suggest matching open roles
+      // from what it just learned about the candidate — this reuses the
+      // existing <JOB_CARDS> pipeline in send()/parseReply(), so results
+      // render with the same job-card UI as any other recommendation.
+      // updateMsgs() keeps msgsRef in sync as each message lands, so by the
+      // time this fires, send() reads the up-to-date history including the
+      // acknowledgement message just pushed above — no stale-closure risk.
+      if (forRecommendations) {
+        const skills = Array.isArray(p.skills) ? p.skills.filter(Boolean).slice(0, 8).join(', ') : '';
+        const bits = [
+          p.current_title && `currently working as a ${p.current_title}`,
+          skills && `with skills in ${skills}`,
+          p.years_experience && `and about ${p.years_experience} years of experience`,
+        ].filter(Boolean).join(' ');
+        setTimeout(() => {
+          send(`Based on my CV${bits ? ` — I'm ${bits}` : ''}, which of your open roles would be the best fit for me? Please recommend the best matches.`);
+        }, 400);
+      }
+    } catch {
+      updateMsgs(m => [...m, { role:'assistant', content: "Sorry, I couldn't read that file. You can still tell me your name and email and I'll help you apply." }]);
+      setParsingCv(false);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) processCvFile(file);
+  };
+
+  // Dedicated handlers for the welcome-screen "drag or upload cv to get
+  // recommendations" CTA — same parse pipeline, but flagged so processCvFile
+  // fires the auto follow-up asking the assistant for matching roles.
+  const handleCtaFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) processCvFile(file, { forRecommendations: true });
+  };
+  const handleCtaDrop = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dragCounter.current = 0; setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processCvFile(file, { forRecommendations: true });
+  };
+
+  const onDragEnter = e => { e.preventDefault(); e.stopPropagation(); dragCounter.current++; if (e.dataTransfer.types?.includes('Files')) setIsDragging(true); };
+  const onDragOver  = e => { e.preventDefault(); e.stopPropagation(); };
+  const onDragLeave = e => { e.preventDefault(); e.stopPropagation(); dragCounter.current = Math.max(0, dragCounter.current - 1); if (dragCounter.current === 0) setIsDragging(false); };
+  const onDrop = e => {
+    e.preventDefault(); e.stopPropagation();
+    dragCounter.current = 0; setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processCvFile(file);
+  };
+
+  const submitApplication = async (fields, cvFile) => {
+    const fd = new FormData();
+    fd.append('portal_id', portal.id);
+    if (fields.job_id)    fd.append('job_id', fields.job_id);
+    if (fields.job_title) fd.append('job_title', fields.job_title);
+    fd.append('first_name', fields.first_name || '');
+    fd.append('last_name',  fields.last_name  || '');
+    fd.append('email',      fields.email      || '');
+    if (fields.phone)      fd.append('phone', fields.phone);
+    if (fields.cover_note) fd.append('cover_note', fields.cover_note);
+    if (cvFile) fd.append('cv', cvFile);
+    const res = await fetch(`${API_ORIGIN}/api/portal-copilot/apply`, { method:'POST', body: fd });
+    return res.json();
+  };
+
+  // Forwards whatever fields the admin configured for this portal's Talent
+  // Community form (see TalentCommunityConfig in Portals.jsx) — not just the
+  // old hardcoded first/last/email/phone set. Array values (multi_select)
+  // are JSON-stringified so the backend can parse them back out.
+  const submitTalentCommunity = async (fields) => {
+    const fd = new FormData();
+    fd.append('portal_id', portal.id);
+    Object.entries(fields || {}).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
+    });
+    if (parsedCvRef.current?.cvFile) fd.append('cv', parsedCvRef.current.cvFile);
+    const res = await fetch(`${API_ORIGIN}/api/portal-copilot/join-community`, { method:'POST', body: fd });
+    return res.json();
+  };
+
+  // "Apply now" on a job card — if we already have a CV parsed this session,
+  // skip straight to a prefilled application card instead of making the
+  // candidate re-type everything through the chat.
+  const handleApplyClick = (job) => {
+    setSelectedJob(job);
+    if (parsedCvRef.current) {
+      updateMsgs(m => [...m, {
+        role:'assistant',
+        content: `Great choice! I've prefilled your application for the ${job.title} role from your CV — please review and submit:`,
+        application: {
+          first_name: parsedCvRef.current.first_name,
+          last_name:  parsedCvRef.current.last_name,
+          email:      parsedCvRef.current.email,
+          phone:      parsedCvRef.current.phone,
+          cover_note: parsedCvRef.current.cover_note,
+          job_id:    job.id,
+          job_title: job.title,
+        },
+        cvFile: parsedCvRef.current.cvFile,
+      }]);
+    } else {
+      send(`I'd like to apply for the ${job.title} role.`);
+    }
   };
 
   const btnStyle = { padding:'10px 20px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff };
@@ -3243,10 +3729,27 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
 
       {/* Chat panel */}
       {open && (
-        <div style={{ position:'fixed', bottom:16, right:16, zIndex:9000, width: Math.min(380, window.innerWidth - 32),
+        <div
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          style={{ position:'fixed', bottom:16, right:16, zIndex:9000, width: Math.min(380, window.innerWidth - 32),
           boxShadow:'0 8px 40px rgba(0,0,0,.2)', borderRadius:16, overflow:'hidden',
           display:'flex', flexDirection:'column', background:'white', fontFamily:ff,
-          height: Math.min(520, window.innerHeight - 40) }}>
+          height: Math.min(cop.widget_height || 580, window.innerHeight - 40) }}>
+          {/* Drag-and-drop overlay — dashed drop-zone box rather than a full
+              solid-color wash, so the panel's content stays legible behind it */}
+          {isDragging && (
+            <div style={{ position:'absolute', inset:0, zIndex:20, background:'rgba(255,255,255,.94)', display:'flex',
+              alignItems:'center', justifyContent:'center', pointerEvents:'none', padding:18 }}>
+              <div style={{ width:'100%', height:'100%', border:`2px dashed ${pr}`, borderRadius:14, background:`${pr}0d`,
+                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:pr, gap:8 }}>
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={pr} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                <div style={{ fontSize:14, fontWeight:700 }}>Drop your CV here</div>
+              </div>
+            </div>
+          )}
           {/* Header */}
           <div style={{ padding:'12px 16px', background:pr, display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:'rgba(255,255,255,.18)', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -3270,7 +3773,10 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
               <div key={i} style={{ display:'flex', justifyContent: m.role==='user' ? 'flex-end' : 'flex-start', flexDirection:'column', alignItems: m.role==='user' ? 'flex-end' : 'flex-start', gap:8 }}>
                 {/* Text bubble — only if there's text */}
                 {m.content && (
-                  <div style={{ maxWidth:'82%', padding:'9px 13px', borderRadius: m.role==='user' ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
+                  // The very first message is the assistant's welcome/intro
+                  // line — render it full width rather than as a constrained
+                  // chat bubble, since it's introductory copy, not a reply.
+                  <div style={{ ...(i===0 ? { width:'100%' } : { maxWidth:'82%' }), padding:'9px 13px', borderRadius: m.role==='user' ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
                     background: m.role==='user' ? pr : '#F3F4F6', color: m.role==='user' ? 'white' : '#111827', fontSize:13, lineHeight:1.6,
                     whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
                     {m.content}
@@ -3280,10 +3786,14 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
                 {m.cards?.length > 0 && (
                   <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
                     {m.cards.map((job, ji) => (
-                      <div key={ji} style={{ background:'white', border:`1.5px solid ${pr}22`, borderRadius:12, padding:'12px 14px',
-                        boxShadow:'0 1px 4px rgba(0,0,0,.06)', cursor:'pointer', transition:'box-shadow .15s' }}
-                        onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 3px 12px ${pr}22`}
-                        onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,.06)'}>
+                      // Two explicit actions per card — "View details" asks the
+                      // assistant to expand on the role in chat; "Apply now"
+                      // jumps straight to (a prefilled, if we have a parsed CV)
+                      // application card. Matches what the system prompt already
+                      // tells the AI the candidate sees.
+                      <div key={ji}
+                        style={{ background:'white', border:`1.5px solid ${pr}22`, borderRadius:12, padding:'12px 14px',
+                        boxShadow:'0 1px 4px rgba(0,0,0,.06)' }}>
                         <div style={{ fontSize:13, fontWeight:700, color:'#111827', marginBottom:2 }}>{job.title}</div>
                         {(job.department || job.location) && (
                           <div style={{ fontSize:11, color:'#6B7280', marginBottom:6 }}>
@@ -3291,39 +3801,113 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
                           </div>
                         )}
                         {(job.work_type || job.employment_type) && (
-                          <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                          <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:10 }}>
                             {[job.work_type, job.employment_type].filter(Boolean).map((tag,ti) => (
                               <span key={ti} style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:`${pr}15`, color:pr, fontWeight:600 }}>{tag}</span>
                             ))}
                           </div>
                         )}
+                        <div style={{ display:'flex', gap:6, marginTop: (job.work_type || job.employment_type) ? 0 : 6 }}>
+                          <button
+                            onClick={() => { setSelectedJob(job); send(`Tell me more about the ${job.title}${job.department ? ` role in ${job.department}` : ' role'}.`); }}
+                            style={{ flex:1, padding:'7px 10px', borderRadius:8, border:`1.5px solid ${pr}40`, background:'transparent', color:pr, fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:ff }}>
+                            View details
+                          </button>
+                          <button
+                            onClick={() => handleApplyClick(job)}
+                            style={{ flex:1, padding:'7px 10px', borderRadius:8, border:'none', background:pr, color:'white', fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:ff }}>
+                            Apply now
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
+                {/* No strong-fit role — offer to join the talent community instead.
+                    Gated on tcJoinedAt so that once the candidate has successfully
+                    joined via one of these cards, any later <TALENT_CTA>true</TALENT_CTA>
+                    the assistant emits (e.g. in a closing/farewell reply) doesn't spawn
+                    a second, fresh "idle" join form under the existing success message. */}
+                {m.talentCta && (tcJoinedAt === null || tcJoinedAt === i) && (
+                  <TalentCommunityCard
+                    prefill={parsedCvRef.current}
+                    pr={pr}
+                    ff={ff}
+                    onSubmit={async (fields) => {
+                      const res = await submitTalentCommunity(fields);
+                      if (!res?.error) setTcJoinedAt(i);
+                      return res;
+                    }}
+                    portalId={portal.id}
+                  />
+                )}
+                {/* Application confirmation — from a parsed CV or an AI-collected <APPLICATION> tag */}
+                {m.application && (
+                  <ApplicationConfirmCard
+                    data={m.application}
+                    cvFileName={m.cvFile?.name}
+                    pr={pr}
+                    ff={ff}
+                    onSubmit={(fields) => submitApplication(fields, m.cvFile)}
+                  />
+                )}
               </div>
             ))}
+            {parsingCv && (
+              <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 14px', fontSize:12, color:'#6B7280' }}>
+                <div style={{ width:14, height:14, border:`2px solid ${pr}30`, borderTop:`2px solid ${pr}`, borderRadius:'50%', animation:'spin .8s linear infinite', flexShrink:0 }}/>
+                Reading your CV…
+              </div>
+            )}
             {busy && (
               <div style={{ display:'flex', gap:4, padding:'10px 14px' }}>
                 {[0,1,2].map(i => <div key={i} style={{ width:6, height:6, borderRadius:'50%', background:pr+'80', animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
               </div>
             )}
-            {/* Quick actions (shown only on first message) */}
+            {/* Quick actions + CV recommendations CTA (shown only on first message) */}
             {msgs.length === 1 && (
-              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
-                {quickActions.map((qa, i) => (
-                  <button key={i} onClick={() => send(qa.prompt)}
-                    style={{ padding:'6px 12px', borderRadius:99, border:`1.5px solid ${pr}`, background:'transparent', color:pr, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:ff }}>
-                    {qa.label}
-                  </button>
-                ))}
-              </div>
+              <>
+                <input ref={ctaFileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={handleCtaFileSelect} style={{ display:'none' }}/>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => ctaFileRef.current?.click()}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctaFileRef.current?.click(); } }}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={handleCtaDrop}
+                  style={{ border:`1.5px dashed ${pr}55`, borderRadius:12, padding:'11px 13px', display:'flex', alignItems:'center', gap:10,
+                    cursor:'pointer', background:`${pr}08`, transition:'background .15s, border-color .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = `${pr}14`; e.currentTarget.style.borderColor = pr; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = `${pr}08`; e.currentTarget.style.borderColor = `${pr}55`; }}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:`${pr}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={pr} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:700, color:'#111827' }}>Drag or upload your CV</div>
+                    <div style={{ fontSize:11, color:'#6B7280' }}>Get personalised role recommendations</div>
+                  </div>
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
+                  {quickActions.map((qa, i) => (
+                    <button key={i} onClick={() => send(qa.prompt)}
+                      style={{ padding:'6px 12px', borderRadius:99, border:`1.5px solid ${pr}`, background:'transparent', color:pr, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:ff }}>
+                      {qa.label}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
             <div ref={bottomRef}/>
           </div>
 
           {/* Input */}
-          <div style={{ padding:'10px 12px', borderTop:'1px solid #E5E7EB', display:'flex', gap:8, flexShrink:0 }}>
+          <div style={{ padding:'10px 12px', borderTop:'1px solid #E5E7EB', display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
+            <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={handleFileSelect} style={{ display:'none' }}/>
+            <button onClick={() => fileRef.current?.click()} title="Attach CV / Resume" disabled={parsingCv}
+              style={{ width:34, height:34, borderRadius:10, border:'1.5px solid #E5E7EB', background:'transparent', color:'#6B7280',
+                cursor: parsingCv ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            </button>
             <input value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } }}
               placeholder={placeholder}
@@ -3333,7 +3917,7 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 19-7z"/></svg>
             </button>
           </div>
-          <style>{`@keyframes pulse{0%,80%,100%{opacity:.3}40%{opacity:1}}`}</style>
+          <style>{`@keyframes pulse{0%,80%,100%{opacity:.3}40%{opacity:1}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       )}
     </>
