@@ -4,7 +4,7 @@
 const companyProfile = {
   // Basic Identity
   id: "company_123",
-  name: "Talentos",
+  name: "Vercentic",
   domain: "talentos.io",
   industry: "Technology Recruitment",
   headquarters: "London, UK",
@@ -177,7 +177,7 @@ const companyProfile = {
       sections: ["About Us", "The Role", "What You'll Do", "What We're Looking For", "Benefits", "Our Process"],
       toneGuidelines: "Use 'you' and 'we' language, avoid jargon, focus on impact not just tasks"
     },
-    emailSignature: "Best regards,\n[Name]\n[Title]\nTalentos\ntalentos.io",
+    emailSignature: "Best regards,\n[Name]\n[Title]\nVercentic\ntalentos.io",
     offerLetterBoilerplate: "We're thrilled to extend this offer..."
   },
 
@@ -276,15 +276,15 @@ Always speak as if you're part of the ${companyProfile.name} team, using "we" an
 const exampleResponses = {
   
   // User: "Write a job description for this role"
-  writeJD: `I'll write a compelling job description for the Engineering Manager role that aligns with Talentos' voice and EVP.
+  writeJD: `I'll write a compelling job description for the Engineering Manager role that aligns with Vercentic' voice and EVP.
 
 **Engineering Manager**
 
 **About Us**
-At Talentos, we're on a mission to connect exceptional talent with ambitious companies. We're a 45-person team building the future of recruitment technology, and we're looking for an Engineering Manager to help us scale.
+At Vercentic, we're on a mission to connect exceptional talent with ambitious companies. We're a 45-person team building the future of recruitment technology, and we're looking for an Engineering Manager to help us scale.
 
 **The Role**
-As an Engineering Manager at Talentos, you'll lead a team of 6-8 engineers building our core recruitment platform. You'll balance technical leadership with people management, ensuring we ship high-quality features while growing your team's capabilities.
+As an Engineering Manager at Vercentic, you'll lead a team of 6-8 engineers building our core recruitment platform. You'll balance technical leadership with people management, ensuring we ship high-quality features while growing your team's capabilities.
 
 **What You'll Do**
 - Lead sprint planning and delivery for our platform team
@@ -316,10 +316,10 @@ We typically move from application to offer in 2-3 weeks:
 
 We provide detailed feedback at every stage, usually within 48 hours.
 
-Talentos is an equal opportunity employer - we welcome applications from all backgrounds.`,
+Vercentic is an equal opportunity employer - we welcome applications from all backgrounds.`,
 
   // User: "What benefits can I mention to this candidate?"
-  benefitsQuestion: `Based on Talentos' benefits package, here's what you can highlight:
+  benefitsQuestion: `Based on Vercentic' benefits package, here's what you can highlight:
 
 **Core Benefits:**
 - Competitive salary (market-leading for this role)
@@ -364,11 +364,11 @@ With our CTO to discuss vision alignment and offer details
 We pride ourselves on quick feedback - you'll hear back within 48 hours after each stage. This aligns with our "Bias for Action" value - we move fast but thoughtfully.`,
 
   // User: "Draft an email to this candidate about our culture"
-  cultureEmail: `Subject: Engineering Manager Role - What Makes Talentos Different
+  cultureEmail: `Subject: Engineering Manager Role - What Makes Vercentic Different
 
 Hi [Candidate Name],
 
-Thanks for your interest in the Engineering Manager position. I wanted to share a bit about what makes Talentos unique.
+Thanks for your interest in the Engineering Manager position. I wanted to share a bit about what makes Vercentic unique.
 
 We're a 45-person team building recruitment tech with a clear set of values:
 
@@ -388,7 +388,7 @@ Happy to jump on a call to discuss further if this resonates.
 Best regards,
 [Your Name]
 [Your Title]
-Talentos
+Vercentic
 talentos.io`
 };
 
@@ -408,7 +408,7 @@ const copilotCapabilities = {
       "culture.workingStyle",
       "templates.jobDescriptionStructure"
     ],
-    example: "Creates JD matching Talentos voice with accurate benefits and process"
+    example: "Creates JD matching Vercentic voice with accurate benefits and process"
   },
 
   "Answer Candidate Questions": {
@@ -431,7 +431,7 @@ const copilotCapabilities = {
       "templates.emailSignature",
       "culture.values"
     ],
-    example: "Writes emails that sound like they're from Talentos, not generic recruiter spam"
+    example: "Writes emails that sound like they're from Vercentic, not generic recruiter spam"
   },
 
   "Summarize Candidate": {

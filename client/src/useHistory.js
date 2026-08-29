@@ -2,8 +2,8 @@
 import { useState, useCallback } from "react";
 
 const MAX_HISTORY = 20;
-const PINNED_KEY = "talentos_pinned";
-const HISTORY_KEY = "talentos_history";
+const PINNED_KEY = "vercentic_pinned";
+const HISTORY_KEY = "vercentic_history";
 
 function loadPinned() {
   try { return JSON.parse(localStorage.getItem(PINNED_KEY) || "[]"); }

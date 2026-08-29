@@ -131,14 +131,14 @@ function applyTheme(prefs) {
 export function ThemeProvider({ children }) {
   const [prefs, setPrefs] = useState(() => {
     try {
-      const saved = localStorage.getItem("talentos_theme");
+      const saved = localStorage.getItem("vercentic_theme");
       return saved ? { ...DEFAULT_PREFS, ...JSON.parse(saved) } : DEFAULT_PREFS;
     } catch { return DEFAULT_PREFS; }
   });
 
   useEffect(() => {
     applyTheme(prefs);
-    localStorage.setItem("talentos_theme", JSON.stringify(prefs));
+    localStorage.setItem("vercentic_theme", JSON.stringify(prefs));
   }, [prefs]);
 
   const update = (key, value) => setPrefs(p => ({ ...p, [key]: value }));

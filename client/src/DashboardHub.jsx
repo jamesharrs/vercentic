@@ -161,7 +161,7 @@ export default function DashboardHub({ tab = "overview", onTabChange, environmen
       )}
       {tab === "insights" && (
         <DashboardInsights environment={environment} onNavigate={(id) => {
-          window.dispatchEvent(new CustomEvent("talentos:openRecord", { detail: { recordId: id } }));
+          window.dispatchEvent(new CustomEvent("vercentic:openRecord", { detail: { recordId: id } }));
         }}/>
       )}
       {tab === "custom" && !builderMode && (

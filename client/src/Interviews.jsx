@@ -1632,9 +1632,9 @@ export default function Interviews({ environment }) {
 
   // Pick up bulk interview candidates stored by bulk action bar
   useEffect(() => {
-    const stored = sessionStorage.getItem("talentos_bulk_interview_candidates");
+    const stored = sessionStorage.getItem("vercentic_bulk_interview_candidates");
     if (!stored) return;
-    sessionStorage.removeItem("talentos_bulk_interview_candidates");
+    sessionStorage.removeItem("vercentic_bulk_interview_candidates");
     try {
       const candidates = JSON.parse(stored);
       if (candidates?.length) {

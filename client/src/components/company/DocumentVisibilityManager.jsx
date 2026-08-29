@@ -33,7 +33,7 @@ const DocumentVisibilityManager = () => {
   const [documents, setDocuments] = useState([
     {
       id: 'doc_1',
-      name: 'Talentos Brand Guidelines 2024.pdf',
+      name: 'Vercentic Brand Guidelines 2024.pdf',
       category: 'Brand',
       visibility: 'candidate',
       uploadedAt: '2024-03-15',

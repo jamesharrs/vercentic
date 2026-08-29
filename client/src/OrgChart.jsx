@@ -1381,7 +1381,7 @@ export default function OrgChart({ environment }) {
       ? (jobsObjIdRef.current || jobsObjId)
       : peopleObjId;
     if (!objId) return;
-    window.dispatchEvent(new CustomEvent("talentos:openRecord", {
+    window.dispatchEvent(new CustomEvent("vercentic:openRecord", {
       detail: { recordId, objectId: objId }
     }));
   };

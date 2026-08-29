@@ -16,7 +16,7 @@ const CompanyDocumentManager = ({ companyId }) => {
   const [documents, setDocuments] = useState([
     {
       id: 'doc_1',
-      name: 'Talentos Brand Guidelines 2024.pdf',
+      name: 'Vercentic Brand Guidelines 2024.pdf',
       category: 'BRAND',
       uploadedAt: '2024-03-15',
       size: '2.4 MB',

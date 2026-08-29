@@ -4403,15 +4403,15 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         await onSaveRef.current(p);
       }
     };
-    window.addEventListener('talentos:portal-force-save', handler);
-    return () => window.removeEventListener('talentos:portal-force-save', handler);
+    window.addEventListener('vercentic:portal-force-save', handler);
+    return () => window.removeEventListener('vercentic:portal-force-save', handler);
   }, []);
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Tell the copilot we're inside the portal builder
   useEffect(() => {
-    const dispatch = () => window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+    const dispatch = () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', {
       detail: {
         type: 'portal',
         name: portal.name || 'Portal',
@@ -4421,7 +4421,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
       }
     }));
     dispatch();
-    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+    return () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', { detail: null }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portal.name, portal.type, activePageIdx]);
   const [showTheme,       setShowTheme]       = useState(false);
@@ -4995,8 +4995,8 @@ export default function PortalsPage({ environment, onFullScreen }) {
         setLoading(false);
       }
     };
-    window.addEventListener("talentos:open-portal", handler);
-    return () => window.removeEventListener("talentos:open-portal", handler);
+    window.addEventListener("vercentic:open-portal", handler);
+    return () => window.removeEventListener("vercentic:open-portal", handler);
   }, [environment?.id, loadStats]);
 
   // Tell Settings to go full-width when builder is open

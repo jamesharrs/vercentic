@@ -1,10 +1,10 @@
-// Run this from ~/projects/talentos to apply the three fixes:
+// Run this from ~/projects/vercentic to apply the three fixes:
 // node patch_sharing_fraud.js
 
 const fs = require('fs');
 const path = require('path');
 
-const BASE = process.env.HOME + '/projects/talentos';
+const BASE = process.env.HOME + '/projects/vercentic';
 
 // ── FIX 1: server/routes/sharing_fraud.js ──────────────────────────────────
 // Remove the dynamic node-fetch import — use globalThis.fetch (Node 18+ global)
@@ -49,5 +49,5 @@ fs.writeFileSync(sfPath, sf);
 console.log('✓ Fixed client/src/SharingFraud.jsx — replaced "Powered by Claude" with "AI powered"');
 
 console.log('\nAll fixes applied. Now run:');
-console.log('  cd ~/projects/talentos');
+console.log('  cd ~/projects/vercentic');
 console.log('  git add -A && git commit --no-verify -m "fix: sharing panel object scope, fetch global, remove Claude branding" && git push origin develop');

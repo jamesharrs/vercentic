@@ -47,7 +47,7 @@ async function logout(page) {
   // Call logout endpoint then clear local session store
   await page.evaluate(async () => {
     await fetch('/api/users/logout', { method: 'POST', credentials: 'include' });
-    localStorage.removeItem('talentos_session');
+    localStorage.removeItem('vercentic_session');
   });
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');

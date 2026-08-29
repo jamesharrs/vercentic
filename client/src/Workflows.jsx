@@ -1663,7 +1663,7 @@ const StepCard = ({ step: rawStep, index, total, onChange, onDelete, onMoveUp, o
                   )}
 
                   {action.type === "webhook" && (
-                    <input value={cfg.url||""} onChange={e=>setActionConfig(action.id,"url",e.target.value)} placeholder="https://hooks.example.com/talentos"
+                    <input value={cfg.url||""} onChange={e=>setActionConfig(action.id,"url",e.target.value)} placeholder="https://hooks.example.com/vercentic"
                       style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, fontFamily:F, outline:"none", color:C.text1 }}/>
                   )}
 
@@ -1813,7 +1813,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
   // Tell copilot we're editing a workflow
   useEffect(() => {
     if (!workflow) return;
-    window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+    window.dispatchEvent(new CustomEvent('vercentic:editor-context', {
       detail: {
         type: 'workflow',
         name: workflow.name || 'New Workflow',
@@ -1821,7 +1821,7 @@ const WorkflowEditor = ({ workflow, objects: parentObjects, environment, onSave,
         stepCount: (workflow.steps || []).length,
       }
     }));
-    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+    return () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', { detail: null }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow?.name]);
   const [name, setName]       = useState(workflow?.name || "");
@@ -2670,7 +2670,7 @@ export default function WorkflowsPage({ environment }) {
         <WorkflowEditor workflow={editing?.id ? editing : null} objects={objects} environment={environment}
           onClose={() => {
         setEditing(null);
-        window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+        window.dispatchEvent(new CustomEvent('vercentic:editor-context', { detail: null }));
       }}
           onSave={(wf) => {
             setWorkflows(ws => ws.find(w => w.id === wf.id) ? ws.map(w => w.id === wf.id ? wf : w) : [...ws, wf]);
@@ -3129,10 +3129,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [activeProfile, setActiveProfile] = useState(null);    // link object for talent profile modal
   const [showColPicker, setShowColPicker] = useState(false);
   const [visibleColIds, setVisibleColIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('talentos_pipeline_cols') || 'null') || DEFAULT_PIPELINE_COLS; }
+    try { return JSON.parse(localStorage.getItem('vercentic_pipeline_cols') || 'null') || DEFAULT_PIPELINE_COLS; }
     catch { return DEFAULT_PIPELINE_COLS; }
   });
-  const saveColIds = ids => { setVisibleColIds(ids); try { localStorage.setItem('talentos_pipeline_cols', JSON.stringify(ids)); } catch {} };
+  const saveColIds = ids => { setVisibleColIds(ids); try { localStorage.setItem('vercentic_pipeline_cols', JSON.stringify(ids)); } catch {} };
   const [sortBy,  setSortBy]  = useState(null);   // column id or null
   const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
   const toggleSort = col => {
@@ -3245,7 +3245,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         const jobId         = link?.target_record_id || link?.record_id || null;
         const jobTitle      = link?.target_title || null;
         // Dispatch event so App.jsx/Offers page can open the create offer modal pre-filled
-        window.dispatchEvent(new CustomEvent('talentos:create-offer', {
+        window.dispatchEvent(new CustomEvent('vercentic:create-offer', {
           detail: {
             candidate: candidateId ? { id: candidateId, name: candidateName } : null,
             job:       jobId       ? { id: jobId,       name: jobTitle }       : null,
@@ -3405,7 +3405,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         </svg>
         <span style={{ fontSize:12 }}>
           No linked-person workflow for this object.{" "}
-          <button onClick={()=>window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:"workflows"}))}
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:navigate",{detail:"workflows"}))}
             style={{ background:"none",border:"none",color:"#7c3aed",cursor:"pointer",fontSize:12,fontWeight:600,padding:0,textDecoration:"underline" }}>
             Create one in Workflows
           </button>
@@ -3772,7 +3772,7 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                       if (v.id === 'list') {
                         // Navigate to the People list filtered to linked people
                         const ids = visiblePeople.map(l=>l.person_record_id).filter(Boolean);
-                        window.dispatchEvent(new CustomEvent('talentos:open-people-list', { detail: { personIds: ids } }));
+                        window.dispatchEvent(new CustomEvent('vercentic:open-people-list', { detail: { personIds: ids } }));
                       } else {
                         setPipelineView(v.id);
                       }

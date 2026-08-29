@@ -385,7 +385,7 @@ export default function ClientHub({ environment, onNavigate }) {
                                   {stagePeople.map((l,li)=>{
                                     const n=`${l.person_data?.first_name||""} ${l.person_data?.last_name||""}`.trim();
                                     return (
-                                      <span key={li} onClick={e=>{e.stopPropagation();if(l.person_id)window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:l.person_id}}));}}
+                                      <span key={li} onClick={e=>{e.stopPropagation();if(l.person_id)window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:l.person_id}}));}}
                                         style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,fontSize:12,fontWeight:600,
                                           background:C.surface,border:`1px solid ${C.border}`,color:C.text1,cursor:"pointer"}}>
                                         <span style={{width:18,height:18,borderRadius:"50%",background:C.accent,color:"white",fontSize:9,fontWeight:800,

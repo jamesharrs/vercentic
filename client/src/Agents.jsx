@@ -120,7 +120,7 @@ function AgentFeedRow({ item }) {
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2,flexWrap:"wrap"}}>
             <span style={{fontSize:12,fontWeight:700,color:C.text1}}>{item.agent_name}</span>
             {item.record_name&&<span style={{fontSize:10,color:C.accent,background:`${C.accent}10`,padding:"1px 6px",borderRadius:4,fontWeight:600,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
-              onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:item.record_id,objectName:item.object_name}}));}}>
+              onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:item.record_id,objectName:item.object_name}}));}}>
               {item.record_name}
             </span>}
           </div>

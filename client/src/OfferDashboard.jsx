@@ -141,11 +141,11 @@ export default function OfferDashboard({ environment, session, onNavigate }) {
         {/* Quick Links */}
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24, flexWrap:"wrap", padding:"14px 18px", background:"white", borderRadius:14, border:"1px solid #f0f0f0" }}>
           <span style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.06em", marginRight:4 }}>Quick Links</span>
-          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"offers"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #0ca67830", background:"#0ca67808", cursor:"pointer", fontSize:13, fontWeight:600, color:"#0ca678", fontFamily:"inherit", whiteSpace:"nowrap" }}>All Offers</button>
-          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:openCopilot",{detail:{message:"create a new offer"}}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #4361ee30", background:"#4361ee08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#4361ee", fontFamily:"inherit", whiteSpace:"nowrap" }}>New Offer</button>
-          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"people"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #7c3aed30", background:"#7c3aed08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#7c3aed", fontFamily:"inherit", whiteSpace:"nowrap" }}>Candidates</button>
-          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"screening"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #f59f0030", background:"#f59f0008", cursor:"pointer", fontSize:13, fontWeight:600, color:"#f59f00", fontFamily:"inherit", whiteSpace:"nowrap" }}>Screening</button>
-          <button onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"onboarding"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #0d948830", background:"#0d948808", cursor:"pointer", fontSize:13, fontWeight:600, color:"#0d9488", fontFamily:"inherit", whiteSpace:"nowrap" }}>Onboarding</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"offers"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #0ca67830", background:"#0ca67808", cursor:"pointer", fontSize:13, fontWeight:600, color:"#0ca678", fontFamily:"inherit", whiteSpace:"nowrap" }}>All Offers</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:openCopilot",{detail:{message:"create a new offer"}}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #4361ee30", background:"#4361ee08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#4361ee", fontFamily:"inherit", whiteSpace:"nowrap" }}>New Offer</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"people"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #7c3aed30", background:"#7c3aed08", cursor:"pointer", fontSize:13, fontWeight:600, color:"#7c3aed", fontFamily:"inherit", whiteSpace:"nowrap" }}>Candidates</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"screening"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #f59f0030", background:"#f59f0008", cursor:"pointer", fontSize:13, fontWeight:600, color:"#f59f00", fontFamily:"inherit", whiteSpace:"nowrap" }}>Screening</button>
+          <button onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"onboarding"}))}} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, border:"1.5px solid #0d948830", background:"#0d948808", cursor:"pointer", fontSize:13, fontWeight:600, color:"#0d9488", fontFamily:"inherit", whiteSpace:"nowrap" }}>Onboarding</button>
         </div>
       Loading offer data…
     </div>
@@ -246,7 +246,7 @@ export default function OfferDashboard({ environment, session, onNavigate }) {
                 const daysLeft = Math.ceil((new Date(o.expiry_date)-new Date())/86400000);
                 const urgent = daysLeft<=2;
                 return (
-                  <div key={o.id||i} onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"offers"}));setTimeout(()=>window.dispatchEvent(new CustomEvent("talentos:open-offer",{detail:{offerId:o.id}})),300);}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,cursor:"pointer",
+                  <div key={o.id||i} onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"offers"}));setTimeout(()=>window.dispatchEvent(new CustomEvent("vercentic:open-offer",{detail:{offerId:o.id}})),300);}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,cursor:"pointer",
                     background:urgent?"#FEF2F2":"#FFFBEB",border:`1px solid ${urgent?C.red+"40":C.amber+"40"}`}}>
                     <div style={{width:34,height:34,borderRadius:9,background:urgent?`${C.red}14`:`${C.amber}14`,
                       display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -286,7 +286,7 @@ export default function OfferDashboard({ environment, session, onNavigate }) {
               {pending.slice(0,6).map((o,i)=>{
                 const age = Math.floor((new Date()-new Date(o.created_at))/86400000);
                 return (
-                  <div key={o.id||i} onClick={()=>{window.dispatchEvent(new CustomEvent("talentos:nav",{detail:"offers"}));setTimeout(()=>window.dispatchEvent(new CustomEvent("talentos:open-offer",{detail:{offerId:o.id}})),300);}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,cursor:"pointer",
+                  <div key={o.id||i} onClick={()=>{window.dispatchEvent(new CustomEvent("vercentic:nav",{detail:"offers"}));setTimeout(()=>window.dispatchEvent(new CustomEvent("vercentic:open-offer",{detail:{offerId:o.id}})),300);}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,cursor:"pointer",
                     background:`${C.amber}08`,border:`1px solid ${C.amber}30`}}>
                     <div style={{width:34,height:34,borderRadius:9,background:`${C.amber}14`,
                       display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>

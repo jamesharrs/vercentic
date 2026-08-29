@@ -547,8 +547,8 @@ export function TasksEventsPanel({ record, environment, linkedJobRecords=[], job
   useRecordSync(recId, ()=>load());
   useEffect(()=>{
     const h = ()=>load();
-    window.addEventListener('talentos:tasks-updated', h);
-    return ()=>window.removeEventListener('talentos:tasks-updated', h);
+    window.addEventListener('vercentic:tasks-updated', h);
+    return ()=>window.removeEventListener('vercentic:tasks-updated', h);
   }, [load]);
 
   const handleDeleteEvent = async id => { await tFetch(`/api/calendar/events/${id}`,{method:"DELETE"}); load(); };

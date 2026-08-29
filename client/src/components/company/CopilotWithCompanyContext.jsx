@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 // Mock company profile data
 const COMPANY_PROFILES = {
-  talentos: {
-    name: "Talentos",
+  vercentic: {
+    name: "Vercentic",
     brand: {
       tagline: "Connecting exceptional talent with ambitious companies",
       voiceTone: "Professional yet approachable, data-driven but human-centric"
@@ -81,7 +81,7 @@ const COMPANY_PROFILES = {
 const CopilotWithCompanyContext = () => {
   const [selectedJob, setSelectedJob] = useState({
     title: "Engineering Manager",
-    company: "talentos",
+    company: "vercentic",
     department: "Engineering"
   });
   

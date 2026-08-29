@@ -14,8 +14,8 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
 
@@ -2184,7 +2184,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
       setDeleteObj(null); setImpact(null);
       if (selObj?.id === deleteObj.id) setSelObj(null);
       reloadObjects();
-      window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+      window.dispatchEvent(new CustomEvent('vercentic:refreshObjects'));
     } catch (err) {
       alert(`Delete failed: ${err.message}`);
     }
@@ -2199,7 +2199,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
       const fresh = await api.get(`/objects/${editObj.id}`).catch(() => null);
       if (fresh?.id) setSelObj(fresh);
     }
-    window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+    window.dispatchEvent(new CustomEvent('vercentic:refreshObjects'));
   };
 
   // ── FieldModal & CreateObjectModal are defined at module level above ──
@@ -2349,7 +2349,7 @@ const ConfigSection = ({ environment }) => {
   const handleExport = () => {
     const a = document.createElement('a');
     a.href = `/api/config/export?environment_id=${envId}`;
-    a.download = `talentos-config-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `vercentic-config-${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     setStatus({ type:'success', msg:'Config exported successfully.' });
   };
@@ -2466,7 +2466,7 @@ const ConfigSection = ({ environment }) => {
 };
 
 // ─── Bulk Threshold Setting (sub-component used inside Appearance) ────────────
-const BULK_THRESHOLD_KEY = "talentos_bulk_threshold";
+const BULK_THRESHOLD_KEY = "vercentic_bulk_threshold";
 export const getBulkThreshold = (roleSlug) => {
   if (roleSlug) {
     const v = localStorage.getItem(`${BULK_THRESHOLD_KEY}_${roleSlug}`);
@@ -2631,13 +2631,13 @@ function CompanyProfilePanel({ environment }) {
         .catch(() => setLoading(false));
     };
     load();
-    window.addEventListener('talentos:company-profile-updated', load);
-    return () => window.removeEventListener('talentos:company-profile-updated', load);
+    window.addEventListener('vercentic:company-profile-updated', load);
+    return () => window.removeEventListener('vercentic:company-profile-updated', load);
   }, [envId]);
 
   const launchWizard = () => {
-    if (envId) localStorage.removeItem(`talentos_setup_complete_${envId}`);
-    window.dispatchEvent(new CustomEvent('talentos:launch-setup-wizard'));
+    if (envId) localStorage.removeItem(`vercentic_setup_complete_${envId}`);
+    window.dispatchEvent(new CustomEvent('vercentic:launch-setup-wizard'));
     setLaunched(true);
     setTimeout(() => setLaunched(false), 3000);
   };
@@ -3022,23 +3022,23 @@ export default function SettingsPage({ currentUser, environment, initialSection,
 
   const setActiveSection = (id) => {
     if (id !== "portals") setFullScreenMode(false);
-    window.dispatchEvent(new CustomEvent("talentos:settings-section", { detail: id }));
+    window.dispatchEvent(new CustomEvent("vercentic:settings-section", { detail: id }));
     setActiveSectionState(id);
     if (onSectionChange) onSectionChange(id);
   };
   // Read section hint from Copilot navigation (on mount + on re-navigate)
   useEffect(() => {
     const checkHint = () => {
-      const hint = sessionStorage.getItem("talentos_settings_section");
+      const hint = sessionStorage.getItem("vercentic_settings_section");
       if (hint) {
-        sessionStorage.removeItem("talentos_settings_section");
+        sessionStorage.removeItem("vercentic_settings_section");
         setActiveSection(hint);
       }
     };
     checkHint(); // check on mount
     const handler = () => setTimeout(checkHint, 50); // check after navigate event
-    window.addEventListener("talentos:navigate", handler);
-    return () => window.removeEventListener("talentos:navigate", handler);
+    window.addEventListener("vercentic:navigate", handler);
+    return () => window.removeEventListener("vercentic:navigate", handler);
   }, []);
   const [search, setSearch]               = useState("");
   const [collapsed, setCollapsed]         = useState({});

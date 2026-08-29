@@ -175,7 +175,7 @@ const FieldEditor = ({ field, index, total, onChange, onRemove, onMove }) => {
 const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
   // Tell the copilot we're inside the form builder
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+    window.dispatchEvent(new CustomEvent('vercentic:editor-context', {
       detail: {
         type: 'form',
         name: form?.name || 'New Form',
@@ -183,7 +183,7 @@ const FormBuilderModal = ({ form, environment, onSave, onClose }) => {
         fieldCount: (form?.fields || []).length,
       }
     }));
-    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+    return () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', { detail: null }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form?.name]);
   const isEdit = !!form?.id;

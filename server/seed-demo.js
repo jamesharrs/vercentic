@@ -1,5 +1,5 @@
 // server/seed-demo.js
-// Run from talentos root: node server/seed-demo.js
+// Run from vercentic root: node server/seed-demo.js
 // Seeds people, jobs, talent pools + generates a CV PDF for each candidate.
 
 const path   = require('path');

@@ -750,7 +750,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
             <button onClick={()=>{
               const objectId = profileData?.record?.object_id;
               if (objectId) {
-                window.dispatchEvent(new CustomEvent('talentos:openRecord', {
+                window.dispatchEvent(new CustomEvent('vercentic:openRecord', {
                   detail: { recordId: link.person_record_id, objectId }
                 }));
               } else {

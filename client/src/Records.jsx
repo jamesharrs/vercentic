@@ -46,8 +46,8 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
 const InterviewPlanPanelLazy = lazy(() => import('./InterviewPlanPanel.jsx').then(m => ({ default: m.InterviewPlanPanel })));
@@ -183,7 +183,7 @@ const STATUS_COLORS = {
 
 // Emit a filter-navigate event so the app shell can navigate to a filtered records list
 const emitFilterNav = (fieldKey, fieldLabel, fieldValue) => {
-  window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+  window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
     detail: { fieldKey, fieldLabel, fieldValue }
   }));
 };
@@ -996,7 +996,7 @@ const FieldValue = ({ field, value, allFieldValues = {}, clamp = null }) => {
               title={`Find others with: ${label}`}
               onClick={e => {
                 e.stopPropagation();
-                window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+                window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
                   detail: { fieldKey: field.api_key, fieldValue: label, objectSlug: null }
                 }));
               }}
@@ -1267,14 +1267,14 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
 // Module-level environment ref — set by RecordsView on mount
 let _currentEnvId = null;
 
-// Module-level pending filter — set by talentos:apply-filter when RecordsView isn't mounted yet.
+// Module-level pending filter — set by vercentic:apply-filter when RecordsView isn't mounted yet.
 // RecordsView picks this up on mount and applies it immediately.
 // Keyed by object slug so the filter only applies to the intended list.
 let _pendingFilter = null; // { objectSlug: string, detail: object }
 
 // Global listener set up once — stores the filter so whichever RecordsView next mounts can pick it up.
 // This fires before RecordsView is even mounted when the Copilot emits NAVIGATE + APPLY_FILTER together.
-window.addEventListener('talentos:apply-filter', (e) => {
+window.addEventListener('vercentic:apply-filter', (e) => {
   // Only store if no RecordsView is currently listening (i.e. we're navigating away from a list)
   // RecordsView sets _pendingFilter = null when it claims it on mount, and null again when unmounted.
   // We store unconditionally here; RecordsView will either pick it up on mount or handle it live.
@@ -2150,7 +2150,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     const prompt = promptMap[slug] || `Create a new ${objectName}. Ask me for the key details to get started.`;
 
     // Use copilotPrompt with silent:true so only Claude's response is shown (no user message bubble)
-    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt, silent: true } }));
+    window.dispatchEvent(new CustomEvent("vercentic:copilotPrompt", { detail: { prompt, silent: true } }));
     onClose();
   };
 
@@ -3162,7 +3162,7 @@ async function resolveMyPersonId() {
     return _mePersonRecordId;
   } catch { return null; }
 }
-window.addEventListener("storage", e => { if (e.key === "talentos_session") { _mePersonResolved = false; _mePersonRecordId = null; } });
+window.addEventListener("storage", e => { if (e.key === "vercentic_session") { _mePersonResolved = false; _mePersonRecordId = null; } });
 
 function getMeContext() {
   try {
@@ -5371,13 +5371,13 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                           ? <LinkedJobsPill
                               jobs={linkedJobs?.[record.id]}
                               mode="all"
-                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
                             />
                           : f.apiKey === '_linked_open_jobs'
                           ? <LinkedJobsPill
                               jobs={linkedJobs?.[record.id]}
                               mode="open"
-                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
                             />
                           : f.apiKey === '_linked_count'
                           ? (() => {
@@ -7090,7 +7090,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
                     {iv.candidate_id !== record.id && iv.candidate_name && (
                       <div style={{fontSize:11,color:C.text3,marginBottom:1}}>
                         Candidate:&nbsp;
-                        <button onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}));}}
+                        <button onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}));}}
                           style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:11,fontWeight:600,textDecoration:"underline",fontFamily:"inherit"}}>
                           {iv.candidate_name}
                         </button>
@@ -7113,7 +7113,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
                           background:"#F0F4FF",border:"1px solid #DBEAFE",display:"flex",alignItems:"center",gap:8}}>
                           <Ic n="user" s={13} c={C.accent}/>
                           <span style={{color:C.text3,fontWeight:600}}>Candidate:</span>
-                          <button onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}))}
+                          <button onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}))}
                             style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:12,fontWeight:700,textDecoration:"underline",fontFamily:"inherit"}}>
                             {iv.candidate_name}
                           </button>
@@ -7391,7 +7391,7 @@ const AgentsRecordPanel = ({ record, environment }) => {
       const r = await api.get(`/agents/runs/by-record/${record.id}`);
       if (Array.isArray(r)) setRuns(r.slice(0, 20));
       // Notify the parent list to re-fetch this record so field updates appear live
-      window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: record.id } }));
+      window.dispatchEvent(new CustomEvent('vercentic:recordUpdated', { detail: { recordId: record.id } }));
       // Flash the agent row green briefly
       setJustUpdated(agent.id);
       setTimeout(() => setJustUpdated(null), 2500);
@@ -7790,7 +7790,7 @@ const JobTasksPanel = ({ record, environment }) => {
       setShowAssign(false);
       setAnchorDate('');
       // Fire update so person's task panel refreshes if open
-      window.dispatchEvent(new CustomEvent('talentos:tasks-updated'));
+      window.dispatchEvent(new CustomEvent('vercentic:tasks-updated'));
     } catch (e) {
       alert('Assignment failed. Please try again.');
     } finally {
@@ -9840,13 +9840,13 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [attachments, setAttachments] = useState([]);
   const [activity, setActivity] = useState([]);
   const [saving, setSaving]     = useState(false);
-  const openPanelsKey = `talentos_openpanels_${objectName}`;
+  const openPanelsKey = `vercentic_openpanels_${objectName}`;
   const [openPanels, setOpenPanels] = useState(() => {
     try {
       // Only restore saved panels if the panel version is current — otherwise use defaults
-      const currentVersion = localStorage.getItem(`talentos_panels_version_${objectName}`);
+      const currentVersion = localStorage.getItem(`vercentic_panels_version_${objectName}`);
       if (currentVersion === "v27") {
-        const saved = JSON.parse(localStorage.getItem(`talentos_openpanels_${objectName}`));
+        const saved = JSON.parse(localStorage.getItem(`vercentic_openpanels_${objectName}`));
         if (saved && typeof saved === "object") return saved;
       }
     } catch {}
@@ -9875,12 +9875,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [showCampaignLinks, setShowCampaignLinks] = useState(false);
   // Track which custom sections are collapsed (by separatorId)
   const [collapsedSections, setCollapsedSections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`talentos_collapsed_${objectName}_${record?.object_id}`)) || {}; } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem(`vercentic_collapsed_${objectName}_${record?.object_id}`)) || {}; } catch { return {}; }
   });
   const toggleSection = (id) => {
     setCollapsedSections(prev => {
       const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem(`talentos_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
+      localStorage.setItem(`vercentic_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
       return next;
     });
   };
@@ -9899,7 +9899,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         const anyExpanded = collapsibleIds.some(id => !prev[id]);
         const next = {};
         collapsibleIds.forEach(id => { next[id] = anyExpanded; }); // true = collapsed
-        localStorage.setItem(`talentos_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
+        localStorage.setItem(`vercentic_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
         return next;
       });
     };
@@ -9923,12 +9923,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
-  const storageKey       = `talentos_panels_${objectName}`;
-  const leftStorageKey   = `talentos_panels_left_${objectName}`;
-  const topStorageKey    = `talentos_panels_top_${objectName}`;
-  const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
+  const storageKey       = `vercentic_panels_${objectName}`;
+  const leftStorageKey   = `vercentic_panels_left_${objectName}`;
+  const topStorageKey    = `vercentic_panels_top_${objectName}`;
+  const bottomStorageKey = `vercentic_panels_bottom_${objectName}`;
   const PANEL_VERSION    = "v27"; // Recommendations expanded by default on Jobs
-  const versionKey       = `talentos_panels_version_${objectName}`;
+  const versionKey       = `vercentic_panels_version_${objectName}`;
 
   // ── Single atomic layout load — deduplicates all 4 zones together ───────
   // Previously 4 separate useState calls allowed the same panel ID to appear
@@ -11198,7 +11198,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Hooks that must be before any early return (rules-of-hooks) ──────────
   // Resizable column split (full-page only, but hooks must be unconditional)
-  const colStorageKey = `talentos_colwidth_${objectName}`;
+  const colStorageKey = `vercentic_colwidth_${objectName}`;
   const [leftPct, setLeftPct] = useState(() => {
     try { return parseFloat(localStorage.getItem(colStorageKey)) || 38; } catch { return 38; }
   });
@@ -11306,7 +11306,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // Handler for AI suggested action strip — fires the Copilot with the action prompt
   const handleSuggestedAction = (action) => {
     const prompt = action.prompt || action.description || action.label || action.title || "Help me with this action";
-    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt } }));
+    window.dispatchEvent(new CustomEvent("vercentic:copilotPrompt", { detail: { prompt } }));
   };
 
   const COMM_OPTIONS = [
@@ -12204,11 +12204,11 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       setAiFilter({ type: 'ids', ids, label: label || `AI Selection · ${ids.length} records`, reason });
       setPage(1);
     };
-    window.addEventListener('talentos:apply-filter',    handleApplyFilter);
-    window.addEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+    window.addEventListener('vercentic:apply-filter',    handleApplyFilter);
+    window.addEventListener('vercentic:apply-id-filter', handleApplyIdFilter);
     return () => {
-      window.removeEventListener('talentos:apply-filter',    handleApplyFilter);
-      window.removeEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+      window.removeEventListener('vercentic:apply-filter',    handleApplyFilter);
+      window.removeEventListener('vercentic:apply-id-filter', handleApplyIdFilter);
     };
   }, [fields]);
 
@@ -12248,7 +12248,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
 
-  // Listen for copilot filter commands — talentos:apply-filter
+  // Listen for copilot filter commands — vercentic:apply-filter
   // Also check _pendingFilter on mount: when the Copilot fires NAVIGATE + APPLY_FILTER together,
   // the filter event fires before RecordsView is mounted. The module-level listener stores it,
   // and we consume it here once fields are loaded.
@@ -12260,7 +12260,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       _pendingFilter = null; // claim it
       // Delay one tick so fields have populated from the load() call
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('talentos:apply-filter', { detail: pending.detail }));
+        window.dispatchEvent(new CustomEvent('vercentic:apply-filter', { detail: pending.detail }));
       }, 150);
     }
 
@@ -12320,12 +12320,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       // Auto-open the filter panel so user can see what was applied
       if ((filters?.length || field) && !clearFilters) setShowFilterPanel(true);
     };
-    window.addEventListener("talentos:apply-filter", handler);
-    return () => window.removeEventListener("talentos:apply-filter", handler);
+    window.addEventListener("vercentic:apply-filter", handler);
+    return () => window.removeEventListener("vercentic:apply-filter", handler);
   }, [fields]); // re-bind when fields load so resolveField has current data
   const [total, setTotal]       = useState(0);
 
-  const colStorageKey = `talentos_cols_${object.id}`;
+  const colStorageKey = `vercentic_cols_${object.id}`;
 
   // Track which object we last successfully loaded — used to decide whether to clear records
   const lastLoadedObjectRef = useRef(null);
@@ -12432,7 +12432,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     });
 
     // Broadcast list summary to copilot so it can answer list questions
-    window.dispatchEvent(new CustomEvent("talentos:list-context", {
+    window.dispatchEvent(new CustomEvent("vercentic:list-context", {
       detail: buildListContext(object, filtered, filterChip ? filtered.length : (r.pagination?.total||0), fields)
     }));
   }, [object.id, environment.id, page, search, filterChip, reloadKey]);
@@ -12449,7 +12449,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { load(); }, [load]);
 
   // Re-trigger load when the server comes back online after a restart.
-  // App.jsx fires 'talentos:server-online' when apiOnline flips false → true.
+  // App.jsx fires 'vercentic:server-online' when apiOnline flips false → true.
   // Guard against rapid re-fires (a flapping connection) — at most one reload
   // per 10s — so a recovering server can't be hammered by a reload storm.
   useEffect(() => {
@@ -12460,8 +12460,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       lastReload = now;
       setReloadKey(k => k + 1);
     };
-    window.addEventListener('talentos:server-online', handler);
-    return () => window.removeEventListener('talentos:server-online', handler);
+    window.addEventListener('vercentic:server-online', handler);
+    return () => window.removeEventListener('vercentic:server-online', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔄 Live update — Copilot (or any other source) fires this after creating a record.
@@ -12474,8 +12474,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         setReloadKey(k => k + 1);
       }
     };
-    window.addEventListener('talentos:recordCreated', handler);
-    return () => window.removeEventListener('talentos:recordCreated', handler);
+    window.addEventListener('vercentic:recordCreated', handler);
+    return () => window.removeEventListener('vercentic:recordCreated', handler);
   }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
@@ -12544,10 +12544,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     const session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const roleSlug = session?.user?.role?.slug;
     if (roleSlug) {
-      const v = localStorage.getItem(`talentos_bulk_threshold_${roleSlug}`);
+      const v = localStorage.getItem(`vercentic_bulk_threshold_${roleSlug}`);
       if (v !== null) return parseInt(v, 10);
     }
-    return parseInt(localStorage.getItem("talentos_bulk_threshold") || "20", 10);
+    return parseInt(localStorage.getItem("vercentic_bulk_threshold") || "20", 10);
   };
 
   const guardedBulkAction = (action, payload = {}) => {
@@ -12638,7 +12638,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (action === "communicate") {
       // Fire event with full recipient records so the modal can render names/emails
       const recipientRecords = records.filter(r => ids.includes(r.id));
-      window.dispatchEvent(new CustomEvent("talentos:bulkCommunicate", {
+      window.dispatchEvent(new CustomEvent("vercentic:bulkCommunicate", {
         detail: { recordIds: ids, recipients: recipientRecords, type: payload.type || null, object }
       }));
       return; // don't clear selection
@@ -12649,7 +12649,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       window.__toast?.success?.(`Note added to ${ids.length} record${ids.length !== 1 ? "s" : ""}`);
     } else if (action === "interview") {
       // Navigate to Interviews tab with bulk candidates pre-populated
-      window.dispatchEvent(new CustomEvent("talentos:bulkInterview", {
+      window.dispatchEvent(new CustomEvent("vercentic:bulkInterview", {
         detail: {
           recordIds: ids,
           candidates: records.filter(r => ids.includes(r.id)).map(r => ({
@@ -12730,7 +12730,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
     if (!displayedRecords.length && !records.length) return;
-    window.dispatchEvent(new CustomEvent("talentos:list-context", {
+    window.dispatchEvent(new CustomEvent("vercentic:list-context", {
       detail: buildListContext(object, displayedRecords, displayedRecords.length, fields)
     }));
   }, [displayedRecords, fields]);

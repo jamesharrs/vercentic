@@ -1190,7 +1190,7 @@ export default function Reports({ environment, initialReport }) {
   const goToFiltered = (filterKey,filterValue) => {
     const obj=objects.find(o=>o.id===selObject);
     if (!obj) return;
-    window.dispatchEvent(new CustomEvent("talentos:filter-navigate",{detail:{objectSlug:obj.slug,fieldKey:filterKey,fieldValue:filterValue}}));
+    window.dispatchEvent(new CustomEvent("vercentic:filter-navigate",{detail:{objectSlug:obj.slug,fieldKey:filterKey,fieldValue:filterValue}}));
   };
 
   const renderChart = () => {

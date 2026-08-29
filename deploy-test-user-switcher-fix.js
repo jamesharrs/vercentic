@@ -166,7 +166,7 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
       const { role, permissions, tenant_slug, ...user } = data;
       const ns = { user, role, permissions, tenant_slug: tenant_slug || null };
       setSession(ns);
-      localStorage.setItem('talentos_session', JSON.stringify(ns));
+      localStorage.setItem('vercentic_session', JSON.stringify(ns));
       setOpen(false);
       window.location.reload();
     } catch (err) { setSwitchError('Login failed — ' + (err.message || 'unknown error')); }

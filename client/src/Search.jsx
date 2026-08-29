@@ -202,7 +202,7 @@ const ResultCard = ({ record, fields, object, onClick, query }) => {
 };
 
 /* ─── Saved Searches ─────────────────────────────────────────────────────── */
-const STORAGE_KEY = "talentos_saved_searches";
+const STORAGE_KEY = "vercentic_saved_searches";
 const getSaved = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); } catch { return []; } };
 const setSaved = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 
@@ -231,9 +231,9 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
 
   // Pick up query passed from the global search bar
   useEffect(() => {
-    const pending = sessionStorage.getItem("talentos_search_query");
+    const pending = sessionStorage.getItem("vercentic_search_query");
     if (pending) {
-      sessionStorage.removeItem("talentos_search_query");
+      sessionStorage.removeItem("vercentic_search_query");
       setQuery(pending);
       // Trigger search after objects load — handled in the search effect below
       setTimeout(() => { inputRef.current?.focus(); }, 100);
@@ -262,9 +262,9 @@ export default function SearchPage({ environment, onNavigateToRecord }) {
   // Auto-search if query was pre-filled from global search bar
   useEffect(() => {
     if (objects.length && query.trim()) {
-      const pending = sessionStorage.getItem("talentos_autosearch");
+      const pending = sessionStorage.getItem("vercentic_autosearch");
       if (pending === "1") {
-        sessionStorage.removeItem("talentos_autosearch");
+        sessionStorage.removeItem("vercentic_autosearch");
         handleSearch();
       }
     }

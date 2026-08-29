@@ -58,7 +58,7 @@ function StatPanel({ panel, data, onNavigate }) {
   const tc=tp?"#059669":tn?V.red:V.text3; const tb=tp?"#f0fdf4":tn?"#fef2f2":`${V.border}40`;
   const handleClick = () => {
     if (!object_slug) return;
-    window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+    window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
       detail: { objectSlug: object_slug, fieldKey: filter_field||null, fieldValue: filter_value||null }
     }));
   };

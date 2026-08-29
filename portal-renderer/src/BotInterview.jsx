@@ -50,7 +50,7 @@ function Shell({ children }) {
         <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #4361ee, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ color: "white", fontSize: 13, fontWeight: 900 }}>T</span>
         </div>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>TalentOS Interview</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>Vercentic Interview</span>
         <span style={{ marginLeft: "auto", fontSize: 11, color: "#9ca3af" }}>Powered by AI</span>
       </div>
       <div style={{ flex: 1, padding: "32px 24px", maxWidth: 720, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
@@ -124,7 +124,7 @@ export default function BotInterview({ token }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 32 }}>
           <BotAvatar size={64} />
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", margin: "16px 0 8px", textAlign: "center" }}>Hi{session?.candidate_name ? `, ${session.candidate_name.split(" ")[0]}` : ""}! 👋</h1>
-          <p style={{ fontSize: 15, color: "#6b7280", textAlign: "center", lineHeight: 1.6, maxWidth: 440 }}>I'm the TalentOS interview assistant. I'll ask you a few questions to help the hiring team get to know you better.</p>
+          <p style={{ fontSize: 15, color: "#6b7280", textAlign: "center", lineHeight: 1.6, maxWidth: 440 }}>I'm the Vercentic interview assistant. I'll ask you a few questions to help the hiring team get to know you better.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
           <InfoCard icon="⏱" label="Estimated time" value="10–20 minutes" />
