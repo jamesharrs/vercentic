@@ -438,6 +438,7 @@ app.use('/api/fields',            require('./routes/fields'));
 app.use('/api/records',           require('./routes/records'));
 app.use('/api/records',           require('./routes/suggested_actions'));
 app.use('/api/records',           require('./routes/bulk_actions'));
+app.use('/api/companies',         require('./routes/companies'));
 app.use('/api/users',             require('./routes/users'));
 app.use('/api/roles',             require('./routes/roles'));
 app.use('/api/org-units',         require('./routes/org_units'));

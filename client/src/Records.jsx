@@ -12,6 +12,10 @@ import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { SharingPanel, FraudPanel } from "./SharingFraud.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
+import {
+  CompanyEmployeesPanel, CompanyAlumniPanel, CompanyIntelPanel,
+  CompanyResearchPanel, CompanyOrgPanel, CompanyAliasesPanel,
+} from "./company/CompanyPanels.jsx";
 
 // Set PDF.js worker once at module load — prevents CDN fallback
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -8095,6 +8099,12 @@ export const PANEL_META = {
   match:        { icon:"sparkles",      label:"Recommendations",     defaultOpen:false },
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true,  personOnly:true },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:false, hidden:true },
+  company_employees: { icon:"users",       label:"Employees",     defaultOpen:true,  companyOnly:true },
+  company_alumni:    { icon:"users",       label:"Alumni",        defaultOpen:false, companyOnly:true },
+  company_intel:     { icon:"activity",    label:"Intelligence",  defaultOpen:true,  companyOnly:true },
+  company_research:  { icon:"sparkles",    label:"Research",      defaultOpen:false, companyOnly:true },
+  company_org:       { icon:"gitBranch",   label:"Structure",     defaultOpen:false, companyOnly:true },
+  company_aliases:   { icon:"link",        label:"Known As",      defaultOpen:false, companyOnly:true },
   hub:          { icon:"link",          label:"Candidate Hub",       defaultOpen:false, personOnly:true },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false, jobOnly:true },
   job_tasks:    { icon:"checkSquare",   label:"Job Tasks",           defaultOpen:true,  jobOnly:true },
@@ -8108,9 +8118,19 @@ export const PANEL_META = {
   fraud:        { icon:"shield",        label:"AI Verification",     defaultOpen:false, personOnly:true },
 };
 
+// Object-name groupings used throughout the panel-scoping logic below.
+// "Job-like" objects (Jobs + Talent Pools) share the recruiting-pipeline panel set;
+// Person and Company each get their own dedicated set.
+const JOB_LIKE_NAMES    = ["Job","Jobs","Talent Pool","Talent Pools"];
+const PERSON_NAMES      = ["Person","People"];
+const COMPANY_NAMES     = ["Company","Companies"];
+const isJobLike    = (n) => JOB_LIKE_NAMES.includes(n);
+const isPersonName = (n) => PERSON_NAMES.includes(n);
+const isCompanyName= (n) => COMPANY_NAMES.includes(n);
+
 export const getDefaultPanelOrder = (objectName) => {
   // Person: Linked Records > Engagement > [Interviews, Assessments] > [Communications, Tasks] > [Notes, Files, Forms] > [Recommendations, AI Agents] > Activity
-  if (objectName === "Person") return [
+  if (isPersonName(objectName)) return [
     "linked","engagement",
     ["coordination","assessments"],
     ["comms","tasks"],
@@ -8119,8 +8139,18 @@ export const getDefaultPanelOrder = (objectName) => {
     ["match","agents"],
     "activity"
   ];
-  // Job: Recommendations > [Interview Plan, Interviews, Screening & IQ, Scorecard] > [Job Tasks, Tasks] > [Notes, Files, Forms] > AI Agents > Bias Scanner > Activity
-  if (objectName === "Job" || objectName === "Jobs") return [
+  // Company: who works there first, then intelligence, then structure
+  if (isCompanyName(objectName)) return [
+    "company_employees",
+    ["company_intel","company_alumni"],
+    "company_research",
+    "company_org",
+    ["notes","attachments"],
+    ["comms","activity"],
+    "company_aliases"
+  ];
+  // Job & Talent Pool: Recommendations > [Interview Plan, Interviews, Screening & IQ, Scorecard] > [Job Tasks, Tasks] > [Notes, Files, Forms] > AI Agents > Bias Scanner > Activity
+  if (isJobLike(objectName)) return [
     "match",
     ["interview_plan","coordination","questions","scorecard"],
     ["job_tasks","tasks"],
@@ -9747,14 +9777,16 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // A panel is visible if its feature flag is on (and for match, also needs ai_matching)
   const panelVisible = (id) => {
     if (PANEL_META[id]?.hidden) return false;
-    if (PANEL_META[id]?.jobOnly    && objectName !== "Job" && objectName !== "Jobs") return false;
-    if (PANEL_META[id]?.personOnly && objectName !== "Person") return false;
+    // Job-only panels are shared by Jobs AND Talent Pools (both are recruiting-pipeline objects)
+    if (PANEL_META[id]?.jobOnly     && !isJobLike(objectName)) return false;
+    if (PANEL_META[id]?.personOnly  && !isPersonName(objectName)) return false;
+    if (PANEL_META[id]?.companyOnly && !isCompanyName(objectName)) return false;
     // Reporting panel only visible when person_type is Employee (or not set on non-employee typed objects)
-    if (id === "reporting" && objectName === "Person") {
+    if (id === "reporting" && isPersonName(objectName)) {
       const pt = (record?.data?.person_type || "").toLowerCase().trim();
       if (pt && pt !== "employee") return false;
     }
-    if (PANEL_META[id]?.personOrJob && objectName !== "Person" && objectName !== "Job" && objectName !== "Jobs") return false;
+    if (PANEL_META[id]?.personOrJob && !isPersonName(objectName) && !isJobLike(objectName)) return false;
     // Check per-object override — settings saves using panel config key (panel_notes OR coordination)
     // Try both the flag key AND the panel ID itself as lookup keys in _perObject
     const recObj = (allObjects||[]).find(o => o.id === record?.object_id);
@@ -9785,7 +9817,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const conditions = ff._panelConditions?.[PANEL_FLAGS[id]] || ff._panelConditions?.[id];
     if (conditions) {
       // Resolve scope: person, job, or 'all'
-      const scope = objectName === 'Person' ? 'person' : (objectName === 'Job' || objectName === 'Jobs') ? 'job' : slug || 'all';
+      const scope = isPersonName(objectName) ? 'person' : isJobLike(objectName) ? 'job' : slug || 'all';
       const cond = conditions[scope] || conditions['all'];
       if (cond?.field) {
         const recordVal = record?.data?.[cond.field];
@@ -9927,7 +9959,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const leftStorageKey   = `vercentic_panels_left_${objectName}`;
   const topStorageKey    = `vercentic_panels_top_${objectName}`;
   const bottomStorageKey = `vercentic_panels_bottom_${objectName}`;
-  const PANEL_VERSION    = "v27"; // Recommendations expanded by default on Jobs
+  const PANEL_VERSION    = "v28"; // Company panels now companyOnly-scoped; Job panels shared with Talent Pool
   const versionKey       = `vercentic_panels_version_${objectName}`;
 
   // ── Single atomic layout load — deduplicates all 4 zones together ───────
@@ -9977,7 +10009,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const allSaved = new Set([...flatPanelIds(top), ...flatPanelIds(left), ...flatPanelIds(right), ...flatPanelIds(bottom)]);
     const defaultOrder = getDefaultPanelOrder(objectName);
     const newPanels = flatPanelIds(defaultOrder).filter(id => !allSaved.has(id));
-    const allNewFromMeta = Object.keys(PANEL_META).filter(id => !allSaved.has(id) && !newPanels.includes(id));
+    // Only auto-inject PANEL_META keys that are actually valid for THIS object type
+    // (panelVisible() enforces personOnly/jobOnly/companyOnly + feature flags) — otherwise
+    // e.g. Company-only panels would get silently added to every Person/Job/Talent Pool layout.
+    const allNewFromMeta = Object.keys(PANEL_META).filter(id => !allSaved.has(id) && !newPanels.includes(id) && panelVisible(id));
     if (newPanels.length || allNewFromMeta.length) right = [...right, ...newPanels, ...allNewFromMeta];
 
     return { top, left, right, bottom };
@@ -10848,6 +10883,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Panel content renderer ── (lowercase = render function, NOT a React component)
   const renderPanel = useCallback(({ id }) => {
+    // Company panels navigate to people, so they need the People object id.
+    const peopleObjId = (allObjects || []).find(o => o.slug === "people")?.id;
     // Dynamic section panels — render the fields for this section
     if (id?.startsWith("section__")) {
       const section = panelSections.find(s => `section__${s.separatorId}` === id);
@@ -11135,6 +11172,15 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="bias_scan") return <BiasScanner record={record} environment={environment}/>;
     if (id==="share")    return <SharingPanel record={record} environment={environment} canRecord={canRecord}/>;
     if (id==="fraud")    return <FraudPanel   record={record} fields={fields}  environment={environment} canRecord={canRecord}/>;
+
+    // ── Company panels ──────────────────────────────────────────────────────
+    // peopleObjectId lets a click on an employee open their person record.
+    if (id==="company_employees") return <CompanyEmployeesPanel record={record} environment={environment} peopleObjectId={peopleObjId}/>;
+    if (id==="company_alumni")    return <CompanyAlumniPanel    record={record} environment={environment} peopleObjectId={peopleObjId}/>;
+    if (id==="company_intel")     return <CompanyIntelPanel     record={record} environment={environment}/>;
+    if (id==="company_research")  return <CompanyResearchPanel  record={record} environment={environment} onUpdate={onUpdate}/>;
+    if (id==="company_org")       return <CompanyOrgPanel       record={record} environment={environment}/>;
+    if (id==="company_aliases")   return <CompanyAliasesPanel   record={record} environment={environment}/>;
     // interview_plan and scorecard are handled earlier with ff.interviews gate
 
     if (id==="match") {
@@ -11173,7 +11219,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections, previewAtt, activeJobContext, linkedJobRecords, attachmentJobFilter, formJobFilter, taskJobFilter]);
+  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections, previewAtt, activeJobContext, linkedJobRecords, attachmentJobFilter, formJobFilter, taskJobFilter, onUpdate]);
 
 
   // PanelCard is defined at module level above RecordDetail

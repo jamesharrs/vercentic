@@ -2326,6 +2326,7 @@ activeNavRef.current = activeNav;
       reports:              { label: "Reports",     objectName: "Reports",    objectColor: "#d97706" },
       calendar:             { label: "Calendar",    objectName: "Calendar",   objectColor: "#0891b2" },
       "org-chart":          { label: "Org Chart",   objectName: "People",     objectColor: "#7c3aed" },
+      orgchart:             { label: "Org Chart",   objectName: "People",     objectColor: "#7c3aed" },
     };
     if (NAV_META[id]) {
       pushHistory({ id: `nav_${id}`, nav: id, type: "nav", ...NAV_META[id] });
@@ -2478,7 +2479,7 @@ activeNavRef.current = activeNav;
         const staticMap = {
           dashboard:'dashboard', reports:'reports', interviews:'interviews',
           calendar:'calendar', campaigns:'campaigns', offers:'offers',
-          settings:'settings', search:'search',
+          settings:'settings', search:'search', orgchart:'orgchart',
         };
         if (staticMap[slug]) switchNav(staticMap[slug]);
       }
