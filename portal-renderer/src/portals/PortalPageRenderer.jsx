@@ -72,10 +72,10 @@ const HeroWidget = ({ cfg, theme }) => {
   return (
     <div style={{
       padding, textAlign: align, position: 'relative', overflow: 'hidden',
-      minHeight: cfg.videoUrl ? 420 : 'auto',
-      display: cfg.videoUrl ? 'flex' : 'block',
-      alignItems: cfg.videoUrl ? 'center' : undefined,
-      justifyContent: cfg.videoUrl ? 'center' : undefined,
+      minHeight: cfg.videoUrl ? 420 : (cfg.bgImage ? 440 : 'auto'),
+      display: (cfg.videoUrl || cfg.bgImage) ? 'flex' : 'block',
+      alignItems: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
+      justifyContent: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
       background: cfg.videoUrl ? '#0F1729'
         : cfg.bgImage ? `url(${cfg.bgImage}) center/cover no-repeat`
         : `linear-gradient(135deg, ${pr}12, ${t.secondaryColor || pr}08)`,
@@ -91,16 +91,16 @@ const HeroWidget = ({ cfg, theme }) => {
       {!cfg.videoUrl && cfg.bgImage && (cfg.overlayOpacity||0) > 0 && (
         <div style={{ position:'absolute', inset:0, background:`rgba(0,0,0,${(cfg.overlayOpacity||0)/100})` }}/>
       )}
-      <div style={{ position:'relative', zIndex:2, maxWidth: cfg.videoUrl ? '720px' : '800px', margin:'0 auto' }}>
+      <div style={{ position:'relative', zIndex:2, maxWidth: (cfg.videoUrl || cfg.bgImage) ? '760px' : '800px', margin:'0 auto' }}>
         {cfg.eyebrow && (
-          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: cfg.videoUrl ? 'rgba(255,255,255,.7)' : pr, marginBottom:12, fontFamily:ff }}>
+          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: (cfg.videoUrl || (cfg.bgImage && (cfg.overlayOpacity||0) > 20)) ? 'rgba(255,255,255,.85)' : pr, marginBottom:12, fontFamily:ff }}>
             {cfg.eyebrow}
           </div>
         )}
-        <h2 style={{ fontSize: cfg.videoUrl ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
+        <h2 style={{ fontSize: (cfg.videoUrl || cfg.bgImage) ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
           {cfg.headline || 'Your Compelling Headline'}
         </h2>
-        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: cfg.videoUrl ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
+        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: (cfg.videoUrl || cfg.bgImage) ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
         <div style={{ display:'flex', gap:12, justifyContent: align === 'center' ? 'center' : 'flex-start', flexWrap:'wrap' }}>
           {cfg.primaryCta && (
             <a href={cfg.primaryCtaLink||'#'} style={{ display:'inline-block', padding: cfg.videoUrl ? '16px 36px' : '14px 32px', borderRadius:br, background:'#FFFFFF', color:pr, fontWeight:700, fontSize: cfg.videoUrl ? 17 : 16, textDecoration:'none', fontFamily:ff }}>
