@@ -64,11 +64,16 @@ function tenantMiddleware(req, res, next) {
   }
 
   // ── 2. No active session — resolve from client hints (login, signup, portal) ─
-  let slug =
-    req.headers['x-tenant-slug'] ||
-    req.query.tenant              ||
-    slugFromHost(req.hostname)    ||
-    null;
+  // An explicit X-Tenant-Slug header or ?tenant= param is a claim made by the
+  // caller — if it doesn't match a real tenant, that's a forged/stale claim and
+  // must be rejected outright, not silently downgraded to the master store
+  // (which would let a request with an invalid tenant slug still succeed against
+  // routes that have no auth check of their own, e.g. GET /objects).
+  // An unrecognized *subdomain*, by contrast, is passive routing (nobody is
+  // claiming a tenant) and legitimately falls back to master (e.g. the
+  // marketing/root site).
+  const explicitSlug = req.headers['x-tenant-slug'] || req.query.tenant || null;
+  let slug = explicitSlug || slugFromHost(req.hostname) || null;
 
   // Dev tenant pin — in local dev, default anonymous requests to DEV_TENANT so
   // localhost can browse a specific provisioned environment (e.g. a Basic
@@ -84,6 +89,11 @@ function tenantMiddleware(req, res, next) {
 
   const knownTenants = cachedTenants();
   if (!knownTenants.has(slug)) {
+    if (explicitSlug) {
+      // Caller explicitly claimed a tenant that doesn't exist — reject rather
+      // than silently serving master's data under a false tenant context.
+      return res.status(401).json({ error: 'Unknown tenant', code: 'UNKNOWN_TENANT' });
+    }
     return tenantStorage.run('master', next);
   }
 
