@@ -62,16 +62,21 @@ jobs:
           node-version: '20'
       - run: npm i -g vercel@latest
 
+      # IMPORTANT: these steps run from the repo root, NOT `working-directory: client`.
+      # The Vercel project has "Root Directory" = client configured server-side.
+      # If we `cd client` ourselves AND let the CLI apply Root Directory again,
+      # it looks for client/client, install silently fails, and the build blows
+      # up later with "vite: not found". Running from repo root lets the CLI
+      # apply Root Directory exactly once, matching what Vercel's own cloud
+      # build does (confirmed against a successful native Vercel deployment).
       - name: Pull Vercel env
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: client
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: client
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -82,7 +87,6 @@ jobs:
           URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} 2>&1 | tail -1)
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "🔍 Staging URL: $URL"
-        working-directory: client
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

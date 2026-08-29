@@ -219,7 +219,12 @@ app.use((req, res, next) => {
 });
 
 // ── Dev auto-login — creates a session for admin when none exists in local dev ──
-if (process.env.NODE_ENV !== 'production') {
+// Gated out for Playwright/CI runs: PLAYWRIGHT_TEST=1 means "treat this like a
+// real anonymous client" so the auth-guard/RBAC E2E suite actually exercises
+// the 401 path instead of every request silently becoming admin@talentos.io.
+// (NODE_ENV alone isn't a safe enough gate here — CI sets NODE_ENV=ci, which
+// is not 'production', so it used to fall through into this convenience login.)
+if (process.env.NODE_ENV !== 'production' && process.env.PLAYWRIGHT_TEST !== '1') {
   app.use((req, res, next) => {
     if (req.session?.userId) return next();
     const skip = ['/api/portals', '/api/health', '/api/superadmin', '/__vite'];
