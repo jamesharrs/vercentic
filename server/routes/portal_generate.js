@@ -6,6 +6,7 @@
 const express   = require('express');
 const router    = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const WIDGET_SCHEMA = `
 AVAILABLE WIDGET TYPES (use ONLY these):
@@ -75,7 +76,7 @@ Return ONLY valid JSON — no markdown, no explanation:
 
     // Stream from Claude using the SDK's event-based API (sdk 0.x doesn't support for-await-of)
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-6',
+      model: MODEL_DEFAULT,
       max_tokens: 6000,
       messages: [{ role: 'user', content: prompt }],
     });

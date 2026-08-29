@@ -7,6 +7,7 @@ const express = require("express");
 const router  = express.Router();
 const { query, insert, update } = require("../db/init");
 const { v4: uuidv4 } = require("uuid");
+const { MODEL_DEFAULT } = require('../config/ai_models');
 const https   = require("https");
 const http    = require("http");
 
@@ -58,7 +59,7 @@ async function callClaude(prompt, maxTokens = 600) {
   if (!apiKey) return null;
   try {
     const res = await postJson("https://api.anthropic.com/v1/messages", {
-      model: "claude-sonnet-4-5-20251022", max_tokens: maxTokens,
+      model: MODEL_DEFAULT, max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     }, { "x-api-key": apiKey, "anthropic-version": "2023-06-01" });
     return res.json?.content?.[0]?.text || null;

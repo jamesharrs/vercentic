@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { trackAIUsage } = require('./admin_dashboard');
+const { MODEL_OPUS } = require('../config/ai_models');
 
 router.post('/', async (req, res) => {
   const { targetLanguage, targetCode, strings } = req.body;
@@ -18,7 +19,7 @@ router.post('/', async (req, res) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-6',
+        model: MODEL_OPUS,
         max_tokens: 4096,
         system: `You are a professional translator for enterprise HR software (Vercentic).
 Translate the JSON object provided into ${targetLanguage}.
@@ -53,7 +54,7 @@ Rules:
         feature:   'translation',
         tokens_in:  data.usage?.input_tokens  || 0,
         tokens_out: data.usage?.output_tokens || 0,
-        model:     'claude-opus-4-6',
+        model:     MODEL_OPUS,
       });
     } catch(_e) {}
     res.json({ translated });

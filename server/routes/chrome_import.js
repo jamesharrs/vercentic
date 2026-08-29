@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // Allow CORS from any origin for chrome extension content scripts
 router.use((req, res, next) => {
@@ -73,7 +74,7 @@ Return ONLY valid JSON:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: MODEL_DEFAULT,
         max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       }),

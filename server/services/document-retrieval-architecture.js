@@ -1,6 +1,16 @@
+/* eslint-disable no-undef */
 /**
- * COMPANY DOCUMENT KNOWLEDGE BASE ARCHITECTURE
- * 
+ * COMPANY DOCUMENT KNOWLEDGE BASE ARCHITECTURE — DESIGN SPEC, NOT EXECUTABLE CODE
+ *
+ * This file is a design/planning document written as JS object literals and
+ * function bodies for readability. It is not required or imported anywhere
+ * in the running app (verified: zero references elsewhere in the codebase),
+ * and it references services (openai, anthropic, pinecone, vectorDB, s3, db,
+ * app, MongoDB-style aggregate syntax) that this codebase does not actually
+ * use — the real app uses a flat JSON store (server/db/init.js) and the
+ * Anthropic SDK directly in each route. Treat this as reference/spec
+ * material for a future real implementation, not as code that runs today.
+ *
  * System for indexing company documents and making them searchable for Copilot
  */
 
@@ -124,7 +134,7 @@ const documentProcessingPipeline = {
         metadata: {
           documentId: 'doc_123',
           documentName: 'Employee Handbook v3.2.pdf',
-          companyId: 'company_talentos',
+          companyId: 'company_vercentic',
           category: 'HANDBOOK',
           pageNumber: 23,
           heading: 'Benefits > Time Off',

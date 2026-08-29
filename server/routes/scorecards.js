@@ -3,6 +3,7 @@ const express  = require('express');
 const router   = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, remove, findOne, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 function ensureTables() {
   const s = getStore();
@@ -181,7 +182,7 @@ router.get('/summary', async (req, res) => {
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
       const context = subs.map(s => `Interviewer: ${s.interviewer_name}\nRecommendation: ${s.recommendation||'none'}\nComments: ${s.overall_comments||''}\nHighlights: ${s.highlights||''}\nRed Flags: ${s.red_flags||''}`).join('\n---\n');
-      const msg = await client.messages.create({ model:'claude-sonnet-4-6', max_tokens:300,
+      const msg = await client.messages.create({ model: MODEL_DEFAULT, max_tokens:300,
         messages:[{ role:'user', content:`Summarise these interview scorecards in 2-3 sentences. Be objective and concise.\n\n${context}` }] });
       aiSummary = msg.content[0]?.text || null;
     } catch(e) { aiSummary = null; }

@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore, tenantStorage, getCurrentTenant, listTenants, storeCache, loadTenantStore } = require('../db/init');
 const pg = require('../db/postgres');
 const Anthropic = require('@anthropic-ai/sdk');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Token → tenant resolution ─────────────────────────────────────────────────
@@ -199,7 +200,7 @@ RULES:
     apiMessages.push({ role: 'user', content: candidate_message });
 
     const resp = await client.messages.create({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6', max_tokens: 350, system,
+      model: MODEL_DEFAULT, max_tokens: 350, system,
       messages: apiMessages,
     });
     const reply = resp.content[0]?.text || '';
@@ -237,7 +238,7 @@ router.post('/complete', async (req, res) => {
   if (transcriptTxt.length > 100) {
     try {
       const prompt = `Analyse this job interview transcript. Return ONLY valid JSON (no markdown):\n{"scores":{${questions.map(q=>`"${q.id}":{"score_1_to_5":<1-5>,"note":"<brief>"}`).join(',')}},"summary":"<2-3 sentence overall assessment>","recommendation":"<strong_yes|yes|maybe|no|strong_no>","key_strengths":["<s1>","<s2>"],"concerns":["<c1>"]}\n\nQUESTIONS ASKED:\n${questions.map(q=>`- ${q.id}: "${q.text}"${q.good_answer_guidance?' | Good: '+q.good_answer_guidance:''}${q.red_flags?' | Flag: '+q.red_flags:''}`).join('\n')||'General assessment only'}\n\nTRANSCRIPT:\n${transcriptTxt.slice(0, 9000)}`;
-      const resp   = await client.messages.create({ model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6', max_tokens:1000, messages:[{role:'user',content:prompt}] });
+      const resp   = await client.messages.create({ model: MODEL_DEFAULT, max_tokens:1000, messages:[{role:'user',content:prompt}] });
       const parsed = JSON.parse((resp.content[0]?.text||'{}').replace(/```json|```/g,'').trim());
       scores       = parsed.scores || {};
       summary      = parsed.summary || summary;

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { query, insert, update, remove, getStore, saveStore, tenantStorage, getCurrentTenant } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // ── Markdown → HTML converter (lightweight, no dependencies) ─────────────────
 function markdownToHtml(md) {
@@ -21,7 +22,7 @@ function markdownToHtml(md) {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/_(.+?)_/g,   '<em>$1</em>')
     // Unordered lists: lines starting with - or *
-    .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     // Ordered lists: lines starting with 1. 2. etc
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
 
@@ -595,7 +596,7 @@ async function runAiAction(action, recordContext, record, fields, previousAiOutp
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens: 2000, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
   });
   const data = await response.json();
   return data.content?.[0]?.text || '[No response]';

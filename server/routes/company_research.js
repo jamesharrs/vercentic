@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 function ensureCollection() {
   const store = getStore();
@@ -87,7 +88,7 @@ router.post('/research', async (req, res) => {
   try {
     // ── Step 1: Research company profile ──────────────────────────────────────
     const searchData = await callAI({
-      model: 'claude-sonnet-4-6',
+      model: MODEL_DEFAULT,
       max_tokens: 2000,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       system: 'You are a company research specialist. Research the company and return ONLY valid compact JSON, no markdown, no extra text.',

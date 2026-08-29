@@ -4,6 +4,7 @@ const { trackAIUsage } = require('./admin_dashboard');
 const path     = require('path');
 const fs       = require('fs');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
+const { MODEL_OPUS } = require('../config/ai_models');
 
 // ── Extract text from file ────────────────────────────────────────────────────
 async function extractText(filePath, mimetype) {
@@ -223,7 +224,7 @@ IMPORTANT: The skills array and work_history array should be populated even if e
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model:      'claude-opus-4-6',
+        model:      MODEL_OPUS,
         max_tokens: 2000,
         system:     systemPrompt,
         messages: [{ role: 'user', content: `Parse this CV:\n\n${cvText.slice(0, 12000)}` }],
@@ -246,7 +247,7 @@ IMPORTANT: The skills array and work_history array should be populated even if e
         feature:        'cv_parse',
         tokens_in:      data.usage?.input_tokens  || 0,
         tokens_out:     data.usage?.output_tokens || 0,
-        model:          'claude-opus-4-6',
+        model:          MODEL_OPUS,
         environment_id: req.body?.environment_id || '',
       });
     } catch(_e) {}
@@ -379,7 +380,7 @@ IMPORTANT: The skills array and work_history array should be populated even if e
     res.json({
       parsed,
       text_length: cvText.length,
-      model: 'claude-opus-4-6',
+      model: MODEL_OPUS,
     });
   } catch(e) {
     console.error('CV parse error:', e);

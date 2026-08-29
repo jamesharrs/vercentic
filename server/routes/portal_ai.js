@@ -1,6 +1,7 @@
 const express   = require('express');
 const router    = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -64,7 +65,7 @@ category must be one of: review, feedback, interview, decision.`;
 
   try {
     const msg = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_DEFAULT,
       max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });

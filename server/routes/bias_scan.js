@@ -3,6 +3,7 @@ const express  = require('express');
 const router   = express.Router();
 const { requireAuth } = require('../middleware/rbac');
 const { trackAIUsage } = require('./admin_dashboard');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const SYSTEM_PROMPT = `You are an expert in inclusive hiring practices and bias-free recruitment. 
 Analyse the provided job description for language or requirements that may introduce bias or unfairly deter qualified candidates.
@@ -55,7 +56,7 @@ router.post('/', requireAuth, async (req, res) => {
         'anthropic-version':    '2023-06-01',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
+        model:      MODEL_DEFAULT,
         max_tokens: 2000,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content }],

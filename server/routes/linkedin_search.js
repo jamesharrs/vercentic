@@ -1,6 +1,7 @@
 // server/routes/linkedin_search.js
 // LinkedIn profile finder using Claude with web search
 const express = require('express');
+const { MODEL_OPUS } = require('../config/ai_models');
 const router = express.Router();
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
         'anthropic-beta': 'web-search-2025-03-05',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-5',
+        model: MODEL_OPUS,
         max_tokens: 1024,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [

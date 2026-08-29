@@ -11,6 +11,7 @@ const fs        = require('fs');
 const Anthropic = require('@anthropic-ai/sdk');
 const { getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
@@ -77,7 +78,7 @@ async function generateTestCases(ctx, options = {}) {
   const company = options.company || env.name;
 
   const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    model: MODEL_DEFAULT,
     max_tokens: 8192,
     system: `You are a senior QA consultant specialising in enterprise recruitment software UAT.
 Write practical test scripts that non-technical users can follow step-by-step.

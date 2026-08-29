@@ -6,6 +6,7 @@
 const express = require('express');
 const router  = express.Router();
 const { getStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 function daysSince(iso) {
   if (!iso) return null;
@@ -124,7 +125,7 @@ router.post('/', async (req, res) => {
     const Anthropic = require('@anthropic-ai/sdk');
     const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await ai.messages.create({
-      model: 'claude-sonnet-4-20250514', max_tokens: 1200,
+      model: MODEL_DEFAULT, max_tokens: 1200,
       messages: [{ role: 'user', content:
         `You are a senior customer success engineer at Vercentic. Diagnose this client environment snapshot:\n\n${snapText}\n\nProvide:\n1. A 2-3 sentence plain-English health summary.\n2. Issues found — what's wrong, why it matters, what to do.\n3. Warnings — not critical but needs attention.\n4. Positive signals — what is working well.\n5. Recommended next steps for the support team, in priority order.\n\nBe direct. Name actual problems. Don't hedge.` }],
     });
