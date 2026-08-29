@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { MODEL_DEFAULT } = require('../config/ai_models');
+const { hasLinkedPersonWorkflow, resolveFirstStage } = require('../utils/pipelineStage');
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -30,6 +31,10 @@ function getOpenJobs(environmentId) {
   return (store.records || [])
     .filter(r => r.object_id === jobsObj.id && !r.deleted_at)
     .filter(r => { const s = (r.data?.status || '').toLowerCase(); return s === 'open' || s === 'active' || !s; })
+    // Jobs must have a Linked Person workflow attached before they can be
+    // surfaced on the career site — otherwise applicants land in an
+    // un-bucketed pipeline stage the admin Application Pipeline can't show.
+    .filter(r => hasLinkedPersonWorkflow(store, r.id))
     .map(r => ({
       id: r.id,
       title: r.data?.job_title || r.data?.name || 'Untitled',
@@ -203,12 +208,30 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
       if (!store.people_links) store.people_links = [];
       const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === job_id && !l.deleted_at);
       if (!linked) {
-        store.people_links.push({
-          id: uid(), person_id: personRecord.id, record_id: job_id,
-          environment_id: portal.environment_id,
-          workflow_id: null, stage_id: null, stage_name: 'Applied',
-          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        });
+        // Resolve the job's Linked Person workflow so the applicant lands on
+        // a real stage — the Application Pipeline widget counts candidates
+        // by matching people_links.stage_id against the assigned workflow's
+        // step ids, so a null stage_id is never shown in any column.
+        if (hasLinkedPersonWorkflow(store, job_id)) {
+          const { stage_id, stage_name } = resolveFirstStage(store, job_id);
+          store.people_links.push({
+            id: uid(), person_id: personRecord.id, record_id: job_id,
+            environment_id: portal.environment_id,
+            workflow_id: null, stage_id, stage_name,
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          });
+        } else {
+          // Job has no pipeline workflow attached (shouldn't normally happen —
+          // getOpenJobs() excludes these — but guard direct/stale job_id
+          // submissions too). Don't create an un-bucketed link; flag it on
+          // the activity log instead so the application isn't silently lost.
+          store.activity.push({
+            id: uid(), record_id: personRecord.id, object_id: peopleObj.id, environment_id: portal.environment_id,
+            action: 'application_unlinked_no_workflow', actor: 'portal-copilot',
+            details: { job_id, job_title, reason: 'Job has no Linked Person workflow attached' },
+            created_at: new Date().toISOString(),
+          });
+        }
       }
     }
 
