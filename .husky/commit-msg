@@ -29,8 +29,15 @@ case "$MSG" in
 esac
 
 # ── 3. Enforce conventional commit prefix ────────────────────────────────────
+# NOTE: only the subject (first) line is checked. Piping the full multi-line
+# $MSG into `cut`/`sed`/`tr` here would process every line independently and
+# concatenate the results, so a body containing a colon anywhere (e.g. a
+# bullet like "Excluded from this commit:") would corrupt PREFIX and reject
+# an otherwise-valid conventional commit. `head -1` isolates the subject line
+# before the prefix is extracted.
 VALID_PREFIXES="feat fix ci chore perf docs refactor test style build"
-PREFIX="$(echo "$MSG" | cut -d: -f1 | sed 's/(.*)//g' | tr -d ' ')"
+SUBJECT="$(echo "$MSG" | head -1)"
+PREFIX="$(echo "$SUBJECT" | cut -d: -f1 | sed 's/(.*)//g' | tr -d ' ')"
 
 for p in $VALID_PREFIXES; do
   if [ "$PREFIX" = "$p" ]; then
