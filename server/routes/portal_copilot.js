@@ -58,6 +58,33 @@ function getCompanyInfo(portal) {
   };
 }
 
+// Admin-configured "which People fields does the chatbot's application flow
+// collect" (Portal Settings → Flows → Chatbot), plus whether it should ask
+// about a CV upload before anything else. Falls back to the historical
+// first/last/email/phone set + CV-first-on when nothing's been configured
+// yet, so existing portals keep working unchanged.
+const DEFAULT_APPLICATION_FIELD_KEYS = ['first_name', 'last_name', 'email', 'phone'];
+function getApplicationFieldsConfig(portal) {
+  const store = getStore();
+  const cop = portal.copilot || {};
+  const cvFirst = cop.cv_first !== false;
+  const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
+  if (!peopleObj) return { cvFirst, fields: [] };
+
+  const selectedKeys = Array.isArray(cop.application_fields) && cop.application_fields.length
+    ? cop.application_fields
+    : DEFAULT_APPLICATION_FIELD_KEYS;
+  const keySet = new Set([...selectedKeys, 'first_name', 'email']);
+  const orderOf = k => { const i = selectedKeys.indexOf(k); return i === -1 ? 999 : i; };
+  const allFields = (store.fields || []).filter(f => f.object_id === peopleObj.id);
+  const fields = allFields
+    .filter(f => keySet.has(f.api_key))
+    .map(f => ({ api_key: f.api_key, name: f.name, field_type: f.field_type, options: f.options || null,
+      required: f.api_key === 'first_name' || f.api_key === 'email' }))
+    .sort((a, b) => orderOf(a.api_key) - orderOf(b.api_key));
+  return { cvFirst, fields };
+}
+
 router.post('/chat', async (req, res) => {
   const { portal_id, messages, session_id } = req.body;
   if (!portal_id || !messages || !Array.isArray(messages))
@@ -91,6 +118,22 @@ router.post('/chat', async (req, res) => {
       }).join('\n')
     : 'No open positions at this time.';
 
+  // Admin-configured application-flow behaviour (Portal Settings → Flows →
+  // Chatbot): whether to lead with the CV-upload prompt, and which extra
+  // People fields (beyond the historical name/email/phone) to try to
+  // collect conversationally. Both feed directly into capability #3 below.
+  const appFieldsCfg = getApplicationFieldsConfig(portal);
+  const baseAppKeys = new Set(['first_name', 'last_name', 'email', 'phone']);
+  const extraAppFields = appFieldsCfg.fields.filter(f => !baseAppKeys.has(f.api_key));
+  const extraFieldsBlock = extraAppFields.length
+    ? `   Also try to naturally collect (never interrogate — it's completely fine to skip any the candidate doesn't want to share):\n${extraAppFields.map(f => `   - ${f.name} (key: "${f.api_key}")`).join('\n')}`
+    : '';
+  const cvFirstBlock = appFieldsCfg.cvFirst
+    ? `   Your VERY FIRST step when a candidate wants to apply is to ask if they have a CV/resume to upload — explain that uploading it lets you pull their details automatically, making applying faster and easier for them. Wait for their reply (they upload one, or say they don't have one / would rather not) before asking for anything else.`
+    : '';
+  const applicationSchemaKeys = ['job_id', 'job_title', 'first_name', 'last_name', 'email', 'phone', 'cover_note', ...extraAppFields.map(f => f.api_key)];
+  const applicationSchemaExample = applicationSchemaKeys.map(k => `"${k}":"..."`).join(',');
+
   const systemPrompt = `You are ${copilotName}, a friendly and professional recruitment assistant on ${company.company_name}'s career site.
 Your name is "${copilotName}" — always introduce yourself by this name if asked.
 ${company.tagline ? `Company tagline: "${company.tagline}"` : ''}
@@ -116,10 +159,13 @@ CAPABILITIES:
 2. DESCRIBE A JOB: When asked for details about a role, give a rich description including responsibilities, requirements, team info.
    Highlight listed skills and salary. End with encouragement and remind them they can apply directly.
 
-3. START APPLICATION: When a candidate wants to apply, collect: full name, email, phone (optional), brief message of interest.
-   Ask if they want to upload a CV. Once you have name + email, output:
-   <APPLICATION>{"job_id":"...","job_title":"...","first_name":"...","last_name":"...","email":"...","phone":"...","cover_note":"..."}</APPLICATION>
-   CRITICAL: "job_id" MUST be the exact "ID:" value from the OPEN POSITIONS list above for the specific role they're applying to — copy it character-for-character, never invent, guess, truncate, or leave it blank. If you are not 100% sure which open position they mean, ask them to confirm/pick one from the list before outputting the APPLICATION tag. The APPLICATION block must be valid, strict JSON — no trailing commas, no comments, no unescaped quotes inside string values.
+3. START APPLICATION: When a candidate wants to apply:
+${cvFirstBlock}
+   Collect: full name, email, phone (optional), brief message of interest.
+${extraFieldsBlock}
+   Once you have at least name + email, output:
+   <APPLICATION>{${applicationSchemaExample}}</APPLICATION>
+   CRITICAL: "job_id" MUST be the exact "ID:" value from the OPEN POSITIONS list above for the specific role they're applying to — copy it character-for-character, never invent, guess, truncate, or leave it blank. If you are not 100% sure which open position they mean, ask them to confirm/pick one from the list before outputting the APPLICATION tag. Only include a key in the APPLICATION JSON if the candidate actually told you that value — never invent or guess extra field values, and omit any key you don't have a real answer for. The APPLICATION block must be valid, strict JSON — no trailing commas, no comments, no unescaped quotes inside string values.
 
 4. ANSWER QUESTIONS: Answer general questions about company, culture, benefits, application process. Be honest if unsure.
 
@@ -180,15 +226,50 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
     if (!peopleObj) return res.status(400).json({ error: 'People object not configured' });
 
+    // Accept any value that matches a real People-object field, not just the
+    // historical name/email/phone quartet — this is what lets (a) admin-
+    // configured extra application fields (Portal Settings → Flows →
+    // Chatbot) and (b) CV-parsed data the frontend forwards silently even
+    // when it wasn't part of the visible conversation both land on the
+    // record. Mirrors /join-community's acceptance pattern exactly.
+    const nonFieldKeys = new Set(['portal_id', 'job_id', 'job_title', 'cover_note']);
+    const peopleFields = (store.fields || []).filter(f => f.object_id === peopleObj.id);
+    const fieldMeta = new Map(peopleFields.map(f => [f.api_key, f]));
+    const fieldValues = {};
+    for (const [k, v] of Object.entries(req.body)) {
+      if (nonFieldKeys.has(k) || !fieldMeta.has(k) || v === undefined || v === '') continue;
+      const type = fieldMeta.get(k).field_type;
+      if (type === 'multi_select' || type === 'table') {
+        try { fieldValues[k] = JSON.parse(v); } catch { fieldValues[k] = [v]; }
+      } else if (type === 'boolean') {
+        fieldValues[k] = v === 'true' || v === true;
+      } else {
+        fieldValues[k] = v;
+      }
+    }
+    // first_name/email always win from the validated top-level vars, even if
+    // the People object's field list is somehow missing them — every seeded
+    // People object has these, but this keeps /apply working regardless.
+    fieldValues.first_name = first_name;
+    fieldValues.email = email;
+    if (last_name) fieldValues.last_name = last_name;
+    if (phone) fieldValues.phone = phone;
+
     let personRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
     if (!personRecord) {
       personRecord = {
         id: uid(), object_id: peopleObj.id, environment_id: portal.environment_id,
-        data: { first_name, last_name: last_name || '', email, phone: phone || '', status: 'Active', source: 'Career Site Copilot', person_type: 'Candidate' },
+        data: { status: 'Active', source: 'Career Site Copilot', person_type: 'Candidate', ...fieldValues },
         created_by: 'portal-copilot', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       };
       if (!store.records) store.records = [];
       store.records.push(personRecord);
+    } else {
+      // Merge rather than overwrite — a returning candidate, or one who
+      // uploads a fuller CV on a second application, should only ever gain
+      // data here, never lose previously-captured values.
+      personRecord.data = { ...personRecord.data, ...fieldValues };
+      personRecord.updated_at = new Date().toISOString();
     }
 
     if (req.file) {
@@ -326,6 +407,19 @@ router.get('/talent-community-fields', (req, res) => {
   }
 
   res.json({ fields, talent_pool_id: poolId, talent_pool_name: poolName });
+});
+
+// Resolve which People fields the chatbot's application flow should collect
+// (admin-configured in Portal Settings → Flows → Chatbot), plus whether it
+// should lead with the CV-upload prompt — public, read-only, same shape as
+// /talent-community-fields so the frontend can reuse its fetch/render logic.
+router.get('/application-fields', (req, res) => {
+  const { portal_id } = req.query;
+  if (!portal_id) return res.status(400).json({ error: 'portal_id required' });
+  const portal = getPortal(portal_id);
+  if (!portal) return res.status(404).json({ error: 'Portal not found' });
+  const cfg = getApplicationFieldsConfig(portal);
+  res.json({ fields: cfg.fields, cv_first: cfg.cvFirst });
 });
 
 // Join the talent community — used when the copilot has no strong-fit open

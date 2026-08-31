@@ -520,6 +520,7 @@ const FeedbackTab = ({ portal, onChange, accent, api: apiProp }) => {
 const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   const [tab, setTab] = useState("branding");
   const [showDomainSetup, setShowDomainSetup] = useState(false);
+  const [wizardMode, setWizardMode] = useState("pages"); // "pages" (WizardBuilder) | "chatbot" (ChatbotFlowConfig)
   const gdpr = portal.gdpr || {};
   const br = portal.branding || {};
   const setG = (k,v) => onChange({ ...portal, gdpr: { ...gdpr, [k]: v } });
@@ -838,7 +839,22 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             </div>
           </>);
         })()}
-        {tab==="wizard"&&<WizardBuilder portal={portal} onChange={onChange}/>}
+        {tab==="wizard"&&(<>
+              <div style={{display:"flex",gap:4,padding:4,borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`,marginBottom:16,width:"fit-content"}}>
+                {[["pages","fileText","Application Wizard"],["chatbot","sparkles","Chatbot"]].map(([id,icon,label])=>(
+                  <button key={id} onClick={()=>setWizardMode(id)} style={{
+                    display:"flex",alignItems:"center",gap:7,padding:"7px 14px",borderRadius:8,border:"none",cursor:"pointer",
+                    background:wizardMode===id?C.surface:"transparent",
+                    color:wizardMode===id?C.accent:C.text3,fontSize:12.5,fontWeight:wizardMode===id?700:600,fontFamily:F,
+                    boxShadow:wizardMode===id?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .15s",
+                  }}>
+                    <Ic n={icon} s={13} c={wizardMode===id?C.accent:C.text3}/> {label}
+                  </button>
+                ))}
+              </div>
+              {wizardMode==="pages" && <WizardBuilder portal={portal} onChange={onChange}/>}
+              {wizardMode==="chatbot" && <ChatbotFlowConfig portal={portal} onChange={onChange}/>}
+            </>)}
           </div>
         </div>
       </div>
@@ -2012,6 +2028,115 @@ const TalentCommunityConfig = ({ cop, setCop, environmentId }) => {
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Portal Settings → Flows → Chatbot: what the copilot's application flow
+// asks for. Takes `portal`/`onChange` directly (not `cop`/`setCop`) because,
+// unlike TalentCommunityConfig above, this renders from the Flows tab's own
+// mode switcher rather than from inside the Copilot tab's existing IIFE —
+// so it derives cop/setCop itself, the same way that IIFE does.
+const DEFAULT_APP_FIELD_KEYS = ["first_name", "last_name", "email", "phone"];
+const ALWAYS_ON_APP_FIELDS = ["first_name", "email"];
+
+const ChatbotFlowConfig = ({ portal, onChange }) => {
+  const cop = portal.copilot || {};
+  const setCop = (k, v) => onChange({ ...portal, copilot: { ...cop, [k]: v } });
+
+  const [objects, setObjects] = useState([]);
+  const [peopleFields, setPeopleFields] = useState([]);
+
+  useEffect(() => {
+    if (!portal.environment_id) return;
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(d => setObjects(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [portal.environment_id]);
+
+  useEffect(() => {
+    const peopleObj = objects.find(o => o.slug === "people");
+    if (peopleObj) {
+      api.get(`/fields?object_id=${peopleObj.id}`)
+        .then(d => setPeopleFields(Array.isArray(d) ? d : []))
+        .catch(() => setPeopleFields([]));
+    }
+  }, [objects]);
+
+  const cvFirst = cop.cv_first !== false; // default ON
+  const selectedKeys = (cop.application_fields && cop.application_fields.length)
+    ? cop.application_fields
+    : DEFAULT_APP_FIELD_KEYS;
+
+  const toggleField = (apiKey) => {
+    if (ALWAYS_ON_APP_FIELDS.includes(apiKey)) return; // always collected, can't turn off
+    const next = selectedKeys.includes(apiKey)
+      ? selectedKeys.filter(k => k !== apiKey)
+      : [...selectedKeys, apiKey];
+    setCop("application_fields", next);
+  };
+
+  const HIDDEN_APP_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id", "talent_community"];
+  const availableFields = peopleFields.filter(f => !HIDDEN_APP_KEYS.includes(f.api_key));
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+          <Ic n="sparkles" s={13} c={C.text3}/> Chatbot Application Flow
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Ask for CV first</div>
+            <div style={{fontSize:11,color:C.text3,marginTop:2}}>Before anything else, the copilot offers to extract details from an uploaded CV to make applying faster</div>
+          </div>
+          <button onClick={()=>setCop("cv_first",!cvFirst)} style={{width:36,height:20,borderRadius:10,border:"none",background:cvFirst?C.accent:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+            <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:cvFirst?18:2,transition:"left .2s"}}/>
+          </button>
+        </div>
+
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Fields to collect in conversation</div>
+          <div style={{fontSize:11,color:C.text3,marginBottom:8}}>The copilot will naturally ask about these while chatting — never as a rigid form. Name and email are always required.</div>
+          {availableFields.length === 0 && (
+            <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+          )}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {availableFields.map(f => {
+              const active = selectedKeys.includes(f.api_key);
+              const locked = ALWAYS_ON_APP_FIELDS.includes(f.api_key);
+              return (
+                <button
+                  key={f.api_key}
+                  type="button"
+                  onClick={() => toggleField(f.api_key)}
+                  disabled={locked}
+                  title={locked ? "Always collected" : ""}
+                  style={{
+                    padding:"5px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,
+                    cursor: locked ? "default" : "pointer",
+                    border:`1.5px solid ${active ? C.accent : C.border}`,
+                    background: active ? `${C.accent}14` : C.surface,
+                    color: active ? C.accent : C.text3,
+                    opacity: locked ? 0.85 : 1,
+                    display:"flex",alignItems:"center",gap:4,
+                  }}>
+                  {f.name}
+                  {locked && <Ic n="lock" s={9} c={active?C.accent:C.text3}/>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding:"12px 14px",borderRadius:10,background:`${C.accent}0A`,border:`1px solid ${C.accent}33`,display:"flex",gap:10}}>
+        <Ic n="lightbulb" s={15} c={C.accent}/>
+        <div style={{fontSize:11.5,color:C.text2,lineHeight:1.5}}>
+          <strong>Anything a CV can be parsed for is always captured</strong>, even if it isn't in the list above or never comes up in the chat — location, skills, work history and more are saved to the candidate's record in the background. The fields above just control what the copilot actively asks about during the conversation.
         </div>
       </div>
     </div>

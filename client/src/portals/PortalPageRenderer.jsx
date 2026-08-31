@@ -3175,7 +3175,18 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 // AI conversationally via an <APPLICATION> tag. Owns its own local field
 // state (initialised once from `data`) so edits don't need to be lifted into
 // the parent message list.
-const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit }) => {
+const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }) => {
+  // Sensible shape to render with immediately, before the admin-configured
+  // field list (Portal Settings → Flows → Chatbot) has loaded from
+  // /application-fields — avoids a flash of an empty form. Mirrors
+  // TalentCommunityCard's DEFAULT_TC_FIELDS pattern below.
+  const DEFAULT_APP_FIELDS = [
+    { api_key:'first_name', name:'First Name', field_type:'text',  required:true  },
+    { api_key:'last_name',  name:'Last Name',  field_type:'text',  required:false },
+    { api_key:'email',      name:'Email',      field_type:'email', required:true  },
+    { api_key:'phone',      name:'Phone',      field_type:'phone', required:false },
+  ];
+  const [fieldsConfig, setFieldsConfig] = useState(DEFAULT_APP_FIELDS);
   const [fields, setFields] = useState({
     first_name: data.first_name || '',
     last_name:  data.last_name  || '',
@@ -3196,12 +3207,93 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit }) => {
   const [status, setStatus] = useState('idle'); // idle | submitting | done | error
   const [errMsg, setErrMsg] = useState('');
 
+  // Pull the admin-configured "fields to collect" for this portal's chatbot
+  // application flow (Portal Settings → Flows → Chatbot → Fields to collect
+  // in conversation). Any extra field beyond the base 4 above gets its own
+  // input here, prefilled from whatever the CV parser found (`data.raw`) if
+  // the candidate hasn't already told us — so data that can be parsed is
+  // captured even when it isn't something the conversation explicitly asked
+  // about, and even if the admin never added it to the configured list at
+  // all (it's simply not shown as an input in that case, but still gets
+  // forwarded silently by submitApplication's raw-fallback merge).
+  useEffect(() => {
+    if (!portalId) return;
+    let cancelled = false;
+    fetch(`${API_ORIGIN}/api/portal-copilot/application-fields?portal_id=${portalId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled || !Array.isArray(d.fields) || !d.fields.length) return;
+        setFieldsConfig(d.fields);
+        setFields(f => {
+          const next = { ...f };
+          d.fields.forEach(fc => {
+            if (fc.api_key in next) return;
+            const parsedVal = data.raw ? data.raw[fc.api_key] : undefined;
+            next[fc.api_key] = parsedVal !== undefined ? parsedVal
+              : (data[fc.api_key] ?? (fc.field_type === 'multi_select' ? [] : ''));
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [portalId]);
+
   const set = (k, v) => setFields(f => ({ ...f, [k]: v }));
-  const canSubmit = fields.first_name.trim() && fields.last_name.trim() && /\S+@\S+\.\S+/.test(fields.email);
+  const canSubmit = (fields.first_name || '').trim() && /\S+@\S+\.\S+/.test(fields.email || '');
 
   const inputStyle = { width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #E5E7EB',
     fontSize:12, fontFamily:ff, outline:'none', boxSizing:'border-box' };
   const labelStyle = { fontSize:10, fontWeight:700, color:'#6B7280', marginBottom:3, textTransform:'uppercase', letterSpacing:.3 };
+
+  // Renders one input for a configured field, matched to its type — the
+  // same type-switch TalentCommunityCard's renderField uses below, kept as
+  // its own local copy here (rather than a shared helper) so this card can
+  // never regress the already-working Talent Community form.
+  const renderField = (fc) => {
+    const val = fields[fc.api_key] ?? (fc.field_type === 'multi_select' ? [] : '');
+    if (fc.field_type === 'select' && Array.isArray(fc.options)) {
+      return (
+        <select style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
+          <option value="">Select…</option>
+          {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    if (fc.field_type === 'multi_select' && Array.isArray(fc.options)) {
+      const arr = Array.isArray(val) ? val : [];
+      return (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+          {fc.options.map(o => {
+            const active = arr.includes(o);
+            return (
+              <button key={o} type="button" onClick={() => set(fc.api_key, active ? arr.filter(x => x !== o) : [...arr, o])}
+                style={{ padding:'4px 9px', borderRadius:99, fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:ff,
+                  border:`1.5px solid ${active ? pr : '#E5E7EB'}`, background: active ? `${pr}15` : 'white', color: active ? pr : '#6B7280' }}>
+                {o}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    if (fc.field_type === 'textarea' || fc.field_type === 'long_text') {
+      return <textarea style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    }
+    if (fc.field_type === 'boolean') {
+      return (
+        <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#374151', cursor:'pointer' }}>
+          <input type="checkbox" checked={!!val} onChange={e => set(fc.api_key, e.target.checked)}/>
+          {fc.name}
+        </label>
+      );
+    }
+    if (fc.field_type === 'date') {
+      return <input style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
+    }
+    const type = fc.field_type === 'email' ? 'email' : fc.field_type === 'phone' ? 'tel' : fc.field_type === 'number' ? 'number' : 'text';
+    return <input style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+  };
 
   if (status === 'done') {
     return (
@@ -3212,26 +3304,34 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit }) => {
     );
   }
 
+  // Same compact-pair layout convention as TalentCommunityCard: keep first/
+  // last name side-by-side when both are configured, everything else
+  // (including any admin-added extra fields, or a solo first/last name if
+  // the other half was toggled off) stacks full-width in the configured
+  // order via `rest`.
+  const firstIdx = fieldsConfig.findIndex(f => f.api_key === 'first_name');
+  const lastIdx  = fieldsConfig.findIndex(f => f.api_key === 'last_name');
+  const pairedNames = firstIdx !== -1 && lastIdx !== -1;
+  const rest = fieldsConfig.filter(f => !(pairedNames && (f.api_key === 'first_name' || f.api_key === 'last_name')));
+
   return (
     <div style={{ width:'100%', padding:'14px', borderRadius:12, background:'#F9FAFB', border:`1.5px solid ${pr}30`, boxSizing:'border-box' }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-        <div>
-          <div style={labelStyle}>First Name</div>
-          <input style={inputStyle} value={fields.first_name} onChange={e=>set('first_name', e.target.value)} placeholder="First name"/>
+      {pairedNames && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+          <div><div style={labelStyle}>First Name</div>{renderField(fieldsConfig[firstIdx])}</div>
+          <div><div style={labelStyle}>Last Name</div>{renderField(fieldsConfig[lastIdx])}</div>
         </div>
-        <div>
-          <div style={labelStyle}>Last Name</div>
-          <input style={inputStyle} value={fields.last_name} onChange={e=>set('last_name', e.target.value)} placeholder="Last name"/>
+      )}
+
+      {rest.map(fc => (
+        <div key={fc.api_key} style={{ marginBottom:8 }}>
+          {fc.field_type !== 'boolean' && (
+            <div style={labelStyle}>{fc.name}{!fc.required && ' (optional)'}</div>
+          )}
+          {renderField(fc)}
         </div>
-      </div>
-      <div style={{ marginBottom:8 }}>
-        <div style={labelStyle}>Email</div>
-        <input style={inputStyle} type="email" value={fields.email} onChange={e=>set('email', e.target.value)} placeholder="you@example.com"/>
-      </div>
-      <div style={{ marginBottom:8 }}>
-        <div style={labelStyle}>Phone</div>
-        <input style={inputStyle} type="tel" value={fields.phone} onChange={e=>set('phone', e.target.value)} placeholder="+971…"/>
-      </div>
+      ))}
+
       <div style={{ marginBottom:10 }}>
         <div style={labelStyle}>Message (optional)</div>
         <textarea style={{ ...inputStyle, resize:'vertical', minHeight:50, fontFamily:ff }} value={fields.cover_note} onChange={e=>set('cover_note', e.target.value)} placeholder="A short note about your interest…"/>
@@ -3602,6 +3702,13 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
       // Remember the parsed details + the raw file for the rest of this
       // session — an "Apply now" click on any job card, or a "join talent
       // community" prompt, can then prefill instantly with no retyping.
+      // `raw` retains the FULL parsed CV object (skills, location, work
+      // history, everything the parser found) even though only a handful of
+      // fields are shown/edited in the UI — submitApplication/
+      // submitTalentCommunity forward it silently as a fallback so nothing
+      // the CV could tell us is ever lost just because it isn't part of the
+      // portal's configured "fields to collect" list or wasn't asked about
+      // in conversation.
       parsedCvRef.current = {
         first_name: p.first_name || '',
         last_name:  p.last_name  || '',
@@ -3609,6 +3716,7 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
         phone:      p.phone      || '',
         cover_note: p.summary    || '',
         cvFile: file,
+        raw: p,
       };
 
       if (forRecommendations) {
@@ -3688,16 +3796,32 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
     if (file) processCvFile(file);
   };
 
+  // Forwards whatever the confirm card is holding — the historical fixed set
+  // (job_id/job_title/first_name/last_name/email/phone/cover_note) plus any
+  // extra People fields the admin configured to collect (Portal Settings →
+  // Flows → Chatbot), the same dynamic-forwarding pattern
+  // submitTalentCommunity uses. Array values (multi_select) are
+  // JSON-stringified so the backend can parse them back out; the backend
+  // only ever persists keys that match a real People-object field, so
+  // forwarding extra/unrecognised keys here is harmless.
   const submitApplication = async (fields, cvFile) => {
     const fd = new FormData();
     fd.append('portal_id', portal.id);
-    if (fields.job_id)    fd.append('job_id', fields.job_id);
-    if (fields.job_title) fd.append('job_title', fields.job_title);
-    fd.append('first_name', fields.first_name || '');
-    fd.append('last_name',  fields.last_name  || '');
-    fd.append('email',      fields.email      || '');
-    if (fields.phone)      fd.append('phone', fields.phone);
-    if (fields.cover_note) fd.append('cover_note', fields.cover_note);
+    Object.entries(fields || {}).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
+    });
+    // Anything the CV parser extracted that isn't part of the visible/edited
+    // field set is still forwarded silently in the background — captured on
+    // the record but never surfaced as a question to the candidate. Only
+    // fills gaps: never overwrites a value the candidate explicitly typed or
+    // edited in the confirm card above.
+    if (parsedCvRef.current?.raw) {
+      Object.entries(parsedCvRef.current.raw).forEach(([k, v]) => {
+        if (fd.has(k) || v === undefined || v === null || v === '') return;
+        fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
+      });
+    }
     if (cvFile) fd.append('cv', cvFile);
     const res = await fetch(`${API_ORIGIN}/api/portal-copilot/apply`, { method:'POST', body: fd });
     return res.json();
@@ -3714,6 +3838,16 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
       if (v === undefined || v === null || v === '') return;
       fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
     });
+    // Same silent-gap-fill as submitApplication above — a candidate who
+    // uploaded a CV before landing on this "join instead" card shouldn't
+    // lose everything the parser found just because most of it isn't part
+    // of the configured Talent Community field list.
+    if (parsedCvRef.current?.raw) {
+      Object.entries(parsedCvRef.current.raw).forEach(([k, v]) => {
+        if (fd.has(k) || v === undefined || v === null || v === '') return;
+        fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
+      });
+    }
     if (parsedCvRef.current?.cvFile) fd.append('cv', parsedCvRef.current.cvFile);
     const res = await fetch(`${API_ORIGIN}/api/portal-copilot/join-community`, { method:'POST', body: fd });
     return res.json();
@@ -3736,6 +3870,7 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
           cover_note: parsedCvRef.current.cover_note,
           job_id:    job.id,
           job_title: job.title,
+          raw: parsedCvRef.current.raw,
         },
         cvFile: parsedCvRef.current.cvFile,
       }]);
@@ -3884,6 +4019,7 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
                     pr={pr}
                     ff={ff}
                     onSubmit={(fields) => submitApplication(fields, m.cvFile)}
+                    portalId={portal.id}
                   />
                 )}
               </div>
