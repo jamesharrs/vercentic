@@ -99,12 +99,11 @@ function useMediaAssets(environment, initialCategory) {
       fd.append("name", file.name.replace(/\.[^.]+$/, ""));
       try {
         const res = await tFetch("/api/media-library/upload", { method: "POST", body: fd });
-        if (!res.ok) {
-          const e = await res.json().catch(() => ({}));
-          failures.push(`${file.name}: ${e.error || `Upload failed (${res.status})`}`);
+        if (res?.error) {
+          failures.push(`${file.name}: ${res.error}`);
           continue;
         }
-        const asset = await res.json();
+        const asset = res;
         // Auto-tag in the background — doesn't block the upload loop; refreshes
         // the grid once the suggestion lands so the name/tags appear live.
         aiTag(asset.id).then(sugg => api.patch(`/media-library/${asset.id}`, sugg)).then(load).catch(() => {});

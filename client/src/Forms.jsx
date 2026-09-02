@@ -624,16 +624,23 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
   const [contextRec, setContextRec] = useState(null); // { id, title }
   const [saving, setSaving]     = useState(null);
 
+  const [everyForm, setEveryForm] = useState([]); // unfiltered by object type — used only to explain an empty state
+
   useEffect(() => {
     if (!environment?.id) return;
     api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`)
       .then(d => setAllForms(Array.isArray(d) ? d : []));
+    api.get(`/forms?environment_id=${environment.id}`)
+      .then(d => setEveryForm(Array.isArray(d) ? d : []));
   }, [environment?.id, objectSlug]);
 
   const available = allForms.filter(f =>
     !existingLinkIds.has(f.id) &&
     (!search || f.name.toLowerCase().includes(search.toLowerCase()))
   );
+  // True only when forms exist in this environment but none of them apply to this object type —
+  // distinct from "no forms have been created at all", which needs a different message.
+  const formsExistElsewhere = allForms.length === 0 && everyForm.length > 0;
 
   const handleLink = async (form) => {
     setSaving(form.id);
@@ -697,7 +704,11 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
         <div style={{ flex:1, overflowY:'auto', padding:'10px 12px' }}>
           {available.length === 0 && (
             <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>
-              {allForms.length === 0 ? 'No forms created yet. Go to Settings → Forms.' : 'All available forms are already linked.'}
+              {allForms.length === 0
+                ? (formsExistElsewhere
+                    ? `No forms are set up for “${objectSlug}” records yet. Forms exist for other record types — open a form in Settings → Forms and add “${objectSlug}” under Applies to.`
+                    : 'No forms created yet. Go to Settings → Forms.')
+                : 'All available forms are already linked.'}
             </div>
           )}
           {available.map(form => {

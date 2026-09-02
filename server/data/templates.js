@@ -582,10 +582,12 @@ const TEMPLATES = {
         // Modules
         'ai_copilot', 'interviews', 'reports', 'portals',
         'cv_parsing', 'bulk_actions', 'duplicate_detection',
+        'communications_panel', 'forms',
         // Nav sections
         'access_search', 'access_calendar',
         // Record panels
         'panel_notes', 'panel_files', 'panel_activity', 'panel_linked_records',
+        'panel_forms', 'panel_questions',
       ],
     },
     objects: [

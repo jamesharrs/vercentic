@@ -1067,6 +1067,16 @@ const SecuritySection = () => {
         </div>
       </Card>
 
+      {/* Career Site Applications */}
+      <Card title="Career Site Applications" subtitle="Control how long candidates can edit their application after submitting">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:16}}>
+          <Inp label="Edit Window (minutes)" type="number" value={settings.application_edit_window_minutes ?? 30} onChange={v=>set("application_edit_window_minutes",parseInt(v))} help="Candidates can freely edit their application within this window after submitting"/>
+        </div>
+        <div style={{marginTop:12,padding:"12px 16px",background:"#f8f9fc",borderRadius:10,fontSize:12,color:C.text3}}>
+          After the window closes, a candidate returning to edit their application will be emailed a one-time verification code before any changes are accepted.
+        </div>
+      </Card>
+
       {/* SSO */}
       <Card title="Single Sign-On (SSO)" subtitle="Allow users to log in via your identity provider">
         <div style={{marginTop:4}}>
@@ -1583,7 +1593,7 @@ const PersonTypeConfig = ({ object, onUpdate }) => {
     const updated = await tFetch(`/api/objects/${object.id}`, {
       method:"PATCH", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ person_type_options: opts }),
-    }).then(r=>r.json());
+    });
     setSaving(false);
     if (onUpdate) onUpdate(updated);
   };
@@ -2359,9 +2369,8 @@ const ConfigSection = ({ environment }) => {
     setStatus({ type:'info', msg:'Validating config file…' }); setDiff(null); setPending(null);
     try {
       const json = JSON.parse(await file.text());
-      const res  = await tFetch(`/api/config/preview?environment_id=${envId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(json) });
-      const data = await res.json();
-      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Invalid config file.' }); return; }
+      const data = await tFetch(`/api/config/preview?environment_id=${envId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(json) });
+      if (data?.error) { setStatus({ type:'error', msg: data.error||'Invalid config file.' }); return; }
       setDiff(data.diff); setDiffMeta(data.meta); setPending(json);
       setStatus({ type:'info', msg:'Review the changes below, then click Apply Import.' });
     } catch(err) { setStatus({ type:'error', msg:`Parse error: ${err.message}` }); }
@@ -2371,9 +2380,8 @@ const ConfigSection = ({ environment }) => {
   const handleApply = async () => {
     if (!pending) return; setApplying(true);
     try {
-      const res  = await tFetch(`/api/config/import?environment_id=${envId}&mode=${mode}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pending) });
-      const data = await res.json();
-      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Import failed.' }); return; }
+      const data = await tFetch(`/api/config/import?environment_id=${envId}&mode=${mode}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pending) });
+      if (data?.error) { setStatus({ type:'error', msg: data.error||'Import failed.' }); return; }
       const summary = Object.entries(data.results).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ');
       setStatus({ type:'success', msg:`Import complete: ${summary||'no changes'}. Reload to see changes.` });
       setDiff(null); setPending(null);

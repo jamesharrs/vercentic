@@ -2807,7 +2807,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   useEffect(() => {
     if (!open || !currentRecord || currentObject?.slug !== 'people') { setPipelineLinks([]); return; }
     tFetch(`/api/workflows/people-links?person_record_id=${currentRecord.id}`)
-      .then(r => r.json()).then(d => setPipelineLinks(Array.isArray(d) ? d : [])).catch(() => setPipelineLinks([]));
+      .then(d => setPipelineLinks(Array.isArray(d) ? d : [])).catch(() => setPipelineLinks([]));
   }, [open, currentRecord?.id, currentObject?.slug]);
 
   // Generate proactive nudges when the copilot opens on a list page
@@ -3145,11 +3145,11 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if (slug) {
         const obj = objects.find(o => o.slug === slug);
         if (obj) {
-          const r = await tFetch(`/api/records?object_id=${obj.id}&environment_id=${environment.id}&search=${encodeURIComponent(q)}&limit=8`).then(r=>r.json());
-          return (r.records||[]).map(rec => ({ ...rec, object_name: obj.name, object_slug: obj.slug, object_color: obj.color }));
+          const r = await tFetch(`/api/records?object_id=${obj.id}&environment_id=${environment.id}&search=${encodeURIComponent(q)}&limit=8`);
+          return (r?.records||[]).map(rec => ({ ...rec, object_name: obj.name, object_slug: obj.slug, object_color: obj.color }));
         }
       }
-      const data = await tFetch(`/api/records/search?q=${encodeURIComponent(q)}&environment_id=${environment.id}&limit=8`).then(r=>r.json());
+      const data = await tFetch(`/api/records/search?q=${encodeURIComponent(q)}&environment_id=${environment.id}&limit=8`);
       return Array.isArray(data) ? data : [];
     } catch { return []; }
   };
@@ -3170,7 +3170,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      }).then(r => r.json());
+      });
       // Attach object metadata to each result for display
       return {
         results: (data.results || []).map(r => ({ ...r, object_name: obj?.name || slug, object_slug: slug, object_color: obj?.color })),
@@ -3581,7 +3581,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if (offerActionData) setPendingOfferAction(offerActionData);
       if (todayFlag) {
         tFetch(`/api/interviews?environment_id=${environment?.id}`)
-          .then(r => r.json()).then(data => {
+          .then(data => {
             const today = new Date().toISOString().slice(0,10);
             const todays = (Array.isArray(data) ? data : data.interviews || [])
               .filter(i => i.date === today).sort((a,b) => (a.time||'').localeCompare(b.time||''));
@@ -3994,7 +3994,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           current_title:parsedPerson.current_title||'',location:parsedPerson.location||'',
           skills:parsedPerson.skills||[],linkedin:parsedPerson.linkedin||'',
           years_experience:parsedPerson.years_experience||0,status:'Active',
-        },created_by:'Copilot'})}).then(r=>r.json());
+        },created_by:'Copilot'})});
+      if (rec?.error) throw new Error(rec.error);
       const name = `${parsedPerson.first_name||''} ${parsedPerson.last_name||''}`.trim();
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${name}** created`,ts:new Date(),createdRecord:{id:rec.id,name,objectName:peopleObj.name,objectColor:peopleObj.color||"#3b5bdb",objectSlug:peopleObj.slug,sub:parsedPerson.current_title||parsedPerson.email||""}}]);
       window.dispatchEvent(new CustomEvent("vercentic:recordCreated", { detail: { objectId: peopleObj.id, objectSlug: peopleObj.slug, recordId: rec.id } }));
@@ -4019,7 +4020,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           employment_type:parsedJob.employment_type||'',salary_min:parsedJob.salary_min||0,
           salary_max:parsedJob.salary_max||0,description:parsedJob.description||'',
           requirements:parsedJob.requirements||'',skills:parsedJob.skills||[],status:'Open',
-        },created_by:'Copilot'})}).then(r=>r.json());
+        },created_by:'Copilot'})});
+      if (rec2?.error) throw new Error(rec2.error);
       setMessages(m=>[...m,{role:'assistant',content:`**Done** — **${parsedJob.job_title}** created`,ts:new Date(),createdRecord:{id:rec2.id,name:parsedJob.job_title,objectName:jobObj.name,objectColor:jobObj.color||"#0ca678",objectSlug:jobObj.slug,sub:parsedJob.department||parsedJob.location||""}}]);
       window.dispatchEvent(new CustomEvent("vercentic:recordCreated", { detail: { objectId: jobObj.id, objectSlug: jobObj.slug, recordId: rec2.id } }));
       setParsedJob(null);
@@ -4541,7 +4543,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         ts: new Date() }]);
       if (currentRecord) {
         tFetch(`/api/workflows/people-links?person_record_id=${currentRecord.id}`)
-          .then(r => r.json()).then(d => setPipelineLinks(Array.isArray(d) ? d : []));
+          .then(d => setPipelineLinks(Array.isArray(d) ? d : []));
       }
       setPendingMoveStage(null);
     } catch(err) {
@@ -4565,7 +4567,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           to: pendingComms.to, subject: pendingComms.subject, body: pendingComms.body,
           from_label: 'Copilot', created_by: 'Copilot',
         }),
-      }).then(r => r.json());
+      });
+      if (item?.error) throw new Error(item.error);
       const simulated = item.simulated || item.status === 'simulated';
       setMessages(m => [...m, { role:'assistant',
         content: simulated

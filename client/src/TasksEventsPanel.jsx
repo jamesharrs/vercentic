@@ -363,8 +363,7 @@ function TaskRow({ task, onRefresh }) {
     fd.append('file_type_id',   config.file_type_id   || '');
     fd.append('file_type_name', config.file_type_name  || 'Upload');
     fd.append('uploaded_by',    'task_completion');
-    const r = await tFetch('/api/attachments/upload', { method:'POST', body:fd });
-    const att = await r.json();
+    const att = await tFetch('/api/attachments/upload', { method:'POST', body:fd });
     await complete({ file_name:file.name, attachment_id:att?.id, uploaded_at:new Date().toISOString() });
   };
 

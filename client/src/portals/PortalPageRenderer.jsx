@@ -3169,6 +3169,73 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 }
 
 // ── Portal Copilot (inline, reads portal.copilot config) ─────────────────────
+
+// Shared pill/chip editor for freeform, list-shaped field values — skills
+// above all, but usable for any similar open-ended tag list. Used by both
+// ApplicationConfirmCard's and TalentCommunityCard's renderField below.
+// Unlike those two functions (deliberately kept as separate copies so one
+// form can never regress the other), this is a small, generic, self-
+// contained UI widget with no business logic of its own, so sharing it
+// carries none of that same risk.
+//
+// Accepts either a real array (the normal shape once a value has gone
+// through this editor, and how CV-parsed skills already arrive) or a
+// comma-separated string (a plain-text value typed/pasted before this
+// editor existed, or forwarded as one long string) and normalises either
+// into pills. Typing a comma — or pasting a whole "React, Node, TypeScript"
+// list — splits straight into separate chips without a separate keypress
+// per item; Enter commits whatever's currently typed as one more chip.
+const PillListEditor = ({ value, onChange, pr, ff, placeholder }) => {
+  const arr = Array.isArray(value) ? value
+    : (typeof value === 'string' && value.trim() ? value.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const [draft, setDraft] = useState('');
+
+  const commit = (raw) => {
+    const parts = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return;
+    const next = [...arr];
+    parts.forEach(p => { if (!next.some(x => x.toLowerCase() === p.toLowerCase())) next.push(p); });
+    onChange(next);
+    setDraft('');
+  };
+
+  return (
+    <div>
+      {arr.length > 0 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:6 }}>
+          {arr.map((s, i) => (
+            <span key={`${s}-${i}`} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 4px 3px 9px', borderRadius:99,
+              fontSize:11, fontWeight:600, background:`${pr}12`, color:pr, border:`1px solid ${pr}30` }}>
+              {s}
+              <button type="button" onClick={() => onChange(arr.filter((_, j) => j !== i))}
+                style={{ background:'none', border:'none', cursor:'pointer', color:pr, display:'flex', alignItems:'center', padding:2, opacity:.7, flexShrink:0 }}
+                onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=.7}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        autoComplete="off"
+        type="text"
+        value={draft}
+        onChange={e => {
+          if (e.target.value.includes(',')) { commit(e.target.value); return; }
+          setDraft(e.target.value);
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(draft); }
+          else if (e.key === 'Backspace' && !draft && arr.length) onChange(arr.slice(0, -1));
+        }}
+        placeholder={placeholder || (arr.length ? 'Add another…' : 'Type a skill and press Enter…')}
+        style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #E5E7EB',
+          fontSize:12, fontFamily:ff, outline:'none', boxSizing:'border-box' }}
+      />
+    </div>
+  );
+};
+
 // ─── Editable, prefillable application-confirmation card ──────────────────────
 // Rendered inline in the copilot transcript whenever we have a candidate's
 // details to confirm — either parsed from an uploaded CV or collected by the
@@ -3204,8 +3271,54 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
     job_id:     data.job_id    || '',
     job_title:  data.job_title || '',
   });
-  const [status, setStatus] = useState('idle'); // idle | submitting | done | error
+  const [status, setStatus] = useState('idle'); // idle | submitting | done | error | verify | verifying
   const [errMsg, setErrMsg] = useState('');
+  // Populated when /apply comes back with error:'verification_required' —
+  // the candidate is editing an application submitted outside the admin-
+  // configured edit window and needs to confirm a one-time emailed code
+  // before the edit is accepted.
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyErr, setVerifyErr] = useState('');
+  const [resendState, setResendState] = useState('idle'); // idle | sending | sent
+
+  const requestEditCode = async () => {
+    setResendState('sending');
+    try {
+      await fetch(`${API_ORIGIN}/api/portal-copilot/request-edit-code`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portal_id: portalId, email: fields.email, job_id: fields.job_id }),
+      });
+    } catch { /* the code may still have been queued server-side */ }
+    setResendState('sent');
+  };
+
+  const verifyAndRetry = async () => {
+    if (!verifyCode.trim()) return;
+    setStatus('verifying'); setVerifyErr('');
+    try {
+      const vRes = await fetch(`${API_ORIGIN}/api/portal-copilot/verify-edit-code`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portal_id: portalId, email: fields.email, job_id: fields.job_id, code: verifyCode.trim() }),
+      }).then(r => r.json());
+      if (vRes?.error) {
+        setVerifyErr(vRes.message || 'That code is incorrect.');
+        setStatus('verify');
+        return;
+      }
+      // Verified — the server just re-anchored the application's edit
+      // window to now, so retrying the exact same submit will proceed as a
+      // normal in-window edit this time.
+      const res = await onSubmit(fields);
+      if (res?.error) {
+        setStatus('error'); setErrMsg(res.message || res.error);
+        return;
+      }
+      setStatus('done');
+    } catch {
+      setVerifyErr('Something went wrong — please try again.');
+      setStatus('verify');
+    }
+  };
 
   // Pull the admin-configured "fields to collect" for this portal's chatbot
   // application flow (Portal Settings → Flows → Chatbot → Fields to collect
@@ -3250,15 +3363,36 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
   // same type-switch TalentCommunityCard's renderField uses below, kept as
   // its own local copy here (rather than a shared helper) so this card can
   // never regress the already-working Talent Community form.
+  //
+  // autoComplete="off" everywhere: this form's whole purpose is to render
+  // WHATEVER we just parsed from the candidate's CV (or from conversation)
+  // as the starting values — but a plain `<input type="email">`/`type="text">`
+  // is exactly what Chrome's profile-autofill targets. Without this, the
+  // browser can silently overwrite a correctly-prefilled "Sarah Mitchell /
+  // sarah@..." with the *device owner's own saved autofill profile* the
+  // moment the field mounts or is focused — producing a submitted
+  // application under the wrong identity despite the form having shown the
+  // right data for an instant. `name` is deliberately left unset (rather
+  // than autoComplete alone) since Chrome's newer heuristics can still
+  // match on name/id even with autoComplete="off".
   const renderField = (fc) => {
-    const val = fields[fc.api_key] ?? (fc.field_type === 'multi_select' ? [] : '');
+    const val = fields[fc.api_key] ?? ((fc.field_type === 'multi_select' || fc.field_type === 'skills' || fc.api_key === 'skills') ? [] : '');
     if (fc.field_type === 'select' && Array.isArray(fc.options)) {
       return (
-        <select style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
+        <select autoComplete="off" style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
           <option value="">Select…</option>
           {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       );
+    }
+    // Skills — and anything else configured as this dedicated field_type —
+    // as removable/addable pills rather than one raw comma-separated line.
+    // Checked ahead of the generic multi_select case below since a skills
+    // field typically has no fixed `options` list (it's an open-ended tag
+    // set, e.g. via ESCO search in the main app), so it wouldn't match that
+    // branch's `Array.isArray(fc.options)` guard anyway.
+    if (fc.field_type === 'skills' || fc.api_key === 'skills') {
+      return <PillListEditor value={val} onChange={v => set(fc.api_key, v)} pr={pr} ff={ff}/>;
     }
     if (fc.field_type === 'multi_select' && Array.isArray(fc.options)) {
       const arr = Array.isArray(val) ? val : [];
@@ -3278,7 +3412,7 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
       );
     }
     if (fc.field_type === 'textarea' || fc.field_type === 'long_text') {
-      return <textarea style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+      return <textarea autoComplete="off" style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
     }
     if (fc.field_type === 'boolean') {
       return (
@@ -3289,10 +3423,19 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
       );
     }
     if (fc.field_type === 'date') {
-      return <input style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
+      return <input autoComplete="off" style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
     }
     const type = fc.field_type === 'email' ? 'email' : fc.field_type === 'phone' ? 'tel' : fc.field_type === 'number' ? 'number' : 'text';
-    return <input style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    // Any plain-text field whose current value already runs long (a CV-
+    // parsed summary/bio forwarded into a configured field, a candidate who
+    // just writes a lot) gets a paragraph-sized textarea instead of a
+    // single-line input that would hide most of what they typed — matches
+    // the dedicated textarea/long_text case above, just triggered by actual
+    // content length rather than the field's declared type.
+    if (type === 'text' && typeof val === 'string' && val.length > 60) {
+      return <textarea autoComplete="off" style={{ ...inputStyle, minHeight:72, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    }
+    return <input autoComplete="off" style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
   };
 
   if (status === 'done') {
@@ -3334,7 +3477,7 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
 
       <div style={{ marginBottom:10 }}>
         <div style={labelStyle}>Message (optional)</div>
-        <textarea style={{ ...inputStyle, resize:'vertical', minHeight:50, fontFamily:ff }} value={fields.cover_note} onChange={e=>set('cover_note', e.target.value)} placeholder="A short note about your interest…"/>
+        <textarea autoComplete="off" style={{ ...inputStyle, resize:'vertical', minHeight:50, fontFamily:ff }} value={fields.cover_note} onChange={e=>set('cover_note', e.target.value)} placeholder="A short note about your interest…"/>
       </div>
       {cvFileName && (
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'6px 10px', borderRadius:8, background:'white', border:'1px solid #E5E7EB' }}>
@@ -3345,22 +3488,63 @@ const ApplicationConfirmCard = ({ data, cvFileName, pr, ff, onSubmit, portalId }
       {status === 'error' && (
         <div style={{ fontSize:11.5, color:'#DC2626', marginBottom:8 }}>{errMsg || 'Something went wrong — please try again.'}</div>
       )}
-      <button
-        disabled={!canSubmit || status === 'submitting'}
-        onClick={async () => {
-          setStatus('submitting'); setErrMsg('');
-          try {
-            const res = await onSubmit(fields);
-            if (res?.error) { setStatus('error'); setErrMsg(res.error); return; }
-            setStatus('done');
-          } catch {
-            setStatus('error'); setErrMsg('Something went wrong — please try again.');
-          }
-        }}
-        style={{ width:'100%', padding:'9px', borderRadius:8, border:'none', background: canSubmit ? pr : '#D1D5DB',
-          color:'white', fontSize:12.5, fontWeight:700, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily:ff }}>
-        {status === 'submitting' ? 'Submitting…' : 'Submit Application'}
-      </button>
+      {status === 'verify' || status === 'verifying' ? (
+        <div style={{ padding:'12px', borderRadius:10, background:'#FFFBEB', border:'1.5px solid #FDE68A' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#92400E', marginBottom:4 }}>Check your email</div>
+          <div style={{ fontSize:11.5, color:'#78350F', marginBottom:10, lineHeight:1.4 }}>
+            It's been a while since you applied — we've emailed a 6-digit code to <b>{fields.email}</b> to confirm it's you before updating your application.
+          </div>
+          <input
+            autoComplete="off" inputMode="numeric" maxLength={6}
+            value={verifyCode}
+            onChange={e => setVerifyCode(e.target.value.replace(/\D/g,''))}
+            placeholder="000000"
+            style={{ ...inputStyle, textAlign:'center', letterSpacing:4, fontSize:16, fontWeight:700, marginBottom:8 }}
+          />
+          {verifyErr && <div style={{ fontSize:11.5, color:'#DC2626', marginBottom:8 }}>{verifyErr}</div>}
+          <button
+            disabled={verifyCode.trim().length < 6 || status === 'verifying'}
+            onClick={verifyAndRetry}
+            style={{ width:'100%', padding:'9px', borderRadius:8, border:'none', marginBottom:8,
+              background: verifyCode.trim().length >= 6 ? pr : '#D1D5DB',
+              color:'white', fontSize:12.5, fontWeight:700,
+              cursor: verifyCode.trim().length >= 6 ? 'pointer' : 'not-allowed', fontFamily:ff }}>
+            {status === 'verifying' ? 'Verifying…' : 'Verify & Update Application'}
+          </button>
+          <button
+            disabled={resendState === 'sending'}
+            onClick={requestEditCode}
+            style={{ width:'100%', padding:'6px', borderRadius:8, border:'none', background:'transparent',
+              color:'#92400E', fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:ff, textDecoration:'underline' }}>
+            {resendState === 'sending' ? 'Sending…' : resendState === 'sent' ? 'Code resent — check your email' : "Didn't get a code? Resend"}
+          </button>
+        </div>
+      ) : (
+        <button
+          disabled={!canSubmit || status === 'submitting'}
+          onClick={async () => {
+            setStatus('submitting'); setErrMsg('');
+            try {
+              const res = await onSubmit(fields);
+              if (res?.error === 'verification_required') {
+                // Kick off the email send immediately, then drop into the
+                // code-entry UI — the frontend owns triggering the send;
+                // /apply itself only ever gates and refuses, never mails.
+                setStatus('verify');
+                requestEditCode();
+                return;
+              }
+              if (res?.error) { setStatus('error'); setErrMsg(res.message || res.error); return; }
+              setStatus('done');
+            } catch {
+              setStatus('error'); setErrMsg('Something went wrong — please try again.');
+            }
+          }}
+          style={{ width:'100%', padding:'9px', borderRadius:8, border:'none', background: canSubmit ? pr : '#D1D5DB',
+            color:'white', fontSize:12.5, fontWeight:700, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily:ff }}>
+          {status === 'submitting' ? 'Submitting…' : 'Submit Application'}
+        </button>
+      )}
     </div>
   );
 };
@@ -3434,15 +3618,28 @@ const TalentCommunityCard = ({ prefill, pr, ff, onSubmit, portalId }) => {
   }
 
   // Renders one input for a field, matched to its configured type.
+  // autoComplete="off" throughout — see the matching comment on
+  // ApplicationConfirmCard's renderField above: without it, browser
+  // profile-autofill can silently replace a correctly CV-prefilled name/
+  // email with the device owner's own saved details.
   const renderField = (fc) => {
-    const val = fields[fc.api_key] ?? (fc.field_type === 'multi_select' ? [] : '');
+    const val = fields[fc.api_key] ?? ((fc.field_type === 'multi_select' || fc.field_type === 'skills' || fc.api_key === 'skills') ? [] : '');
     if (fc.field_type === 'select' && Array.isArray(fc.options)) {
       return (
-        <select style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
+        <select autoComplete="off" style={inputStyle} value={val} onChange={e => set(fc.api_key, e.target.value)}>
           <option value="">Select…</option>
           {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       );
+    }
+    // Skills — and anything else configured as this dedicated field_type —
+    // as removable/addable pills rather than one raw comma-separated line.
+    // Checked ahead of the generic multi_select case below since a skills
+    // field typically has no fixed `options` list (it's an open-ended tag
+    // set, e.g. via ESCO search in the main app), so it wouldn't match that
+    // branch's `Array.isArray(fc.options)` guard anyway.
+    if (fc.field_type === 'skills' || fc.api_key === 'skills') {
+      return <PillListEditor value={val} onChange={v => set(fc.api_key, v)} pr={pr} ff={ff}/>;
     }
     if (fc.field_type === 'multi_select' && Array.isArray(fc.options)) {
       const arr = Array.isArray(val) ? val : [];
@@ -3462,7 +3659,7 @@ const TalentCommunityCard = ({ prefill, pr, ff, onSubmit, portalId }) => {
       );
     }
     if (fc.field_type === 'textarea' || fc.field_type === 'long_text') {
-      return <textarea style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+      return <textarea autoComplete="off" style={{ ...inputStyle, minHeight:56, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
     }
     if (fc.field_type === 'boolean') {
       return (
@@ -3473,10 +3670,19 @@ const TalentCommunityCard = ({ prefill, pr, ff, onSubmit, portalId }) => {
       );
     }
     if (fc.field_type === 'date') {
-      return <input style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
+      return <input autoComplete="off" style={inputStyle} type="date" value={val} onChange={e => set(fc.api_key, e.target.value)}/>;
     }
     const type = fc.field_type === 'email' ? 'email' : fc.field_type === 'phone' ? 'tel' : fc.field_type === 'number' ? 'number' : 'text';
-    return <input style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    // Any plain-text field whose current value already runs long (a CV-
+    // parsed summary/bio forwarded into a configured field, a candidate who
+    // just writes a lot) gets a paragraph-sized textarea instead of a
+    // single-line input that would hide most of what they typed — matches
+    // the dedicated textarea/long_text case above, just triggered by actual
+    // content length rather than the field's declared type.
+    if (type === 'text' && typeof val === 'string' && val.length > 60) {
+      return <textarea autoComplete="off" style={{ ...inputStyle, minHeight:72, resize:'vertical' }} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
+    }
+    return <input autoComplete="off" style={inputStyle} type={type} value={val} onChange={e => set(fc.api_key, e.target.value)} placeholder={fc.name}/>;
   };
 
   // Keep the familiar compact 2-column first/last name row when both are
@@ -3881,6 +4087,11 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
 
   const btnStyle = { padding:'10px 20px', borderRadius:br, background:pr, color:'white', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:ff };
 
+  // True while an application or talent-community form is actually rendered
+  // in the thread — drives the wider panel below (more room for real field
+  // input, not just chat bubbles).
+  const inApplyFlow = msgs.some(m => m.application || m.talentCta);
+
   return (
     <>
       {/* Floating trigger button */}
@@ -3905,7 +4116,16 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          style={{ position:'fixed', bottom:16, right:16, zIndex:9000, width: Math.min(380, window.innerWidth - 32),
+          style={{ position:'fixed', bottom:16, right:16, zIndex:9000,
+          // Base width is 380px, same as always — but once an application or
+          // talent-community form is actually on screen (m.application /
+          // m.talentCta on any rendered message), the candidate is filling in
+          // real fields (name, skills, notes…) rather than just reading chat
+          // bubbles, so the panel grows ~50% wider (380 → 570) to give those
+          // inputs breathing room. Still clamped to the viewport so it never
+          // overflows on a narrow screen.
+          width: Math.min(inApplyFlow ? 570 : 380, window.innerWidth - 32),
+          transition:'width .25s ease',
           boxShadow:'0 8px 40px rgba(0,0,0,.2)', borderRadius:16, overflow:'hidden',
           display:'flex', flexDirection:'column', background:'white', fontFamily:ff,
           height: Math.min(cop.widget_height || 580, window.innerHeight - 40) }}>

@@ -1362,7 +1362,6 @@ export default function FieldModal({ field, selEnv, selObj, onSaved, onClose }) 
   useEffect(() => {
     if (!isEdit || !field?.id || !selObj?.id) return;
     tFetch(`/api/field-visibility?object_id=${selObj.id}`)
-      .then(r=>r.json())
       .then(rules => {
         const vis = {};
         (Array.isArray(rules) ? rules : []).forEach(r => {

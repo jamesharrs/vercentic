@@ -305,7 +305,7 @@ export default function TaskGroupsSettings({ environment }) {
     if (!environment?.id) return;
     setLoading(true);
     tFetch(`/api/task-groups/templates?environment_id=${environment.id}`)
-      .then(r=>r.json()).then(d=>{ setTemplates(Array.isArray(d)?d:[]); setLoading(false); })
+      .then(d=>{ setTemplates(Array.isArray(d)?d:[]); setLoading(false); })
       .catch(()=>setLoading(false));
   }, [environment?.id]);
 

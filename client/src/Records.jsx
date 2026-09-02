@@ -840,6 +840,30 @@ const ExpandableText = ({ text, children, lines = 2, size = 13 }) => {
   );
 };
 
+// Normalizes a multi/skills-type field value into a real array for
+// rendering. Values SHOULD already be arrays by the time they reach here,
+// but a value can land as a literal JSON-array string instead — e.g. a
+// career-site submission whose backend coercion didn't recognize this
+// field's type (skills is its own dedicated field_type, not multi_select,
+// and was previously missed) stores the raw '["React","Node.js"]' text as
+// one string. Without this, that string falls into the `[value]` branch
+// below and renders as a single giant pill containing the whole bracketed
+// list instead of individual chips. Parsing it here means already-corrupted
+// stored values still display correctly, on top of the write-path fix.
+const toChipArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (t.startsWith("[") && t.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(t);
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* not actually JSON — treat as a single plain value below */ }
+    }
+  }
+  return value ? [value] : [];
+};
+
 // Field types that hold free-flowing prose and should wrap rather than truncate
 const LONG_TEXT_TYPES = new Set(["textarea", "long_text", "rich_text"]);
 const LONG_TEXT_MIN   = 90; // chars — below this a plain single-line render is fine
@@ -980,14 +1004,14 @@ const FieldValue = ({ field, value, allFieldValues = {}, clamp = null }) => {
     case "date":    return <span style={{fontSize:13}}>{new Date(value).toLocaleDateString()}</span>;
     case "dataset": {
       // Dataset values stored as string or array of strings
-      const arr = Array.isArray(value) ? value : (value ? [value] : []);
+      const arr = toChipArray(value);
       if (!arr.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
       return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {arr.map(v=><FilterPill key={v} label={v} color={C.accent} fieldKey={field.api_key} fieldName={field.name}/>)}
       </div>;
     }
     case "skills": {
-      const arr = Array.isArray(value) ? value : (value ? [value] : []);
+      const arr = toChipArray(value);
       if (!arr.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
       return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {arr.map((v,i)=>{
@@ -1616,7 +1640,7 @@ const DatasetPicker = ({ field, value, onChange }) => {
   const [dropRect, setDropRect] = useState(null);
   const ref = useRef(null);
   const isMulti = field.dataset_multi !== false && field.dataset_multi !== "false";
-  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  const selected = toChipArray(value);
 
   useEffect(() => {
     if (!field.dataset_id) return;
@@ -1727,7 +1751,10 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   const [dropdownRect, setDropdownRect] = useState(null);
   const debounceRef = useRef(null);
   const isMulti = field.skills_multi !== false && field.skills_multi !== "false";
-  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  // toChipArray also recovers an already-corrupted stored value (a literal
+  // '["React","Node.js"]' string from before the write-path fix) so editing
+  // a legacy record shows real chips instead of one giant unparseable pill.
+  const selected = toChipArray(value);
 
   // Close on outside click — also catches clicks inside the portal
   useEffect(() => {
@@ -1743,7 +1770,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   // Load categories on mount
   useEffect(() => {
     tFetch("/api/enterprise/skills/search/categories")
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); })
+      .then(d => { if (Array.isArray(d)) setCategories(d); })
       .catch(() => {});
   }, []);
 
@@ -1755,8 +1782,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
       try {
         const params = new URLSearchParams({ q: q || "", limit: "30" });
         if (cat) params.set("category", cat);
-        const res = await tFetch(`/api/enterprise/skills/search?${params}`);
-        const data = await res.json();
+        const data = await tFetch(`/api/enterprise/skills/search?${params}`);
         setResults(data.results || []);
       } catch { setResults([]); }
       setLoading(false);
@@ -2798,7 +2824,10 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
 };
 
 /* ─── Column Picker Dropdown ───────────────────────────────────────────────── */
-const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleObj = false }) => {
+const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleObj = false, screeningJobs = [] }) => {
+  const [expandedScreeningJobId, setExpandedScreeningJobId] = useState(null);
+  const [screeningJobQuestions, setScreeningJobQuestions] = useState({}); // jobId -> rules[]
+  const [loadingScreeningJobId, setLoadingScreeningJobId] = useState(null);
   const ref = useRef(null);
   const searchRef = useRef(null);
   const [search, setSearch] = useState("");
@@ -2917,6 +2946,82 @@ const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleO
           </>
         );
       })()}
+      {/* Screening Responses — dynamic per-job, per-question columns (People only) */}
+      {isPeopleObj && screeningJobs?.length > 0 && (
+        <>
+          <div style={{ padding:"6px 14px 4px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>Screening Responses</div>
+          {screeningJobs.map(job => {
+            const isExpanded = expandedScreeningJobId === job.id;
+            const isLoading  = loadingScreeningJobId === job.id;
+            const rules      = screeningJobQuestions[job.id];
+            const visibleCount = visibleIds.filter(id => id.startsWith(`screening|${job.id}|`)).length;
+            return (
+              <div key={job.id}>
+                <div
+                  onClick={async () => {
+                    if (isExpanded) { setExpandedScreeningJobId(null); return; }
+                    setExpandedScreeningJobId(job.id);
+                    if (!screeningJobQuestions[job.id] && loadingScreeningJobId !== job.id) {
+                      setLoadingScreeningJobId(job.id);
+                      try {
+                        const data = await api.get(`/screening/job/${job.id}`);
+                        setScreeningJobQuestions(prev => ({ ...prev, [job.id]: Array.isArray(data?.rules) ? data.rules : [] }));
+                      } catch (e) {
+                        setScreeningJobQuestions(prev => ({ ...prev, [job.id]: [] }));
+                      } finally {
+                        setLoadingScreeningJobId(null);
+                      }
+                    }
+                  }}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 14px", cursor:"pointer", transition:"background .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background="#f8f9fc"}
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                  <span style={{ display:"flex", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition:"transform .15s", flexShrink:0 }}>
+                    <Ic n="chevronDown" s={11} c={C.text3}/>
+                  </span>
+                  <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:500, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{job.title}</span>
+                  {visibleCount > 0 && (
+                    <span style={{ fontSize:10, fontWeight:700, color:"white", background:C.accent, borderRadius:99, padding:"1px 6px", flexShrink:0 }}>{visibleCount}</span>
+                  )}
+                </div>
+                {isExpanded && (
+                  <div style={{ paddingLeft:14 }}>
+                    {isLoading && (
+                      <div style={{ padding:"6px 14px", fontSize:12, color:C.text3 }}>Loading questions…</div>
+                    )}
+                    {!isLoading && rules && rules.length === 0 && (
+                      <div style={{ padding:"6px 14px", fontSize:12, color:C.text3 }}>No screening questions for this job</div>
+                    )}
+                    {!isLoading && rules && rules.map(rule => {
+                      const colId = makeScreeningColId(job.id, rule.id);
+                      const on = visibleIds.includes(colId);
+                      const typeColor = rule.rule_type === 'knockout' ? '#e03131' : rule.rule_type === 'required' ? '#f59f00' : rule.rule_type === 'preferred' ? '#0ca678' : C.text3;
+                      return (
+                        <div key={rule.id} onClick={() => toggleField(colId)}
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 14px", cursor:"pointer",
+                            background: on ? C.accentLight : "transparent", transition:"background .1s" }}
+                          onMouseEnter={e => !on && (e.currentTarget.style.background="#f8f9fc")}
+                          onMouseLeave={e => !on && (e.currentTarget.style.background="transparent")}>
+                          <div style={{ width:14, height:14, borderRadius:4, border:`2px solid ${on?C.accent:C.border}`,
+                            background: on ? C.accent : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            {on && <Ic n="check" s={9} c="white"/>}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12, fontWeight: on?600:400, color: on?C.accent:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{rule.question_text || 'Question'}</div>
+                          </div>
+                          {rule.rule_type && (
+                            <span style={{ fontSize:9, fontWeight:700, color:typeColor, textTransform:"uppercase", flexShrink:0 }}>{rule.rule_type}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
       {q && filteredFields.length === 0 && filteredSystem.length === 0 && (
         <div style={{ padding:"16px 14px", textAlign:"center", fontSize:12, color:C.text3 }}>No columns match "{search}"</div>
       )}
@@ -4986,6 +5091,67 @@ function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
   return '—';
 }
 
+// ── Screening response columns (dynamic, per-job per-question) ──────────────
+// Composite id format: `screening|<jobId>|<ruleId>` — mirrors the existing
+// `linked|<objectId>|<fieldId>` convention used by the Advanced Filter panel.
+function parseScreeningColId(id) {
+  if (typeof id !== 'string' || !id.startsWith('screening|')) return null;
+  const parts = id.split('|');
+  if (parts.length !== 3) return null;
+  return { jobId: parts[1], ruleId: parts[2] };
+}
+
+function makeScreeningColId(jobId, ruleId) {
+  return `screening|${jobId}|${ruleId}`;
+}
+
+// Builds a synthetic field-descriptor for one screening question, consumed by
+// TableView's listFields resolution and its header/cell rendering.
+function buildScreeningFieldDescriptor(jobId, jobTitle, rule) {
+  return {
+    id: makeScreeningColId(jobId, rule.id),
+    name: rule.question_text || 'Question',
+    api_key: null,
+    isSystem: false,
+    isScreening: true,
+    jobId,
+    jobTitle: jobTitle || 'Job',
+    ruleId: rule.id,
+    rule_type: rule.rule_type,
+    question_type: rule.question_type,
+  };
+}
+
+// Renders one candidate's answer to one screening question inside a table cell.
+function ScreeningAnswerCell({ record, jobId, ruleId, screeningResponses }) {
+  const respMap = screeningResponses?.[jobId];
+  const resp = respMap?.[record.id];
+  if (!resp) return <span style={{ fontSize:12, color:'#c1c5cc' }}>—</span>;
+  const result = resp.results?.[ruleId];
+  const rawAnswer = resp.answers?.[ruleId];
+  const answer = result?.answer !== undefined ? result.answer : rawAnswer;
+  if (answer === undefined || answer === null || answer === '') {
+    return <span style={{ fontSize:12, color:'#c1c5cc' }}>—</span>;
+  }
+  const displayVal = Array.isArray(answer) ? answer.join(', ') : String(answer);
+  const passed = result?.passed;
+  const ruleType = result?.rule_type;
+  const showIndicator = (ruleType === 'knockout' || ruleType === 'preferred') && passed !== undefined && passed !== null;
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#1a1a2e' }}>
+      {showIndicator && (
+        <span style={{ fontSize:11, fontWeight:700, color: passed ? '#0ca678' : '#e03131', flexShrink:0 }}>
+          {passed ? '✓' : '✕'}
+        </span>
+      )}
+      <span
+        style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:220 }}
+        title={displayVal}
+      >{displayVal}</span>
+    </div>
+  );
+}
+
 
 // ── LinkedJobsPill — renders all linked jobs for a person in the table ───────
 function LinkedJobsPill({ jobs, mode, onNavigate }) {
@@ -5226,12 +5392,22 @@ const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
 
 // ── Enhanced TableView ─────────────────────────────────────────────────────────
 const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, linkedPeopleCounts, onLinkedCountClick, dupMap = {},
-  onStageChange, onStatusUpdate, showEngagement, engagementScores, isPeopleObj }) => {
+  onStageChange, onStatusUpdate, showEngagement, engagementScores, isPeopleObj, screeningMeta, screeningResponses, screeningJobTitles }) => {
   const [hoveredRow, setHoveredRow] = useState(null);
   const statusField = fields.find(f => f.api_key === "status");
   const statusOptions = statusField?.options || [];
   const listFields = visibleFieldIds
-    ? visibleFieldIds.map(id => fields.find(f => f.id === id) || SYSTEM_COLS.find(s => s.id === id)).filter(Boolean)
+    ? visibleFieldIds.map(id => {
+        const parsedScreening = parseScreeningColId(id);
+        if (parsedScreening) {
+          const meta = screeningMeta?.[parsedScreening.jobId];
+          const rule = meta?.rules?.[parsedScreening.ruleId];
+          if (!rule) return null;
+          const jobTitle = screeningJobTitles?.[parsedScreening.jobId];
+          return buildScreeningFieldDescriptor(parsedScreening.jobId, jobTitle, rule);
+        }
+        return fields.find(f => f.id === id) || SYSTEM_COLS.find(s => s.id === id);
+      }).filter(Boolean)
     : fields.filter(f => f.show_in_list);
 
   // Apply column order — only use saved order if it covers all visible fields
@@ -5291,7 +5467,8 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
             <th style={{ width:36, padding:"10px 8px" }}/>
             {/* Field headers */}
             {orderedFields.map((f, fi) => {
-              const isSorted = sortBy === (f.isSystem ? f.apiKey : f.api_key);
+              const sortKey = f.isSystem ? f.apiKey : f.isScreening ? f.id : f.api_key;
+              const isSorted = sortBy === sortKey;
               const w = colWidths?.[f.id] || null;
               const isDragOver = dragOverIdx === fi;
               return (
@@ -5306,13 +5483,18 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                     background: isDragOver ? `${C.accent}08` : undefined,
                     ...(w ? { width:w, minWidth:w, maxWidth:w } : {}) }}>
                   <div style={{ display:"flex", alignItems:"center", gap:2, padding:"10px 12px 10px 14px", cursor:"pointer", whiteSpace:"nowrap" }}
-                    onClick={() => onSort?.(f.isSystem ? f.apiKey : f.api_key)}>
-                    <span style={{ fontSize:11, fontWeight:700, color: isSorted ? C.accent : C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{f.name}</span>
+                    onClick={() => onSort?.(sortKey)}
+                    title={f.isScreening ? `${f.jobTitle}: ${f.name}` : undefined}>
+                    {f.isScreening && <Ic n="clipboard" s={10} c={isSorted ? C.accent : "#c1c5cc"}/>}
+                    <span style={{ display:"flex", flexDirection:"column", gap:1 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color: isSorted ? C.accent : C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{f.name}</span>
+                      {f.isScreening && <span style={{ fontSize:9, fontWeight:600, color:"#9ca3af", textTransform:"none", letterSpacing:0 }}>{f.jobTitle}</span>}
+                    </span>
                     {isSorted
                       ? <Ic n={sortDir === 'asc' ? 'chevronUp' : 'chevronDown'} s={11} c={C.accent}/>
                       : <Ic n="chevronDown" s={10} c="#d1d5db"/>}
-                    {/* Column filter button */}
-                    {!f.isSystem && <button
+                    {/* Column filter button — screening columns aren't filterable yet */}
+                    {!f.isSystem && !f.isScreening && <button
                       onClick={e => { e.stopPropagation(); onColumnFilter?.(f, e.currentTarget.getBoundingClientRect()); }}
                       title={`Filter by ${f.name}`}
                       style={{ background:"none", border:"none", cursor:"pointer", padding:"1px 3px", borderRadius:4, opacity:0.5, display:"flex", marginLeft:1 }}
@@ -5352,10 +5534,12 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                 {orderedFields.map((f, fi) => {
                   const val = f.isSystem
                     ? getSystemValue(record, f.apiKey, linkedJobs)
+                    : f.isScreening
+                    ? undefined
                     : record.data?.[f.api_key];
                   const w = colWidths?.[f.id] || null;
                   // Prose columns wrap and clamp instead of truncating to one line
-                  const isProse = !f.isSystem && fi > 0 &&
+                  const isProse = !f.isSystem && !f.isScreening && fi > 0 &&
                     (LONG_TEXT_TYPES.has(f.field_type) || (typeof val === "string" && val.length > LONG_TEXT_MIN));
                   return (
                     <td key={f.id}
@@ -5366,11 +5550,15 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                           : { textOverflow:"ellipsis", whiteSpace:"nowrap", ...(w ? { maxWidth:w, width:w } : { maxWidth:220 }) }) }}
                       onClick={fi===0 ? () => onProfile(record) : undefined}>
                       {fi === 0
-                        ? <span style={{ fontWeight:700, color:"#4361EE" }}
-                            onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
-                            onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
-                            {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
-                          </span>
+                        ? (f.isScreening
+                            ? <ScreeningAnswerCell record={record} jobId={f.jobId} ruleId={f.ruleId} screeningResponses={screeningResponses}/>
+                            : <span style={{ fontWeight:700, color:"#4361EE" }}
+                                onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
+                                onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
+                                {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
+                              </span>)
+                        : f.isScreening
+                        ? <ScreeningAnswerCell record={record} jobId={f.jobId} ruleId={f.ruleId} screeningResponses={screeningResponses}/>
                         : (f.apiKey === '_linked_job' || f.apiKey === '_linked_all_jobs')
                           ? <LinkedJobsPill
                               jobs={linkedJobs?.[record.id]}
@@ -6733,9 +6921,9 @@ const JobQuestionsPanel = ({ record, environment }) => {
       let libraryIds = [];
       if (libraryQs.length) {
         const saved = await Promise.all(libraryQs.map(q =>
-          tFetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) }).then(r=>r.json())
+          tFetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) })
         ));
-        libraryIds = saved.map(q => q.id).filter(Boolean);
+        libraryIds = saved.map(q => q?.id).filter(Boolean);
       }
 
       // Assign library questions to the job
@@ -7220,8 +7408,8 @@ const CoordinationPanel = ({ record, environment }) => {
   const startNew = async () => {
     setStarting(true);
     try {
-      const r = await tFetch("/api/interview-coordinator/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({candidate_id:record.id,environment_id:environment?.id})}).then(r=>r.json());
-      if (r.ok) await load(); else window.__toast?.alert(r.error||"Failed");
+      const r = await tFetch("/api/interview-coordinator/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({candidate_id:record.id,environment_id:environment?.id})});
+      if (!r?.error) await load(); else window.__toast?.alert(r.error||"Failed");
     } catch(e){window.__toast?.alert(e.message);}
     setStarting(false);
   };
@@ -8159,163 +8347,6 @@ export const getDefaultPanelOrder = (objectName) => {
   ];
   // Default for other objects
   return ["tasks","comms","approvals","notes","attachments","forms","activity","agents","match"];
-};
-
-// ─── Forms Panel ─────────────────────────────────────────────────────────────
-const FormsPanel = ({ record, environment, objectSlug }) => {
-  const [forms,      setForms]      = useState([]);
-  const [subs,       setSubs]       = useState([]);
-  const [activeForm, setActiveForm] = useState(null);
-  const [filling,    setFilling]    = useState(false);
-  const [formData,   setFormData]   = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [expanded,   setExpanded]   = useState({});
-
-  const loadForms = useCallback(async () => {
-    if (!environment?.id) return;
-    const f = await api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`);
-    if (Array.isArray(f)) setForms(f);
-    const s = await api.get(`/forms/submissions/by-record/${record.id}?environment_id=${environment.id}`);
-    if (Array.isArray(s)) setSubs(s);
-  }, [record.id, environment?.id, objectSlug]);
-
-  useEffect(() => { loadForms(); }, [loadForms]);
-
-  const openForm = (form) => {
-    setActiveForm(form);
-    const init = {};
-    (form.fields||[]).forEach(f => { init[f.id || f.name] = ''; });
-    setFormData(init);
-    setFilling(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!activeForm) return;
-    setSubmitting(true);
-    const res = await tFetch(`/api/forms/${activeForm.id}/submissions`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ record_id:record.id, record_name:record.data?.first_name ? `${record.data.first_name} ${record.data.last_name||''}`.trim() : record.id, data: formData, environment_id: environment?.id, submitted_by:'Admin' }),
-    });
-    if (res.ok) { setFilling(false); setActiveForm(null); await loadForms(); }
-    setSubmitting(false);
-  };
-
-  const renderInput = (field) => {
-    const key = field.id || field.name;
-    const val = formData[key] ?? '';
-    const st  = { width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,color:C.text1,outline:'none',boxSizing:'border-box',background:'#f9fafb' };
-
-    if (field.field_type==='textarea')
-      return <textarea value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} rows={3} style={{...st,resize:'vertical'}}/>;
-    if (field.field_type==='select'||field.field_type==='multiselect')
-      return <select value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} style={st}>
-        <option value="">— select —</option>
-        {(field.options||[]).map(o=><option key={o} value={o}>{o}</option>)}
-      </select>;
-    if (field.field_type==='boolean')
-      return <div style={{display:'flex',gap:8}}>
-        {['Yes','No'].map(v=><button key={v} onClick={()=>setFormData(d=>({...d,[key]:v}))} style={{padding:'6px 16px',borderRadius:8,border:`1px solid ${val===v?C.accent:C.border}`,background:val===v?C.accentLight:'transparent',color:val===v?C.accent:C.text2,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:F}}>{v}</button>)}
-      </div>;
-    if (field.field_type==='rating')
-      return <div style={{display:'flex',gap:4}}>
-        {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setFormData(d=>({...d,[key]:n}))} style={{background:'none',border:'none',cursor:'pointer',fontSize:22,color:n<=(val||0)?C.amber:'#D1D5DB',padding:'0 2px'}}>★</button>)}
-      </div>;
-    if (field.field_type==='date')
-      return <input type="date" value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} style={st}/>;
-    if (field.field_type==='number'||field.field_type==='currency')
-      return <input type="number" value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} style={st}/>;
-    return <input type={field.field_type==='email'?'email':field.field_type==='url'?'url':'text'} value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} style={st}/>;
-  };
-
-  if (forms.length===0 && subs.length===0) return (
-    <div style={{textAlign:'center',padding:'28px 0',color:C.text3,fontSize:13}}>
-      <div style={{marginBottom:6}}>No forms configured for this record type.</div>
-      <div style={{fontSize:11}}>Go to Settings → Forms to create forms.</div>
-    </div>
-  );
-
-  return (
-    <div>
-      {/* Available forms to fill */}
-      {forms.length>0 && (
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Available Forms</div>
-          {forms.map(form=>(
-            <div key={form.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:'#f9fafb',marginBottom:6}}>
-              <div style={{width:30,height:30,borderRadius:8,background:`${form.color||C.accent}15`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <span style={{fontSize:14}}>📋</span>
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{form.name}</div>
-                {form.description&&<div style={{fontSize:11,color:C.text3}}>{form.description}</div>}
-              </div>
-              {form.is_confidential&&<span style={{fontSize:10,padding:'1px 5px',borderRadius:4,background:'#FEF2F2',color:C.red}}>🔒</span>}
-              <button onClick={()=>openForm(form)} style={{padding:'5px 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:C.accentLight,color:C.accent,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:F,flexShrink:0}}>Fill in</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Past submissions */}
-      {subs.length>0 && (
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Submissions ({subs.length})</div>
-          {subs.map(sub=>(
-            <div key={sub.id} style={{borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#f9fafb',cursor:'pointer'}} onClick={()=>setExpanded(e=>({...e,[sub.id]:!e[sub.id]}))}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{sub.form_name}</div>
-                  <div style={{fontSize:11,color:C.text3}}>By {sub.submitted_by} · {new Date(sub.submitted_at).toLocaleDateString()}</div>
-                </div>
-                <span style={{color:C.text3,fontSize:16}}>{expanded[sub.id]?'−':'+'}</span>
-              </div>
-              {expanded[sub.id] && (
-                <div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
-                  {Object.entries(sub.data||{}).map(([k,v])=>(
-                    <div key={k} style={{display:'flex',padding:'5px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                      <span style={{color:C.text3,width:140,flexShrink:0,fontWeight:500}}>{k}</span>
-                      <span style={{color:C.text1}}>{Array.isArray(v)?v.join(', '):String(v||'—')}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Fill-in Modal */}
-      {filling && activeForm && (
-        <div onMouseDown={e=>e.stopPropagation()} onClick={e=>e.target===e.currentTarget&&setFilling(false)}
-          style={{position:'fixed',inset:0,background:'rgba(15,23,41,.45)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
-          <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,.2)',overflow:'hidden',fontFamily:F}}>
-            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif"}}>{activeForm.name}</div>
-                {activeForm.description&&<div style={{fontSize:11,color:C.text3,marginTop:2}}>{activeForm.description}</div>}
-              </div>
-              <button onClick={()=>setFilling(false)} style={{background:'none',border:'none',cursor:'pointer',color:C.text3,fontSize:20}}>×</button>
-            </div>
-            <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
-              {(activeForm.fields||[]).map((field,i)=>(
-                <div key={field.id||i} style={{marginBottom:14}}>
-                  <label style={{fontSize:12,fontWeight:700,color:C.text2,display:'block',marginBottom:5}}>
-                    {field.name} {field.is_required&&<span style={{color:C.red}}>*</span>}
-                  </label>
-                  {field.help_text&&<div style={{fontSize:11,color:C.text3,marginBottom:4}}>{field.help_text}</div>}
-                  {renderInput(field)}
-                </div>
-              ))}
-            </div>
-            <div style={{padding:'12px 20px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}>
-              <button onClick={()=>setFilling(false)} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F,color:C.text2}}>Cancel</button>
-              <button onClick={handleSubmit} disabled={submitting} style={{padding:'8px 20px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F,opacity:submitting?0.5:1}}>{submitting?'Submitting…':'Submit'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 };
 
 // ─── Doc Extract Modal ────────────────────────────────────────────────────────
@@ -9854,7 +9885,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (objectName !== "Person") return;
     if (!record?.id || !environment?.id) return;
     tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
-      .then(r => r.json())
       .then(d => setLinkedJobRecords(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, [record?.id, environment?.id, objectName]);
@@ -10278,12 +10308,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       formData.append('uploaded_by',    'Admin');
       formData.append('environment_id', currentObject.environment_id || environment?.id || '');
       const res = await tFetch('/api/attachments/upload', { method:'POST', body: formData });
-      if (!res.ok) {
-        let errMsg = `Upload failed (${res.status})`;
-        try { const e = await res.json(); errMsg = e.error || errMsg; } catch {}
-        setUploadError(errMsg);
+      if (res?.error) {
+        setUploadError(res.error);
       } else {
-        const att = await res.json();
+        const att = res;
         load();
         if (ft?.parse_cv && ff.cv_parsing) {
           if (confirm(`"${ft.name}" file uploaded. Parse CV fields automatically?`)) {
@@ -12146,6 +12174,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const showEngagement = isPeopleObj && (visibleFieldIds || []).includes('__engagement');
   const [engagementScores,  setEngagementScores]  = useState({});
   const [loadingEngagement, setLoadingEngagement] = useState(false);
+  // ── Screening response columns ─────────────────────────────────────────────
+  // screeningMeta:      { [jobId]: { rules: { [ruleId]: rule } } }
+  // screeningResponses: { [jobId]: { [candidateRecordId]: responseRow } }
+  const [screeningMeta, setScreeningMeta]           = useState({});
+  const [screeningResponses, setScreeningResponses] = useState({});
+  const [loadingScreeningJobs, setLoadingScreeningJobs] = useState({}); // jobId -> true while fetching
   const [activeFilters, setActiveFilters]     = useState([]);
   const [aiFilter,      setAiFilter]          = useState(null);
   const [filterLogic, setFilterLogic]         = useState("AND");
@@ -12758,6 +12792,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             bv = engagementScores[b.id]?.score ?? -1;
             return sortDir === 'asc' ? av - bv : bv - av;
           }
+        } else if (sortBy.startsWith('screening|')) {
+          const parsedSort = parseScreeningColId(sortBy);
+          if (parsedSort) {
+            const aResp = screeningResponses?.[parsedSort.jobId]?.[a.id];
+            const bResp = screeningResponses?.[parsedSort.jobId]?.[b.id];
+            const aAns = aResp?.results?.[parsedSort.ruleId]?.answer ?? aResp?.answers?.[parsedSort.ruleId];
+            const bAns = bResp?.results?.[parsedSort.ruleId]?.answer ?? bResp?.answers?.[parsedSort.ruleId];
+            av = Array.isArray(aAns) ? aAns.join(', ') : (aAns ?? '');
+            bv = Array.isArray(bAns) ? bAns.join(', ') : (bAns ?? '');
+          } else { av = ''; bv = ''; }
         } else {
           av = a.data?.[sortBy] ?? ''; bv = b.data?.[sortBy] ?? '';
         }
@@ -12771,7 +12815,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       recs = recs.filter(r => idSet.has(r.id));
     }
     return recs;
-  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter]);
+  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter, screeningResponses]);
 
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
@@ -12914,6 +12958,68 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     }).catch(() => {});
   }, [object?.id, environment?.id, allObjects.length]);
 
+  // ── Screening response columns: job title lookup ────────────────────────────
+  // Reuses the Jobs records already loaded above for cross-object filtering —
+  // no extra fetch needed just to label a screening column's job.
+  const jobsObjId = allObjects.find(o => (o.slug||"").toLowerCase() === "jobs")?.id;
+  const screeningJobTitles = useMemo(() => {
+    const map = {};
+    (linkedObjectRecords[jobsObjId] || []).forEach(r => {
+      map[r.id] = r.data?.job_title || r.data?.title || r.data?.name || "Job";
+    });
+    return map;
+  }, [linkedObjectRecords, jobsObjId]);
+  // Same Jobs records, reshaped as {id, title} pairs for the Column Picker's
+  // "Screening Responses" section — sorted alphabetically for easy scanning.
+  const screeningJobsList = useMemo(() => {
+    return (linkedObjectRecords[jobsObjId] || [])
+      .map(r => ({ id: r.id, title: screeningJobTitles[r.id] || "Job" }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [linkedObjectRecords, jobsObjId, screeningJobTitles]);
+
+  // ── Screening response columns: lazy-load rules + responses ────────────────
+  // Whenever a screening|<jobId>|<ruleId> column is added to visibleFieldIds
+  // for a job we haven't fetched yet, pull that job's question set (once) and
+  // every candidate's answers for it (one call covers all rows in the table).
+  useEffect(() => {
+    if (!isPeopleObj || !environment?.id) return;
+    const ids = visibleFieldIds || [];
+    const jobIdsNeeded = new Set();
+    ids.forEach(id => {
+      const parsed = parseScreeningColId(id);
+      if (parsed && !screeningMeta[parsed.jobId] && !loadingScreeningJobs[parsed.jobId]) {
+        jobIdsNeeded.add(parsed.jobId);
+      }
+    });
+    if (jobIdsNeeded.size === 0) return;
+    setLoadingScreeningJobs(prev => {
+      const next = { ...prev };
+      jobIdsNeeded.forEach(jobId => { next[jobId] = true; });
+      return next;
+    });
+    jobIdsNeeded.forEach(jobId => {
+      Promise.all([
+        api.get(`/screening/job/${jobId}`),
+        api.get(`/screening/responses/job/${jobId}`),
+      ]).then(([ruleData, responseList]) => {
+        const rulesArr = Array.isArray(ruleData?.rules) ? ruleData.rules : [];
+        const ruleMap = {};
+        rulesArr.forEach(r => { ruleMap[r.id] = r; });
+        setScreeningMeta(prev => ({ ...prev, [jobId]: { rules: ruleMap } }));
+        const respArr = Array.isArray(responseList) ? responseList : [];
+        const respMap = {};
+        respArr.forEach(r => { if (r.record_id) respMap[r.record_id] = r; });
+        setScreeningResponses(prev => ({ ...prev, [jobId]: respMap }));
+      }).catch(() => {
+        // Mark as loaded-but-empty so a transient error doesn't retry every render
+        setScreeningMeta(prev => ({ ...prev, [jobId]: { rules: {} } }));
+        setScreeningResponses(prev => ({ ...prev, [jobId]: {} }));
+      }).finally(() => {
+        setLoadingScreeningJobs(prev => { const next = { ...prev }; delete next[jobId]; return next; });
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleFieldIds, isPeopleObj, environment?.id]);
 
   const handleExport = (format) => {
     setShowExport(false);
@@ -13119,6 +13225,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
                 onChange={handleColChange}
                 onClose={() => setShowColPicker(false)}
                 isPeopleObj={isPeopleObj}
+                screeningJobs={screeningJobsList}
               />
             )}
           </div>
@@ -13266,7 +13373,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             onStageChange={(recordId, updated) => setLinkedJobs(prev => ({ ...prev, [recordId]: updated }))}
             showEngagement={showEngagement}
             engagementScores={engagementScores}
-            isPeopleObj={isPeopleObj}/>
+            isPeopleObj={isPeopleObj}
+            screeningMeta={screeningMeta}
+            screeningResponses={screeningResponses}
+            screeningJobTitles={screeningJobTitles}/>
         )}
       </div>
 

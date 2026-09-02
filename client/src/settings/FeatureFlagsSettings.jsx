@@ -169,8 +169,8 @@ function RecordPanelsSection({ flagMap, saving, toggle, toggleAll, bulkSaving, B
     const obj = objects.find(o => typeKey === 'person' ? o.slug === 'people' : typeKey === 'job' ? o.slug === 'jobs' : o.slug === typeKey);
     if (!obj) return;
     try {
-      const r = await tFetch(`/api/fields?object_id=${obj.id}`);
-      if (r.ok) { const d = await r.json(); setFieldsCache(prev => ({ ...prev, [typeKey]: Array.isArray(d) ? d : [] })); }
+      const d = await tFetch(`/api/fields?object_id=${obj.id}`);
+      setFieldsCache(prev => ({ ...prev, [typeKey]: Array.isArray(d) ? d : [] }));
     } catch {}
   };
 
@@ -340,11 +340,10 @@ export default function FeatureFlagsSettings({ environment }) {
     try {
       // Load base flags (for the admin table)
       const res = await tFetch(`/api/feature-flags/all?environment_id=${environment.id}`);
-      if (res.ok) setFlags((await res.json()).flags || []);
+      if (res && Array.isArray(res.flags)) setFlags(res.flags);
       // Also load per-object overrides from the main GET endpoint
-      const res2 = await tFetch(`/api/feature-flags?environment_id=${environment.id}`);
-      if (res2.ok) {
-        const d = await res2.json();
+      const d = await tFetch(`/api/feature-flags?environment_id=${environment.id}`);
+      if (d) {
         setPerObject(d._perObject || {});
         setPanelConditions(d._panelConditions || {});
       }

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { query, getStore } = require('../db/init');
+const { query, getStore, saveStore } = require('../db/init');
+const { sendEmail } = require('../services/messaging');
 const { v4: uid } = require('uuid');
 const multer = require('multer');
 const path = require('path');
@@ -22,6 +23,45 @@ const upload = multer({
 function getPortal(portalId) {
   const store = getStore();
   return (store.portals || []).find(p => p.id === portalId && p.status === 'published' && !p.deleted_at);
+}
+
+// Coerces one submitted form-field value (always a string or undefined, since
+// it's arriving through multipart/FormData) back into the shape the record
+// store expects for that field's real type.
+//
+// The frontend (PortalPageRenderer.jsx submitApplication/submitTalentCommunity,
+// and the CV-parser raw-fallback merge) JSON.stringifies EVERY array value
+// before appending it to FormData — multi_select answers, pill-edited skills
+// lists, and whatever array-shaped fields the CV parser found (skills,
+// education, work_history, languages, certifications…) all arrive as JSON
+// text like '["Node.js","React"]'.
+//
+// This used to only get JSON.parsed back out when the People object's field
+// definition said `field_type === 'multi_select' || 'table'` — but fields
+// like the dedicated 'skills' type (FieldModal.jsx's own first-class type,
+// distinct from multi_select) fell through to the plain string branch, so
+// the raw JSON text was stored and then rendered as one giant literal
+// '["Node.js","React"]' pill in the main app instead of individual chips.
+// Rather than hand-list every array-capable field_type here (and risk
+// missing the next one), we lead with a value-shape check: any string that
+// looks like a JSON array is parsed as one regardless of the field's
+// declared type, then fall back to the old type-based check for anything
+// that doesn't match that shape.
+function coerceFieldValue(type, v) {
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t.startsWith('[') && t.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(t);
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* not actually JSON — fall through */ }
+    }
+  }
+  if (type === 'multi_select' || type === 'table') {
+    try { return JSON.parse(v); } catch { return [v]; }
+  }
+  if (type === 'boolean') return v === 'true' || v === true;
+  return v;
 }
 
 function getOpenJobs(environmentId) {
@@ -83,6 +123,61 @@ function getApplicationFieldsConfig(portal) {
       required: f.api_key === 'first_name' || f.api_key === 'email' }))
     .sort((a, b) => orderOf(a.api_key) - orderOf(b.api_key));
   return { cvFirst, fields };
+}
+
+// ── Job Application form + edit-window verification helpers ──────────────────
+//
+// The chatbot's cover_note used to be dumped into an unscoped store.notes
+// entry — invisible in reports, unsearchable, and mixed in with general
+// person-level notes regardless of which job it was actually about. This
+// finds-or-creates a real, per-environment "Job Application" form (via the
+// existing Forms engine) so cover notes land as a proper form_response
+// scoped to (person, job) — searchable, reportable, and shown in its own
+// Forms tab rather than bleeding into the Notes panel.
+const SECURITY_DEFAULT_EDIT_WINDOW_MIN = 30;
+
+function ensureJobApplicationForm(store, environmentId) {
+  if (!store.forms) store.forms = [];
+  let form = store.forms.find(f => f.environment_id === environmentId && f.slug === 'job_application' && !f.deleted_at);
+  if (form) return form;
+  const now = new Date().toISOString();
+  form = {
+    id: uid(),
+    environment_id: environmentId,
+    name: 'Job Application',
+    description: 'Captures job-specific application details submitted via the career site, such as the cover note.',
+    slug: 'job_application',
+    category: 'screening',
+    applies_to: ['people'],
+    fields: [
+      { id: uid(), api_key: 'cover_note', name: 'Cover Note', field_type: 'long_text', required: false },
+    ],
+    sharing: 'internal',
+    share_token: uid().slice(0, 16),
+    confidential: false,
+    allow_multiple: true,
+    show_in_record: true,
+    searchable: true,
+    parseable: false,
+    status: 'active',
+    created_by: 'portal-copilot',
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
+  store.forms.push(form);
+  return form;
+}
+
+// Finds the existing Job Application form_response for this exact
+// (person, job) pair, if one exists — used both to decide whether a
+// submission is a first-time apply vs a returning edit, and to gate edits
+// outside the configured edit window.
+function findExistingApplicationResponse(store, environmentId, personId, jobId) {
+  if (!personId || !jobId) return null;
+  const form = (store.forms || []).find(f => f.environment_id === environmentId && f.slug === 'job_application' && !f.deleted_at);
+  if (!form) return null;
+  return (store.form_responses || []).find(r => !r.deleted_at && r.form_id === form.id && r.record_id === personId && r.context_record_id === jobId) || null;
 }
 
 router.post('/chat', async (req, res) => {
@@ -221,7 +316,6 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     const portal = getPortal(portal_id);
     if (!portal) return res.status(404).json({ error: 'Portal not found' });
     const store = getStore();
-    const { saveStore } = require('../db/init');
 
     const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
     if (!peopleObj) return res.status(400).json({ error: 'People object not configured' });
@@ -238,14 +332,7 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     const fieldValues = {};
     for (const [k, v] of Object.entries(req.body)) {
       if (nonFieldKeys.has(k) || !fieldMeta.has(k) || v === undefined || v === '') continue;
-      const type = fieldMeta.get(k).field_type;
-      if (type === 'multi_select' || type === 'table') {
-        try { fieldValues[k] = JSON.parse(v); } catch { fieldValues[k] = [v]; }
-      } else if (type === 'boolean') {
-        fieldValues[k] = v === 'true' || v === true;
-      } else {
-        fieldValues[k] = v;
-      }
+      fieldValues[k] = coerceFieldValue(fieldMeta.get(k).field_type, v);
     }
     // first_name/email always win from the validated top-level vars, even if
     // the People object's field list is somehow missing them — every seeded
@@ -255,7 +342,50 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     if (last_name) fieldValues.last_name = last_name;
     if (phone) fieldValues.phone = phone;
 
-    let personRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
+    // Resolve the job to link against BEFORE any store mutation — the AI can
+    // mishandle an opaque UUID far more easily than a plain title it read
+    // straight off the OPEN POSITIONS list (this was the actual root cause
+    // of applications silently landing with no job link at all — job_id
+    // would come through missing, blank, or hallucinated). If job_id
+    // doesn't match a real record, fall back to an exact case-insensitive
+    // title match among this portal's open jobs before giving up. Moved
+    // ahead of the person lookup/creation so the edit-window gate below can
+    // check it without mutating anything first.
+    let resolvedJobId = (job_id && (store.records || []).some(r => r.id === job_id && !r.deleted_at)) ? job_id : null;
+    if (!resolvedJobId && job_title) {
+      const candidateJobs = getOpenJobs(portal.environment_id);
+      const match = candidateJobs.find(j => j.title.trim().toLowerCase() === String(job_title).trim().toLowerCase());
+      if (match) resolvedJobId = match.id;
+    }
+
+    // Read-only lookup — do NOT create/mutate the person record yet. A
+    // returning candidate editing an existing job application is gated
+    // below by the security-configured edit window before anything changes.
+    const existingPersonRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
+
+    if (existingPersonRecord && resolvedJobId) {
+      const existingResponse = findExistingApplicationResponse(store, portal.environment_id, existingPersonRecord.id, resolvedJobId);
+      if (existingResponse) {
+        const windowMin = store.security_settings?.application_edit_window_minutes ?? SECURITY_DEFAULT_EDIT_WINDOW_MIN;
+        const submittedAt = new Date(existingResponse.submitted_at || existingResponse.created_at).getTime();
+        const withinWindow = (Date.now() - submittedAt) <= windowMin * 60 * 1000;
+        if (!withinWindow) {
+          // Outside the edit window and not (yet) re-verified — refuse with
+          // zero mutations. The frontend's job is to call
+          // /request-edit-code then /verify-edit-code, which re-anchors
+          // this response's submitted_at to now on success, then retries
+          // this same /apply call — at which point it will read as
+          // withinWindow above and proceed normally.
+          return res.status(403).json({
+            error: 'verification_required',
+            message: "It's been a while since you applied — we've sent a verification code to your email so you can confirm it's really you before we update your application.",
+            job_id: resolvedJobId, job_title,
+          });
+        }
+      }
+    }
+
+    let personRecord = existingPersonRecord;
     if (!personRecord) {
       personRecord = {
         id: uid(), object_id: peopleObj.id, environment_id: portal.environment_id,
@@ -290,20 +420,8 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
       created_at: new Date().toISOString(),
     });
 
-    // Resolve the job to link against. The AI can mishandle an opaque UUID
-    // far more easily than a plain title it read straight off the OPEN
-    // POSITIONS list (this was the actual root cause of applications
-    // silently landing with no job link at all — job_id would come through
-    // missing, blank, or hallucinated). If job_id doesn't match a real
-    // record, fall back to an exact case-insensitive title match among this
-    // portal's open jobs before giving up.
-    let resolvedJobId = (job_id && (store.records || []).some(r => r.id === job_id && !r.deleted_at)) ? job_id : null;
-    if (!resolvedJobId && job_title) {
-      const candidateJobs = getOpenJobs(portal.environment_id);
-      const match = candidateJobs.find(j => j.title.trim().toLowerCase() === String(job_title).trim().toLowerCase());
-      if (match) resolvedJobId = match.id;
-    }
-
+    // resolvedJobId was already resolved above (before the edit-window
+    // gate) — reused here unchanged.
     if (resolvedJobId) {
       if (!store.people_links) store.people_links = [];
       const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === resolvedJobId && !l.deleted_at);
@@ -347,12 +465,53 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     }
 
     if (cover_note) {
-      if (!store.notes) store.notes = [];
-      store.notes.push({
-        id: uid(), record_id: personRecord.id,
-        content: `Applied via ${portal.name || 'career site'} copilot${job_title ? ` for ${job_title}` : ''}: ${cover_note}`,
-        created_by: 'portal-copilot', created_at: new Date().toISOString(),
-      });
+      if (resolvedJobId) {
+        // Job-scoped: store the cover note as a real Job Application
+        // form_response (searchable, reportable, shown in its own Forms
+        // tab) rather than an unscoped person-level Note — this is what
+        // keeps application-specific data separate from the person's
+        // general profile data, mirroring how job-scoped Notes already
+        // work on the record panel.
+        const appForm = ensureJobApplicationForm(store, portal.environment_id);
+        const now = new Date().toISOString();
+        const existingResponse = findExistingApplicationResponse(store, portal.environment_id, personRecord.id, resolvedJobId);
+        if (existingResponse) {
+          existingResponse.data = { ...existingResponse.data, cover_note };
+          existingResponse.submitted_at = now; // re-anchors the edit window
+          existingResponse.updated_at = now;
+        } else {
+          if (!store.form_responses) store.form_responses = [];
+          store.form_responses.push({
+            id: uid(), form_id: appForm.id, form_name: appForm.name,
+            environment_id: portal.environment_id,
+            record_id: personRecord.id, record_type: 'people',
+            context_record_id: resolvedJobId, context_record_title: job_title || null,
+            data: { cover_note },
+            submitted_by: 'portal-copilot',
+            submitted_at: now, created_at: now, deleted_at: null,
+          });
+        }
+        if (!store.form_links) store.form_links = [];
+        const hasLink = store.form_links.some(l => !l.deleted_at && l.record_id === personRecord.id && l.form_id === appForm.id && l.context_record_id === resolvedJobId);
+        if (!hasLink) {
+          store.form_links.push({
+            id: uid(), record_id: personRecord.id, form_id: appForm.id,
+            environment_id: portal.environment_id,
+            context_record_id: resolvedJobId, context_record_title: job_title || null,
+            linked_by: 'portal-copilot',
+            created_at: now, updated_at: now,
+          });
+        }
+      } else {
+        // No job could be resolved at all — fall back to the original
+        // unscoped Note so the cover note is never silently lost.
+        if (!store.notes) store.notes = [];
+        store.notes.push({
+          id: uid(), record_id: personRecord.id,
+          content: `Applied via ${portal.name || 'career site'} copilot${job_title ? ` for ${job_title}` : ''}: ${cover_note}`,
+          created_by: 'portal-copilot', created_at: new Date().toISOString(),
+        });
+      }
     }
 
     saveStore();
@@ -360,6 +519,93 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
   } catch (e) {
     console.error('[portal-copilot] Apply error:', e.message);
     res.status(500).json({ error: 'Failed to submit application' });
+  }
+});
+
+// Generate & email a one-time verification code so a returning candidate
+// can edit an application outside the configured edit window. Tied to
+// (portal, email, job) so a code can't be reused across jobs or portals.
+router.post('/request-edit-code', async (req, res) => {
+  try {
+    const { portal_id, email, job_id } = req.body;
+    if (!portal_id || !email || !job_id)
+      return res.status(400).json({ error: 'portal_id, email, and job_id required' });
+    const portal = getPortal(portal_id);
+    if (!portal) return res.status(404).json({ error: 'Portal not found' });
+    const store = getStore();
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+
+    if (!store.portal_verifications) store.portal_verifications = [];
+    // Invalidate any prior unverified codes for this exact (portal,email,job)
+    store.portal_verifications.forEach(v => {
+      if (v.portal_id === portal_id && v.email === email && v.job_id === job_id && !v.verified_at) v.expires_at = now.toISOString();
+    });
+    store.portal_verifications.push({
+      id: uid(), portal_id, email, job_id, code,
+      expires_at: expiresAt, verified_at: null,
+      created_at: now.toISOString(),
+    });
+    saveStore();
+
+    const company = getCompanyInfo(portal);
+    try {
+      await sendEmail({
+        to: email,
+        subject: `Your verification code for ${company.company_name}`,
+        html: `<p>Hi,</p><p>Your verification code to update your application is:</p><h2 style="letter-spacing:4px;">${code}</h2><p>This code expires in 15 minutes. If you didn't request this, you can ignore this email.</p><p>— ${company.company_name}</p>`,
+        text: `Your verification code is ${code}. It expires in 15 minutes.`,
+        tags: { environment_id: portal.environment_id },
+      });
+    } catch (mailErr) {
+      console.error('[portal-copilot] request-edit-code send failed:', mailErr.message);
+      // Don't fail the request over a mail-provider hiccup — the code is
+      // still valid and stored; simulation mode logs it to the console.
+    }
+
+    res.json({ success: true, message: 'Verification code sent' });
+  } catch (e) {
+    console.error('[portal-copilot] request-edit-code error:', e.message);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// Verify the code, and on success re-anchor the matching Job Application
+// form_response's submitted_at to now — this is what lets a subsequent
+// /apply call for the same (person, job) proceed as "within window"
+// without /apply needing any separate verified-flag concept of its own.
+router.post('/verify-edit-code', async (req, res) => {
+  try {
+    const { portal_id, email, job_id, code } = req.body;
+    if (!portal_id || !email || !job_id || !code)
+      return res.status(400).json({ error: 'portal_id, email, job_id, and code required' });
+    const portal = getPortal(portal_id);
+    if (!portal) return res.status(404).json({ error: 'Portal not found' });
+    const store = getStore();
+
+    const verification = (store.portal_verifications || [])
+      .filter(v => v.portal_id === portal_id && v.email === email && v.job_id === job_id && v.code === String(code) && !v.verified_at)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+    if (!verification) return res.status(400).json({ error: 'invalid_code', message: 'That code is incorrect.' });
+    if (new Date(verification.expires_at) < new Date()) return res.status(400).json({ error: 'expired_code', message: 'That code has expired — please request a new one.' });
+
+    verification.verified_at = new Date().toISOString();
+
+    const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
+    const personRecord = peopleObj ? (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at) : null;
+    if (personRecord) {
+      const existingResponse = findExistingApplicationResponse(store, portal.environment_id, personRecord.id, job_id);
+      if (existingResponse) existingResponse.submitted_at = new Date().toISOString();
+    }
+
+    saveStore();
+    res.json({ success: true, verified: true });
+  } catch (e) {
+    console.error('[portal-copilot] verify-edit-code error:', e.message);
+    res.status(500).json({ error: 'Failed to verify code' });
   }
 });
 
@@ -447,14 +693,7 @@ router.post('/join-community', upload.single('cv'), async (req, res) => {
     const fieldValues = {};
     for (const [k, v] of Object.entries(req.body)) {
       if (!fieldMeta.has(k) || v === undefined || v === '') continue;
-      const type = fieldMeta.get(k).field_type;
-      if (type === 'multi_select') {
-        try { fieldValues[k] = JSON.parse(v); } catch { fieldValues[k] = [v]; }
-      } else if (type === 'boolean') {
-        fieldValues[k] = v === 'true' || v === true;
-      } else {
-        fieldValues[k] = v;
-      }
+      fieldValues[k] = coerceFieldValue(fieldMeta.get(k).field_type, v);
     }
 
     const email = fieldValues.email;

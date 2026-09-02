@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getStore, insert, update } = require('../db/init');
+const { getStore, insert, update, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
 
 // Wraps async route handlers so unhandled promise rejections flow to Express
@@ -18,9 +18,7 @@ router.get('/settings', (req, res) => {
 router.patch('/settings', (req, res) => {
   const store = getStore();
   store.security_settings = { ...store.security_settings, ...req.body, updated_at: new Date().toISOString() };
-  const fs = require('fs'); const path = require('path');
-  const DB_PATH = path.join(__dirname, '../../data/talentos.json');
-  fs.writeFileSync(DB_PATH, JSON.stringify(store, null, 2));
+  saveStore();
   res.json(store.security_settings);
 });
 
