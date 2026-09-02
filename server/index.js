@@ -227,7 +227,16 @@ app.use((req, res, next) => {
 if (process.env.NODE_ENV !== 'production' && process.env.PLAYWRIGHT_TEST !== '1') {
   app.use((req, res, next) => {
     if (req.session?.userId) return next();
-    const skip = ['/api/portals', '/api/health', '/api/superadmin', '/__vite'];
+    // '/api/portals' and '/api/portal-copilot' are both public/unauthenticated
+    // by design (career-site visitors) — they must NEVER be silently auto-
+    // logged in as the internal admin, and (more critically) this middleware's
+    // loadTenantStore(devTenant) call below is a full reload-from-disk that
+    // *replaces* the in-memory store; since saveStore() debounces its write by
+    // 150ms, a reload landing inside that window silently discards whatever a
+    // still-in-flight prior request just pushed (e.g. a candidate created a
+    // moment earlier by /join-community or /apply). Excluding every public
+    // portal route here removes that race entirely for this dev-only path.
+    const skip = ['/api/portals', '/api/portal-copilot', '/api/health', '/api/superadmin', '/__vite'];
     if (skip.some(p => req.path.startsWith(p))) return next();
     if (req.method === 'POST' && req.path === '/api/auth/login') return next();
     if (!storeReady) return next(); // don't attempt auto-login before store is ready

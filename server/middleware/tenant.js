@@ -51,15 +51,18 @@ function tenantMiddleware(req, res, next) {
       const knownTenants  = cachedTenants();
       const slug = (requestedSlug && requestedSlug !== 'master' && knownTenants.has(requestedSlug))
         ? requestedSlug : sessionTenant;
+      req.tenantSlug = slug;
       return tenantStorage.run(slug, next);
     }
 
     // Regular authenticated user — strictly locked to their session tenant
     const knownTenants = cachedTenants();
     if (knownTenants.has(sessionTenant)) {
+      req.tenantSlug = sessionTenant;
       return tenantStorage.run(sessionTenant, next);
     }
     // Session tenant no longer valid — fall through to master
+    req.tenantSlug = 'master';
     return tenantStorage.run('master', next);
   }
 
@@ -84,6 +87,7 @@ function tenantMiddleware(req, res, next) {
   }
 
   if (!slug || slug === 'master') {
+    req.tenantSlug = 'master';
     return tenantStorage.run('master', next);
   }
 
@@ -94,10 +98,12 @@ function tenantMiddleware(req, res, next) {
       // than silently serving master's data under a false tenant context.
       return res.status(401).json({ error: 'Unknown tenant', code: 'UNKNOWN_TENANT' });
     }
+    req.tenantSlug = 'master';
     return tenantStorage.run('master', next);
   }
 
   // Pre-auth request (login, portal public routes, etc.) — use requested tenant
+  req.tenantSlug = slug;
   tenantStorage.run(slug, next);
 }
 

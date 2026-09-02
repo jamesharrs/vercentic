@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query, getStore, saveStore } = require('../db/init');
+const { query, getStore, saveStore, tenantStorage } = require('../db/init');
 const { sendEmail } = require('../services/messaging');
 const { v4: uid } = require('uuid');
 const multer = require('multer');
@@ -19,6 +19,17 @@ const upload = multer({
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
   }
 });
+
+// multer's multipart parsing (busboy under the hood) resolves/calls its next()
+// from outside the synchronous call stack that AsyncLocalStorage.run() tracks —
+// in practice this silently drops the tenant context tenantMiddleware just set
+// up, so every route below that takes a file upload re-enters the correct
+// tenant context (captured on req.tenantSlug by tenantMiddleware, which is a
+// plain property and so is immune to this) right after the upload.* middleware
+// finishes, before touching getStore()/getPortal() at all.
+function reenterTenant(req, res, next) {
+  tenantStorage.run(req.tenantSlug || 'master', next);
+}
 
 function getPortal(portalId) {
   const store = getStore();
@@ -57,8 +68,20 @@ function coerceFieldValue(type, v) {
       } catch { /* not actually JSON — fall through */ }
     }
   }
-  if (type === 'multi_select' || type === 'table') {
-    try { return JSON.parse(v); } catch { return [v]; }
+  // Fallback for values that arrive as a bare, non-JSON string (e.g. a
+  // single skill typed/confirmed in conversation, like "C++") on a field
+  // whose type is inherently array-shaped — these never match the
+  // bracket-detection heuristic above since there's nothing JSON-y about
+  // them, so without this the value would be stored as a lone string
+  // instead of a one-item array, then rendered as a single giant pill
+  // rather than an editable/addable chip. 'skills' is FieldModal.jsx's own
+  // first-class field type (distinct from multi_select) and was the
+  // reported case; multi_select/table are kept from the original check.
+  if (type === 'multi_select' || type === 'table' || type === 'skills') {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : [v];
+    } catch { return [v]; }
   }
   if (type === 'boolean') return v === 'true' || v === true;
   return v;
@@ -178,6 +201,22 @@ function findExistingApplicationResponse(store, environmentId, personId, jobId) 
   const form = (store.forms || []).find(f => f.environment_id === environmentId && f.slug === 'job_application' && !f.deleted_at);
   if (!form) return null;
   return (store.form_responses || []).find(r => !r.deleted_at && r.form_id === form.id && r.record_id === personId && r.context_record_id === jobId) || null;
+}
+
+// Finds this exact (person, job) application's people_links row — unlike
+// findExistingApplicationResponse above (which only exists if the candidate
+// happened to give a cover note, since that's the one optional field that
+// triggers creating a Job Application form_response), a people_links row is
+// created unconditionally on every successful /apply to a resolved job.
+// This makes it the one signal guaranteed to exist for "has this person
+// already applied to this job" and "when did they last touch it", which is
+// what the edit-window re-verification gate actually needs — gating on the
+// form_response instead silently let every cover-note-less (re-)application
+// through with no re-verification at all, since findExistingApplicationResponse
+// would return null even for a returning candidate.
+function findExistingApplicationLink(store, personId, jobId) {
+  if (!personId || !jobId) return null;
+  return (store.people_links || []).find(l => !l.deleted_at && l.person_record_id === personId && l.target_record_id === jobId) || null;
 }
 
 router.post('/chat', async (req, res) => {
@@ -308,7 +347,7 @@ RULES:
 });
 
 // Submit application from copilot
-router.post('/apply', upload.single('cv'), async (req, res) => {
+router.post('/apply', upload.single('cv'), reenterTenant, async (req, res) => {
   try {
     const { portal_id, job_id, job_title, first_name, last_name, email, phone, cover_note } = req.body;
     if (!portal_id || !email || !first_name)
@@ -361,19 +400,27 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     // Read-only lookup — do NOT create/mutate the person record yet. A
     // returning candidate editing an existing job application is gated
     // below by the security-configured edit window before anything changes.
-    const existingPersonRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
+    // Normalised (trim + lowercase) so "Amy@Co.com" and "amy@co.com" (or a
+    // stray trailing space from a mobile keyboard) are recognised as the
+    // same candidate instead of silently creating a second person record.
+    const emailNorm = String(email).trim().toLowerCase();
+    const existingPersonRecord = (store.records || []).find(r => r.object_id === peopleObj.id && (r.data?.email || '').trim().toLowerCase() === emailNorm && !r.deleted_at);
 
     if (existingPersonRecord && resolvedJobId) {
-      const existingResponse = findExistingApplicationResponse(store, portal.environment_id, existingPersonRecord.id, resolvedJobId);
-      if (existingResponse) {
+      // See findExistingApplicationLink's comment: gate on the people_links
+      // row (always created), not the Job Application form_response (only
+      // created when a cover note was given), or the edit window silently
+      // never triggers for the common case of an application with no note.
+      const existingLink = findExistingApplicationLink(store, existingPersonRecord.id, resolvedJobId);
+      if (existingLink) {
         const windowMin = store.security_settings?.application_edit_window_minutes ?? SECURITY_DEFAULT_EDIT_WINDOW_MIN;
-        const submittedAt = new Date(existingResponse.submitted_at || existingResponse.created_at).getTime();
-        const withinWindow = (Date.now() - submittedAt) <= windowMin * 60 * 1000;
+        const lastTouched = new Date(existingLink.last_applied_at || existingLink.updated_at || existingLink.created_at).getTime();
+        const withinWindow = (Date.now() - lastTouched) <= windowMin * 60 * 1000;
         if (!withinWindow) {
           // Outside the edit window and not (yet) re-verified — refuse with
           // zero mutations. The frontend's job is to call
           // /request-edit-code then /verify-edit-code, which re-anchors
-          // this response's submitted_at to now on success, then retries
+          // this link's last_applied_at to now on success, then retries
           // this same /apply call — at which point it will read as
           // withinWindow above and proceed normally.
           return res.status(403).json({
@@ -424,19 +471,29 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
     // gate) — reused here unchanged.
     if (resolvedJobId) {
       if (!store.people_links) store.people_links = [];
-      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === resolvedJobId && !l.deleted_at);
-      if (!linked) {
+      // person_record_id/target_record_id (not person_id/record_id) is the
+      // field-name convention every other write path uses — the admin
+      // Application Pipeline widget (Workflows.jsx), stage-move actions,
+      // AI screening, and the stage_stale task trigger all match strictly
+      // on these two names with no fallback, so a row created under the
+      // old person_id/record_id names was invisible to all of them (only
+      // GET /api/people-links and GET /records/:id/people-links happen to
+      // normalise/fall back to either shape for reads).
+      const existingLink = store.people_links.find(l => l.person_record_id === personRecord.id && l.target_record_id === resolvedJobId && !l.deleted_at);
+      if (!existingLink) {
         // Resolve the job's Linked Person workflow so the applicant lands on
         // a real stage — the Application Pipeline widget counts candidates
         // by matching people_links.stage_id against the assigned workflow's
         // step ids, so a null stage_id is never shown in any column.
         if (hasLinkedPersonWorkflow(store, resolvedJobId)) {
           const { stage_id, stage_name } = resolveFirstStage(store, resolvedJobId);
+          const nowIso = new Date().toISOString();
           store.people_links.push({
-            id: uid(), person_id: personRecord.id, record_id: resolvedJobId,
+            id: uid(), person_record_id: personRecord.id, target_record_id: resolvedJobId,
             environment_id: portal.environment_id,
             workflow_id: null, stage_id, stage_name,
-            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+            last_applied_at: nowIso,
+            created_at: nowIso, updated_at: nowIso,
           });
         } else {
           // Job has no pipeline workflow attached (shouldn't normally happen —
@@ -450,6 +507,15 @@ router.post('/apply', upload.single('cv'), async (req, res) => {
             created_at: new Date().toISOString(),
           });
         }
+      } else {
+        // Returning candidate re-applying/editing within the window (or
+        // retrying right after successful edit-code verification) — re-anchor
+        // last_applied_at so the edit-window gate above measures from this
+        // submission, not a stale original one. updated_at is deliberately
+        // left untouched — task_triggers.js's stage_stale trigger reads it as
+        // "time since last stage change", which a same-stage resubmission
+        // must not reset.
+        existingLink.last_applied_at = new Date().toISOString();
       }
     } else if (job_id || job_title) {
       // Neither the submitted job_id nor a title fallback could be resolved
@@ -595,8 +661,20 @@ router.post('/verify-edit-code', async (req, res) => {
     verification.verified_at = new Date().toISOString();
 
     const peopleObj = (store.objects || []).find(o => o.environment_id === portal.environment_id && o.slug === 'people');
-    const personRecord = peopleObj ? (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at) : null;
+    // Normalised lookup — matches /apply and /join-community.
+    const emailNorm = String(email).trim().toLowerCase();
+    const personRecord = peopleObj ? (store.records || []).find(r => r.object_id === peopleObj.id && (r.data?.email || '').trim().toLowerCase() === emailNorm && !r.deleted_at) : null;
     if (personRecord) {
+      // Re-anchor the people_links row's last_applied_at — this is what
+      // /apply's edit-window gate actually reads now (see
+      // findExistingApplicationLink), so this is what makes the caller's
+      // immediate retry of /apply read as withinWindow. job_id here is the
+      // resolvedJobId the 403 response echoed back, so it matches the
+      // target_record_id the link was created/found with.
+      const existingLink = findExistingApplicationLink(store, personRecord.id, job_id);
+      if (existingLink) existingLink.last_applied_at = new Date().toISOString();
+      // Also re-anchor the legacy Job Application form_response's
+      // submitted_at, in case anything else still reads it.
       const existingResponse = findExistingApplicationResponse(store, portal.environment_id, personRecord.id, job_id);
       if (existingResponse) existingResponse.submitted_at = new Date().toISOString();
     }
@@ -672,7 +750,7 @@ router.get('/application-fields', (req, res) => {
 // role for a candidate, so they can stay on file for future openings instead
 // of hitting a dead end. Mirrors /apply closely but tags the person record
 // rather than linking them to a specific job.
-router.post('/join-community', upload.single('cv'), async (req, res) => {
+router.post('/join-community', upload.single('cv'), reenterTenant, async (req, res) => {
   try {
     const { portal_id, note } = req.body;
     if (!portal_id) return res.status(400).json({ error: 'portal_id required' });
@@ -701,7 +779,11 @@ router.post('/join-community', upload.single('cv'), async (req, res) => {
     if (!email || !firstName)
       return res.status(400).json({ error: 'first_name and email required' });
 
-    let personRecord = (store.records || []).find(r => r.object_id === peopleObj.id && r.data?.email === email && !r.deleted_at);
+    // Normalised (trim + lowercase) so a differently-cased or whitespace-
+    // padded email is still recognised as the same person — matches the
+    // normalization applied to /apply's equivalent lookup.
+    const emailNorm = String(email).trim().toLowerCase();
+    let personRecord = (store.records || []).find(r => r.object_id === peopleObj.id && (r.data?.email || '').trim().toLowerCase() === emailNorm && !r.deleted_at);
     if (!personRecord) {
       personRecord = {
         id: uid(), object_id: peopleObj.id, environment_id: portal.environment_id,
@@ -739,14 +821,25 @@ router.post('/join-community', upload.single('cv'), async (req, res) => {
     const poolId = portal.copilot?.talent_pool_id;
     if (poolId) {
       if (!store.people_links) store.people_links = [];
-      const linked = store.people_links.some(l => l.person_id === personRecord.id && l.record_id === poolId && !l.deleted_at);
-      if (!linked) {
+      // person_record_id/target_record_id — see the matching comment in
+      // /apply above; the old person_id/record_id shape used here made
+      // talent-community links invisible to the same set of consumers
+      // (Application Pipeline widget, screening, task triggers, etc.).
+      const existingPoolLink = store.people_links.find(l => l.person_record_id === personRecord.id && l.target_record_id === poolId && !l.deleted_at);
+      if (!existingPoolLink) {
+        const nowIso = new Date().toISOString();
         store.people_links.push({
-          id: uid(), person_id: personRecord.id, record_id: poolId,
+          id: uid(), person_record_id: personRecord.id, target_record_id: poolId,
           environment_id: portal.environment_id,
           workflow_id: null, stage_id: null, stage_name: 'Talent Community',
-          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          last_applied_at: nowIso,
+          created_at: nowIso, updated_at: nowIso,
         });
+      } else {
+        // Re-joining/re-submitting — re-anchor the touch timestamp only,
+        // same reasoning as /apply's equivalent branch (updated_at is left
+        // alone for stage_stale's benefit).
+        existingPoolLink.last_applied_at = new Date().toISOString();
       }
     }
 
@@ -759,7 +852,7 @@ router.post('/join-community', upload.single('cv'), async (req, res) => {
 });
 
 // Upload a document during copilot conversation
-router.post('/upload', upload.single('file'), (req, res) => {
+router.post('/upload', upload.single('file'), reenterTenant, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ file_id: uid(), file_name: req.file.originalname, file_size: req.file.size, file_path: req.file.path, mime_type: req.file.mimetype });
 });
