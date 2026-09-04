@@ -30,7 +30,7 @@ const EMAIL_MAP = {
   hr_platform:          'admin.hr@vercentic.com',
   rpo_provider:         'admin.rpo@vercentic.com',
 };
-const ADMIN_EMAIL_FOR_ENV = EMAIL_MAP[TEMPLATE_KEY] || `admin.${TEMPLATE_KEY}@vercentic.com`;
+const ADMIN_EMAIL_FOR_ENV = args.email || EMAIL_MAP[TEMPLATE_KEY] || `admin.${TEMPLATE_KEY}@vercentic.com`;
 
 async function run() {
   console.log(`\n🚀 Provisioning master environment`);
