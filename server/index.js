@@ -66,7 +66,10 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/chrome-import')) return next();
   corsMiddleware(req, res, next);
 });
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => { req.rawBody = buf; }, // needed for Slack HMAC signature verification (chat_bot_webhooks.js)
+}));
 app.use(secureHeaders);
 app.use('/api', apiLimiter);
 
@@ -344,6 +347,7 @@ const AUTH_EXEMPT = [
   '/feature-packs',
   '/release-notes',  // public read — published notes shown to all logged-in users
   '/superadmin', '/bot',
+  '/chat-bot-hooks',        // Slack + Teams inbound webhooks — self-authenticate via HMAC signature / bot JWT
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
   '/sequencer/track-open',           // open-tracking pixel (no auth — email clients fetch without credentials)
@@ -590,6 +594,9 @@ app.use('/api/security-audit',    require('./routes/security_audit'));
 app.use('/api/field-visibility',  require('./routes/field_visibility'));
 app.use('/api/integrations',      require('./routes/integrations'));
 app.use('/api/connector-actions', require('./routes/connector_actions'));
+app.use('/api/conversational-actions', require('./routes/conversational_actions'));
+app.use('/api/chat-bot-channels',      require('./routes/chat_bot_channels'));
+app.use('/api/chat-bot-hooks',         require('./routes/chat_bot_webhooks'));
 app.use('/api/brand-kits',        require('./routes/brand_kits'));
 app.use('/api/talent-profile',    require('./routes/talent_profile'));
 app.use('/api/webhooks',          require('./routes/webhooks'));

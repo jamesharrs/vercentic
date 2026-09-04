@@ -63,11 +63,13 @@ const GLOBAL_ACTIONS = [
   'manage_users','manage_roles','manage_settings','manage_workflows',
   'manage_portals','manage_forms','manage_interviews','manage_org_structure',
   'manage_integrations','view_audit_log',
+  'manage_conversational_actions',
   // ── Data actions ────────────────────────────────────────────────────────────
   'run_reports','export_data','bulk_actions',
   // ── Feature access flags (gate entire nav sections) ─────────────────────────
   'access_dashboard','access_org_chart','access_interviews','access_offers',
   'access_reports','access_copilot','access_calendar','access_search','access_achievements',
+  'access_conversational_actions',
   // ── Record action flags (gate actions within a record) ───────────────────────
   'record_send_email','record_send_sms','record_log_call','record_view_comms',
   'record_add_note','record_delete_note','record_upload_file','record_delete_file',
@@ -222,8 +224,8 @@ function seedDefaultPermissions(store) {
     // anything a later seed wrote. Any new object must be listed here or the
     // highest-privilege role silently loses access to it.
     super_admin:    { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], companies:['view','create','edit','delete','export'], __global__: GLOBAL_ACTIONS },
-    admin:          { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], __global__:['manage_users','manage_roles','manage_settings','manage_workflows','manage_portals','manage_forms','manage_interviews','manage_org_structure','manage_integrations','view_audit_log','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search','access_achievements',...ALL_RECORD] },
-    recruiter:      { people:['view','create','edit','export'], jobs:['view','create','edit','export'], talent_pools:['view','create','edit'], __global__:['manage_interviews','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search','access_achievements',...ALL_RECORD] },
+    admin:          { people:['view','create','edit','delete','export'], jobs:['view','create','edit','delete','export'], talent_pools:['view','create','edit','delete','export'], __global__:['manage_users','manage_roles','manage_settings','manage_workflows','manage_portals','manage_forms','manage_interviews','manage_org_structure','manage_integrations','manage_conversational_actions','view_audit_log','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search','access_achievements','access_conversational_actions',...ALL_RECORD] },
+    recruiter:      { people:['view','create','edit','export'], jobs:['view','create','edit','export'], talent_pools:['view','create','edit'], __global__:['manage_interviews','run_reports','export_data','bulk_actions','access_dashboard','access_org_chart','access_interviews','access_offers','access_reports','access_copilot','access_calendar','access_search','access_achievements','access_conversational_actions',...ALL_RECORD] },
     hiring_manager: { people:['view'], jobs:['view','edit'], talent_pools:['view'], __global__:['manage_interviews','access_dashboard','access_interviews','access_copilot','access_calendar','access_search','record_view_comms','record_add_note','record_schedule_interview','record_move_stage'] },
     read_only:      { people:['view'], jobs:['view'], talent_pools:['view'], __global__:['access_dashboard','access_search','record_view_comms'] },
   };

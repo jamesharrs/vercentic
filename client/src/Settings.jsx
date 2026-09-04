@@ -54,6 +54,7 @@ const DefaultSignatureSettings = lazy(() => import("./EmailSettings").then(m => 
 const IntegrationHub     = lazy(() => import("./IntegrationHub.jsx"));
 const IntegrationsSettings = lazy(() => import("./IntegrationsSettings.jsx"));
 const FormsList          = lazy(() => import("./Forms.jsx").then(m => ({ default: m.FormsList })));
+const ConversationalActionsSettings = lazy(() => import("./settings/ConversationalActionsSettings.jsx"));
 
 const LazyTab = ({ children }) => (
   <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading…</div>}>
@@ -198,6 +199,7 @@ const PATHS = {
   "flag":"M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7",
   "webhook":"M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 000-6 3 3 0 00-3 3c0 .24.04.47.09.7L8.04 9.81A3 3 0 005 9a3 3 0 000 6 3 3 0 003.04-.81l7.12 4.15c-.05.21-.08.43-.08.66a3 3 0 103-3z",
   "gitBranch":"M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9",
+  "messageSquare":"M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z",
   "file":"M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zM13 2v7h7",
 };
 const Ic = ({n,s=16,c="currentColor"}) => (
@@ -2999,6 +3001,7 @@ const NAV_GROUPS = [
       { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows", feature:"workflows" },
       { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews", feature:"interviews" },
       { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals", feature:"portals" },
+      { id:"conversational_actions", icon:"messageSquare", label:"Conversational Actions", perm:"manage_conversational_actions" },
       { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles", feature:"sandbox" },
     ],
   },
@@ -3235,6 +3238,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="workflows"            && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
         {activeSection==="interview_templates"  && <LazyTab><InterviewTemplatesSettings environment={environment}/></LazyTab>}
         {activeSection==="portals"              && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
+        {activeSection==="conversational_actions" && <LazyTab><ConversationalActionsSettings environment={environment}/></LazyTab>}
         {activeSection==="talent_profile" && (
           <div style={{ maxWidth:700, padding:24 }}>
             <div style={{ marginBottom:20 }}>
