@@ -249,7 +249,7 @@ router.post('/:id/assign', (req, res) => {
 // Generates a 6-digit code + URL token, bound to the caller's tenant.
 // Magic link tokens are stored in the MASTER store so they survive across tenant
 // store lookups on verify. The token carries tenant_slug so there is no ambiguity.
-router.post('/magic-send', (req, res) => {
+router.post('/magic-send', async (req, res) => {
   try {
     const { email, tenant_slug } = req.body;
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'Valid email required' });
@@ -281,11 +281,37 @@ router.post('/magic-send', (req, res) => {
     const appUrl   = process.env.APP_URL || 'https://app.vercentic.com';
     const tenantQs = tenant_slug ? `&tenant=${tenant_slug}` : '';
     const magicUrl = `${appUrl}/client-hub?magic_token=${token}${tenantQs}`;
+    const hubName  = tenant_slug ? `${tenant_slug}'s Client Hub` : 'Vercentic Client Hub';
 
-    // TODO: Replace console.log with SendGrid send in production
-    console.log(`[MAGIC LINK] email=${emailLower} tenant=${tenant_slug||'master'} code=${code} url=${magicUrl}`);
+    let simulated = true;
+    try {
+      const { sendEmail } = require('../services/messaging');
+      const result = await sendEmail({
+        to: emailLower,
+        subject: `Your sign-in link — ${hubName}`,
+        text: `Your verification code is: ${code}\n\nOr sign in directly: ${magicUrl}\n\nThis link and code expire in 15 minutes.`,
+        html: `<div style="font-family:sans-serif">
+      <p>Sign in to <strong>${hubName}</strong> using the button below, or enter this code:</p>
+      <p style="font-family:monospace;font-size:32px;font-weight:bold;letter-spacing:0.1em;margin:16px 0">${code}</p>
+      <p><a href="${magicUrl}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Sign in</a></p>
+      <p style="color:#6b7280;font-size:13px">This link and code expire in 15 minutes. If you didn't request this, you can safely ignore this email.</p>
+    </div>`,
+      });
+      if (!result.simulated) simulated = false;
+    } catch (emailErr) {
+      console.error('[MAGIC LINK] send failed, falling back to simulation:', emailErr.message);
+    }
 
-    res.json({ success: true, message: `Magic link sent to ${email}`, _dev_code: code, _dev_token: token, _dev_url: magicUrl });
+    if (simulated) {
+      console.log(`[MAGIC LINK] (simulated) email=${emailLower} tenant=${tenant_slug||'master'} code=${code} url=${magicUrl}`);
+    }
+
+    res.json({
+      success: true,
+      message: `Magic link sent to ${email}`,
+      simulated,
+      ...(simulated ? { _dev_code: code, _dev_token: token, _dev_url: magicUrl } : {}),
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

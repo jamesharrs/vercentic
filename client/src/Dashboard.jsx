@@ -1364,7 +1364,7 @@ export default function Dashboard({ environment, session, onNavigate, onOpenReco
           onClick={() => window.dispatchEvent(new CustomEvent("vercentic:create-record", { detail: { objectName: "Talent Pools" } }))} />
         <ActionBtn label="Recommendations" color={V.amber}
           iconPath={<><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></>}
-          onClick={() => {}} />
+          onClick={() => window.dispatchEvent(new CustomEvent("vercentic:openCopilot", { detail: { message: "Show me your top candidate-to-job match recommendations right now" } }))} />
       </div>
 
     </div>
