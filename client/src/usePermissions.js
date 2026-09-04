@@ -5,7 +5,7 @@
  * Super Admin bypass: super_admin role always returns true.
  */
 
-const SESSION_KEY = "talentos_session";
+const SESSION_KEY = "vercentic_session";
 
 // Scope session key to subdomain so each tenant environment is isolated
 function _sessionKey() {

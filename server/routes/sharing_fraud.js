@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const ts = () => new Date().toISOString();
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const { MODEL_DEFAULT: MODEL } = require('../config/ai_models');
 
 // ── SHARE TOKEN MANAGEMENT ──────────────────────────────────────────────────
 

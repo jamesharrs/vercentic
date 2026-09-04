@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const now = () => new Date().toISOString();
 
@@ -197,7 +198,7 @@ router.post('/:id/ai-suggest', express.json(), async (req, res) => {
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const r = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 400,
+      model: MODEL_DEFAULT, max_tokens: 400,
       messages: [{ role: 'user', content:
         `You are a ${tone} recruiter. Write a short reply (2–3 sentences) to this candidate conversation.\n${recordCtx}\n\nConversation:\n${convHistory}\n\nWrite ONLY the reply body.`
       }],

@@ -510,7 +510,8 @@ export default function TaskModal({ task, defaultValues={}, environmentId, onSav
       const url    = isEdit ? `/api/calendar/tasks/${task.id}` : '/api/calendar/tasks';
       const method = isEdit ? 'PATCH' : 'POST';
       const r = await tFetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-      onSave?.(await r.json()); onClose?.();
+      if (r?.error) throw new Error(r.error);
+      onSave?.(r); onClose?.();
     } catch(e) { console.error(e); } finally { setSaving(false); }
   };
 

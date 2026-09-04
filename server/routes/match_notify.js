@@ -18,7 +18,7 @@ const { getStore, saveStore } = require('../db/init');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL  = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const { MODEL_DEFAULT: MODEL } = require('../config/ai_models');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

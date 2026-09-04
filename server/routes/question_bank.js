@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // Seeding is handled in server/index.js initDB block
 
@@ -165,7 +166,6 @@ router.get('/jobs/:job_id', (req, res) => {
 
 // Alias — WizardRenderer calls /jobs/:job_id/questions (with /questions suffix)
 router.get('/jobs/:job_id/questions', (req, res) => {
-  req.params.job_id = req.params.job_id; // already set
   // Re-use same logic — just forward to the handler above by re-calling
   const store = require('../db/init').getStore();
   const jobId = req.params.job_id;
@@ -285,7 +285,7 @@ router.post('/jobs/:job_id/generate', async (req, res) => {
 
   const prompt = `You are an expert recruiter creating interview questions for a ${job_title||'role'} role${department?` in ${department}`:''}.\n${description?`Job description: ${description}\n`:''}${skills?`Required skills: ${Array.isArray(skills)?skills.join(', '):skills}\n`:''}\n\nGenerate exactly ${count} high-quality, ROLE-SPECIFIC interview questions. Aim for:\n- 1-2 knockout/eligibility checks (type: "knockout")\n- 2-3 competency/behavioural questions specific to this role (type: "competency")\n- 1-2 technical questions about the required skills (type: "technical")\n- 1-2 culture fit questions (type: "culture")\n\n${existingTexts ? `IMPORTANT - The following questions already exist in the library. Do NOT generate anything similar or overlapping:\n- ${existingTexts}\n\n` : ''}${assignedTexts ? `These questions are already assigned to this job - do not repeat them:\n- ${assignedTexts}\n\n` : ''}Make every question specific to the role, not generic. Avoid generic questions like "Tell me about yourself" or "What are your strengths".\n\nRespond with valid JSON array only:\n[{"text":"...","type":"knockout|competency|technical|culture","competency":"...","weight":10,"tags":["..."],"options":null,"pass_value":null}]\nFor knockout questions add options like ["Yes","No"] and pass_value.`;
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
+    const response = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:MODEL_DEFAULT,max_tokens:2000,messages:[{role:'user',content:prompt}]})});
     const data = await response.json();
     if (data.error) { console.error('Anthropic error:', data.error); return res.status(500).json({error: data.error.message||'AI error'}); }
     const raw = data.content?.[0]?.text||'[]';

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query, insert, getStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // ── AI usage tracking helper ────────────────────────────────────────────────
 // Call from ai-proxy.js, cv_parse.js, doc_extract.js, translate.js etc.
@@ -13,7 +14,7 @@ function trackAIUsage(data) {
       feature: data.feature || 'unknown',
       tokens_in: data.tokens_in || 0,
       tokens_out: data.tokens_out || 0,
-      model: data.model || 'claude-sonnet-4-6',
+      model: data.model || MODEL_DEFAULT,
       environment_id: data.environment_id || '',
       metadata: data.metadata ? JSON.stringify(data.metadata) : null,
       created_at: new Date().toISOString()

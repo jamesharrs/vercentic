@@ -10,7 +10,7 @@
 ## Live URLs
 - App: https://www.vercentic.com
 - API: https://talentos-production-4045.up.railway.app
-- Repo: https://github.com/jamesharrs/talentos
+- Repo: https://github.com/jamesharrs/vercentic
 
 ## Local dev
 ```bash
@@ -37,7 +37,7 @@ bash deploy.sh "commit message"     # Deploy both
 - Data stored in `data/talentos.json` (JSON file store, not SQL)
 - Records have a `data: {}` blob for all field values
 - Multi-environment: every record scoped to `environment_id`
-- Branding: platform is called **Vercentic** (not TalentOS)
+- Branding: platform is called **Vercentic** (formerly TalentOS — fully rebranded)
 - Icons: custom SVG path `Ic` component — no external icon library
 - Theme: CSS variables (`var(--t-accent)`, `var(--t-bg)` etc.) via ThemeProvider
 - i18n: `client/src/i18n/` — AI-generated translations, Arabic RTL supported

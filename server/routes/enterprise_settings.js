@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 function ts() { return new Date().toISOString(); }
 
 function migrateEnterpriseSettings() {
@@ -75,7 +76,7 @@ try {
   ESCO_FULL = require('../data/esco_full');
   ESCO_INDEX = ESCO_FULL.map(s => ({
     name_lower: s.name.toLowerCase(),
-    words: s.name.toLowerCase().split(/[\s\/\-\(\)&,]+/).filter(Boolean),
+    words: s.name.toLowerCase().split(/[\s/\-()&,]+/).filter(Boolean),
     category: s.category,
     subcategory: s.subcategory || '',
     original: s
@@ -156,7 +157,7 @@ router.post('/skills/ai-extract', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: MODEL_DEFAULT,
         max_tokens: 1000,
         messages: [{ role: 'user', content: `You are a skills taxonomy expert. Given this job context, suggest 15-25 relevant skill keywords that should be on the job requirements. Return ONLY a JSON array of short skill name strings.
 

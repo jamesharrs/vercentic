@@ -127,7 +127,7 @@ export default function BiasScanner({ record, environment }) {
     if (!jd.trim()) { setError("No job description found on this record."); return; }
     setLoading(true); setError(null); setResult(null);
     try {
-      const res  = await tFetch("/api/bias-scan", {
+      const data = await tFetch("/api/bias-scan", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
@@ -136,8 +136,7 @@ export default function BiasScanner({ record, environment }) {
           environment_id:  environment?.id,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Scan failed");
+      if (data?.error) throw new Error(data.error || "Scan failed");
       setResult(data);
     } catch (e) {
       setError(e.message);

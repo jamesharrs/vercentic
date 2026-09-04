@@ -19,7 +19,7 @@ function sessionKey() {
   const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
     !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
   const slug = isSubdomain ? parts[0] : 'default';
-  return `talentos_session_${slug}`;
+  return `vercentic_session_${slug}`;
 }
 
 function getSession() {
@@ -82,16 +82,16 @@ function handleResponse(r, path = '') {
   if (r.status === 404 && SILENT_404_PATTERNS.some(p => path.includes(p))) return null;
   if (r.status === 503) {
     // Server still starting up — NOT a logout trigger. Retry after 2s.
-    window.dispatchEvent(new CustomEvent('talentos:server-starting'));
+    window.dispatchEvent(new CustomEvent('vercentic:server-starting'));
     return Promise.resolve(null);
   }
   if (r.status === 401) {
     // In dev: try to re-sync session before logging out
     if (!import.meta.env.PROD) {
-      window.dispatchEvent(new CustomEvent('talentos:session-lost'));
+      window.dispatchEvent(new CustomEvent('vercentic:session-lost'));
       return Promise.resolve(null); // return null instead of the error JSON
     }
-    window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
+    window.dispatchEvent(new CustomEvent('vercentic:unauthenticated'));
   }
   return r.json();
 }
@@ -100,14 +100,14 @@ function handleResponse(r, path = '') {
 // (call sites expect to read .id, .error etc on the response — we shouldn't return null mid-flow)
 function handleMutationResponse(r, path = '') {
   if (r.status === 503) {
-    window.dispatchEvent(new CustomEvent('talentos:server-starting'));
+    window.dispatchEvent(new CustomEvent('vercentic:server-starting'));
     return Promise.resolve({ __server_starting: true, error: 'Server starting up — try again' });
   }
   if (r.status === 401) {
     if (!import.meta.env.PROD) {
-      window.dispatchEvent(new CustomEvent('talentos:session-lost'));
+      window.dispatchEvent(new CustomEvent('vercentic:session-lost'));
     } else {
-      window.dispatchEvent(new CustomEvent('talentos:unauthenticated'));
+      window.dispatchEvent(new CustomEvent('vercentic:unauthenticated'));
     }
     // Still parse the body so callers see { error: 'Authentication required' }
   }

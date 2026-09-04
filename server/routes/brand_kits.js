@@ -4,6 +4,7 @@ const { getStore, saveStore } = require('../db/init');
 const crypto  = require('crypto');
 const https   = require('https');
 const http    = require('http');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 function ensure() {
   const s = getStore();
@@ -188,7 +189,7 @@ async function validateLogoWithAI(candidates, brandName, key) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: MODEL_DEFAULT,
           max_tokens: 60,
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
@@ -227,7 +228,7 @@ Rules: primaryColor = dominant brand colour (not black/white). bgColor usually w
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:512, messages:[{role:'user',content:prompt}] })
+      body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens:512, messages:[{role:'user',content:prompt}] })
     });
     const data = await res.json();
     const text = data.content?.[0]?.text||'';

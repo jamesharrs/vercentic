@@ -78,7 +78,7 @@ function SetupModal({provider,existing,environmentId,onClose,onSaved}){
     if(!existing?.id){setError('Save first before testing');return;}
     setTesting(true);setTestResult(null);
     try{
-      const r=await tFetch(`/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json());
+      const r=await tFetch(`/api/integrations/${existing.id}/test`,{method:'POST'});
       setTestResult(r); setTesting(false);
     }catch(e){setTestResult({ok:false,message:e.message});setTesting(false);}
   };
@@ -308,7 +308,7 @@ export default function IntegrationsPage({environment}){
   };
   const handleRetest=async(id)=>{
     try {
-      const result = await tFetch(`/integrations/${id}/test`,{method:'POST'});
+      const result = await tFetch(`/api/integrations/${id}/test`,{method:'POST'});
       await load();
       return result;
     } catch(e) { console.warn('retest failed',e); }

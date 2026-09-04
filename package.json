@@ -46,11 +46,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jamesharrs/talentos.git"
+    "url": "git+https://github.com/jamesharrs/vercentic.git"
   },
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/jamesharrs/talentos/issues"
+    "url": "https://github.com/jamesharrs/vercentic/issues"
   },
-  "homepage": "https://github.com/jamesharrs/talentos#readme"
+  "homepage": "https://github.com/jamesharrs/vercentic#readme"
 }

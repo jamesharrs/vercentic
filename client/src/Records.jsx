@@ -12,6 +12,10 @@ import StyledSelect from "./components/StyledSelect.jsx";
 import BiasScanner from "./BiasScanner.jsx";
 import { SharingPanel, FraudPanel } from "./SharingFraud.jsx";
 import { EngagementBadge, EngagementPanel } from "./EngagementScore.jsx";
+import {
+  CompanyEmployeesPanel, CompanyAlumniPanel, CompanyIntelPanel,
+  CompanyResearchPanel, CompanyOrgPanel, CompanyAliasesPanel,
+} from "./company/CompanyPanels.jsx";
 
 // Set PDF.js worker once at module load — prevents CDN fallback
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -46,8 +50,8 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
 const InterviewPlanPanelLazy = lazy(() => import('./InterviewPlanPanel.jsx').then(m => ({ default: m.InterviewPlanPanel })));
@@ -183,7 +187,7 @@ const STATUS_COLORS = {
 
 // Emit a filter-navigate event so the app shell can navigate to a filtered records list
 const emitFilterNav = (fieldKey, fieldLabel, fieldValue) => {
-  window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+  window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
     detail: { fieldKey, fieldLabel, fieldValue }
   }));
 };
@@ -792,7 +796,84 @@ const TableFieldEditor = ({ field, value, onChange }) => {
   );
 };
 
-const FieldValue = ({ field, value, allFieldValues = {} }) => {
+// ── ExpandableText — clamps long copy to N lines with an inline More/Less ─────
+// Used for textarea / long free-text fields so list rows stay uniform height
+// but the full content is one click away without leaving the list.
+const ExpandableText = ({ text, children, lines = 2, size = 13 }) => {
+  const [open, setOpen]       = useState(false);
+  const [overflows, setOver]  = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // measured while clamped, so this stays true once toggled open
+    setOver(el.scrollHeight > el.clientHeight + 1);
+  }, [text, lines]);
+
+  const clampStyle = open ? {} : {
+    display: "-webkit-box",
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  };
+
+  return (
+    <div style={{ minWidth:0, maxWidth:"100%" }}>
+      <div ref={ref}
+        style={{ fontSize:size, color:C.text1, lineHeight:1.5,
+          whiteSpace: children ? "normal" : "pre-wrap",
+          wordBreak:"break-word", ...clampStyle }}>
+        {children ?? text}
+      </div>
+      {(overflows || open) && (
+        <button
+          onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          style={{ background:"none", border:"none", padding:0, marginTop:3, cursor:"pointer",
+            fontSize:11, fontWeight:700, color:C.accent, fontFamily:F,
+            display:"inline-flex", alignItems:"center", gap:3 }}>
+          {open ? "Less" : "More"}
+          <Ic n={open ? "chevU" : "chevD"} s={10} c={C.accent}/>
+        </button>
+      )}
+    </div>
+  );
+};
+
+// Normalizes a multi/skills-type field value into a real array for
+// rendering. Values SHOULD already be arrays by the time they reach here,
+// but a value can land as a literal JSON-array string instead — e.g. a
+// career-site submission whose backend coercion didn't recognize this
+// field's type (skills is its own dedicated field_type, not multi_select,
+// and was previously missed) stores the raw '["React","Node.js"]' text as
+// one string. Without this, that string falls into the `[value]` branch
+// below and renders as a single giant pill containing the whole bracketed
+// list instead of individual chips. Parsing it here means already-corrupted
+// stored values still display correctly, on top of the write-path fix.
+const toChipArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (t.startsWith("[") && t.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(t);
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* not actually JSON — treat as a single plain value below */ }
+    }
+  }
+  return value ? [value] : [];
+};
+
+// Field types that hold free-flowing prose and should wrap rather than truncate
+const LONG_TEXT_TYPES = new Set(["textarea", "long_text", "rich_text"]);
+const LONG_TEXT_MIN   = 90; // chars — below this a plain single-line render is fine
+// Lines of prose shown in a list row before the inline More toggle appears.
+// Keeps rows a uniform height without hiding content behind an ellipsis.
+const PROSE_CLAMP_LINES = 2;
+
+// `clamp` = number of lines to show before a "More" toggle (list views).
+// Omit it — as the record detail panel does — to always render in full.
+const FieldValue = ({ field, value, allFieldValues = {}, clamp = null }) => {
   if (value===null||value===undefined||value==="") return <span style={{color:C.text3,fontSize:12}}>—</span>;
 
   switch(field.field_type) {
@@ -887,6 +968,11 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
     }
     case "rich_text": {
       const html = sanitizeHtml(String(value));
+      if (clamp) return (
+        <ExpandableText lines={clamp}>
+          <div className="rich-text-preview" dangerouslySetInnerHTML={{ __html: html }}/>
+        </ExpandableText>
+      );
       return (
         <div style={{ fontSize:13, lineHeight:1.65, color:"#111827" }}
           className="rich-text-preview"
@@ -918,14 +1004,14 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
     case "date":    return <span style={{fontSize:13}}>{new Date(value).toLocaleDateString()}</span>;
     case "dataset": {
       // Dataset values stored as string or array of strings
-      const arr = Array.isArray(value) ? value : (value ? [value] : []);
+      const arr = toChipArray(value);
       if (!arr.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
       return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {arr.map(v=><FilterPill key={v} label={v} color={C.accent} fieldKey={field.api_key} fieldName={field.name}/>)}
       </div>;
     }
     case "skills": {
-      const arr = Array.isArray(value) ? value : (value ? [value] : []);
+      const arr = toChipArray(value);
       if (!arr.length) return <span style={{color:C.text3,fontSize:12}}>—</span>;
       return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {arr.map((v,i)=>{
@@ -938,7 +1024,7 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
               title={`Find others with: ${label}`}
               onClick={e => {
                 e.stopPropagation();
-                window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+                window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
                   detail: { fieldKey: field.api_key, fieldValue: label, objectSlug: null }
                 }));
               }}
@@ -954,7 +1040,17 @@ const FieldValue = ({ field, value, allFieldValues = {} }) => {
     }
     case "table":        return <TableFieldValue field={field} value={value}/>;
     case "file_preview": return <FilePreviewWidget field={field} recordId={allFieldValues?.__record_id} compact={false}/>;
-    default:        return <span style={{fontSize:13,color:C.text1,lineHeight:1.5}}>{String(value)}</span>;
+    case "textarea":
+    case "long_text":
+    default: {
+      const txt = String(value);
+      // Long prose in a list gets clamped with an inline More toggle so rows
+      // stay a uniform height but nothing is lost behind an ellipsis.
+      if (clamp && txt.length > LONG_TEXT_MIN) return <ExpandableText text={txt} lines={clamp}/>;
+      const isProse = LONG_TEXT_TYPES.has(field.field_type);
+      return <span style={{fontSize:13,color:C.text1,lineHeight:1.5,
+        ...(isProse ? {whiteSpace:"pre-wrap",wordBreak:"break-word",display:"block"} : {})}}>{txt}</span>;
+    }
   }
 };
 
@@ -1199,14 +1295,14 @@ const FieldEditor = ({ field, value, onChange, autoFocus, environment, recordDat
 // Module-level environment ref — set by RecordsView on mount
 let _currentEnvId = null;
 
-// Module-level pending filter — set by talentos:apply-filter when RecordsView isn't mounted yet.
+// Module-level pending filter — set by vercentic:apply-filter when RecordsView isn't mounted yet.
 // RecordsView picks this up on mount and applies it immediately.
 // Keyed by object slug so the filter only applies to the intended list.
 let _pendingFilter = null; // { objectSlug: string, detail: object }
 
 // Global listener set up once — stores the filter so whichever RecordsView next mounts can pick it up.
 // This fires before RecordsView is even mounted when the Copilot emits NAVIGATE + APPLY_FILTER together.
-window.addEventListener('talentos:apply-filter', (e) => {
+window.addEventListener('vercentic:apply-filter', (e) => {
   // Only store if no RecordsView is currently listening (i.e. we're navigating away from a list)
   // RecordsView sets _pendingFilter = null when it claims it on mount, and null again when unmounted.
   // We store unconditionally here; RecordsView will either pick it up on mount or handle it live.
@@ -1544,7 +1640,7 @@ const DatasetPicker = ({ field, value, onChange }) => {
   const [dropRect, setDropRect] = useState(null);
   const ref = useRef(null);
   const isMulti = field.dataset_multi !== false && field.dataset_multi !== "false";
-  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  const selected = toChipArray(value);
 
   useEffect(() => {
     if (!field.dataset_id) return;
@@ -1655,7 +1751,10 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   const [dropdownRect, setDropdownRect] = useState(null);
   const debounceRef = useRef(null);
   const isMulti = field.skills_multi !== false && field.skills_multi !== "false";
-  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  // toChipArray also recovers an already-corrupted stored value (a literal
+  // '["React","Node.js"]' string from before the write-path fix) so editing
+  // a legacy record shows real chips instead of one giant unparseable pill.
+  const selected = toChipArray(value);
 
   // Close on outside click — also catches clicks inside the portal
   useEffect(() => {
@@ -1671,7 +1770,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   // Load categories on mount
   useEffect(() => {
     tFetch("/api/enterprise/skills/search/categories")
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); })
+      .then(d => { if (Array.isArray(d)) setCategories(d); })
       .catch(() => {});
   }, []);
 
@@ -1683,8 +1782,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
       try {
         const params = new URLSearchParams({ q: q || "", limit: "30" });
         if (cat) params.set("category", cat);
-        const res = await tFetch(`/api/enterprise/skills/search?${params}`);
-        const data = await res.json();
+        const data = await tFetch(`/api/enterprise/skills/search?${params}`);
         setResults(data.results || []);
       } catch { setResults([]); }
       setLoading(false);
@@ -2082,7 +2180,7 @@ const RecordFormModal = ({ fields, record, objectName, onSave, onClose, environm
     const prompt = promptMap[slug] || `Create a new ${objectName}. Ask me for the key details to get started.`;
 
     // Use copilotPrompt with silent:true so only Claude's response is shown (no user message bubble)
-    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt, silent: true } }));
+    window.dispatchEvent(new CustomEvent("vercentic:copilotPrompt", { detail: { prompt, silent: true } }));
     onClose();
   };
 
@@ -2726,7 +2824,10 @@ const SavedViewsDropdown = ({ objectId, environmentId, userId, currentFilters, c
 };
 
 /* ─── Column Picker Dropdown ───────────────────────────────────────────────── */
-const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleObj = false }) => {
+const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleObj = false, screeningJobs = [] }) => {
+  const [expandedScreeningJobId, setExpandedScreeningJobId] = useState(null);
+  const [screeningJobQuestions, setScreeningJobQuestions] = useState({}); // jobId -> rules[]
+  const [loadingScreeningJobId, setLoadingScreeningJobId] = useState(null);
   const ref = useRef(null);
   const searchRef = useRef(null);
   const [search, setSearch] = useState("");
@@ -2845,6 +2946,82 @@ const ColumnPickerDropdown = ({ fields, visibleIds, onChange, onClose, isPeopleO
           </>
         );
       })()}
+      {/* Screening Responses — dynamic per-job, per-question columns (People only) */}
+      {isPeopleObj && screeningJobs?.length > 0 && (
+        <>
+          <div style={{ padding:"6px 14px 4px", fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:"0.07em", borderTop:`1px solid ${C.border}`, marginTop:4 }}>Screening Responses</div>
+          {screeningJobs.map(job => {
+            const isExpanded = expandedScreeningJobId === job.id;
+            const isLoading  = loadingScreeningJobId === job.id;
+            const rules      = screeningJobQuestions[job.id];
+            const visibleCount = visibleIds.filter(id => id.startsWith(`screening|${job.id}|`)).length;
+            return (
+              <div key={job.id}>
+                <div
+                  onClick={async () => {
+                    if (isExpanded) { setExpandedScreeningJobId(null); return; }
+                    setExpandedScreeningJobId(job.id);
+                    if (!screeningJobQuestions[job.id] && loadingScreeningJobId !== job.id) {
+                      setLoadingScreeningJobId(job.id);
+                      try {
+                        const data = await api.get(`/screening/job/${job.id}`);
+                        setScreeningJobQuestions(prev => ({ ...prev, [job.id]: Array.isArray(data?.rules) ? data.rules : [] }));
+                      } catch (e) {
+                        setScreeningJobQuestions(prev => ({ ...prev, [job.id]: [] }));
+                      } finally {
+                        setLoadingScreeningJobId(null);
+                      }
+                    }
+                  }}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 14px", cursor:"pointer", transition:"background .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background="#f8f9fc"}
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                  <span style={{ display:"flex", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition:"transform .15s", flexShrink:0 }}>
+                    <Ic n="chevronDown" s={11} c={C.text3}/>
+                  </span>
+                  <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:500, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{job.title}</span>
+                  {visibleCount > 0 && (
+                    <span style={{ fontSize:10, fontWeight:700, color:"white", background:C.accent, borderRadius:99, padding:"1px 6px", flexShrink:0 }}>{visibleCount}</span>
+                  )}
+                </div>
+                {isExpanded && (
+                  <div style={{ paddingLeft:14 }}>
+                    {isLoading && (
+                      <div style={{ padding:"6px 14px", fontSize:12, color:C.text3 }}>Loading questions…</div>
+                    )}
+                    {!isLoading && rules && rules.length === 0 && (
+                      <div style={{ padding:"6px 14px", fontSize:12, color:C.text3 }}>No screening questions for this job</div>
+                    )}
+                    {!isLoading && rules && rules.map(rule => {
+                      const colId = makeScreeningColId(job.id, rule.id);
+                      const on = visibleIds.includes(colId);
+                      const typeColor = rule.rule_type === 'knockout' ? '#e03131' : rule.rule_type === 'required' ? '#f59f00' : rule.rule_type === 'preferred' ? '#0ca678' : C.text3;
+                      return (
+                        <div key={rule.id} onClick={() => toggleField(colId)}
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 14px", cursor:"pointer",
+                            background: on ? C.accentLight : "transparent", transition:"background .1s" }}
+                          onMouseEnter={e => !on && (e.currentTarget.style.background="#f8f9fc")}
+                          onMouseLeave={e => !on && (e.currentTarget.style.background="transparent")}>
+                          <div style={{ width:14, height:14, borderRadius:4, border:`2px solid ${on?C.accent:C.border}`,
+                            background: on ? C.accent : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            {on && <Ic n="check" s={9} c="white"/>}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12, fontWeight: on?600:400, color: on?C.accent:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{rule.question_text || 'Question'}</div>
+                          </div>
+                          {rule.rule_type && (
+                            <span style={{ fontSize:9, fontWeight:700, color:typeColor, textTransform:"uppercase", flexShrink:0 }}>{rule.rule_type}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
       {q && filteredFields.length === 0 && filteredSystem.length === 0 && (
         <div style={{ padding:"16px 14px", textAlign:"center", fontSize:12, color:C.text3 }}>No columns match "{search}"</div>
       )}
@@ -3094,7 +3271,7 @@ async function resolveMyPersonId() {
     return _mePersonRecordId;
   } catch { return null; }
 }
-window.addEventListener("storage", e => { if (e.key === "talentos_session") { _mePersonResolved = false; _mePersonRecordId = null; } });
+window.addEventListener("storage", e => { if (e.key === "vercentic_session") { _mePersonResolved = false; _mePersonRecordId = null; } });
 
 function getMeContext() {
   try {
@@ -4914,6 +5091,67 @@ function getSystemValue(record, col, linkedJobs, linkedPeopleCounts) {
   return '—';
 }
 
+// ── Screening response columns (dynamic, per-job per-question) ──────────────
+// Composite id format: `screening|<jobId>|<ruleId>` — mirrors the existing
+// `linked|<objectId>|<fieldId>` convention used by the Advanced Filter panel.
+function parseScreeningColId(id) {
+  if (typeof id !== 'string' || !id.startsWith('screening|')) return null;
+  const parts = id.split('|');
+  if (parts.length !== 3) return null;
+  return { jobId: parts[1], ruleId: parts[2] };
+}
+
+function makeScreeningColId(jobId, ruleId) {
+  return `screening|${jobId}|${ruleId}`;
+}
+
+// Builds a synthetic field-descriptor for one screening question, consumed by
+// TableView's listFields resolution and its header/cell rendering.
+function buildScreeningFieldDescriptor(jobId, jobTitle, rule) {
+  return {
+    id: makeScreeningColId(jobId, rule.id),
+    name: rule.question_text || 'Question',
+    api_key: null,
+    isSystem: false,
+    isScreening: true,
+    jobId,
+    jobTitle: jobTitle || 'Job',
+    ruleId: rule.id,
+    rule_type: rule.rule_type,
+    question_type: rule.question_type,
+  };
+}
+
+// Renders one candidate's answer to one screening question inside a table cell.
+function ScreeningAnswerCell({ record, jobId, ruleId, screeningResponses }) {
+  const respMap = screeningResponses?.[jobId];
+  const resp = respMap?.[record.id];
+  if (!resp) return <span style={{ fontSize:12, color:'#c1c5cc' }}>—</span>;
+  const result = resp.results?.[ruleId];
+  const rawAnswer = resp.answers?.[ruleId];
+  const answer = result?.answer !== undefined ? result.answer : rawAnswer;
+  if (answer === undefined || answer === null || answer === '') {
+    return <span style={{ fontSize:12, color:'#c1c5cc' }}>—</span>;
+  }
+  const displayVal = Array.isArray(answer) ? answer.join(', ') : String(answer);
+  const passed = result?.passed;
+  const ruleType = result?.rule_type;
+  const showIndicator = (ruleType === 'knockout' || ruleType === 'preferred') && passed !== undefined && passed !== null;
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#1a1a2e' }}>
+      {showIndicator && (
+        <span style={{ fontSize:11, fontWeight:700, color: passed ? '#0ca678' : '#e03131', flexShrink:0 }}>
+          {passed ? '✓' : '✕'}
+        </span>
+      )}
+      <span
+        style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:220 }}
+        title={displayVal}
+      >{displayVal}</span>
+    </div>
+  );
+}
+
 
 // ── LinkedJobsPill — renders all linked jobs for a person in the table ───────
 function LinkedJobsPill({ jobs, mode, onNavigate }) {
@@ -5154,12 +5392,22 @@ const InlineStatusPicker = ({ record, statusOptions, onUpdate }) => {
 
 // ── Enhanced TableView ─────────────────────────────────────────────────────────
 const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, onEdit, onDelete, onProfile, selectedIds, onToggleSelect, onToggleAll, sortBy, sortDir, onSort, onColumnFilter, colWidths, onResizeCol, visibleColOrder, onReorderCols, linkedJobs, linkedPeopleCounts, onLinkedCountClick, dupMap = {},
-  onStageChange, onStatusUpdate, showEngagement, engagementScores, isPeopleObj }) => {
+  onStageChange, onStatusUpdate, showEngagement, engagementScores, isPeopleObj, screeningMeta, screeningResponses, screeningJobTitles }) => {
   const [hoveredRow, setHoveredRow] = useState(null);
   const statusField = fields.find(f => f.api_key === "status");
   const statusOptions = statusField?.options || [];
   const listFields = visibleFieldIds
-    ? visibleFieldIds.map(id => fields.find(f => f.id === id) || SYSTEM_COLS.find(s => s.id === id)).filter(Boolean)
+    ? visibleFieldIds.map(id => {
+        const parsedScreening = parseScreeningColId(id);
+        if (parsedScreening) {
+          const meta = screeningMeta?.[parsedScreening.jobId];
+          const rule = meta?.rules?.[parsedScreening.ruleId];
+          if (!rule) return null;
+          const jobTitle = screeningJobTitles?.[parsedScreening.jobId];
+          return buildScreeningFieldDescriptor(parsedScreening.jobId, jobTitle, rule);
+        }
+        return fields.find(f => f.id === id) || SYSTEM_COLS.find(s => s.id === id);
+      }).filter(Boolean)
     : fields.filter(f => f.show_in_list);
 
   // Apply column order — only use saved order if it covers all visible fields
@@ -5219,7 +5467,8 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
             <th style={{ width:36, padding:"10px 8px" }}/>
             {/* Field headers */}
             {orderedFields.map((f, fi) => {
-              const isSorted = sortBy === (f.isSystem ? f.apiKey : f.api_key);
+              const sortKey = f.isSystem ? f.apiKey : f.isScreening ? f.id : f.api_key;
+              const isSorted = sortBy === sortKey;
               const w = colWidths?.[f.id] || null;
               const isDragOver = dragOverIdx === fi;
               return (
@@ -5234,13 +5483,18 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                     background: isDragOver ? `${C.accent}08` : undefined,
                     ...(w ? { width:w, minWidth:w, maxWidth:w } : {}) }}>
                   <div style={{ display:"flex", alignItems:"center", gap:2, padding:"10px 12px 10px 14px", cursor:"pointer", whiteSpace:"nowrap" }}
-                    onClick={() => onSort?.(f.isSystem ? f.apiKey : f.api_key)}>
-                    <span style={{ fontSize:11, fontWeight:700, color: isSorted ? C.accent : C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{f.name}</span>
+                    onClick={() => onSort?.(sortKey)}
+                    title={f.isScreening ? `${f.jobTitle}: ${f.name}` : undefined}>
+                    {f.isScreening && <Ic n="clipboard" s={10} c={isSorted ? C.accent : "#c1c5cc"}/>}
+                    <span style={{ display:"flex", flexDirection:"column", gap:1 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color: isSorted ? C.accent : C.text3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{f.name}</span>
+                      {f.isScreening && <span style={{ fontSize:9, fontWeight:600, color:"#9ca3af", textTransform:"none", letterSpacing:0 }}>{f.jobTitle}</span>}
+                    </span>
                     {isSorted
                       ? <Ic n={sortDir === 'asc' ? 'chevronUp' : 'chevronDown'} s={11} c={C.accent}/>
                       : <Ic n="chevronDown" s={10} c="#d1d5db"/>}
-                    {/* Column filter button */}
-                    {!f.isSystem && <button
+                    {/* Column filter button — screening columns aren't filterable yet */}
+                    {!f.isSystem && !f.isScreening && <button
                       onClick={e => { e.stopPropagation(); onColumnFilter?.(f, e.currentTarget.getBoundingClientRect()); }}
                       title={`Filter by ${f.name}`}
                       style={{ background:"none", border:"none", cursor:"pointer", padding:"1px 3px", borderRadius:4, opacity:0.5, display:"flex", marginLeft:1 }}
@@ -5280,31 +5534,42 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                 {orderedFields.map((f, fi) => {
                   const val = f.isSystem
                     ? getSystemValue(record, f.apiKey, linkedJobs)
+                    : f.isScreening
+                    ? undefined
                     : record.data?.[f.api_key];
                   const w = colWidths?.[f.id] || null;
+                  // Prose columns wrap and clamp instead of truncating to one line
+                  const isProse = !f.isSystem && !f.isScreening && fi > 0 &&
+                    (LONG_TEXT_TYPES.has(f.field_type) || (typeof val === "string" && val.length > LONG_TEXT_MIN));
                   return (
                     <td key={f.id}
                       style={{ padding:"var(--t-row-pad, 12px) 14px", cursor: fi===0 ? "pointer" : "default",
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                        ...(w ? { maxWidth:w, width:w } : { maxWidth:220 }) }}
+                        overflow:"hidden", verticalAlign: isProse ? "top" : "middle",
+                        ...(isProse
+                          ? { whiteSpace:"normal", ...(w ? { maxWidth:w, width:w } : { maxWidth:340, minWidth:240 }) }
+                          : { textOverflow:"ellipsis", whiteSpace:"nowrap", ...(w ? { maxWidth:w, width:w } : { maxWidth:220 }) }) }}
                       onClick={fi===0 ? () => onProfile(record) : undefined}>
                       {fi === 0
-                        ? <span style={{ fontWeight:700, color:"#4361EE" }}
-                            onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
-                            onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
-                            {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
-                          </span>
+                        ? (f.isScreening
+                            ? <ScreeningAnswerCell record={record} jobId={f.jobId} ruleId={f.ruleId} screeningResponses={screeningResponses}/>
+                            : <span style={{ fontWeight:700, color:"#4361EE" }}
+                                onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
+                                onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
+                                {f.isSystem ? val : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>}
+                              </span>)
+                        : f.isScreening
+                        ? <ScreeningAnswerCell record={record} jobId={f.jobId} ruleId={f.ruleId} screeningResponses={screeningResponses}/>
                         : (f.apiKey === '_linked_job' || f.apiKey === '_linked_all_jobs')
                           ? <LinkedJobsPill
                               jobs={linkedJobs?.[record.id]}
                               mode="all"
-                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
                             />
                           : f.apiKey === '_linked_open_jobs'
                           ? <LinkedJobsPill
                               jobs={linkedJobs?.[record.id]}
                               mode="open"
-                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
+                              onNavigate={jobRecId => window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: jobRecId, objectSlug: 'jobs' } }))}
                             />
                           : f.apiKey === '_linked_count'
                           ? (() => {
@@ -5360,7 +5625,7 @@ const TableView = ({ records, fields, visibleFieldIds, objectColor, onSelect, on
                             })()
                           : f.isSystem
                             ? <span style={{ fontSize:13, color: val === '—' ? C.text3 : C.text1 }}>{val}</span>
-                            : <FieldValue field={f} value={val} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
+                            : <FieldValue field={f} value={val} clamp={isProse ? PROSE_CLAMP_LINES : null} allFieldValues={{...(record?.data||{}), __record_id: record?.id}}/>
                       }
                     </td>
                   );
@@ -6656,9 +6921,9 @@ const JobQuestionsPanel = ({ record, environment }) => {
       let libraryIds = [];
       if (libraryQs.length) {
         const saved = await Promise.all(libraryQs.map(q =>
-          tFetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) }).then(r=>r.json())
+          tFetch("/api/question-bank/questions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(q) })
         ));
-        libraryIds = saved.map(q => q.id).filter(Boolean);
+        libraryIds = saved.map(q => q?.id).filter(Boolean);
       }
 
       // Assign library questions to the job
@@ -7017,7 +7282,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
                     {iv.candidate_id !== record.id && iv.candidate_name && (
                       <div style={{fontSize:11,color:C.text3,marginBottom:1}}>
                         Candidate:&nbsp;
-                        <button onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}));}}
+                        <button onClick={e=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}));}}
                           style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:11,fontWeight:600,textDecoration:"underline",fontFamily:"inherit"}}>
                           {iv.candidate_name}
                         </button>
@@ -7040,7 +7305,7 @@ const PersonInterviewsPanel = ({ record, environment, linkedJobRecords, activeJo
                           background:"#F0F4FF",border:"1px solid #DBEAFE",display:"flex",alignItems:"center",gap:8}}>
                           <Ic n="user" s={13} c={C.accent}/>
                           <span style={{color:C.text3,fontWeight:600}}>Candidate:</span>
-                          <button onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}))}
+                          <button onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:iv.candidate_id,objectId:null}}))}
                             style={{background:"none",border:"none",padding:0,cursor:"pointer",color:C.accent,fontSize:12,fontWeight:700,textDecoration:"underline",fontFamily:"inherit"}}>
                             {iv.candidate_name}
                           </button>
@@ -7143,8 +7408,8 @@ const CoordinationPanel = ({ record, environment }) => {
   const startNew = async () => {
     setStarting(true);
     try {
-      const r = await tFetch("/api/interview-coordinator/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({candidate_id:record.id,environment_id:environment?.id})}).then(r=>r.json());
-      if (r.ok) await load(); else window.__toast?.alert(r.error||"Failed");
+      const r = await tFetch("/api/interview-coordinator/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({candidate_id:record.id,environment_id:environment?.id})});
+      if (!r?.error) await load(); else window.__toast?.alert(r.error||"Failed");
     } catch(e){window.__toast?.alert(e.message);}
     setStarting(false);
   };
@@ -7318,7 +7583,7 @@ const AgentsRecordPanel = ({ record, environment }) => {
       const r = await api.get(`/agents/runs/by-record/${record.id}`);
       if (Array.isArray(r)) setRuns(r.slice(0, 20));
       // Notify the parent list to re-fetch this record so field updates appear live
-      window.dispatchEvent(new CustomEvent('talentos:recordUpdated', { detail: { recordId: record.id } }));
+      window.dispatchEvent(new CustomEvent('vercentic:recordUpdated', { detail: { recordId: record.id } }));
       // Flash the agent row green briefly
       setJustUpdated(agent.id);
       setTimeout(() => setJustUpdated(null), 2500);
@@ -7717,7 +7982,7 @@ const JobTasksPanel = ({ record, environment }) => {
       setShowAssign(false);
       setAnchorDate('');
       // Fire update so person's task panel refreshes if open
-      window.dispatchEvent(new CustomEvent('talentos:tasks-updated'));
+      window.dispatchEvent(new CustomEvent('vercentic:tasks-updated'));
     } catch (e) {
       alert('Assignment failed. Please try again.');
     } finally {
@@ -8022,6 +8287,12 @@ export const PANEL_META = {
   match:        { icon:"sparkles",      label:"Recommendations",     defaultOpen:false },
   reporting:    { icon:"gitBranch",     label:"Reporting",           defaultOpen:true,  personOnly:true },
   user:         { icon:"user",          label:"Platform User",       defaultOpen:false, hidden:true },
+  company_employees: { icon:"users",       label:"Employees",     defaultOpen:true,  companyOnly:true },
+  company_alumni:    { icon:"users",       label:"Alumni",        defaultOpen:false, companyOnly:true },
+  company_intel:     { icon:"activity",    label:"Intelligence",  defaultOpen:true,  companyOnly:true },
+  company_research:  { icon:"sparkles",    label:"Research",      defaultOpen:false, companyOnly:true },
+  company_org:       { icon:"gitBranch",   label:"Structure",     defaultOpen:false, companyOnly:true },
+  company_aliases:   { icon:"link",        label:"Known As",      defaultOpen:false, companyOnly:true },
   hub:          { icon:"link",          label:"Candidate Hub",       defaultOpen:false, personOnly:true },
   scorecard:    { icon:"clipboard",     label:"Scorecards",          defaultOpen:false, jobOnly:true },
   job_tasks:    { icon:"checkSquare",   label:"Job Tasks",           defaultOpen:true,  jobOnly:true },
@@ -8035,9 +8306,19 @@ export const PANEL_META = {
   fraud:        { icon:"shield",        label:"AI Verification",     defaultOpen:false, personOnly:true },
 };
 
+// Object-name groupings used throughout the panel-scoping logic below.
+// "Job-like" objects (Jobs + Talent Pools) share the recruiting-pipeline panel set;
+// Person and Company each get their own dedicated set.
+const JOB_LIKE_NAMES    = ["Job","Jobs","Talent Pool","Talent Pools"];
+const PERSON_NAMES      = ["Person","People"];
+const COMPANY_NAMES     = ["Company","Companies"];
+const isJobLike    = (n) => JOB_LIKE_NAMES.includes(n);
+const isPersonName = (n) => PERSON_NAMES.includes(n);
+const isCompanyName= (n) => COMPANY_NAMES.includes(n);
+
 export const getDefaultPanelOrder = (objectName) => {
   // Person: Linked Records > Engagement > [Interviews, Assessments] > [Communications, Tasks] > [Notes, Files, Forms] > [Recommendations, AI Agents] > Activity
-  if (objectName === "Person") return [
+  if (isPersonName(objectName)) return [
     "linked","engagement",
     ["coordination","assessments"],
     ["comms","tasks"],
@@ -8046,8 +8327,18 @@ export const getDefaultPanelOrder = (objectName) => {
     ["match","agents"],
     "activity"
   ];
-  // Job: Recommendations > [Interview Plan, Interviews, Screening & IQ, Scorecard] > [Job Tasks, Tasks] > [Notes, Files, Forms] > AI Agents > Bias Scanner > Activity
-  if (objectName === "Job" || objectName === "Jobs") return [
+  // Company: who works there first, then intelligence, then structure
+  if (isCompanyName(objectName)) return [
+    "company_employees",
+    ["company_intel","company_alumni"],
+    "company_research",
+    "company_org",
+    ["notes","attachments"],
+    ["comms","activity"],
+    "company_aliases"
+  ];
+  // Job & Talent Pool: Recommendations > [Interview Plan, Interviews, Screening & IQ, Scorecard] > [Job Tasks, Tasks] > [Notes, Files, Forms] > AI Agents > Bias Scanner > Activity
+  if (isJobLike(objectName)) return [
     "match",
     ["interview_plan","coordination","questions","scorecard"],
     ["job_tasks","tasks"],
@@ -8056,163 +8347,6 @@ export const getDefaultPanelOrder = (objectName) => {
   ];
   // Default for other objects
   return ["tasks","comms","approvals","notes","attachments","forms","activity","agents","match"];
-};
-
-// ─── Forms Panel ─────────────────────────────────────────────────────────────
-const FormsPanel = ({ record, environment, objectSlug }) => {
-  const [forms,      setForms]      = useState([]);
-  const [subs,       setSubs]       = useState([]);
-  const [activeForm, setActiveForm] = useState(null);
-  const [filling,    setFilling]    = useState(false);
-  const [formData,   setFormData]   = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [expanded,   setExpanded]   = useState({});
-
-  const loadForms = useCallback(async () => {
-    if (!environment?.id) return;
-    const f = await api.get(`/forms?environment_id=${environment.id}&object_slug=${objectSlug||'people'}`);
-    if (Array.isArray(f)) setForms(f);
-    const s = await api.get(`/forms/submissions/by-record/${record.id}?environment_id=${environment.id}`);
-    if (Array.isArray(s)) setSubs(s);
-  }, [record.id, environment?.id, objectSlug]);
-
-  useEffect(() => { loadForms(); }, [loadForms]);
-
-  const openForm = (form) => {
-    setActiveForm(form);
-    const init = {};
-    (form.fields||[]).forEach(f => { init[f.id || f.name] = ''; });
-    setFormData(init);
-    setFilling(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!activeForm) return;
-    setSubmitting(true);
-    const res = await tFetch(`/api/forms/${activeForm.id}/submissions`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ record_id:record.id, record_name:record.data?.first_name ? `${record.data.first_name} ${record.data.last_name||''}`.trim() : record.id, data: formData, environment_id: environment?.id, submitted_by:'Admin' }),
-    });
-    if (res.ok) { setFilling(false); setActiveForm(null); await loadForms(); }
-    setSubmitting(false);
-  };
-
-  const renderInput = (field) => {
-    const key = field.id || field.name;
-    const val = formData[key] ?? '';
-    const st  = { width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,color:C.text1,outline:'none',boxSizing:'border-box',background:'#f9fafb' };
-
-    if (field.field_type==='textarea')
-      return <textarea value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} rows={3} style={{...st,resize:'vertical'}}/>;
-    if (field.field_type==='select'||field.field_type==='multiselect')
-      return <select value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} style={st}>
-        <option value="">— select —</option>
-        {(field.options||[]).map(o=><option key={o} value={o}>{o}</option>)}
-      </select>;
-    if (field.field_type==='boolean')
-      return <div style={{display:'flex',gap:8}}>
-        {['Yes','No'].map(v=><button key={v} onClick={()=>setFormData(d=>({...d,[key]:v}))} style={{padding:'6px 16px',borderRadius:8,border:`1px solid ${val===v?C.accent:C.border}`,background:val===v?C.accentLight:'transparent',color:val===v?C.accent:C.text2,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:F}}>{v}</button>)}
-      </div>;
-    if (field.field_type==='rating')
-      return <div style={{display:'flex',gap:4}}>
-        {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setFormData(d=>({...d,[key]:n}))} style={{background:'none',border:'none',cursor:'pointer',fontSize:22,color:n<=(val||0)?C.amber:'#D1D5DB',padding:'0 2px'}}>★</button>)}
-      </div>;
-    if (field.field_type==='date')
-      return <input type="date" value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} style={st}/>;
-    if (field.field_type==='number'||field.field_type==='currency')
-      return <input type="number" value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} style={st}/>;
-    return <input type={field.field_type==='email'?'email':field.field_type==='url'?'url':'text'} value={val} onChange={e=>setFormData(d=>({...d,[key]:e.target.value}))} placeholder={field.placeholder||''} style={st}/>;
-  };
-
-  if (forms.length===0 && subs.length===0) return (
-    <div style={{textAlign:'center',padding:'28px 0',color:C.text3,fontSize:13}}>
-      <div style={{marginBottom:6}}>No forms configured for this record type.</div>
-      <div style={{fontSize:11}}>Go to Settings → Forms to create forms.</div>
-    </div>
-  );
-
-  return (
-    <div>
-      {/* Available forms to fill */}
-      {forms.length>0 && (
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Available Forms</div>
-          {forms.map(form=>(
-            <div key={form.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:'#f9fafb',marginBottom:6}}>
-              <div style={{width:30,height:30,borderRadius:8,background:`${form.color||C.accent}15`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <span style={{fontSize:14}}>📋</span>
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{form.name}</div>
-                {form.description&&<div style={{fontSize:11,color:C.text3}}>{form.description}</div>}
-              </div>
-              {form.is_confidential&&<span style={{fontSize:10,padding:'1px 5px',borderRadius:4,background:'#FEF2F2',color:C.red}}>🔒</span>}
-              <button onClick={()=>openForm(form)} style={{padding:'5px 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:C.accentLight,color:C.accent,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:F,flexShrink:0}}>Fill in</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Past submissions */}
-      {subs.length>0 && (
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Submissions ({subs.length})</div>
-          {subs.map(sub=>(
-            <div key={sub.id} style={{borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#f9fafb',cursor:'pointer'}} onClick={()=>setExpanded(e=>({...e,[sub.id]:!e[sub.id]}))}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12,fontWeight:700,color:C.text1}}>{sub.form_name}</div>
-                  <div style={{fontSize:11,color:C.text3}}>By {sub.submitted_by} · {new Date(sub.submitted_at).toLocaleDateString()}</div>
-                </div>
-                <span style={{color:C.text3,fontSize:16}}>{expanded[sub.id]?'−':'+'}</span>
-              </div>
-              {expanded[sub.id] && (
-                <div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
-                  {Object.entries(sub.data||{}).map(([k,v])=>(
-                    <div key={k} style={{display:'flex',padding:'5px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                      <span style={{color:C.text3,width:140,flexShrink:0,fontWeight:500}}>{k}</span>
-                      <span style={{color:C.text1}}>{Array.isArray(v)?v.join(', '):String(v||'—')}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Fill-in Modal */}
-      {filling && activeForm && (
-        <div onMouseDown={e=>e.stopPropagation()} onClick={e=>e.target===e.currentTarget&&setFilling(false)}
-          style={{position:'fixed',inset:0,background:'rgba(15,23,41,.45)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
-          <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,.2)',overflow:'hidden',fontFamily:F}}>
-            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:C.text1,fontFamily:"'Space Grotesk', sans-serif"}}>{activeForm.name}</div>
-                {activeForm.description&&<div style={{fontSize:11,color:C.text3,marginTop:2}}>{activeForm.description}</div>}
-              </div>
-              <button onClick={()=>setFilling(false)} style={{background:'none',border:'none',cursor:'pointer',color:C.text3,fontSize:20}}>×</button>
-            </div>
-            <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
-              {(activeForm.fields||[]).map((field,i)=>(
-                <div key={field.id||i} style={{marginBottom:14}}>
-                  <label style={{fontSize:12,fontWeight:700,color:C.text2,display:'block',marginBottom:5}}>
-                    {field.name} {field.is_required&&<span style={{color:C.red}}>*</span>}
-                  </label>
-                  {field.help_text&&<div style={{fontSize:11,color:C.text3,marginBottom:4}}>{field.help_text}</div>}
-                  {renderInput(field)}
-                </div>
-              ))}
-            </div>
-            <div style={{padding:'12px 20px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}>
-              <button onClick={()=>setFilling(false)} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F,color:C.text2}}>Cancel</button>
-              <button onClick={handleSubmit} disabled={submitting} style={{padding:'8px 20px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F,opacity:submitting?0.5:1}}>{submitting?'Submitting…':'Submit'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 };
 
 // ─── Doc Extract Modal ────────────────────────────────────────────────────────
@@ -9674,14 +9808,16 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // A panel is visible if its feature flag is on (and for match, also needs ai_matching)
   const panelVisible = (id) => {
     if (PANEL_META[id]?.hidden) return false;
-    if (PANEL_META[id]?.jobOnly    && objectName !== "Job" && objectName !== "Jobs") return false;
-    if (PANEL_META[id]?.personOnly && objectName !== "Person") return false;
+    // Job-only panels are shared by Jobs AND Talent Pools (both are recruiting-pipeline objects)
+    if (PANEL_META[id]?.jobOnly     && !isJobLike(objectName)) return false;
+    if (PANEL_META[id]?.personOnly  && !isPersonName(objectName)) return false;
+    if (PANEL_META[id]?.companyOnly && !isCompanyName(objectName)) return false;
     // Reporting panel only visible when person_type is Employee (or not set on non-employee typed objects)
-    if (id === "reporting" && objectName === "Person") {
+    if (id === "reporting" && isPersonName(objectName)) {
       const pt = (record?.data?.person_type || "").toLowerCase().trim();
       if (pt && pt !== "employee") return false;
     }
-    if (PANEL_META[id]?.personOrJob && objectName !== "Person" && objectName !== "Job" && objectName !== "Jobs") return false;
+    if (PANEL_META[id]?.personOrJob && !isPersonName(objectName) && !isJobLike(objectName)) return false;
     // Check per-object override — settings saves using panel config key (panel_notes OR coordination)
     // Try both the flag key AND the panel ID itself as lookup keys in _perObject
     const recObj = (allObjects||[]).find(o => o.id === record?.object_id);
@@ -9712,7 +9848,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const conditions = ff._panelConditions?.[PANEL_FLAGS[id]] || ff._panelConditions?.[id];
     if (conditions) {
       // Resolve scope: person, job, or 'all'
-      const scope = objectName === 'Person' ? 'person' : (objectName === 'Job' || objectName === 'Jobs') ? 'job' : slug || 'all';
+      const scope = isPersonName(objectName) ? 'person' : isJobLike(objectName) ? 'job' : slug || 'all';
       const cond = conditions[scope] || conditions['all'];
       if (cond?.field) {
         const recordVal = record?.data?.[cond.field];
@@ -9749,7 +9885,6 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (objectName !== "Person") return;
     if (!record?.id || !environment?.id) return;
     tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}`)
-      .then(r => r.json())
       .then(d => setLinkedJobRecords(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, [record?.id, environment?.id, objectName]);
@@ -9767,13 +9902,13 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [attachments, setAttachments] = useState([]);
   const [activity, setActivity] = useState([]);
   const [saving, setSaving]     = useState(false);
-  const openPanelsKey = `talentos_openpanels_${objectName}`;
+  const openPanelsKey = `vercentic_openpanels_${objectName}`;
   const [openPanels, setOpenPanels] = useState(() => {
     try {
       // Only restore saved panels if the panel version is current — otherwise use defaults
-      const currentVersion = localStorage.getItem(`talentos_panels_version_${objectName}`);
+      const currentVersion = localStorage.getItem(`vercentic_panels_version_${objectName}`);
       if (currentVersion === "v27") {
-        const saved = JSON.parse(localStorage.getItem(`talentos_openpanels_${objectName}`));
+        const saved = JSON.parse(localStorage.getItem(`vercentic_openpanels_${objectName}`));
         if (saved && typeof saved === "object") return saved;
       }
     } catch {}
@@ -9802,12 +9937,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const [showCampaignLinks, setShowCampaignLinks] = useState(false);
   // Track which custom sections are collapsed (by separatorId)
   const [collapsedSections, setCollapsedSections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`talentos_collapsed_${objectName}_${record?.object_id}`)) || {}; } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem(`vercentic_collapsed_${objectName}_${record?.object_id}`)) || {}; } catch { return {}; }
   });
   const toggleSection = (id) => {
     setCollapsedSections(prev => {
       const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem(`talentos_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
+      localStorage.setItem(`vercentic_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
       return next;
     });
   };
@@ -9826,7 +9961,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
         const anyExpanded = collapsibleIds.some(id => !prev[id]);
         const next = {};
         collapsibleIds.forEach(id => { next[id] = anyExpanded; }); // true = collapsed
-        localStorage.setItem(`talentos_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
+        localStorage.setItem(`vercentic_collapsed_${objectName}_${record?.object_id}`, JSON.stringify(next));
         return next;
       });
     };
@@ -9850,12 +9985,12 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   const rightColRef = useRef(null);
   const currentObject = (allObjects||[]).find(o => o.id === record?.object_id) || {};
 
-  const storageKey       = `talentos_panels_${objectName}`;
-  const leftStorageKey   = `talentos_panels_left_${objectName}`;
-  const topStorageKey    = `talentos_panels_top_${objectName}`;
-  const bottomStorageKey = `talentos_panels_bottom_${objectName}`;
-  const PANEL_VERSION    = "v27"; // Recommendations expanded by default on Jobs
-  const versionKey       = `talentos_panels_version_${objectName}`;
+  const storageKey       = `vercentic_panels_${objectName}`;
+  const leftStorageKey   = `vercentic_panels_left_${objectName}`;
+  const topStorageKey    = `vercentic_panels_top_${objectName}`;
+  const bottomStorageKey = `vercentic_panels_bottom_${objectName}`;
+  const PANEL_VERSION    = "v28"; // Company panels now companyOnly-scoped; Job panels shared with Talent Pool
+  const versionKey       = `vercentic_panels_version_${objectName}`;
 
   // ── Single atomic layout load — deduplicates all 4 zones together ───────
   // Previously 4 separate useState calls allowed the same panel ID to appear
@@ -9904,7 +10039,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     const allSaved = new Set([...flatPanelIds(top), ...flatPanelIds(left), ...flatPanelIds(right), ...flatPanelIds(bottom)]);
     const defaultOrder = getDefaultPanelOrder(objectName);
     const newPanels = flatPanelIds(defaultOrder).filter(id => !allSaved.has(id));
-    const allNewFromMeta = Object.keys(PANEL_META).filter(id => !allSaved.has(id) && !newPanels.includes(id));
+    // Only auto-inject PANEL_META keys that are actually valid for THIS object type
+    // (panelVisible() enforces personOnly/jobOnly/companyOnly + feature flags) — otherwise
+    // e.g. Company-only panels would get silently added to every Person/Job/Talent Pool layout.
+    const allNewFromMeta = Object.keys(PANEL_META).filter(id => !allSaved.has(id) && !newPanels.includes(id) && panelVisible(id));
     if (newPanels.length || allNewFromMeta.length) right = [...right, ...newPanels, ...allNewFromMeta];
 
     return { top, left, right, bottom };
@@ -10170,12 +10308,10 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
       formData.append('uploaded_by',    'Admin');
       formData.append('environment_id', currentObject.environment_id || environment?.id || '');
       const res = await tFetch('/api/attachments/upload', { method:'POST', body: formData });
-      if (!res.ok) {
-        let errMsg = `Upload failed (${res.status})`;
-        try { const e = await res.json(); errMsg = e.error || errMsg; } catch {}
-        setUploadError(errMsg);
+      if (res?.error) {
+        setUploadError(res.error);
       } else {
-        const att = await res.json();
+        const att = res;
         load();
         if (ft?.parse_cv && ff.cv_parsing) {
           if (confirm(`"${ft.name}" file uploaded. Parse CV fields automatically?`)) {
@@ -10775,6 +10911,8 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Panel content renderer ── (lowercase = render function, NOT a React component)
   const renderPanel = useCallback(({ id }) => {
+    // Company panels navigate to people, so they need the People object id.
+    const peopleObjId = (allObjects || []).find(o => o.slug === "people")?.id;
     // Dynamic section panels — render the fields for this section
     if (id?.startsWith("section__")) {
       const section = panelSections.find(s => `section__${s.separatorId}` === id);
@@ -11054,13 +11192,23 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     if (id==="user") return <UserPanel record={record}/>;
     if (id==="hub")  return <CandidateHubPanel record={record} environment={environment}/>;
     if (id==="scorecard") return ff.interviews ? <ScorecardPanel record={record} environment={environment}/> : null;
-    if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment}/>;
+    if (id==="interview_plan") return ff.interviews ? <Suspense fallback={<div style={{padding:"20px",textAlign:"center",color:"#9ca3af",fontSize:13}}>Loading…</div>}><InterviewPlanPanelLazy record={record} environment={environment} onNavigate={onNavigate}/></Suspense> : null;
+    if (id==="assessments")  return <AssessmentsPanel record={record} environment={environment} activeJobId={activeJobContext}/>;
     if (id==="engagement") return <EngagementPanel recordId={record?.id}/>;
     if (id==="questions") return <JobQuestionsPanel record={record} environment={environment}/>;
     if (id==="job_tasks") return <JobTasksPanel record={record} environment={environment}/>;
     if (id==="bias_scan") return <BiasScanner record={record} environment={environment}/>;
     if (id==="share")    return <SharingPanel record={record} environment={environment} canRecord={canRecord}/>;
     if (id==="fraud")    return <FraudPanel   record={record} fields={fields}  environment={environment} canRecord={canRecord}/>;
+
+    // ── Company panels ──────────────────────────────────────────────────────
+    // peopleObjectId lets a click on an employee open their person record.
+    if (id==="company_employees") return <CompanyEmployeesPanel record={record} environment={environment} peopleObjectId={peopleObjId}/>;
+    if (id==="company_alumni")    return <CompanyAlumniPanel    record={record} environment={environment} peopleObjectId={peopleObjId}/>;
+    if (id==="company_intel")     return <CompanyIntelPanel     record={record} environment={environment}/>;
+    if (id==="company_research")  return <CompanyResearchPanel  record={record} environment={environment} onUpdate={onUpdate}/>;
+    if (id==="company_org")       return <CompanyOrgPanel       record={record} environment={environment}/>;
+    if (id==="company_aliases")   return <CompanyAliasesPanel   record={record} environment={environment}/>;
     // interview_plan and scorecard are handled earlier with ff.interviews gate
 
     if (id==="match") {
@@ -11099,7 +11247,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
     );
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections, previewAtt, activeJobContext, linkedJobRecords, attachmentJobFilter, formJobFilter, taskJobFilter]);
+  }, [record, editing, notes, attachments, fields, environment, objectName, fileTypes, cvParsing, cvParseAtt, docExtracting, docExtractAtt, uploading, uploadDragging, selectedFileType, currentObject, allObjects, openPanels, _permCtx, uploadError, globalEdit, saving, panelSections, collapsedSections, previewAtt, activeJobContext, linkedJobRecords, attachmentJobFilter, formJobFilter, taskJobFilter, onUpdate]);
 
 
   // PanelCard is defined at module level above RecordDetail
@@ -11124,7 +11272,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
 
   // ── Hooks that must be before any early return (rules-of-hooks) ──────────
   // Resizable column split (full-page only, but hooks must be unconditional)
-  const colStorageKey = `talentos_colwidth_${objectName}`;
+  const colStorageKey = `vercentic_colwidth_${objectName}`;
   const [leftPct, setLeftPct] = useState(() => {
     try { return parseFloat(localStorage.getItem(colStorageKey)) || 38; } catch { return 38; }
   });
@@ -11232,7 +11380,7 @@ export const RecordDetail = ({ record, fields, allObjects, environment, objectNa
   // Handler for AI suggested action strip — fires the Copilot with the action prompt
   const handleSuggestedAction = (action) => {
     const prompt = action.prompt || action.description || action.label || action.title || "Help me with this action";
-    window.dispatchEvent(new CustomEvent("talentos:copilotPrompt", { detail: { prompt } }));
+    window.dispatchEvent(new CustomEvent("vercentic:copilotPrompt", { detail: { prompt } }));
   };
 
   const COMM_OPTIONS = [
@@ -11876,7 +12024,9 @@ function TalentCardGrid({ records, fields, visibleFieldIds, objectColor, onProfi
     if (field.field_type === "currency") return <span style={{ fontWeight:600, fontSize:12 }}>${Number(val).toLocaleString()}</span>;
     if (field.field_type === "date") return <span style={{ fontSize:11, color:C.text2 }}>{new Date(val).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</span>;
     const str = String(val);
-    return <span style={{ fontSize:12, color:C.text1, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:1, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{str}</span>;
+    // Prose gets a few lines in a card (there's vertical room); everything else stays on one
+    const cardLines = (LONG_TEXT_TYPES.has(field.field_type) || str.length > LONG_TEXT_MIN) ? 3 : 1;
+    return <span style={{ fontSize:12, color:C.text1, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:cardLines, WebkitBoxOrient:"vertical", overflow:"hidden", wordBreak:"break-word" }}>{str}</span>;
   };
 
   if (!records.length) return (
@@ -12024,6 +12174,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   const showEngagement = isPeopleObj && (visibleFieldIds || []).includes('__engagement');
   const [engagementScores,  setEngagementScores]  = useState({});
   const [loadingEngagement, setLoadingEngagement] = useState(false);
+  // ── Screening response columns ─────────────────────────────────────────────
+  // screeningMeta:      { [jobId]: { rules: { [ruleId]: rule } } }
+  // screeningResponses: { [jobId]: { [candidateRecordId]: responseRow } }
+  const [screeningMeta, setScreeningMeta]           = useState({});
+  const [screeningResponses, setScreeningResponses] = useState({});
+  const [loadingScreeningJobs, setLoadingScreeningJobs] = useState({}); // jobId -> true while fetching
   const [activeFilters, setActiveFilters]     = useState([]);
   const [aiFilter,      setAiFilter]          = useState(null);
   const [filterLogic, setFilterLogic]         = useState("AND");
@@ -12128,11 +12284,11 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       setAiFilter({ type: 'ids', ids, label: label || `AI Selection · ${ids.length} records`, reason });
       setPage(1);
     };
-    window.addEventListener('talentos:apply-filter',    handleApplyFilter);
-    window.addEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+    window.addEventListener('vercentic:apply-filter',    handleApplyFilter);
+    window.addEventListener('vercentic:apply-id-filter', handleApplyIdFilter);
     return () => {
-      window.removeEventListener('talentos:apply-filter',    handleApplyFilter);
-      window.removeEventListener('talentos:apply-id-filter', handleApplyIdFilter);
+      window.removeEventListener('vercentic:apply-filter',    handleApplyFilter);
+      window.removeEventListener('vercentic:apply-id-filter', handleApplyIdFilter);
     };
   }, [fields]);
 
@@ -12172,7 +12328,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { setActiveListName(null); }, [object?.id]);
   const [activeTab, setActiveTab] = useState("records");
 
-  // Listen for copilot filter commands — talentos:apply-filter
+  // Listen for copilot filter commands — vercentic:apply-filter
   // Also check _pendingFilter on mount: when the Copilot fires NAVIGATE + APPLY_FILTER together,
   // the filter event fires before RecordsView is mounted. The module-level listener stores it,
   // and we consume it here once fields are loaded.
@@ -12184,7 +12340,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       _pendingFilter = null; // claim it
       // Delay one tick so fields have populated from the load() call
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('talentos:apply-filter', { detail: pending.detail }));
+        window.dispatchEvent(new CustomEvent('vercentic:apply-filter', { detail: pending.detail }));
       }, 150);
     }
 
@@ -12244,12 +12400,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       // Auto-open the filter panel so user can see what was applied
       if ((filters?.length || field) && !clearFilters) setShowFilterPanel(true);
     };
-    window.addEventListener("talentos:apply-filter", handler);
-    return () => window.removeEventListener("talentos:apply-filter", handler);
+    window.addEventListener("vercentic:apply-filter", handler);
+    return () => window.removeEventListener("vercentic:apply-filter", handler);
   }, [fields]); // re-bind when fields load so resolveField has current data
   const [total, setTotal]       = useState(0);
 
-  const colStorageKey = `talentos_cols_${object.id}`;
+  const colStorageKey = `vercentic_cols_${object.id}`;
 
   // Track which object we last successfully loaded — used to decide whether to clear records
   const lastLoadedObjectRef = useRef(null);
@@ -12356,7 +12512,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     });
 
     // Broadcast list summary to copilot so it can answer list questions
-    window.dispatchEvent(new CustomEvent("talentos:list-context", {
+    window.dispatchEvent(new CustomEvent("vercentic:list-context", {
       detail: buildListContext(object, filtered, filterChip ? filtered.length : (r.pagination?.total||0), fields)
     }));
   }, [object.id, environment.id, page, search, filterChip, reloadKey]);
@@ -12373,7 +12529,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
   useEffect(() => { load(); }, [load]);
 
   // Re-trigger load when the server comes back online after a restart.
-  // App.jsx fires 'talentos:server-online' when apiOnline flips false → true.
+  // App.jsx fires 'vercentic:server-online' when apiOnline flips false → true.
   // Guard against rapid re-fires (a flapping connection) — at most one reload
   // per 10s — so a recovering server can't be hammered by a reload storm.
   useEffect(() => {
@@ -12384,8 +12540,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       lastReload = now;
       setReloadKey(k => k + 1);
     };
-    window.addEventListener('talentos:server-online', handler);
-    return () => window.removeEventListener('talentos:server-online', handler);
+    window.addEventListener('vercentic:server-online', handler);
+    return () => window.removeEventListener('vercentic:server-online', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔄 Live update — Copilot (or any other source) fires this after creating a record.
@@ -12398,8 +12554,8 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
         setReloadKey(k => k + 1);
       }
     };
-    window.addEventListener('talentos:recordCreated', handler);
-    return () => window.removeEventListener('talentos:recordCreated', handler);
+    window.addEventListener('vercentic:recordCreated', handler);
+    return () => window.removeEventListener('vercentic:recordCreated', handler);
   }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch batch engagement scores whenever records load (People object only, when column toggled on)
@@ -12468,10 +12624,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     const session = JSON.parse(localStorage.getItem(_sessionKey()) || "{}");
     const roleSlug = session?.user?.role?.slug;
     if (roleSlug) {
-      const v = localStorage.getItem(`talentos_bulk_threshold_${roleSlug}`);
+      const v = localStorage.getItem(`vercentic_bulk_threshold_${roleSlug}`);
       if (v !== null) return parseInt(v, 10);
     }
-    return parseInt(localStorage.getItem("talentos_bulk_threshold") || "20", 10);
+    return parseInt(localStorage.getItem("vercentic_bulk_threshold") || "20", 10);
   };
 
   const guardedBulkAction = (action, payload = {}) => {
@@ -12562,7 +12718,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     if (action === "communicate") {
       // Fire event with full recipient records so the modal can render names/emails
       const recipientRecords = records.filter(r => ids.includes(r.id));
-      window.dispatchEvent(new CustomEvent("talentos:bulkCommunicate", {
+      window.dispatchEvent(new CustomEvent("vercentic:bulkCommunicate", {
         detail: { recordIds: ids, recipients: recipientRecords, type: payload.type || null, object }
       }));
       return; // don't clear selection
@@ -12573,7 +12729,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       window.__toast?.success?.(`Note added to ${ids.length} record${ids.length !== 1 ? "s" : ""}`);
     } else if (action === "interview") {
       // Navigate to Interviews tab with bulk candidates pre-populated
-      window.dispatchEvent(new CustomEvent("talentos:bulkInterview", {
+      window.dispatchEvent(new CustomEvent("vercentic:bulkInterview", {
         detail: {
           recordIds: ids,
           candidates: records.filter(r => ids.includes(r.id)).map(r => ({
@@ -12636,6 +12792,16 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             bv = engagementScores[b.id]?.score ?? -1;
             return sortDir === 'asc' ? av - bv : bv - av;
           }
+        } else if (sortBy.startsWith('screening|')) {
+          const parsedSort = parseScreeningColId(sortBy);
+          if (parsedSort) {
+            const aResp = screeningResponses?.[parsedSort.jobId]?.[a.id];
+            const bResp = screeningResponses?.[parsedSort.jobId]?.[b.id];
+            const aAns = aResp?.results?.[parsedSort.ruleId]?.answer ?? aResp?.answers?.[parsedSort.ruleId];
+            const bAns = bResp?.results?.[parsedSort.ruleId]?.answer ?? bResp?.answers?.[parsedSort.ruleId];
+            av = Array.isArray(aAns) ? aAns.join(', ') : (aAns ?? '');
+            bv = Array.isArray(bAns) ? bAns.join(', ') : (bAns ?? '');
+          } else { av = ''; bv = ''; }
         } else {
           av = a.data?.[sortBy] ?? ''; bv = b.data?.[sortBy] ?? '';
         }
@@ -12649,12 +12815,12 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
       recs = recs.filter(r => idSet.has(r.id));
     }
     return recs;
-  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter]);
+  }, [records, activeFilters, fields, sortBy, sortDir, linkedJobs, engagementScores, aiFilter, screeningResponses]);
 
   // Re-broadcast list context whenever displayed records change (filters applied, sort changed etc.)
   useEffect(() => {
     if (!displayedRecords.length && !records.length) return;
-    window.dispatchEvent(new CustomEvent("talentos:list-context", {
+    window.dispatchEvent(new CustomEvent("vercentic:list-context", {
       detail: buildListContext(object, displayedRecords, displayedRecords.length, fields)
     }));
   }, [displayedRecords, fields]);
@@ -12792,6 +12958,68 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
     }).catch(() => {});
   }, [object?.id, environment?.id, allObjects.length]);
 
+  // ── Screening response columns: job title lookup ────────────────────────────
+  // Reuses the Jobs records already loaded above for cross-object filtering —
+  // no extra fetch needed just to label a screening column's job.
+  const jobsObjId = allObjects.find(o => (o.slug||"").toLowerCase() === "jobs")?.id;
+  const screeningJobTitles = useMemo(() => {
+    const map = {};
+    (linkedObjectRecords[jobsObjId] || []).forEach(r => {
+      map[r.id] = r.data?.job_title || r.data?.title || r.data?.name || "Job";
+    });
+    return map;
+  }, [linkedObjectRecords, jobsObjId]);
+  // Same Jobs records, reshaped as {id, title} pairs for the Column Picker's
+  // "Screening Responses" section — sorted alphabetically for easy scanning.
+  const screeningJobsList = useMemo(() => {
+    return (linkedObjectRecords[jobsObjId] || [])
+      .map(r => ({ id: r.id, title: screeningJobTitles[r.id] || "Job" }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [linkedObjectRecords, jobsObjId, screeningJobTitles]);
+
+  // ── Screening response columns: lazy-load rules + responses ────────────────
+  // Whenever a screening|<jobId>|<ruleId> column is added to visibleFieldIds
+  // for a job we haven't fetched yet, pull that job's question set (once) and
+  // every candidate's answers for it (one call covers all rows in the table).
+  useEffect(() => {
+    if (!isPeopleObj || !environment?.id) return;
+    const ids = visibleFieldIds || [];
+    const jobIdsNeeded = new Set();
+    ids.forEach(id => {
+      const parsed = parseScreeningColId(id);
+      if (parsed && !screeningMeta[parsed.jobId] && !loadingScreeningJobs[parsed.jobId]) {
+        jobIdsNeeded.add(parsed.jobId);
+      }
+    });
+    if (jobIdsNeeded.size === 0) return;
+    setLoadingScreeningJobs(prev => {
+      const next = { ...prev };
+      jobIdsNeeded.forEach(jobId => { next[jobId] = true; });
+      return next;
+    });
+    jobIdsNeeded.forEach(jobId => {
+      Promise.all([
+        api.get(`/screening/job/${jobId}`),
+        api.get(`/screening/responses/job/${jobId}`),
+      ]).then(([ruleData, responseList]) => {
+        const rulesArr = Array.isArray(ruleData?.rules) ? ruleData.rules : [];
+        const ruleMap = {};
+        rulesArr.forEach(r => { ruleMap[r.id] = r; });
+        setScreeningMeta(prev => ({ ...prev, [jobId]: { rules: ruleMap } }));
+        const respArr = Array.isArray(responseList) ? responseList : [];
+        const respMap = {};
+        respArr.forEach(r => { if (r.record_id) respMap[r.record_id] = r; });
+        setScreeningResponses(prev => ({ ...prev, [jobId]: respMap }));
+      }).catch(() => {
+        // Mark as loaded-but-empty so a transient error doesn't retry every render
+        setScreeningMeta(prev => ({ ...prev, [jobId]: { rules: {} } }));
+        setScreeningResponses(prev => ({ ...prev, [jobId]: {} }));
+      }).finally(() => {
+        setLoadingScreeningJobs(prev => { const next = { ...prev }; delete next[jobId]; return next; });
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleFieldIds, isPeopleObj, environment?.id]);
 
   const handleExport = (format) => {
     setShowExport(false);
@@ -12997,6 +13225,7 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
                 onChange={handleColChange}
                 onClose={() => setShowColPicker(false)}
                 isPeopleObj={isPeopleObj}
+                screeningJobs={screeningJobsList}
               />
             )}
           </div>
@@ -13144,7 +13373,10 @@ export default function RecordsView({ environment, object, onOpenRecord, initial
             onStageChange={(recordId, updated) => setLinkedJobs(prev => ({ ...prev, [recordId]: updated }))}
             showEngagement={showEngagement}
             engagementScores={engagementScores}
-            isPeopleObj={isPeopleObj}/>
+            isPeopleObj={isPeopleObj}
+            screeningMeta={screeningMeta}
+            screeningResponses={screeningResponses}
+            screeningJobTitles={screeningJobTitles}/>
         )}
       </div>
 

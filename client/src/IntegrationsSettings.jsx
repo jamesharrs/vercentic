@@ -309,7 +309,7 @@ function SetupModal({provider,existing,environmentId,onClose,onSaved}){
   const handleTest=async()=>{
     if(!existing?.id){setErr('Save first before testing');return;}
     setTesting(true);setTestResult(null);
-    const r=await tFetch(`/api/integrations/${existing.id}/test`,{method:'POST'}).then(x=>x.json()).catch(e=>({ok:false,message:e.message}));
+    const r=await tFetch(`/api/integrations/${existing.id}/test`,{method:'POST'}).catch(e=>({ok:false,message:e.message}));
     setTestResult(r);setTesting(false);
     if(r.ok) onSaved(r); // refresh parent list so status badge updates
   };

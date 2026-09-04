@@ -7,6 +7,7 @@ const express  = require('express');
 const router   = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function ts() { return new Date().toISOString(); }
@@ -27,7 +28,7 @@ function callClaude(prompt, system = 'You are an expert recruiter evaluator. Ret
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   return client.messages
-    .create({ model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514', max_tokens: 1200,
+    .create({ model: MODEL_DEFAULT, max_tokens: 1200,
       system, messages: [{ role: 'user', content: prompt }] })
     .then(r => r.content[0]?.text || '{}');
 }

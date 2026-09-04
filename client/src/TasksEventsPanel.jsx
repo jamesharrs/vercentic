@@ -363,8 +363,7 @@ function TaskRow({ task, onRefresh }) {
     fd.append('file_type_id',   config.file_type_id   || '');
     fd.append('file_type_name', config.file_type_name  || 'Upload');
     fd.append('uploaded_by',    'task_completion');
-    const r = await tFetch('/api/attachments/upload', { method:'POST', body:fd });
-    const att = await r.json();
+    const att = await tFetch('/api/attachments/upload', { method:'POST', body:fd });
     await complete({ file_name:file.name, attachment_id:att?.id, uploaded_at:new Date().toISOString() });
   };
 
@@ -547,8 +546,8 @@ export function TasksEventsPanel({ record, environment, linkedJobRecords=[], job
   useRecordSync(recId, ()=>load());
   useEffect(()=>{
     const h = ()=>load();
-    window.addEventListener('talentos:tasks-updated', h);
-    return ()=>window.removeEventListener('talentos:tasks-updated', h);
+    window.addEventListener('vercentic:tasks-updated', h);
+    return ()=>window.removeEventListener('vercentic:tasks-updated', h);
   }, [load]);
 
   const handleDeleteEvent = async id => { await tFetch(`/api/calendar/events/${id}`,{method:"DELETE"}); load(); };

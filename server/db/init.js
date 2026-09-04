@@ -4,6 +4,9 @@ const fs   = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { AsyncLocalStorage } = require('async_hooks');
 const pg = require('./postgres');
+// Safe to require at module load — seedCompanies only pulls in uuid up front and
+// resolves its data-layer deps lazily inside the function, so no import cycle.
+const { seedCompanies } = require('./seedCompanies');
 
 const DATA_DIR = process.env.DATA_PATH || path.join(__dirname, '../../data');
 
@@ -412,6 +415,9 @@ async function initDB() {
     });
 
     await seedPersonTypeFields('master');
+    // Wrapped: seedCompanies resolves the store via getStore(), which reads
+    // AsyncLocalStorage rather than taking a tenant key.
+    await tenantStorage.run('master', () => seedCompanies('master'));
     await seedUsersAndRoles('master');
     saveStore('master');
     console.log('✅ Master store loaded');
@@ -422,6 +428,7 @@ async function initDB() {
   // Fresh seed — run within master tenant context
   await tenantStorage.run('master', async () => {
     await seedEnvironmentAndObjects();
+    await seedCompanies('master');
     await seedUsersAndRoles('master');
   });
   console.log('✅ Seeded master store');
@@ -584,7 +591,9 @@ module.exports = { getStore, saveStore, saveStoreNow, withBatch, query, findOne,
 // Migrations are expensive (scan every tenant's store, write to disk).
 // Only run them once: track a version stamp in the master store.
 // Bump MIGRATION_VERSION when you add a new migration.
-const MIGRATION_VERSION = 14;
+// 15 — Company object. Forces the super_admin permission rebuild to re-run so
+//      the companies object-level rules land on existing stores.
+const MIGRATION_VERSION = 15;
 
 function runMigrationsIfNeeded() {
   const store = storeCache['master'];
@@ -610,6 +619,7 @@ function runMigrationsIfNeeded() {
   pruneOrphanedPeopleLinks();
   migrateCalendarIds();
   migrateAssignmentEnvIds();
+  migrateCompaniesAllTenants();
   migrateRolesSeed();
   store._migration_version = MIGRATION_VERSION;
   } finally { _batchMode = false; }
@@ -1111,6 +1121,24 @@ function migrateAssignmentEnvIds() {
 // ── Migration v13: ensure all environments have the 5 standard roles + permissions ─
 // Fixes environments provisioned with the old simplified role format that lacked
 // proper slugs and RBAC permission rows. Safe to run repeatedly (idempotent).
+// ── Migration: Company object across every tenant ───────────────────────────
+// initDB only seeds master. Every other tenant picks the object up here.
+// seedCompanies is declared async but contains no awaits, so the body completes
+// synchronously and this is safe to call from the sync migration runner.
+function migrateCompaniesAllTenants() {
+  let seeded = 0;
+  for (const [key, store] of Object.entries(storeCache)) {
+    if (!store) continue;
+    try {
+      tenantStorage.run(key, () => seedCompanies(key));
+      seeded++;
+    } catch (e) {
+      console.warn(`[migrateCompanies] failed for ${key}:`, e.message);
+    }
+  }
+  console.log(`✅ migrateCompanies: companies object ensured on ${seeded} store(s)`);
+}
+
 function migrateRolesSeed() {
   const SYSTEM_ROLES = [
     { name: 'Super Admin',    slug: 'super_admin',    color: '#e03131', description: 'Full access to everything' },

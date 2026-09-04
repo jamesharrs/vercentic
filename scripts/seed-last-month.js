@@ -1,7 +1,8 @@
 const fs = require('fs');
+const path = require('path');
 const { randomUUID: uuidv4 } = require('crypto');
 
-const DATA_PATH = '/Users/james/projects/talentos/data/talentos.json';
+const DATA_PATH = path.join(__dirname, '../data/talentos.json');
 const data = JSON.parse(fs.readFileSync(DATA_PATH));
 
 const ENV_ID    = 'c0c64e3b-113d-48b8-bc3c-684769849742';

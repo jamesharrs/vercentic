@@ -4,6 +4,7 @@ const { trackAIUsage } = require('./admin_dashboard');
 const path    = require('path');
 const fs      = require('fs');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
+const { MODEL_OPUS } = require('../config/ai_models');
 
 const IMAGE_EXTS  = new Set(['.jpg','.jpeg','.png','.gif','.webp','.bmp','.tiff','.tif']);
 const IMAGE_MIMES = new Set(['image/jpeg','image/png','image/gif','image/webp','image/bmp','image/tiff']);
@@ -61,7 +62,7 @@ async function callClaudeVision(apiKey, imageData, mediaType, prompt) {
     method: 'POST',
     headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01' },
     body: JSON.stringify({
-      model: 'claude-opus-4-6', max_tokens: 1500,
+      model: MODEL_OPUS, max_tokens: 1500,
       messages: [{ role:'user', content: [
         { type:'image', source: { type:'base64', media_type:mediaType, data:imageData } },
         { type:'text', text: prompt },
@@ -77,7 +78,7 @@ async function callClaudeText(apiKey, text, prompt) {
     method: 'POST',
     headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01' },
     body: JSON.stringify({
-      model: 'claude-opus-4-6', max_tokens: 1500, system: prompt,
+      model: MODEL_OPUS, max_tokens: 1500, system: prompt,
       messages: [{ role:'user', content: `Extract data from this document:\n\n${text.slice(0, 12000)}` }],
     }),
   });
@@ -149,7 +150,7 @@ router.post('/', (req, res, next) => {
         feature:        'doc_extract',
         tokens_in:      claudeResponse.usage?.input_tokens  || 0,
         tokens_out:     claudeResponse.usage?.output_tokens || 0,
-        model:          'claude-opus-4-6',
+        model:          MODEL_OPUS,
         environment_id: req.body?.environment_id || '',
       });
     } catch(_e) {}

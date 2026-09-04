@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const DEFAULT_QUESTIONS = [
   { id: 'kq1', type: 'knockout', competency: 'eligibility', text: 'Are you currently eligible to work in the country where this role is based?', options: ['Yes', 'No'], pass_value: 'Yes', weight: 10 },
@@ -33,7 +34,7 @@ const callClaude = async (prompt, systemPrompt) => {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens: 1000, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
   });
   const data = await res.json();
   return data.content?.[0]?.text || '';
@@ -54,7 +55,7 @@ const scoreAnswer = async (question, answer, jobContext, candidateName) => {
   const prompt = `Job context:\n${jobContext}\nCandidate: ${candidateName}\nQuestion type: ${question.type} — Competency: ${question.competency}\nQuestion: ${question.text}\nCandidate's answer: ${answer}\nMax score: ${question.weight}\n\nRespond with JSON:\n{"score":<0-${question.weight}>,"feedback":"<1-2 sentences>","ai_annotation":"<1 sentence>","strengths":["<s1>"],"gaps":["<g1>"]}`;
   try {
     const raw = await callClaude(prompt, systemPrompt);
-    const parsed = JSON.parse(raw.replace(/\`\`\`json|\`\`\`/g, '').trim());
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
     return { ...parsed, max_score: question.weight, passed: true };
   } catch {
     return { score: Math.round(question.weight * 0.5), max_score: question.weight, passed: true, feedback: 'Manual review required.', ai_annotation: 'Scoring error.', strengths: [], gaps: [] };
@@ -67,7 +68,7 @@ const generateSummary = async (session, jobContext) => {
   const prompt = `Job context:\n${jobContext}\nCandidate: ${session.candidate_name}\nResponses:\n${answersText}\nTotal: ${session.total_score}/${session.max_score}\n\nJSON format:\n{"headline":"<1 sentence>","summary":"<3-4 sentences>","top_strengths":["s1","s2","s3"],"areas_to_probe":["p1","p2"],"recommendation":"strong_yes"|"yes"|"consider"|"no"|"knockout_fail","recommendation_reason":"<1 sentence>"}`;
   try {
     const raw = await callClaude(prompt, systemPrompt);
-    return JSON.parse(raw.replace(/\`\`\`json|\`\`\`/g, '').trim());
+    return JSON.parse(raw.replace(/```json|```/g, '').trim());
   } catch {
     const pct = Math.round((session.total_score / session.max_score) * 100);
     return { headline: `Candidate scored ${pct}%.`, summary: 'Review individual responses.', top_strengths: [], areas_to_probe: [], recommendation: pct >= 70 ? 'yes' : pct >= 50 ? 'consider' : 'no', recommendation_reason: 'Based on overall score.' };

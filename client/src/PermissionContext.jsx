@@ -15,7 +15,7 @@ function getSessionRole() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    const key = isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
+    const key = isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
     const sess = JSON.parse(localStorage.getItem(key) || 'null');
     return sess?.role?.slug || null;
   } catch { return null; }

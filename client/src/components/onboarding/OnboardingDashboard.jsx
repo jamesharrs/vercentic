@@ -278,7 +278,7 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
                   const probDays=daysUntil(p.data?.probation_end||p.data?.probation_review_date);
                   return (
                     <tr key={p.id} style={{ background:i%2===0?"transparent":"#fafafa", cursor:"pointer" }}
-                      onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:p.id,objectId:p.object_id}}))}>
+                      onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:p.id,objectId:p.object_id}}))}>
                       <td style={{ padding:"10px 12px", fontSize:13, fontWeight:600, color:C.accent }}>{name}</td>
                       <td style={{ padding:"10px 12px", fontSize:12, color:C.text2 }}>{p.data?.current_title||p.data?.job_title||'—'}</td>
                       <td style={{ padding:"10px 12px", fontSize:12, color:C.text2 }}>{fmtDate(p.data?.start_date)}</td>

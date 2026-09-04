@@ -23,12 +23,13 @@ const RULE_TYPES = [
   { value:"knockout", label:"Knockout",  color:"#ef4444", bg:"#fef2f2", desc:"Auto-reject if answer fails" },
   { value:"required", label:"Required",  color:"#d97706", bg:"#fffbeb", desc:"Must pass — recruiter reviews" },
   { value:"preferred",label:"Preferred", color:"#059669", bg:"#ecfdf5", desc:"Bonus points — doesn't disqualify" },
+  { value:"basic",     label:"Basic",     color:"#64748b", bg:"#f1f5f9", desc:"Collects the answer — no pass/fail rule" },
 ];
 const RULE_TYPE_MAP = Object.fromEntries(RULE_TYPES.map(t=>[t.value,t]));
 
-const Q_COLORS = { knockout:"#ef4444", competency:"#3b82f6", technical:"#8b5cf6", culture:"#10b981" };
-const Q_LABELS = { knockout:"Eligibility", competency:"Competency", technical:"Technical", culture:"Culture Fit" };
-const Q_TYPES  = ["knockout","competency","technical","culture"];
+const Q_COLORS = { knockout:"#ef4444", competency:"#3b82f6", technical:"#8b5cf6", culture:"#10b981", file_upload:"#14B8A6" };
+const Q_LABELS = { knockout:"Eligibility", competency:"Competency", technical:"Technical", culture:"Culture Fit", file_upload:"File Upload" };
+const Q_TYPES  = ["knockout","competency","technical","culture","file_upload"];
 
 // Lucide SVG icon helper — no emoji anywhere in UI
 const PATHS = {
@@ -100,7 +101,7 @@ function ScreeningGeneratePreview({ items, onConfirm, onClose }) {
                           {(row.question_options?.length>0 ? RULE_TYPES : RULE_TYPES.filter(t=>t.value!=="knockout")).map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                       </div>
-                      {row.question_options?.length>0&&<div>
+                      {row.question_options?.length>0 && row.rule_type!=="basic"&&<div>
                         <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:2}}>PASS ANSWER</label>
                         <select value={row.pass_value} onChange={e=>sf(i,"pass_value",e.target.value)}
                           style={{padding:"4px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,background:C.surface,outline:"none"}}>
@@ -210,8 +211,8 @@ function RuleCard({ rule, onChange, onRemove }) {
                 {availableRuleTypes.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            {/* Pass answer — multiple choice only */}
-            {hasOptions&&<div>
+            {/* Pass answer — multiple choice only, and only when a rule is actually being evaluated */}
+            {hasOptions && rule.rule_type!=="basic" &&<div>
               <label style={{fontFamily:F,fontSize:10,color:C.text3,fontWeight:600,display:"block",marginBottom:3}}>PASS ANSWER</label>
               <select value={rule.pass_value||""} onChange={e=>onChange({...rule,pass_value:e.target.value})}
                 style={{padding:"5px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,background:C.surface,outline:"none"}}>
@@ -225,8 +226,12 @@ function RuleCard({ rule, onChange, onRemove }) {
               <input type="number" min={1} max={10} value={rule.weight||5} onChange={e=>onChange({...rule,weight:Number(e.target.value)})}
                 style={{width:60,padding:"5px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,fontFamily:F,fontSize:12,outline:"none"}}/>
             </div>}
-            {/* Free-text hint */}
-            {!hasOptions&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:"#f8fafc",border:`1px solid ${C.border}`}}>
+            {/* Basic hint — pure data collection, no rule evaluated regardless of options */}
+            {rule.rule_type==="basic"&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:"#f8fafc",border:`1px solid ${C.border}`}}>
+              <span style={{fontFamily:F,fontSize:11,color:C.text3}}>Data collection only — no pass/fail evaluation</span>
+            </div>}
+            {/* Free-text hint (non-basic) */}
+            {!hasOptions && rule.rule_type!=="basic"&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:"#f8fafc",border:`1px solid ${C.border}`}}>
               <span style={{fontFamily:F,fontSize:11,color:C.text3}}>Free text — recruiter reviews manually</span>
             </div>}
             <div style={{flex:1,minWidth:120}}>
@@ -453,7 +458,7 @@ export default function ScreeningRulesPanel({ record, environment, jobId: jobIdP
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search questions…"
                 style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:"none",boxSizing:"border-box"}}/>
             </div>
-            {["","knockout","competency","technical","culture"].map(t=>(
+            {["","knockout","competency","technical","culture","file_upload"].map(t=>(
               <button key={t} onClick={()=>setFilterType(t)}
                 style={{padding:"5px 10px",borderRadius:7,border:`1.5px solid ${filterType===t?(Q_COLORS[t]||C.accent):C.border}`,
                   background:filterType===t?(Q_COLORS[t]||C.accent):"transparent",

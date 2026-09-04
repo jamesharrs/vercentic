@@ -131,7 +131,7 @@ router.patch('/:id', (req, res) => {
     if (conflict) return res.status(409).json({ error: `Slug "${newSlug}" already exists in this environment`, existing_id: conflict.id });
   }
 
-  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages', 'nav', 'footer', 'branding', 'gdpr', 'feedback', 'config', 'custom_domain', 'type', 'access_type', 'allowed_roles', 'copilot', 'hub', 'wizard', 'equal_opps', 'ab_variants'];
+  const allowed = ['name', 'slug', 'description', 'status', 'theme', 'pages', 'nav', 'footer', 'branding', 'gdpr', 'feedback', 'config', 'custom_domain', 'type', 'access_type', 'allowed_roles', 'copilot', 'hub', 'wizard', 'equal_opps', 'ab_variants', 'hm_shortlist_saved_view_id'];
   const updates = { updated_at: new Date().toISOString() };
   allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
   store.portals[idx] = { ...store.portals[idx], ...updates };
@@ -500,6 +500,12 @@ router.post('/:id/wizard/submit', async (req, res) => {
           if (fileKey === '__file_cv_resume' && job_id) {
             att.linked_job_id = job_id;
             att.file_type_name = 'CV / Resume';
+          } else if (fileKey.startsWith('__file_sq_') && job_id) {
+            // Screening-question file upload — tag with the job and the question's label
+            const ruleId = fileKey.slice('__file_sq_'.length);
+            const rule = (store.screening_job_rules || []).find(r => r.record_id === job_id && r.id === ruleId);
+            att.linked_job_id = job_id;
+            att.file_type_name = rule?.display_label || rule?.question_text?.slice(0, 40) || 'Screening Upload';
           }
         }
       }

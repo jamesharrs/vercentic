@@ -184,6 +184,7 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
     footer2:"M3 3h18v4H3zM3 17h18v4H3zM3 10h18v4H3z",
     externalLink:"M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3",
     monitor:"M20 3H4a1 1 0 00-1 1v12a1 1 0 001 1h7v2H8v2h8v-2h-3v-2h7a1 1 0 001-1V4a1 1 0 00-1-1zm-1 12H5V5h14v10z",
+    maximize:"M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3",
     smartphone:"M17 1H7a2 2 0 00-2 2v18a2 2 0 002 2h10a2 2 0 002-2V3a2 2 0 00-2-2zm0 18H7V5h10v14zm-5 2a1 1 0 100-2 1 1 0 000 2z",    more:"M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z",    "play-circle":"M12 22a10 10 0 100-20 10 10 0 000 20zM10 8l6 4-6 4V8z",
 
 
@@ -519,6 +520,19 @@ const FeedbackTab = ({ portal, onChange, accent, api: apiProp }) => {
 const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   const [tab, setTab] = useState("branding");
   const [showDomainSetup, setShowDomainSetup] = useState(false);
+  const [wizardMode, setWizardMode] = useState("pages"); // "pages" (WizardBuilder) | "chatbot" (ChatbotFlowConfig)
+  const [hmSavedViews, setHmSavedViews] = useState([]);
+  const [hmViewsLoading, setHmViewsLoading] = useState(false);
+  useEffect(() => {
+    if (portal.type !== "hm_portal" || !portal.environment_id) return;
+    let cancelled = false;
+    setHmViewsLoading(true);
+    apiProp.get(`/saved-views?environment_id=${portal.environment_id}`)
+      .then(views => { if (!cancelled) setHmSavedViews(Array.isArray(views) ? views : []); })
+      .catch(() => { if (!cancelled) setHmSavedViews([]); })
+      .finally(() => { if (!cancelled) setHmViewsLoading(false); });
+    return () => { cancelled = true; };
+  }, [portal.type, portal.environment_id]);
   const gdpr = portal.gdpr || {};
   const br = portal.branding || {};
   const setG = (k,v) => onChange({ ...portal, gdpr: { ...gdpr, [k]: v } });
@@ -548,6 +562,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             {[
               ["branding","palette","Branding"],
               ["access","shield","Access"],
+              ...(portal.type==="hm_portal"?[["hm","users2","HM Setup"]]:[]),
               ["domain","link","Domain & Embed"],
               ["gdpr","lock","GDPR"],
               ["eo","users","Equal Opps"],
@@ -642,6 +657,32 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             <div style={{fontSize:11,color:C.text3}}>Comma-separated role slugs. Leave empty to allow any authenticated user.</div>
           </>}
         </>}
+        {tab==="hm"&&<>
+          {lbl("Shortlist — saved view")}
+          <div style={{fontSize:12,color:C.text3,marginTop:-2,marginBottom:2,lineHeight:1.5}}>
+            Pick a Saved View on the People object to define which candidates show up on a hiring manager's "Shortlist" tab.
+            Leave blank to show everyone across the hiring manager's own pipelines by default.
+          </div>
+          {hmViewsLoading
+            ? <div style={{fontSize:12,color:C.text3,padding:"8px 0"}}>Loading saved views…</div>
+            : (
+              <select value={portal.hm_shortlist_saved_view_id||""} onChange={e=>onChange({...portal,hm_shortlist_saved_view_id:e.target.value||null})} style={inp}>
+                <option value="">— No saved view (show everyone) —</option>
+                {hmSavedViews.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            )}
+          {(!hmViewsLoading && hmSavedViews.length===0) && (
+            <div style={{fontSize:11,color:C.text3,marginTop:2}}>No saved views found for this environment yet. Create one from the People list view, then come back here to select it.</div>
+          )}
+          {portal.hm_shortlist_saved_view_id && (
+            <div style={{marginTop:2,display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,background:C.accentLight,border:`1px solid ${C.accent}33`}}>
+              <Ic n="check" s={13} c={C.accent}/>
+              <span style={{fontSize:12,color:C.text1}}>
+                Using <strong>{hmSavedViews.find(v=>v.id===portal.hm_shortlist_saved_view_id)?.name || "this view"}</strong> to build the Shortlist.
+              </span>
+            </div>
+          )}
+        </>}
         {tab==="domain"&&<>
           {lbl("Portal URL")}
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -729,6 +770,21 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
                 {lbl("Avatar / logo URL")}<input value={cop.avatar_url||""} onChange={e=>setCop("avatar_url",e.target.value)} placeholder="https://…/avatar.png" style={inp}/>
                 {cop.avatar_url&&<img src={cop.avatar_url} alt="" style={{width:40,height:40,borderRadius:10,objectFit:"cover",marginTop:6,border:`1px solid ${C.border}`}} onError={e=>e.target.style.display="none"}/>}
               </div>
+              {/* Appearance */}
+              <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="maximize" s={13} c={C.text3}/> Widget Size</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                  {lbl("Panel height")}
+                  <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{cop.widget_height||580}px</span>
+                </div>
+                <input type="range" min={420} max={900} step={20} value={cop.widget_height||580} onChange={e=>setCop("widget_height",parseInt(e.target.value))} style={{width:"100%",accentColor:C.accent,cursor:"pointer"}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.text3,marginTop:2}}><span>Compact</span><span>Tall</span></div>
+                <div style={{display:"flex",gap:6,marginTop:10}}>
+                  {[["Compact",480],["Standard",580],["Tall",700],["Full",860]].map(([label,val])=>(
+                    <button key={label} onClick={()=>setCop("widget_height",val)} style={chipStyle((cop.widget_height||580)===val)}>{label}</button>
+                  ))}
+                </div>
+              </div>
               {/* Messaging */}
               <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
                 <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Ic n="messageSquare" s={13} c={C.text3}/> Messaging</div>
@@ -751,6 +807,8 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
                 ))}
                 <button onClick={()=>setCop("quick_actions",[...(cop.quick_actions||[]),{label:"",prompt:""}])} style={{fontSize:11,fontWeight:700,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:"4px 0",fontFamily:F}}>+ Add quick action</button>
               </div>
+              {/* Talent Community — fields collected + which pool sign-ups join */}
+              <TalentCommunityConfig cop={cop} setCop={setCop} environmentId={portal.environment_id}/>
               {/* Preview */}
               <div style={{padding:"14px",borderRadius:12,background:`linear-gradient(135deg, ${br.primary_color||br.primary||C.accent}, ${br.secondary_color||br.secondary||br.primary_color||br.primary||C.accent}dd)`,color:"white"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -820,7 +878,22 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             </div>
           </>);
         })()}
-        {tab==="wizard"&&<WizardBuilder portal={portal} onChange={onChange}/>}
+        {tab==="wizard"&&(<>
+              <div style={{display:"flex",gap:4,padding:4,borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`,marginBottom:16,width:"fit-content"}}>
+                {[["pages","fileText","Application Wizard"],["chatbot","sparkles","Chatbot"]].map(([id,icon,label])=>(
+                  <button key={id} onClick={()=>setWizardMode(id)} style={{
+                    display:"flex",alignItems:"center",gap:7,padding:"7px 14px",borderRadius:8,border:"none",cursor:"pointer",
+                    background:wizardMode===id?C.surface:"transparent",
+                    color:wizardMode===id?C.accent:C.text3,fontSize:12.5,fontWeight:wizardMode===id?700:600,fontFamily:F,
+                    boxShadow:wizardMode===id?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .15s",
+                  }}>
+                    <Ic n={icon} s={13} c={wizardMode===id?C.accent:C.text3}/> {label}
+                  </button>
+                ))}
+              </div>
+              {wizardMode==="pages" && <WizardBuilder portal={portal} onChange={onChange}/>}
+              {wizardMode==="chatbot" && <ChatbotFlowConfig portal={portal} onChange={onChange}/>}
+            </>)}
           </div>
         </div>
       </div>
@@ -1748,6 +1821,17 @@ const HM_CTA_OPTIONS = [
   { action:'approve_offer',      label:'Approve Offer' },
   { action:'reject',             label:'Reject' },
   { action:'view_profile',       label:'View Profile' },
+  { action:'view_pipeline',      label:'View Pipeline' },
+];
+
+// Dashboard-style shortcuts — a curated HM-scoped feed instead of a raw object+list.
+// Picking one sets cfg.data_source and clears object_id/list_id (and vice versa).
+const HM_DATA_SOURCES = [
+  { value:'',              label:'Custom (pick an object + list)' },
+  { value:'hm_my_jobs',     label:'My Open Roles' },
+  { value:'hm_shortlist',   label:'Shortlist Candidates' },
+  { value:'hm_interviews',  label:'Upcoming Interviews' },
+  { value:'hm_onboarding',  label:'Onboarding' },
 ];
 
 // ── ReportWidgetConfig ────────────────────────────────────────────────────────
@@ -1883,7 +1967,235 @@ const AISummaryWidgetConfig = ({ cfg, set, environmentId }) => {
   );
 };
 
-const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
+// ─── Talent Community field/pool config (Copilot tab) ─────────────────────────
+// Lets an admin choose which People fields the public Talent Community sign-up
+// form collects (cop.talent_community_fields) and which Talent Pool new
+// sign-ups get linked to (cop.talent_pool_id). This is a separate component —
+// not inline in the Copilot tab's `(() => {...})()` body — because that body
+// is re-invoked on every render as a plain function call, so useState/useEffect
+// can't safely live there; extracting a real component keeps hooks order
+// stable, same pattern as HMWidgetConfig below.
+const DEFAULT_TC_FIELD_KEYS = ["first_name", "last_name", "email", "phone"];
+const ALWAYS_ON_TC_FIELDS = ["first_name", "email"];
+
+const TalentCommunityConfig = ({ cop, setCop, environmentId }) => {
+  const [objects, setObjects] = useState([]);
+  const [peopleFields, setPeopleFields] = useState([]);
+  const [talentPools, setTalentPools] = useState([]);
+  const [loadingPools, setLoadingPools] = useState(false);
+
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/objects?environment_id=${environmentId}`)
+      .then(d => setObjects(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [environmentId]);
+
+  useEffect(() => {
+    const peopleObj = objects.find(o => o.slug === "people");
+    const poolsObj  = objects.find(o => o.slug === "talent-pools");
+    if (peopleObj) {
+      api.get(`/fields?object_id=${peopleObj.id}`)
+        .then(d => setPeopleFields(Array.isArray(d) ? d : []))
+        .catch(() => setPeopleFields([]));
+    }
+    if (poolsObj && environmentId) {
+      setLoadingPools(true);
+      api.get(`/records?object_id=${poolsObj.id}&environment_id=${environmentId}&limit=200`)
+        .then(d => setTalentPools(Array.isArray(d?.records) ? d.records : []))
+        .catch(() => setTalentPools([]))
+        .finally(() => setLoadingPools(false));
+    }
+  }, [objects, environmentId]);
+
+  const selectedKeys = (cop.talent_community_fields && cop.talent_community_fields.length)
+    ? cop.talent_community_fields
+    : DEFAULT_TC_FIELD_KEYS;
+
+  const toggleField = (apiKey) => {
+    if (ALWAYS_ON_TC_FIELDS.includes(apiKey)) return; // always collected, can't turn off
+    const next = selectedKeys.includes(apiKey)
+      ? selectedKeys.filter(k => k !== apiKey)
+      : [...selectedKeys, apiKey];
+    setCop("talent_community_fields", next);
+  };
+
+  const HIDDEN_TC_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id", "talent_community"];
+  const availableFields = peopleFields.filter(f => !HIDDEN_TC_KEYS.includes(f.api_key));
+
+  return (
+    <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+        <Ic n="users" s={13} c={C.text3}/> Talent Community
+      </div>
+      <div style={{fontSize:11,color:C.text3,marginBottom:10}}>
+        When there's no strong-fit open role, the copilot offers to keep the candidate on file instead of a dead end. Choose which fields to collect and which Talent Pool sign-ups join.
+      </div>
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Connects to Talent Pool</div>
+        <select
+          value={cop.talent_pool_id || ""}
+          onChange={e => setCop("talent_pool_id", e.target.value || null)}
+          style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,fontFamily:F,outline:"none",color:C.text1,background:C.surface,boxSizing:"border-box"}}>
+          <option value="">— None (just create/update the person record) —</option>
+          {talentPools.map(r => (
+            <option key={r.id} value={r.id}>{r.data?.pool_name || r.data?.name || "Untitled Pool"}</option>
+          ))}
+        </select>
+        {!loadingPools && talentPools.length === 0 && (
+          <div style={{fontSize:11,color:C.text3,marginTop:4}}>No talent pools found in this environment yet.</div>
+        )}
+      </div>
+
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Fields collected</div>
+        {availableFields.length === 0 && (
+          <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+        )}
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {availableFields.map(f => {
+            const active = selectedKeys.includes(f.api_key);
+            const locked = ALWAYS_ON_TC_FIELDS.includes(f.api_key);
+            return (
+              <button
+                key={f.api_key}
+                type="button"
+                onClick={() => toggleField(f.api_key)}
+                disabled={locked}
+                title={locked ? "Always collected" : ""}
+                style={{
+                  padding:"5px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,
+                  cursor: locked ? "default" : "pointer",
+                  border:`1.5px solid ${active ? C.accent : C.border}`,
+                  background: active ? `${C.accent}14` : C.surface,
+                  color: active ? C.accent : C.text3,
+                  opacity: locked ? 0.85 : 1,
+                  display:"flex",alignItems:"center",gap:4,
+                }}>
+                {f.name}
+                {locked && <Ic n="lock" s={9} c={active?C.accent:C.text3}/>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Portal Settings → Flows → Chatbot: what the copilot's application flow
+// asks for. Takes `portal`/`onChange` directly (not `cop`/`setCop`) because,
+// unlike TalentCommunityConfig above, this renders from the Flows tab's own
+// mode switcher rather than from inside the Copilot tab's existing IIFE —
+// so it derives cop/setCop itself, the same way that IIFE does.
+const DEFAULT_APP_FIELD_KEYS = ["first_name", "last_name", "email", "phone"];
+const ALWAYS_ON_APP_FIELDS = ["first_name", "email"];
+
+const ChatbotFlowConfig = ({ portal, onChange }) => {
+  const cop = portal.copilot || {};
+  const setCop = (k, v) => onChange({ ...portal, copilot: { ...cop, [k]: v } });
+
+  const [objects, setObjects] = useState([]);
+  const [peopleFields, setPeopleFields] = useState([]);
+
+  useEffect(() => {
+    if (!portal.environment_id) return;
+    api.get(`/objects?environment_id=${portal.environment_id}`)
+      .then(d => setObjects(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [portal.environment_id]);
+
+  useEffect(() => {
+    const peopleObj = objects.find(o => o.slug === "people");
+    if (peopleObj) {
+      api.get(`/fields?object_id=${peopleObj.id}`)
+        .then(d => setPeopleFields(Array.isArray(d) ? d : []))
+        .catch(() => setPeopleFields([]));
+    }
+  }, [objects]);
+
+  const cvFirst = cop.cv_first !== false; // default ON
+  const selectedKeys = (cop.application_fields && cop.application_fields.length)
+    ? cop.application_fields
+    : DEFAULT_APP_FIELD_KEYS;
+
+  const toggleField = (apiKey) => {
+    if (ALWAYS_ON_APP_FIELDS.includes(apiKey)) return; // always collected, can't turn off
+    const next = selectedKeys.includes(apiKey)
+      ? selectedKeys.filter(k => k !== apiKey)
+      : [...selectedKeys, apiKey];
+    setCop("application_fields", next);
+  };
+
+  const HIDDEN_APP_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id", "talent_community"];
+  const availableFields = peopleFields.filter(f => !HIDDEN_APP_KEYS.includes(f.api_key));
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{padding:"12px 14px",borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+          <Ic n="sparkles" s={13} c={C.text3}/> Chatbot Application Flow
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Ask for CV first</div>
+            <div style={{fontSize:11,color:C.text3,marginTop:2}}>Before anything else, the copilot offers to extract details from an uploaded CV to make applying faster</div>
+          </div>
+          <button onClick={()=>setCop("cv_first",!cvFirst)} style={{width:36,height:20,borderRadius:10,border:"none",background:cvFirst?C.accent:"#D1D5DB",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+            <div style={{width:16,height:16,borderRadius:"50%",background:"white",position:"absolute",top:2,left:cvFirst?18:2,transition:"left .2s"}}/>
+          </button>
+        </div>
+
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Fields to collect in conversation</div>
+          <div style={{fontSize:11,color:C.text3,marginBottom:8}}>The copilot will naturally ask about these while chatting — never as a rigid form. Name and email are always required.</div>
+          {availableFields.length === 0 && (
+            <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+          )}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {availableFields.map(f => {
+              const active = selectedKeys.includes(f.api_key);
+              const locked = ALWAYS_ON_APP_FIELDS.includes(f.api_key);
+              return (
+                <button
+                  key={f.api_key}
+                  type="button"
+                  onClick={() => toggleField(f.api_key)}
+                  disabled={locked}
+                  title={locked ? "Always collected" : ""}
+                  style={{
+                    padding:"5px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,
+                    cursor: locked ? "default" : "pointer",
+                    border:`1.5px solid ${active ? C.accent : C.border}`,
+                    background: active ? `${C.accent}14` : C.surface,
+                    color: active ? C.accent : C.text3,
+                    opacity: locked ? 0.85 : 1,
+                    display:"flex",alignItems:"center",gap:4,
+                  }}>
+                  {f.name}
+                  {locked && <Ic n="lock" s={9} c={active?C.accent:C.text3}/>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding:"12px 14px",borderRadius:10,background:`${C.accent}0A`,border:`1px solid ${C.accent}33`,display:"flex",gap:10}}>
+        <Ic n="lightbulb" s={15} c={C.accent}/>
+        <div style={{fontSize:11.5,color:C.text2,lineHeight:1.5}}>
+          <strong>Anything a CV can be parsed for is always captured</strong>, even if it isn't in the list above or never comes up in the chat — location, skills, work history and more are saved to the candidate's record in the background. The fields above just control what the copilot actively asks about during the conversation.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HIDDEN_DRILLDOWN_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id"];
+
+const HMWidgetConfig = ({ cfg, set, setMany, environmentId, pages }) => {
   const [objects,    setObjects]    = useState([]);
   const [savedLists, setSavedLists] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -1908,6 +2220,43 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
       .finally(() => setLoadingLists(false));
   }, [cfg.object_id, objects, environmentId]);
 
+  // Determine what kind of record this widget's rows represent, so we know whether
+  // (and which object's fields) to offer for the drill-down detail view.
+  const drilldownRecordType = (() => {
+    if (cfg.data_source === 'hm_my_jobs') return 'job';
+    if (cfg.data_source === 'hm_shortlist' || cfg.data_source === 'hm_onboarding') return 'candidate';
+    if (cfg.data_source === 'hm_interviews') return null; // interview rows aren't a single People/Jobs record
+    if (!cfg.data_source && cfg.object_id) {
+      const obj = objects.find(o => o.id === cfg.object_id);
+      if (obj?.slug === 'people') return 'candidate';
+      if (obj?.slug === 'jobs') return 'job';
+    }
+    return null;
+  })();
+
+  const [drilldownFields, setDrilldownFields] = useState([]);
+  useEffect(() => {
+    if (!drilldownRecordType || !environmentId) { setDrilldownFields([]); return; }
+    const slug = drilldownRecordType === 'candidate' ? 'people' : 'jobs';
+    const obj = objects.find(o => o.slug === slug);
+    if (!obj) { setDrilldownFields([]); return; }
+    api.get(`/fields?object_id=${obj.id}`)
+      .then(d => setDrilldownFields(Array.isArray(d) ? d : []))
+      .catch(() => setDrilldownFields([]));
+  }, [drilldownRecordType, objects, environmentId]);
+
+  const drilldownAvailableFields = drilldownFields.filter(f => !HIDDEN_DRILLDOWN_KEYS.includes(f.api_key));
+  const drilldownSelectedKeys = (cfg.drilldown_fields && cfg.drilldown_fields.length)
+    ? cfg.drilldown_fields
+    : drilldownAvailableFields.map(f => f.api_key);
+  const toggleDrilldownField = (apiKey) => {
+    const next = drilldownSelectedKeys.includes(apiKey)
+      ? drilldownSelectedKeys.filter(k => k !== apiKey)
+      : [...drilldownSelectedKeys, apiKey];
+    set('drilldown_fields', next);
+  };
+  const drilldownShowFiles = cfg.drilldown_show_files !== false;
+
   const accentColor = cfg.accent_color || C.accent;
 
   return (
@@ -1931,7 +2280,24 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
         </div>
       </div>
 
-      {/* Step 1: Object type */}
+      {/* Data source — either a curated HM-scoped feed, or a custom object + list */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+          Data Source
+        </div>
+        <select value={cfg.data_source||''} onChange={e=>setMany({data_source:e.target.value||undefined, object_id:'', list_id:''})}
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
+          {HM_DATA_SOURCES.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        {cfg.data_source && (
+          <div style={{fontSize:11,color:C.text3,marginTop:4}}>
+            This is a built-in Hiring Manager feed — it's scoped to the signed-in manager automatically, so there's no object or list to pick.
+          </div>
+        )}
+      </div>
+
+      {/* Step 1: Object type — only for a custom (non-shortcut) data source */}
+      {!cfg.data_source && (
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
           1 · Object Type
@@ -1942,9 +2308,10 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
           {objects.map(o=><option key={o.id} value={o.id}>{o.plural_name||o.name}</option>)}
         </select>
       </div>
+      )}
 
       {/* Step 2: Saved list (only when object is selected) */}
-      {cfg.object_id && (
+      {!cfg.data_source && cfg.object_id && (
         <div>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
             2 · Saved List (optional — blank shows all records)
@@ -1969,7 +2336,7 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Display Mode</div>
         <div style={{display:'flex',gap:8}}>
-          {['card','table','kanban'].map(m=>(
+          {['card','table','kanban','stats'].map(m=>(
             <button key={m} onClick={()=>set('display_mode',m)} style={{
               flex:1,padding:'8px 0',borderRadius:9,cursor:'pointer',fontFamily:F,
               border:`1.5px solid ${(cfg.display_mode||'card')===m?accentColor:C.border}`,
@@ -1991,28 +2358,126 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
         </div>
       )}
 
+      {/* Stat tile drill-down targets — where each number takes the manager when they click it */}
+      {cfg.display_mode==='stats'&&(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+            Tile Click-through
+          </div>
+          <div style={{fontSize:11,color:C.text3,marginBottom:8}}>Choose which page each stat opens. Leave blank to keep a tile static.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {[
+              {key:'pipeline',   label:'In Pipeline'},
+              {key:'interviews', label:'Upcoming Interviews'},
+              {key:'offers',     label:'Pending Offers'},
+            ].map(t=>(
+              <div key={t.key} style={{display:'grid',gridTemplateColumns:'1fr 1.3fr',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:12,color:C.text2,fontWeight:600}}>{t.label}</span>
+                <select value={(cfg.stat_tile_targets||{})[t.key]||''}
+                  onChange={e=>set('stat_tile_targets',{...(cfg.stat_tile_targets||{}),[t.key]:e.target.value||undefined})}
+                  style={{padding:'6px 10px',borderRadius:7,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:'none',background:C.surface}}>
+                  <option value=''>— No link (static) —</option>
+                  {(pages||[]).map(p=><option key={p.id} value={p.slug}>{p.name}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* CTA Actions */}
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>CTA Actions</div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-          {HM_CTA_OPTIONS.map(opt=>{
-            const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
-            return (
-              <button key={opt.action} onClick={()=>{
-                const btns=active
-                  ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
-                  :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
-                set('cta_buttons',btns);
-              }} style={{
-                padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
-                border:`1.5px solid ${active?accentColor:C.border}`,
-                background:active?`${accentColor}14`:C.surface,
-                color:active?accentColor:C.text2,
-                fontSize:12,fontWeight:600,transition:'all .12s'
-              }}>{active?'✓ ':''}{opt.label}</button>
-            );
-          })}
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {HM_CTA_OPTIONS.map(opt=>{
+              const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
+              return (
+                <button key={opt.action} onClick={()=>{
+                  const btns=active
+                    ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
+                    :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
+                  set('cta_buttons',btns);
+                }} style={{
+                  padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
+                  border:`1.5px solid ${active?accentColor:C.border}`,
+                  background:active?`${accentColor}14`:C.surface,
+                  color:active?accentColor:C.text2,
+                  fontSize:12,fontWeight:600,transition:'all .12s'
+                }}>{active?'✓ ':''}{opt.label}</button>
+              );
+            })}
+          </div>
+          {/* "View Pipeline" needs a target page — show a picker inline once it's toggled on */}
+          {(cfg.cta_buttons||[]).some(b=>b.action==='view_pipeline')&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:`${accentColor}0a`,border:`1px dashed ${accentColor}44`}}>
+              <span style={{fontSize:11,color:C.text3,fontWeight:600,whiteSpace:'nowrap'}}>→ Goes to page</span>
+              <select value={cfg.view_pipeline_target||''} onChange={e=>set('view_pipeline_target',e.target.value||undefined)}
+                style={{flex:1,padding:'5px 8px',borderRadius:6,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:'none',background:C.surface}}>
+                <option value=''>— Default (Shortlist) —</option>
+                {(pages||[]).map(p=><option key={p.id} value={p.slug}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Drill Down — clicking a row opens a read-only detail view; admin picks the fields/files shown */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Drill Down</div>
+        {!drilldownRecordType ? (
+          <div style={{fontSize:11,color:C.text3,padding:'8px 10px',borderRadius:8,background:C.surface2,border:`1px dashed ${C.border}`}}>
+            {cfg.data_source === 'hm_interviews'
+              ? "This feed lists interviews, not a single People/Jobs record, so there's no detail view to configure."
+              : 'Pick a data source above (or a custom People/Jobs object) to enable a detail view.'}
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderRadius:9,border:`1.5px solid ${C.border}`,background:C.surface}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Open a {drilldownRecordType==='candidate'?'Talent Profile':'Job Detail'} on click</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2}}>Clicking a {drilldownRecordType==='candidate'?'candidate':'role'} opens a read-only detail view with the fields and files you choose below</div>
+              </div>
+              <button onClick={()=>set('drilldown_enabled', !(cfg.drilldown_enabled!==false))} style={{width:36,height:20,borderRadius:10,border:'none',background:(cfg.drilldown_enabled!==false)?accentColor:'#D1D5DB',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+                <div style={{width:16,height:16,borderRadius:'50%',background:'white',position:'absolute',top:2,left:(cfg.drilldown_enabled!==false)?18:2,transition:'left .2s'}}/>
+              </button>
+            </div>
+
+            {(cfg.drilldown_enabled!==false) && (
+              <>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:8,background:C.surface2}}>
+                  <span style={{fontSize:12,color:C.text2,fontWeight:600}}>Show file attachments</span>
+                  <button onClick={()=>set('drilldown_show_files', !drilldownShowFiles)} style={{width:32,height:18,borderRadius:9,border:'none',background:drilldownShowFiles?accentColor:'#D1D5DB',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+                    <div style={{width:14,height:14,borderRadius:'50%',background:'white',position:'absolute',top:2,left:drilldownShowFiles?16:2,transition:'left .2s'}}/>
+                  </button>
+                </div>
+
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+                    Fields shown in detail view
+                  </div>
+                  {drilldownAvailableFields.length===0 && (
+                    <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+                  )}
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {drilldownAvailableFields.map(f=>{
+                      const active = drilldownSelectedKeys.includes(f.api_key);
+                      return (
+                        <button key={f.api_key} type="button" onClick={()=>toggleDrilldownField(f.api_key)}
+                          style={{
+                            padding:'5px 10px',borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,cursor:'pointer',
+                            border:`1.5px solid ${active?accentColor:C.border}`,
+                            background:active?`${accentColor}14`:C.surface,
+                            color:active?accentColor:C.text3,
+                          }}>{f.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Empty state */}
@@ -2164,7 +2629,7 @@ Output ONLY valid HTML — no markdown fences, no explanation.`;
   );
 };
 
-const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
+const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId, pages }) => {
   // Keep local cfg state so sequential set() calls accumulate rather than overwrite each other
   const [localCfg, setLocalCfg] = useState(cell.widgetConfig || {});
   const localCfgRef = useRef(localCfg);
@@ -2339,7 +2804,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="people"/>
       );
       case "hm_widget": return (
-        <HMWidgetConfig cfg={cfg} set={set} setMany={setMany} environmentId={environmentId}/>
+        <HMWidgetConfig cfg={cfg} set={set} setMany={setMany} environmentId={environmentId} pages={pages}/>
       );
       case "report_widget": return (
         <ReportWidgetConfig cfg={cfg} set={set} environmentId={environmentId}/>
@@ -2746,7 +3211,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
 };
 
 // ─── Widget Cell ──────────────────────────────────────────────────────────────
-const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environmentId }) => {
+const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environmentId, pages }) => {
   const [showPicker, setShowPicker] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -2811,7 +3276,7 @@ const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environm
         onSelect={type=>{onUpdate({...cell,widgetType:type,widgetConfig:{}});setShowPicker(false);setShowConfig(true);}}
         onClose={()=>setShowPicker(false)}/>}
       {showConfig&&cell.widgetType&&<WidgetConfigPanel
-        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)} environmentId={environmentId}/>}
+        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)} environmentId={environmentId} pages={pages}/>}
     </div>
   );
 };
@@ -3063,7 +3528,7 @@ const RowSettings = ({ row, onChange, onClose }) => {
 
 
 // ─── Canvas Row ───────────────────────────────────────────────────────────────
-const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop, environmentId }) => {
+const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop, environmentId, pages }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [hovered, setHovered] = useState(false);
   const padMap = {none:"0px",sm:"24px",md:"56px",lg:"96px",xl:"140px"};
@@ -3109,7 +3574,7 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
           {row.cells.map((cell,ci)=>(
             <WidgetCell key={cell.id} cell={cell} flex={cellFlex(ci)}
               onUpdate={u=>updateCell(ci,u)} onRemove={()=>removeWidget(ci)}
-              theme={theme} isEditing={isEditing} environmentId={environmentId}/>
+              theme={theme} isEditing={isEditing} environmentId={environmentId} pages={pages}/>
           ))}
         </div>
       </div>
@@ -3186,7 +3651,7 @@ const AddRowBar = ({ onAdd }) => {
 };
 
 // ─── Canvas ───────────────────────────────────────────────────────────────────
-const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
+const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId, pages }) => {
   const [dragFrom, setDragFrom] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const safeRows = page?.rows || [];
@@ -3239,7 +3704,7 @@ const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
             theme={theme} isEditing={isEditing}
             dragTarget={dragTarget===i}
             onDragStart={setDragFrom} onDragOver={setDragTarget} onDrop={handleDrop}
-            environmentId={environmentId}/>
+            environmentId={environmentId} pages={pages}/>
         </div>
       ))}
       {isEditing&&<AddRowBar onAdd={preset=>addRow(preset,safeRows.length-1)}/>}
@@ -4403,15 +4868,15 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
         await onSaveRef.current(p);
       }
     };
-    window.addEventListener('talentos:portal-force-save', handler);
-    return () => window.removeEventListener('talentos:portal-force-save', handler);
+    window.addEventListener('vercentic:portal-force-save', handler);
+    return () => window.removeEventListener('vercentic:portal-force-save', handler);
   }, []);
   const [activePageIdx, setActivePageIdx] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Tell the copilot we're inside the portal builder
   useEffect(() => {
-    const dispatch = () => window.dispatchEvent(new CustomEvent('talentos:editor-context', {
+    const dispatch = () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', {
       detail: {
         type: 'portal',
         name: portal.name || 'Portal',
@@ -4421,7 +4886,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
       }
     }));
     dispatch();
-    return () => window.dispatchEvent(new CustomEvent('talentos:editor-context', { detail: null }));
+    return () => window.dispatchEvent(new CustomEvent('vercentic:editor-context', { detail: null }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portal.name, portal.type, activePageIdx]);
   const [showTheme,       setShowTheme]       = useState(false);
@@ -4443,20 +4908,23 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
   const updatePage = (updated) => setPortal(p=>({...p,pages:p.pages.map((pg,i)=>i===activePageIdx?updated:pg)}));
   const addPage = () => {
     const np = {...defaultPage(),id:uid(),name:`Page ${portal.pages.length+1}`,slug:`/page-${portal.pages.length+1}`};
-    setPortal(p=>({...p,pages:[...p.pages,np]}));
+    setPortal(p=>({...p,pages:[...p.pages,np],
+      nav:{...(p.nav||{}),links:[...((p.nav||{}).links||[]),{id:uid(),label:np.name,href:np.slug,pageId:np.id}]}}));
     setActivePageIdx(portal.pages.length);
   };
 
   const handleDuplicatePage = (pg) => {
     const copy = {...JSON.parse(JSON.stringify(pg)),id:uid(),name:pg.name+" (copy)",slug:pg.slug+"-copy",seo:{title:"",description:"",ogImage:""}};
     const pages = [...portal.pages,copy];
-    setPortal(p=>({...p,pages}));
+    setPortal(p=>({...p,pages,
+      nav:{...(p.nav||{}),links:[...((p.nav||{}).links||[]),{id:uid(),label:copy.name,href:copy.slug,pageId:copy.id}]}}));
     setActivePageIdx(pages.length-1);
     setPageActionsFor(null);
   };
   const handleDeletePage = (pg) => {
     const pages = portal.pages.filter(x=>x.id!==pg.id);
-    setPortal(p=>({...p,pages}));
+    setPortal(p=>({...p,pages,
+      nav:{...(p.nav||{}),links:((p.nav||{}).links||[]).filter(l=>l.pageId!==pg.id)}}));
     setActivePageIdx(Math.max(0,activePageIdx-1));
     setPageActionsFor(null);
   };
@@ -4678,7 +5146,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             theme={portal.theme}
             onChange={nav=>setPortal(p=>({...p,nav}))}
             isEditing={isEditing}/>
-          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id}/>
+          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id} pages={portal.pages}/>
           <InlineFooter
             footer={portal.footer||defaultFooter()}
             theme={portal.theme}
@@ -4691,7 +5159,8 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
 
       {pageActionsFor&&<PageActionsMenu
         page={pageActionsFor} allPages={portal.pages}
-        onUpdate={updated=>{setPortal(p=>({...p,pages:p.pages.map(x=>x.id===updated.id?updated:x)}));setPageActionsFor(updated);if(page?.id===updated.id)updatePage(updated);}}
+        onUpdate={updated=>{setPortal(p=>({...p,pages:p.pages.map(x=>x.id===updated.id?updated:x),
+          nav:{...(p.nav||{}),links:((p.nav||{}).links||[]).map(l=>l.pageId===updated.id?{...l,href:updated.slug}:l)}}));setPageActionsFor(updated);if(page?.id===updated.id)updatePage(updated);}}
         onDuplicate={()=>handleDuplicatePage(pageActionsFor)}
         onDelete={()=>handleDeletePage(pageActionsFor)}
         onClose={()=>setPageActionsFor(null)}/>}
@@ -4991,8 +5460,8 @@ export default function PortalsPage({ environment, onFullScreen }) {
         setLoading(false);
       }
     };
-    window.addEventListener("talentos:open-portal", handler);
-    return () => window.removeEventListener("talentos:open-portal", handler);
+    window.addEventListener("vercentic:open-portal", handler);
+    return () => window.removeEventListener("vercentic:open-portal", handler);
   }, [environment?.id, loadStats]);
 
   // Tell Settings to go full-width when builder is open

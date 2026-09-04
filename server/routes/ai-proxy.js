@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { trackAIUsage } = require('./admin_dashboard');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 router.post('/chat', async (req, res) => {
   const { messages, system } = req.body;
@@ -17,7 +18,7 @@ router.post('/chat', async (req, res) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+        model: MODEL_DEFAULT,
         max_tokens: req.body.max_tokens || 4096,
         system: system || 'You are a helpful assistant.',
         messages,
@@ -50,7 +51,7 @@ router.post('/chat', async (req, res) => {
         feature:        b.feature        || 'copilot',
         tokens_in:      data.usage?.input_tokens  || 0,
         tokens_out:     data.usage?.output_tokens || 0,
-        model:          b.model          || 'claude-sonnet-4-6',
+        model:          b.model          || MODEL_DEFAULT,
         environment_id: b.environment_id || b.environmentId || '',
       });
     } catch(_e) {}
@@ -68,7 +69,7 @@ router.get('/status', (req, res) => {
     configured: key.length > 10,
     key_prefix: key ? key.slice(0, 10) + '...' : 'NOT SET',
     key_length: key.length,
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    model: MODEL_DEFAULT,
   });
 });
 

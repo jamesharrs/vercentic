@@ -29,13 +29,13 @@ function deepGet(obj, path) {
 const I18nContext = createContext(null);
 
 export function I18nProvider({ children }) {
-  const [locale, setLocale] = useState(() => localStorage.getItem("talentos_locale") || "en");
+  const [locale, setLocale] = useState(() => localStorage.getItem("vercentic_locale") || "en");
   const [translations, setTranslations] = useState(translationCache[locale] || en);
   const [generating, setGenerating] = useState(false);
 
   // Persist locale choice
   useEffect(() => {
-    localStorage.setItem("talentos_locale", locale);
+    localStorage.setItem("vercentic_locale", locale);
     // Apply RTL/LTR to document
     const lang = LANGUAGES.find(l => l.code === locale);
     document.documentElement.dir  = lang?.dir  || "ltr";

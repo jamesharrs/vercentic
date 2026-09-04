@@ -19,6 +19,7 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const { getStore, saveStore, query, findOne, insert } = require('../db/init');
 const { mergePortalBranding } = require('../utils/portalBranding');
+const { hasLinkedPersonWorkflow, resolveFirstStage } = require('../utils/pipelineStage');
 const uid = () => crypto.randomUUID();
 
 // ── Header image resolution ───────────────────────────────────────────────────
@@ -80,7 +81,11 @@ router.get('/:portalId/jobs', (req, res) => {
       r.object_id === jobObj.id &&
       r.environment_id === portal.environment_id &&
       !r.deleted_at &&
-      (!r.data?.status || ['Open','open','Active','active'].includes(r.data.status))
+      (!r.data?.status || ['Open','open','Active','active'].includes(r.data.status)) &&
+      // Jobs must have a Linked Person workflow attached before they can be
+      // posted to the career site — otherwise applicants land in an
+      // un-bucketed pipeline stage the admin Application Pipeline can't show.
+      hasLinkedPersonWorkflow(store, r.id)
     );
 
     if (search) {
@@ -120,6 +125,10 @@ router.get('/:portalId/job/:jobId', (req, res) => {
       r.id === req.params.jobId && r.environment_id === portal.environment_id && !r.deleted_at
     );
     if (!record) return res.status(404).json({ error: 'Job not found' });
+    // Same rule as the listing endpoint — a job without a Linked Person
+    // workflow attached isn't posted to the career site, so a direct/stale
+    // link to it shouldn't resolve either.
+    if (!hasLinkedPersonWorkflow(store, record.id)) return res.status(404).json({ error: 'Job not found' });
     res.json({
       id:           record.id,
       record_number: record.record_number,
@@ -194,12 +203,30 @@ router.post('/:portalId/apply', (req, res) => {
       if (!store.people_links) store.people_links = [];
       const linked = store.people_links.some(l => l.person_id === person.id && l.record_id === job_id && !l.deleted_at);
       if (!linked) {
-        store.people_links.push({
-          id: uid(), person_id: person.id, record_id: job_id,
-          environment_id: portal.environment_id,
-          workflow_id: null, stage_id: null, stage_name: 'Applied',
-          created_at: now, updated_at: now,
-        });
+        // Resolve the job's Linked Person workflow so the applicant lands on
+        // a real stage — the Application Pipeline widget counts candidates
+        // by matching people_links.stage_id against the assigned workflow's
+        // step ids, so a null stage_id is never shown in any column.
+        if (hasLinkedPersonWorkflow(store, job_id)) {
+          const { stage_id, stage_name } = resolveFirstStage(store, job_id);
+          store.people_links.push({
+            id: uid(), person_id: person.id, record_id: job_id,
+            environment_id: portal.environment_id,
+            workflow_id: null, stage_id, stage_name,
+            created_at: now, updated_at: now,
+          });
+        } else {
+          // Job has no pipeline workflow attached (shouldn't normally happen —
+          // the jobs listing excludes these — but guard direct/stale job_id
+          // submissions too). Don't create an un-bucketed link; flag it on
+          // the activity log instead so the application isn't silently lost.
+          store.activity.push({
+            id: uid(), record_id: person.id, object_id: peopleObj.id, environment_id: portal.environment_id,
+            action: 'application_unlinked_no_workflow', actor: 'portal-public',
+            details: { job_id, job_title, reason: 'Job has no Linked Person workflow attached' },
+            created_at: now,
+          });
+        }
       }
     }
 

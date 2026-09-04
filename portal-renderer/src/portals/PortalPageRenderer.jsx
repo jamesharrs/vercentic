@@ -72,10 +72,10 @@ const HeroWidget = ({ cfg, theme }) => {
   return (
     <div style={{
       padding, textAlign: align, position: 'relative', overflow: 'hidden',
-      minHeight: cfg.videoUrl ? 420 : 'auto',
-      display: cfg.videoUrl ? 'flex' : 'block',
-      alignItems: cfg.videoUrl ? 'center' : undefined,
-      justifyContent: cfg.videoUrl ? 'center' : undefined,
+      minHeight: cfg.videoUrl ? 420 : (cfg.bgImage ? 440 : 'auto'),
+      display: (cfg.videoUrl || cfg.bgImage) ? 'flex' : 'block',
+      alignItems: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
+      justifyContent: (cfg.videoUrl || cfg.bgImage) ? 'center' : undefined,
       background: cfg.videoUrl ? '#0F1729'
         : cfg.bgImage ? `url(${cfg.bgImage}) center/cover no-repeat`
         : `linear-gradient(135deg, ${pr}12, ${t.secondaryColor || pr}08)`,
@@ -91,16 +91,16 @@ const HeroWidget = ({ cfg, theme }) => {
       {!cfg.videoUrl && cfg.bgImage && (cfg.overlayOpacity||0) > 0 && (
         <div style={{ position:'absolute', inset:0, background:`rgba(0,0,0,${(cfg.overlayOpacity||0)/100})` }}/>
       )}
-      <div style={{ position:'relative', zIndex:2, maxWidth: cfg.videoUrl ? '720px' : '800px', margin:'0 auto' }}>
+      <div style={{ position:'relative', zIndex:2, maxWidth: (cfg.videoUrl || cfg.bgImage) ? '760px' : '800px', margin:'0 auto' }}>
         {cfg.eyebrow && (
-          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: cfg.videoUrl ? 'rgba(255,255,255,.7)' : pr, marginBottom:12, fontFamily:ff }}>
+          <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color: (cfg.videoUrl || (cfg.bgImage && (cfg.overlayOpacity||0) > 20)) ? 'rgba(255,255,255,.85)' : pr, marginBottom:12, fontFamily:ff }}>
             {cfg.eyebrow}
           </div>
         )}
-        <h2 style={{ fontSize: cfg.videoUrl ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
+        <h2 style={{ fontSize: (cfg.videoUrl || cfg.bgImage) ? 48 : 36, fontWeight:hw, color:tc, fontFamily:hf, margin:'0 0 16px', lineHeight:1.15 }}>
           {cfg.headline || 'Your Compelling Headline'}
         </h2>
-        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: cfg.videoUrl ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
+        {cfg.subheading && <p style={{ margin:'0 0 32px', fontSize: (cfg.videoUrl || cfg.bgImage) ? 20 : 18, color:tcSub, lineHeight:1.6, opacity:0.9 }}>{cfg.subheading}</p>}
         <div style={{ display:'flex', gap:12, justifyContent: align === 'center' ? 'center' : 'flex-start', flexWrap:'wrap' }}>
           {cfg.primaryCta && (
             <a href={cfg.primaryCtaLink||'#'} style={{ display:'inline-block', padding: cfg.videoUrl ? '16px 36px' : '14px 32px', borderRadius:br, background:'#FFFFFF', color:pr, fontWeight:700, fontSize: cfg.videoUrl ? 17 : 16, textDecoration:'none', fontFamily:ff }}>
@@ -1833,6 +1833,20 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
             </tbody>
           </table>
         </div>
+      ) : displayMode === 'kanban' ? (
+        <div style={{ display:'flex', gap:14, overflowX:'auto', paddingBottom:8 }}>
+          {(cfg.stages?.length ? cfg.stages : ['—']).map(stage => {
+            const cols = cfg.stages?.length ? filtered.filter(r => (r.data?.status||'') === stage) : filtered;
+            return (
+              <div key={stage} style={{ minWidth:240, flex:'0 0 240px' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', padding:'6px 10px', background:'#F3F4F6', borderRadius:8, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.04em', fontFamily:ff }}>
+                  {stage} · {cols.length}
+                </div>
+                {cols.map(r => <RecordCard key={r.id} record={r}/>)}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         filtered.map(r => <RecordCard key={r.id} record={r}/>)
       )}
@@ -1849,6 +1863,37 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
               <button onClick={()=>setModal(null)} style={{ flex:1, padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
               <button onClick={async()=>{ const note=document.getElementById('hm-feedback-note').value; await api.patch(`/records/${modal.record.id}`, { data:{ feedback_note:note } }); setModal(null); }} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Submit</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move stage modal */}
+      {modal?.type === 'move_stage' && (
+        <div onClick={()=>setModal(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, padding:28, width:360, boxShadow:'0 32px 80px rgba(0,0,0,0.2)', fontFamily:ff }}>
+            <div style={{ fontSize:16, fontWeight:800, color:tc, marginBottom:4 }}>Move Stage</div>
+            <div style={{ fontSize:12, color:'#9DA8C7', marginBottom:20 }}>{recordTitle(modal.record)}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {(cfg.stages?.length ? cfg.stages : []).map(stage => {
+                const current = (modal.record.data?.status||'') === stage;
+                return (
+                  <button key={stage} disabled={current} onClick={async()=>{
+                    const patchFn = api.patch || ((p, b) => api.post ? api.post(p, { ...b, _method:'PATCH' }) : Promise.resolve());
+                    await patchFn(`/records/${modal.record.id}`, { data:{ status: stage } }).catch(()=>{});
+                    setRecords(rs => rs.map(r => r.id===modal.record.id ? {...r, data:{...r.data, status:stage}} : r));
+                    setModal(null);
+                  }} style={{
+                    padding:'10px 14px', borderRadius:10,
+                    border: current ? `1.5px solid ${pr}` : '1.5px solid #E8ECF8',
+                    background: current ? `${pr}10` : '#fff', color: current ? pr : tc,
+                    fontSize:13, fontWeight:700, textAlign:'left', fontFamily:ff,
+                    cursor: current ? 'default' : 'pointer', opacity: current ? 0.6 : 1
+                  }}>{stage}{current ? ' (current)' : ''}</button>
+                );
+              })}
+              {!(cfg.stages?.length) && <div style={{ fontSize:12, color:'#9DA8C7', fontFamily:ff }}>No stages configured for this widget.</div>}
+            </div>
+            <button onClick={()=>setModal(null)} style={{ marginTop:16, width:'100%', padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
           </div>
         </div>
       )}

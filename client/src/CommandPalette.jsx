@@ -157,9 +157,9 @@ export default function CommandPalette({ open, onClose, navObjects=[], environme
     if (item.action === 'navigate') { onNavigate?.(item.nav); }
     else if (item.action === 'create') {
       onNavigate?.(item.nav);
-      setTimeout(() => window.dispatchEvent(new CustomEvent('talentos:quick-create', { detail: item.objectSlug })), 200);
+      setTimeout(() => window.dispatchEvent(new CustomEvent('vercentic:quick-create', { detail: item.objectSlug })), 200);
     } else if (item.action === 'open_record') {
-      window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: item.recordId, objectId: item.objectId } }));
+      window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: item.recordId, objectId: item.objectId } }));
     }
   }, [onClose, onNavigate]);
 

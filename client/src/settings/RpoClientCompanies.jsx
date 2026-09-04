@@ -124,8 +124,7 @@ export default function RpoClientCompanies({ environment }) {
   useEffect(() => {
     if (!envId) { setLoading(false); return; }
     tFetch(`/api/rpo-clients?environment_id=${envId}`)
-      .then(r=>r.ok?r.json():{clients:[],rpo_mode:false})
-      .then(data=>{setClients(data.clients||[]);setRpoMode(data.rpo_mode||false);})
+      .then(data=>{setClients(data?.clients||[]);setRpoMode(data?.rpo_mode||false);})
       .catch(()=>setClients([]))
       .finally(()=>setLoading(false));
   }, [envId]);
@@ -148,8 +147,7 @@ export default function RpoClientCompanies({ environment }) {
   const handleToggleRpo = async () => { const next=!rpoMode; setRpoMode(next); await saveAll(clients,next); };
 
   const handleWizardComplete = async (clientId) => {
-    const r = await tFetch(`/api/company-research?environment_id=rpo_client_${clientId}`);
-    const profileData = r.ok ? await r.json() : null;
+    const profileData = await tFetch(`/api/company-research?environment_id=rpo_client_${clientId}`);
     if (profileData) {
       const updated = clients.map(c=>c.id===clientId?{...c,profile:profileData,industry:profileData.industry}:c);
       setClients(updated); await saveAll(updated);

@@ -66,7 +66,10 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/chrome-import')) return next();
   corsMiddleware(req, res, next);
 });
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => { req.rawBody = buf; }, // needed for Slack HMAC signature verification (chat_bot_webhooks.js)
+}));
 app.use(secureHeaders);
 app.use('/api', apiLimiter);
 
@@ -219,14 +222,47 @@ app.use((req, res, next) => {
 });
 
 // ── Dev auto-login — creates a session for admin when none exists in local dev ──
-if (process.env.NODE_ENV !== 'production') {
+// Gated out for Playwright/CI runs: PLAYWRIGHT_TEST=1 means "treat this like a
+// real anonymous client" so the auth-guard/RBAC E2E suite actually exercises
+// the 401 path instead of every request silently becoming admin@talentos.io.
+// (NODE_ENV alone isn't a safe enough gate here — CI sets NODE_ENV=ci, which
+// is not 'production', so it used to fall through into this convenience login.)
+if (process.env.NODE_ENV !== 'production' && process.env.PLAYWRIGHT_TEST !== '1') {
   app.use((req, res, next) => {
     if (req.session?.userId) return next();
-    const skip = ['/api/portals', '/api/health', '/api/superadmin', '/__vite'];
+    // '/api/portals' and '/api/portal-copilot' are both public/unauthenticated
+    // by design (career-site visitors) — they must NEVER be silently auto-
+    // logged in as the internal admin, and (more critically) this middleware's
+    // loadTenantStore(devTenant) call below is a full reload-from-disk that
+    // *replaces* the in-memory store; since saveStore() debounces its write by
+    // 150ms, a reload landing inside that window silently discards whatever a
+    // still-in-flight prior request just pushed (e.g. a candidate created a
+    // moment earlier by /join-community or /apply). Excluding every public
+    // portal route here removes that race entirely for this dev-only path.
+    const skip = ['/api/portals', '/api/portal-copilot', '/api/health', '/api/superadmin', '/__vite'];
     if (skip.some(p => req.path.startsWith(p))) return next();
     if (req.method === 'POST' && req.path === '/api/auth/login') return next();
     if (!storeReady) return next(); // don't attempt auto-login before store is ready
     try {
+      // Dev tenant pin — set DEV_TENANT=<slug> to make localhost auto-login into
+      // a specific provisioned tenant (e.g. a Basic template env) so you can
+      // browse a separate environment without the session snapping back to
+      // master. Unset (or 'master') for the normal master/Production view.
+      const devTenant = process.env.DEV_TENANT && process.env.DEV_TENANT !== 'master'
+        ? process.env.DEV_TENANT : null;
+      if (devTenant) {
+        const { loadTenantStore } = require('./db/init');
+        const ts = loadTenantStore(devTenant);
+        const tAdmin = (ts?.users || []).find(u => {
+          const role = (ts.roles || []).find(r => r.id === u.role_id);
+          return !u.deleted_at && (u.role_name === 'super_admin' || role?.slug === 'super_admin');
+        }) || (ts?.users || []).find(u => !u.deleted_at);
+        if (tAdmin) {
+          req.session.userId     = tAdmin.id;
+          req.session.tenantSlug = devTenant;
+          return req.session.save(() => next());
+        }
+      }
       const store = getStore();
       const admin = (store.users || []).find(u => u.email === 'admin@talentos.io' && !u.deleted_at);
       if (admin) {
@@ -311,6 +347,7 @@ const AUTH_EXEMPT = [
   '/feature-packs',
   '/release-notes',  // public read — published notes shown to all logged-in users
   '/superadmin', '/bot',
+  '/chat-bot-hooks',        // Slack + Teams inbound webhooks — self-authenticate via HMAC signature / bot JWT
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
   '/sequencer/track-open',           // open-tracking pixel (no auth — email clients fetch without credentials)
@@ -358,6 +395,12 @@ app.use('/api', (req, res, next) => {
   if (req.path.match(/^\/portals\/[^/]+\/draft/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/session$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/jobs($|\/)/)) return next();
+  // Hiring Manager Portal — portal-token-gated wrapper endpoints (not main-app
+  // session auth). Each handler in hm_portal.js independently verifies
+  // x-portal-token against global._portalSessions AND checks sess.portal_id
+  // matches the :id in the URL — this exemption only lets the request past
+  // the main-app session gate, it does not itself grant access.
+  if (req.path.match(/^\/portals\/[^/]+\/hm\//)) return next();
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   next();
@@ -419,6 +462,7 @@ app.use('/api/fields',            require('./routes/fields'));
 app.use('/api/records',           require('./routes/records'));
 app.use('/api/records',           require('./routes/suggested_actions'));
 app.use('/api/records',           require('./routes/bulk_actions'));
+app.use('/api/companies',         require('./routes/companies'));
 app.use('/api/users',             require('./routes/users'));
 app.use('/api/roles',             require('./routes/roles'));
 app.use('/api/org-units',         require('./routes/org_units'));
@@ -510,6 +554,7 @@ app.use('/api/portal-public', require('./routes/portal_public'));
 app.use('/api/portals/:id',        require('./routes/fit_check'));
 app.use('/api/portals',           require('./routes/portal_generate'));
 app.use('/api/portals',           require('./routes/portals'));
+app.use('/api/portals',           require('./routes/hm_portal'));
 
 // People-links — public endpoint for HM portal
 app.get('/api/people-links', (req, res) => {
@@ -556,6 +601,9 @@ app.use('/api/security-audit',    require('./routes/security_audit'));
 app.use('/api/field-visibility',  require('./routes/field_visibility'));
 app.use('/api/integrations',      require('./routes/integrations'));
 app.use('/api/connector-actions', require('./routes/connector_actions'));
+app.use('/api/conversational-actions', require('./routes/conversational_actions'));
+app.use('/api/chat-bot-channels',      require('./routes/chat_bot_channels'));
+app.use('/api/chat-bot-hooks',         require('./routes/chat_bot_webhooks'));
 app.use('/api/brand-kits',        require('./routes/brand_kits'));
 app.use('/api/talent-profile',    require('./routes/talent_profile'));
 app.use('/api/webhooks',          require('./routes/webhooks'));

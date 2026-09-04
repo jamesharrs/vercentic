@@ -144,7 +144,7 @@ export const STATUS_COLORS = {
 
 // Emit a filter-navigate event so the app shell can navigate to a filtered records list
 const emitFilterNav = (fieldKey, fieldLabel, fieldValue) => {
-  window.dispatchEvent(new CustomEvent("talentos:filter-navigate", {
+  window.dispatchEvent(new CustomEvent("vercentic:filter-navigate", {
     detail: { fieldKey, fieldLabel, fieldValue }
   }));
 };

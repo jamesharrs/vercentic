@@ -339,7 +339,25 @@ const ScreeningQuestionsBlock = ({ config={}, formData, set, questions=[], color
               <span style={{fontSize:10,fontWeight:700,color:'#DC2626'}}>ELIGIBILITY REQUIREMENT</span>
             </div>}
             <p style={{fontSize:14,fontWeight:600,color:'#0F1729',margin:'0 0 12px',lineHeight:1.5}}>{i+1}. {q.text}</p>
-            {q.options?.length>0 ? (
+            {q.type==='file_upload' ? (
+              <label style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'#F8F9FF',borderRadius:12,
+                border:`2px dashed ${val?color:'#C7D0E8'}`,cursor:'pointer',transition:'border-color .2s'}}>
+                <input type="file" style={{display:'none'}} onChange={e=>{
+                  const f=e.target.files?.[0];
+                  if (f) { set(`__file_sq_${q.id}`, f); set(`sq_${q.id}`, f.name); }
+                  e.target.value='';
+                }}/>
+                <div style={{width:32,height:32,borderRadius:9,background:`${color}14`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {val?<WzIc n="checkCircle" s={16} c="#0CAF77"/>:<WzIc n="paperclip" s={16} c={color}/>}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'#0F1729',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val||'Upload a file'}</div>
+                  <div style={{fontSize:11,color:'#6B7280'}}>{formData[`__file_sq_${q.id}`]?`${(formData[`__file_sq_${q.id}`].size/1024).toFixed(0)} KB`:'Click to browse'}</div>
+                </div>
+                {val&&<button onClick={e=>{e.preventDefault();e.stopPropagation();set(`sq_${q.id}`,'');set(`__file_sq_${q.id}`,null);}}
+                  style={{padding:'4px 8px',borderRadius:6,border:'none',background:'#FEE2E2',color:'#EF4444',fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>Remove</button>}
+              </label>
+            ) : q.options?.length>0 ? (
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {q.options.map(opt=>(
                   <label key={opt} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'8px 12px',borderRadius:8,

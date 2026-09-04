@@ -19,6 +19,7 @@ const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore } = require('../db/init');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -237,7 +238,7 @@ Return ONLY valid JSON, no markdown, no preamble:
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+        model: MODEL_DEFAULT,
         max_tokens: 200,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -286,7 +287,7 @@ router.post('/:id/ai-tag', ah(async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+        model: MODEL_DEFAULT,
         max_tokens: 300,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },

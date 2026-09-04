@@ -55,11 +55,11 @@ export default function ActivationChecklist({ environmentId, compact=false }) {
   const handleCta = async (step) => {
     if (step.cta_action.startsWith('navigate:')) {
       const target = step.cta_action.replace('navigate:','');
-      window.dispatchEvent(new CustomEvent('talentos:navigate',{detail:target}));
+      window.dispatchEvent(new CustomEvent('vercentic:navigate',{detail:target}));
     } else if (step.cta_action === 'create_job') {
-      window.dispatchEvent(new CustomEvent('talentos:quick-create',{detail:'jobs'}));
+      window.dispatchEvent(new CustomEvent('vercentic:quick-create',{detail:'jobs'}));
     } else if (step.cta_action === 'create_person') {
-      window.dispatchEvent(new CustomEvent('talentos:quick-create',{detail:'people'}));
+      window.dispatchEvent(new CustomEvent('vercentic:quick-create',{detail:'people'}));
     }
     // Mark step complete
     await tFetch(`/api/onboarding/${environmentId}/complete`,{
@@ -84,7 +84,7 @@ export default function ActivationChecklist({ environmentId, compact=false }) {
     return (
       <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',
         borderRadius:12,border:`1.5px solid ${C.border}`,background:C.white,cursor:'pointer',fontFamily:F}}
-        onClick={()=>window.dispatchEvent(new CustomEvent('talentos:open-checklist'))}>
+        onClick={()=>window.dispatchEvent(new CustomEvent('vercentic:open-checklist'))}>
         <ProgressRing pct={progress.percentage} size={44} stroke={4}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:12,fontWeight:700,color:C.text1}}>Setup {progress.percentage}% complete</div>

@@ -265,7 +265,7 @@ export default function ScreeningDashboard({ environment, onNavigate }) {
             </thead>
             <tbody>{recent.map((r,i)=>(
               <tr key={r.id} style={{ background:i%2===0?"transparent":"#fafafa", cursor:"pointer" }}
-                onClick={()=>{ window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:r.id,objectId:r.object_id}})); }}>
+                onClick={()=>{ window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:r.id,objectId:r.object_id}})); }}>
                 <td style={{ padding:"10px 12px", fontSize:13, fontWeight:600, color:C.accent }}>{r.name}</td>
                 <td style={{ padding:"10px 12px", fontSize:12, color:C.text2 }}>{r.role}</td>
                 <td style={{ padding:"10px 12px", fontSize:12, color:C.text3 }}>{r.source}</td>

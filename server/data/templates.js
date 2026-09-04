@@ -521,7 +521,7 @@ function buildStandardConfig(tier, envId, objectMap, now, uid) {
       ],
       created_at: now, updated_at: now, deleted_at: null,
     },
-    ...(tier === 'standard' ? [{
+    {
       id: uid(), environment_id: envId,
       name: 'Hiring Manager Portal', slug: 'hiring', type: 'hm_portal', status: 'draft',
       company_name: 'Talent Team', tagline: 'Your hiring dashboard',
@@ -529,17 +529,49 @@ function buildStandardConfig(tier, envId, objectMap, now, uid) {
       primary_color: '#334155', secondary_color: '#475569', accent_color: '#4361EE',
       background_color: '#F8FAFC', text_color: '#0F172A',
       font_family: "'DM Sans', sans-serif",
-      logo_url: '', show_apply_button: false, require_auth: true,
+      logo_url: '', show_apply_button: false, require_auth: true, access_type: 'internal',
       show_salary: true, allow_cv_upload: false,
       exposed_objects: ['jobs','people'], access_token: hmToken,
+      // Configurable candidate shortlist (see server/routes/hm_portal.js's
+      // GET /:id/hm/shortlist) — null until an admin picks a Saved View for
+      // "who needs review" in Portal Settings; falls back to every candidate
+      // linked to this HM's jobs when unset.
+      hm_shortlist_saved_view_id: null,
       pages: [
         { id: uid(), name: 'Dashboard', slug: '/', rows: [
-          { id: uid(), preset: '1', bgColor: '#1E293B', padding: 'md', cells: [{ id: uid(), widgetType: 'hero', widgetConfig: { headline: 'Hiring Manager Portal', subheading: 'Your candidates and open roles.' } }] },
-          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'jobs', widgetConfig: {} }] },
+          { id: uid(), preset: '1', bgColor: '#1E293B', padding: 'md', cells: [{ id: uid(), widgetType: 'hero', widgetConfig: { headline: 'Welcome back', subheading: 'Your open roles, candidates and interviews at a glance.' } }] },
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: { data_source: 'hm_my_jobs', display_mode: 'stats' } }] },
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: { data_source: 'hm_my_jobs', display_mode: 'card', widget_title: 'My Open Roles' } }] },
+        ]},
+        { id: uid(), name: 'Shortlist', slug: '/shortlist', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_shortlist', display_mode: 'kanban', widget_title: 'Shortlist for Review',
+            // Only 'Interviewing'/'Offer'/'Placed' are reachable: the shortlist
+            // is gated by a Saved View (hm_shortlist_saved_view_id) scoped to
+            // those statuses by design — earlier-stage candidates (New,
+            // Screening) are recruiter-owned and intentionally hidden from the
+            // hiring manager until they're ready for review. Keeping the kanban
+            // stages list in sync avoids permanently-empty columns.
+            stages: ['Interviewing','Offer','Placed'],
+            cta_buttons: [{ action: 'view_profile', label: 'View Profile' }],
+          } }] },
+        ]},
+        { id: uid(), name: 'Interviews', slug: '/interviews', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_interviews', display_mode: 'card', widget_title: 'Upcoming Interviews',
+            empty_message: 'No interviews scheduled.',
+            cta_buttons: [{ action: 'submit_feedback', label: 'Submit Feedback' }],
+          } }] },
+        ]},
+        { id: uid(), name: 'Onboarding', slug: '/onboarding', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_onboarding', display_mode: 'card', widget_title: 'Onboarding',
+            empty_message: 'No candidates currently onboarding.',
+          } }] },
         ]},
       ],
       created_at: now, updated_at: now, deleted_at: null,
-    }] : []),
+    },
   ];
 
   return { workflows, interviewTypes, forms, fileTypes, emailTemplates, portals };
@@ -561,6 +593,54 @@ const DEFAULT_ROLES = [
 // ─────────────────────────────────────────────────────────────────────────────
 const TEMPLATES = {
 
+  // ── Basic ─────────────────────────────────────────────────────────────────
+  // The leanest environment — a clean applicant tracker. People, Jobs and
+  // Talent Pools with the simplified Starter field sets, one pipeline, and a
+  // feature_profile that ships most modules OFF so first-time users aren't
+  // overwhelmed. Default for self-serve signups.
+  recruitment_basic: {
+    key:         'recruitment_basic',
+    label:       'Basic',
+    description: 'A clean, simple recruitment tracker — candidates, jobs and talent pools, one pipeline, and just the essentials switched on. Everything else is one toggle away in settings.',
+    tier:        'basic',
+    icon:        'rocket',
+    is_default:  true,   // default for self-serve signups
+    default_roles: DEFAULT_ROLES,
+    // Feature profile — only these flags stay ON. Provisioning writes OFF
+    // overrides for every other default-on module/panel/nav flag.
+    // (see overridesForKeepOn in routes/feature-flags.js)
+    feature_profile: {
+      keep_on: [
+        // Modules
+        'ai_copilot', 'interviews', 'reports', 'portals',
+        'cv_parsing', 'bulk_actions', 'duplicate_detection',
+        'communications_panel', 'forms',
+        // Nav sections
+        'access_search', 'access_calendar',
+        // Record panels
+        'panel_notes', 'panel_files', 'panel_activity', 'panel_linked_records',
+        'panel_forms', 'panel_questions',
+      ],
+    },
+    objects: [
+      {
+        slug: 'people', name: 'Person', plural_name: 'People',
+        icon: 'user', color: '#4361EE', is_system: true,
+        fields: PEOPLE_STARTER,
+      },
+      {
+        slug: 'jobs', name: 'Job', plural_name: 'Jobs',
+        icon: 'briefcase', color: '#0CAF77', is_system: true,
+        fields: JOBS_STARTER,
+      },
+      {
+        slug: 'talent-pools', name: 'Talent Pool', plural_name: 'Talent Pools',
+        icon: 'users', color: '#C87E8B', is_system: true,
+        fields: TALENT_POOL_FIELDS,
+      },
+    ],
+  },
+
   // ── Recruitment Starter ───────────────────────────────────────────────────
   // Default for web signups. Simplified data model, focused on essentials.
   recruitment_starter: {
@@ -569,7 +649,7 @@ const TEMPLATES = {
     description: 'Simple recruitment tracking — candidates, jobs and talent pools. Best for teams getting started.',
     tier:        'starter',
     icon:        'rocket',
-    is_default:  true,   // default for self-serve signups
+    is_default:  false,  // Basic is now the self-serve default
     default_roles: DEFAULT_ROLES,
     objects: [
       {
@@ -768,6 +848,7 @@ function resolveTemplate(key) {
     is_default:    tpl.is_default || false,
     objects,
     roles:         tpl.default_roles || DEFAULT_ROLES,
+    feature_profile: tpl.feature_profile || null,
   };
 }
 

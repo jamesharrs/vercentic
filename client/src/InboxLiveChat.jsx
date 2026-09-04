@@ -8,8 +8,8 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
 
@@ -275,7 +275,7 @@ export default function InboxLiveChat({ environment, session, onNavigate, onBack
     await loadConversation(convId); loadList();
   };
   const handleCreatePerson = (conv) => {
-    window.dispatchEvent(new CustomEvent('talentos:create-from-chat', { detail:{ email:conv.visitor_email, first_name:conv.visitor_name?.split(' ')[0]||'', last_name:conv.visitor_name?.split(' ').slice(1).join(' ')||'', conversation_id:conv.id } }));
+    window.dispatchEvent(new CustomEvent('vercentic:create-from-chat', { detail:{ email:conv.visitor_email, first_name:conv.visitor_name?.split(' ')[0]||'', last_name:conv.visitor_name?.split(' ').slice(1).join(' ')||'', conversation_id:conv.id } }));
   };
 
   const FILTERS = [ {id:'all',label:'All',count:convs.length}, {id:'escalated',label:'Waiting',count:convs.filter(c=>c.status==='escalated').length}, {id:'mine',label:'Mine',count:convs.filter(c=>c.claimed_by===currentUserId).length}, {id:'resolved',label:'Resolved',count:convs.filter(c=>c.status==='resolved').length} ];
@@ -324,7 +324,7 @@ export default function InboxLiveChat({ environment, session, onNavigate, onBack
       {/* Chat */}
       <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
         {selected
-          ? <ChatPanel conv={selected} currentUserId={currentUserId} onSendMessage={handleSendMessage} onClaim={handleClaim} onResolve={handleResolve} onLink={handleLink} onCreatePerson={handleCreatePerson} onNavigateToPerson={id=>window.dispatchEvent(new CustomEvent('talentos:openRecord',{detail:{recordId:id}}))}/>
+          ? <ChatPanel conv={selected} currentUserId={currentUserId} onSendMessage={handleSendMessage} onClaim={handleClaim} onResolve={handleResolve} onLink={handleLink} onCreatePerson={handleCreatePerson} onNavigateToPerson={id=>window.dispatchEvent(new CustomEvent('vercentic:openRecord',{detail:{recordId:id}}))}/>
           : <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12, color:C.text3 }}>
               <Ic n="message-circle" s={40} c="#E5E7EB"/>
               <p style={{ margin:0, fontSize:14, color:C.text3 }}>Select a conversation</p>

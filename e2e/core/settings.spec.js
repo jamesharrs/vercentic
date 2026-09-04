@@ -42,7 +42,7 @@ test.describe('Settings', () => {
     await usersBtn.click();
     await page.waitForTimeout(800);
     await expect(page.locator('text="Something went wrong"')).not.toBeVisible();
-    const userTable = await page.locator('table, text=/admin@talentos/i').first().isVisible(T).catch(() => false);
+    const userTable = await page.locator('table, text=/admin@vercentic/i').first().isVisible(T).catch(() => false);
     expect(userTable).toBe(true);
   });
 

@@ -146,14 +146,38 @@ router.delete('/:id', (req, res) => {
   res.json({ deleted: true });
 });
 
+// ── Cross-form search (for reports) ──────────────────────────────────────────
+// NOTE: this must be registered BEFORE '/:id/responses' below — otherwise Express
+// matches '/search/responses' against the '/:id/responses' pattern first (with
+// id='search'), silently returning an empty/wrong result instead of running the
+// real cross-form search.
+router.get('/search/responses', (req, res) => {
+  ensure();
+  const { environment_id, query, form_id, record_id, context_record_id } = req.query;
+  let responses = (getStore().form_responses || []).filter(r => !r.deleted_at);
+  if (environment_id) responses = responses.filter(r => r.environment_id === environment_id);
+  if (form_id)        responses = responses.filter(r => r.form_id === form_id);
+  if (record_id)      responses = responses.filter(r => r.record_id === record_id);
+  if (context_record_id) responses = responses.filter(r => r.context_record_id === context_record_id);
+  if (query) {
+    const q = query.toLowerCase();
+    responses = responses.filter(r =>
+      Object.values(r.data || {}).some(v => String(v||'').toLowerCase().includes(q))
+    );
+  }
+  res.json(responses);
+});
+
 // ── Form Responses ────────────────────────────────────────────────────────────
 
 // List responses for a form or record
 router.get('/:id/responses', (req, res) => {
   ensure();
-  const { record_id, environment_id } = req.query;
+  const { record_id, environment_id, context_record_id } = req.query;
   let responses = (getStore().form_responses || []).filter(r => r.form_id === req.params.id && !r.deleted_at);
   if (record_id) responses = responses.filter(r => r.record_id === record_id);
+  if (environment_id) responses = responses.filter(r => r.environment_id === environment_id);
+  if (context_record_id) responses = responses.filter(r => r.context_record_id === context_record_id);
   res.json(responses);
 });
 
@@ -172,6 +196,8 @@ router.post('/:id/responses', (req, res) => {
     environment_id: req.body.environment_id || form.environment_id,
     record_id:      req.body.record_id      || null,
     record_type:    req.body.record_type    || null,   // 'people', 'jobs' etc
+    context_record_id:    req.body.context_record_id    || null,   // e.g. the Job this response is scoped to
+    context_record_title: req.body.context_record_title || null,
     data:           req.body.data           || {},     // { field_key: value }
     submitted_by:   req.body.submitted_by   || 'Admin',
     submitted_at:   now,
@@ -208,7 +234,12 @@ router.patch('/:id/responses/:responseId', (req, res) => {
   const s = getStore();
   const idx = (s.form_responses || []).findIndex(r => r.id === req.params.responseId && r.form_id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Response not found' });
-  s.form_responses[idx] = { ...s.form_responses[idx], data: { ...s.form_responses[idx].data, ...req.body.data }, updated_at: new Date().toISOString() };
+  const touch = { updated_at: new Date().toISOString() };
+  if (req.body.data) touch.data = { ...s.form_responses[idx].data, ...req.body.data };
+  if (req.body.submitted_at) touch.submitted_at = req.body.submitted_at;
+  if (req.body.context_record_id !== undefined) touch.context_record_id = req.body.context_record_id;
+  if (req.body.context_record_title !== undefined) touch.context_record_title = req.body.context_record_title;
+  s.form_responses[idx] = { ...s.form_responses[idx], ...touch };
   saveStore();
   res.json(s.form_responses[idx]);
 });
@@ -222,23 +253,6 @@ router.delete('/:id/responses/:responseId', (req, res) => {
   s.form_responses[idx].deleted_at = new Date().toISOString();
   saveStore();
   res.json({ deleted: true });
-});
-
-// ── Cross-form search (for reports) ──────────────────────────────────────────
-router.get('/search/responses', (req, res) => {
-  ensure();
-  const { environment_id, query, form_id, record_id } = req.query;
-  let responses = (getStore().form_responses || []).filter(r => !r.deleted_at);
-  if (environment_id) responses = responses.filter(r => r.environment_id === environment_id);
-  if (form_id)        responses = responses.filter(r => r.form_id === form_id);
-  if (record_id)      responses = responses.filter(r => r.record_id === record_id);
-  if (query) {
-    const q = query.toLowerCase();
-    responses = responses.filter(r =>
-      Object.values(r.data || {}).some(v => String(v||'').toLowerCase().includes(q))
-    );
-  }
-  res.json(responses);
 });
 
 module.exports = router;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePermissions } from "./PermissionContext.jsx";
+import { useFeatures } from "./hooks/useFeature.jsx";
 
 // Matches the NAV_GROUPS in Settings.jsx — ids must be identical
 const DASHBOARD_GROUPS = [
@@ -19,7 +20,7 @@ const DASHBOARD_GROUPS = [
       { id:"users",   icon:"users",      label:"Users",              desc:"Invite and manage platform users",          perm:"manage_users" },
       { id:"groups",  icon:"layers",     label:"Groups",             desc:"Organise users into teams and groups",      perm:"manage_users" },
       { id:"roles",   icon:"shield",     label:"Roles & Permissions",desc:"Define what each role can see and do",      perm:"manage_roles" },
-      { id:"org",     icon:"git-branch", label:"Org Structure",      desc:"Build your organisational hierarchy",       perm:"manage_org_structure" },
+      { id:"org",     icon:"git-branch", label:"Org Structure",      desc:"Build your organisational hierarchy",       perm:"manage_org_structure", feature:"org_chart" },
     ],
   },
   {
@@ -34,33 +35,34 @@ const DASHBOARD_GROUPS = [
     id: "schema", label: "Data & Schema", color: "#059669",
     items: [
       { id:"datamodel",   icon:"database",    label:"Data Model",       desc:"Configure objects, fields and field types",     perm:"manage_settings" },
-      { id:"duplicates",  icon:"copy",        label:"Duplicates",       desc:"Merge rules and duplicate detection settings",  perm:"manage_settings" },
+      { id:"duplicates",  icon:"copy",        label:"Duplicates",       desc:"Merge rules and duplicate detection settings",  perm:"manage_settings", feature:"duplicate_detection" },
       { id:"file_types",  icon:"paperclip",   label:"File Types",       desc:"Define file categories and extraction rules",   perm:"manage_settings" },
-      { id:"company_docs",icon:"file-text",   label:"Company Documents",desc:"Shared documents available across the platform" },
-      { id:"forms",       icon:"clipboard",   label:"Forms",            desc:"Build forms to capture structured data",         perm:"manage_forms" },
-      { id:"questions",   icon:"help-circle", label:"Question Library", desc:"Reusable questions for interviews and surveys" },
-      { id:"datasets",    icon:"layers",      label:"Data Sets",        desc:"Manage shared data sets and lookup values" },
-      { id:"test_scripts",icon:"sparkles",    label:"Test Scripts",     desc:"AI-generated UAT test scripts from your live configuration" },
-      { id:"enterprise",  icon:"briefcase",   label:"Enterprise",       desc:"Enterprise-specific configuration options",      perm:"manage_roles" },
+      { id:"company_docs",icon:"file-text",   label:"Company Documents",desc:"Shared documents available across the platform", feature:"access_documents" },
+      { id:"forms",       icon:"clipboard",   label:"Forms",            desc:"Build forms to capture structured data",         perm:"manage_forms", feature:"forms" },
+      { id:"questions",   icon:"help-circle", label:"Question Library", desc:"Reusable questions for interviews and surveys", feature:"forms" },
+      { id:"datasets",    icon:"layers",      label:"Data Sets",        desc:"Manage shared data sets and lookup values", feature:"data_sets" },
+      { id:"test_scripts",icon:"sparkles",    label:"Test Scripts",     desc:"AI-generated UAT test scripts from your live configuration", feature:"test_scripts" },
+      { id:"enterprise",  icon:"briefcase",   label:"Enterprise",       desc:"Enterprise-specific configuration options",      perm:"manage_roles", feature:"enterprise_settings" },
     ],
   },
   {
     id: "processes", label: "Processes", color: "#7c3aed",
     items: [
-      { id:"brand_kits",      icon:"palette",   label:"Brand Kits",      desc:"Manage brand colours, fonts and assets" },
+      { id:"brand_kits",      icon:"palette",   label:"Brand Kits",      desc:"Manage brand colours, fonts and assets", feature:"portals" },
       { id:"email_templates", icon:"mail",      label:"Email Templates", desc:"Create and manage reusable email templates" },
       { id:"talent_profile",  icon:"user",      label:"Talent Profile",  desc:"Configure the candidate talent profile card" },
-      { id:"workflows",       icon:"zap",       label:"Workflows",       desc:"Automate steps, triggers and AI actions",       perm:"manage_workflows" },
-      { id:"portals",         icon:"globe",     label:"Portals",         desc:"Career sites, HM portals and external experiences", perm:"manage_portals" },
-      { id:"sandbox",         icon:"git-branch",label:"Sandbox Manager", desc:"Test configuration changes before going live",   perm:"manage_roles" },
+      { id:"workflows",       icon:"zap",       label:"Workflows",       desc:"Automate steps, triggers and AI actions",       perm:"manage_workflows", feature:"workflows" },
+      { id:"portals",         icon:"globe",     label:"Portals",         desc:"Career sites, HM portals and external experiences", perm:"manage_portals", feature:"portals" },
+      { id:"conversational_actions", icon:"message-square", label:"Conversational Actions", desc:"Slack & Teams — search, update records and approve from chat", perm:"manage_conversational_actions" },
+      { id:"sandbox",         icon:"git-branch",label:"Sandbox Manager", desc:"Test configuration changes before going live",   perm:"manage_roles", feature:"sandbox" },
     ],
   },
   {
     id: "ai", label: "AI", color: "#b45309",
     items: [
-      { id:"ai_governance", icon:"sparkles", label:"AI Governance",   desc:"Usage policies, content controls and audit" },
-      { id:"ai_matching",   icon:"target",   label:"Recommendations", desc:"Configure candidate-to-job recommendation rules" },
-      { id:"agents",        icon:"cpu",      label:"Agents",          desc:"Configure AI agents and their capabilities" },
+      { id:"ai_governance", icon:"sparkles", label:"AI Governance",   desc:"Usage policies, content controls and audit", feature:"ai_governance" },
+      { id:"ai_matching",   icon:"target",   label:"Recommendations", desc:"Configure candidate-to-job recommendation rules", feature:"ai_matching" },
+      { id:"agents",        icon:"cpu",      label:"Agents",          desc:"Configure AI agents and their capabilities", feature:"agents" },
     ],
   },
   {
@@ -81,6 +83,7 @@ const PATHS = {
   layers:        "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   shield:        "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
   "git-branch":  "M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9",
+  "message-square": "M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z",
   lock:          "M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4",
   activity:      "M22 12h-4l-3 9L9 3l-3 9H2",
   "file-text":   "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M16 13H8M16 17H8M10 9H8",
@@ -117,11 +120,14 @@ function Ic({ n, s = 16, c = "currentColor" }) {
 export default function SettingsDashboard({ onNavigate, searchQuery = "" }) {
   const [hovered, setHovered] = useState(null);
   const { canGlobal } = usePermissions();
+  const { features } = useFeatures();
   const q = searchQuery.trim().toLowerCase();
 
   const filtered = DASHBOARD_GROUPS.map(group => ({
     ...group,
     items: group.items.filter(item => {
+      // Feature gate — items with no feature always show
+      if (item.feature && !features.has(item.feature)) return false;
       // Permission gate — items with no perm always show
       if (item.perm && !canGlobal(item.perm)) return false;
       // Search filter

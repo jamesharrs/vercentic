@@ -316,7 +316,8 @@ function ScreeningTab({ recordId, jobId }) {
 // ── Main AssessmentsPanel export ──────────────────────────────────────────────
 export default function AssessmentsPanel({ record, environment, session, activeJobId }) {
   const [links,       setLinks]       = useState([]);
-  const [selectedLinkId, setSelectedLinkId] = useState(activeJobId || "");
+  // Holds a people-link id — NOT a job record id. activeJobId is resolved to one below.
+  const [selectedLinkId, setSelectedLinkId] = useState("");
   const [tab,         setTab]         = useState("screening"); // screening | scorecards
   const [loadingLinks, setLoadingLinks] = useState(true);
 
@@ -334,11 +335,10 @@ export default function AssessmentsPanel({ record, environment, session, activeJ
           job_name: l.target_name || l.job_title || l.job_name || "Job",
           stage_name: l.stage_name || null,
         })));
-        // Auto-select: use activeJobId link if provided, else most recent
-        if (!selectedLinkId && arr.length) {
-          const match = activeJobId ? arr.find(l => l.target_record_id === activeJobId || l.record_id === activeJobId) : null;
-          setSelectedLinkId(match?.id || arr[0]?.id || "");
-        }
+        // Auto-select: use activeJobId link if provided, else most recent.
+        // Functional updater so we read the live value, not a stale closure.
+        const match = activeJobId ? arr.find(l => l.target_record_id === activeJobId || l.record_id === activeJobId) : null;
+        setSelectedLinkId(prev => prev || match?.id || arr[0]?.id || "");
         setLoadingLinks(false);
       });
   }, [record?.id, environment?.id]);

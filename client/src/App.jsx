@@ -93,17 +93,17 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
-// One-time migration: move legacy 'talentos_session' key to the new scoped key.
+// One-time migration: move legacy 'vercentic_session' key to the new scoped key.
 // Runs once on load — clears the shared key so sessions don't bleed across subdomains.
 (function migrateSession() {
   try {
     const newKey = _sessionKey();
     if (!localStorage.getItem(newKey)) {
-      const legacy = localStorage.getItem('talentos_session');
+      const legacy = localStorage.getItem('vercentic_session');
       if (legacy) {
         // Only migrate if the legacy session belongs to this subdomain's tenant
         const parsed = JSON.parse(legacy);
@@ -115,7 +115,7 @@ function _sessionKey() {
       }
     }
     // Always remove the old shared key so it can't bleed into other subdomains
-    localStorage.removeItem('talentos_session');
+    localStorage.removeItem('vercentic_session');
   } catch {}
 })();
 
@@ -1291,13 +1291,13 @@ const GlobalSearch = ({ selectedEnv, navObjects, onNavigateToSearch, onNavigateT
 
                       // Inline action map
                       const NOTIF_ACTIONS = {
-                        interview_today:  { label:"View interview",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
-                        application_new:  { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
-                        offer_action:     { label:"View offer",      fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:{slug:"offers"}})); } },
-                        workflow_blocked: { label:"Review workflow",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:{slug:"workflows"}})); } },
-                        agent_review:     { label:"Review agent",     fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:navigate",{detail:{slug:"agents"}})); } },
-                        stage_change:     { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
-                        scorecard_submitted:{ label:"View scorecard",fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        interview_today:  { label:"View interview",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        application_new:  { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        offer_action:     { label:"View offer",      fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:navigate",{detail:{slug:"offers"}})); } },
+                        workflow_blocked: { label:"Review workflow",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:navigate",{detail:{slug:"workflows"}})); } },
+                        agent_review:     { label:"Review agent",     fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:navigate",{detail:{slug:"agents"}})); } },
+                        stage_change:     { label:"View candidate",  fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
+                        scorecard_submitted:{ label:"View scorecard",fn:(n)=>{ setBellOpen(false); window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:n.record_id,objectId:n.object_id}})); } },
                       };
 
                       return groups.map(group => (
@@ -1580,8 +1580,8 @@ function RecordPage({ recordId, objectId, environment, allObjects, onBack, onNav
     const handler = (e) => {
       if (e.detail?.recordId === recordId) load();
     };
-    window.addEventListener('talentos:recordUpdated', handler);
-    return () => window.removeEventListener('talentos:recordUpdated', handler);
+    window.addEventListener('vercentic:recordUpdated', handler);
+    return () => window.removeEventListener('vercentic:recordUpdated', handler);
   }, [recordId, load]);
 
   if (loading) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, color:"#9ca3af" }}>Loading…</div>;
@@ -1921,7 +1921,7 @@ activeNavRef.current = activeNav;
           setApiOnline(prev => {
             // Flipping false→true triggers the environments/objects reload via the useEffect below
             if (prev !== true) {
-              window.dispatchEvent(new CustomEvent('talentos:server-online'));
+              window.dispatchEvent(new CustomEvent('vercentic:server-online'));
               return true;
             }
             return prev;
@@ -1997,11 +1997,11 @@ activeNavRef.current = activeNav;
       startTransition(() => setSession(null));
       try { window.__toast?.alert('Your session expired — please log in again.'); } catch {}
     };
-    window.addEventListener('talentos:unauthenticated', handler);
-    window.addEventListener('talentos:session-lost', handler);
+    window.addEventListener('vercentic:unauthenticated', handler);
+    window.addEventListener('vercentic:session-lost', handler);
     return () => {
-      window.removeEventListener('talentos:unauthenticated', handler);
-      window.removeEventListener('talentos:session-lost', handler);
+      window.removeEventListener('vercentic:unauthenticated', handler);
+      window.removeEventListener('vercentic:session-lost', handler);
       clearTimeout(debounceTimer);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2043,11 +2043,11 @@ activeNavRef.current = activeNav;
 
     // Also re-sync whenever any API call gets a 401 in dev
     const onSessionLost = () => { attempts = 0; sync(); };
-    window.addEventListener('talentos:session-lost', onSessionLost);
-    window.addEventListener('talentos:server-starting', onSessionLost);
+    window.addEventListener('vercentic:session-lost', onSessionLost);
+    window.addEventListener('vercentic:server-starting', onSessionLost);
     return () => {
-      window.removeEventListener('talentos:session-lost', onSessionLost);
-      window.removeEventListener('talentos:server-starting', onSessionLost);
+      window.removeEventListener('vercentic:session-lost', onSessionLost);
+      window.removeEventListener('vercentic:server-starting', onSessionLost);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2181,7 +2181,7 @@ activeNavRef.current = activeNav;
   // Persist session context for error reporter
   useEffect(() => {
     if (session?.user && selectedEnv) {
-      sessionStorage.setItem('talentos_session', JSON.stringify({
+      sessionStorage.setItem('vercentic_session', JSON.stringify({
         user: { id: session.user.id, email: session.user.email },
         environment: { id: selectedEnv.id, name: selectedEnv.name },
       }));
@@ -2225,8 +2225,8 @@ activeNavRef.current = activeNav;
   // Manual launch from Settings
   useEffect(() => {
     const handler = () => setShowSetupWizard(true);
-    window.addEventListener('talentos:launch-setup-wizard', handler);
-    return () => window.removeEventListener('talentos:launch-setup-wizard', handler);
+    window.addEventListener('vercentic:launch-setup-wizard', handler);
+    return () => window.removeEventListener('vercentic:launch-setup-wizard', handler);
   }, []);
 
   // Auto-start product tour on first login
@@ -2326,6 +2326,7 @@ activeNavRef.current = activeNav;
       reports:              { label: "Reports",     objectName: "Reports",    objectColor: "#d97706" },
       calendar:             { label: "Calendar",    objectName: "Calendar",   objectColor: "#0891b2" },
       "org-chart":          { label: "Org Chart",   objectName: "People",     objectColor: "#7c3aed" },
+      orgchart:             { label: "Org Chart",   objectName: "People",     objectColor: "#7c3aed" },
     };
     if (NAV_META[id]) {
       pushHistory({ id: `nav_${id}`, nav: id, type: "nav", ...NAV_META[id] });
@@ -2438,7 +2439,7 @@ activeNavRef.current = activeNav;
   const switchNavRef = useRef(switchNav);
   switchNavRef.current = switchNav;
 
-  // Global event listener — anything can fire talentos:openRecord to navigate to a record page
+  // Global event listener — anything can fire vercentic:openRecord to navigate to a record page
   useEffect(() => {
     const handler = (e) => {
       const { recordId, objectId, objectSlug, recordNumber } = e.detail || {};
@@ -2451,15 +2452,15 @@ activeNavRef.current = activeNav;
       }
       if (recordId && resolvedObjectId) openRecordRef.current(recordId, resolvedObjectId, recordNumber);
     };
-    window.addEventListener("talentos:openRecord", handler);
-    return () => window.removeEventListener("talentos:openRecord", handler);
+    window.addEventListener("vercentic:openRecord", handler);
+    return () => window.removeEventListener("vercentic:openRecord", handler);
   }, []); // safe — uses ref, not stale closure
 
   // 🔄 Live update — refresh nav objects when Copilot (or Settings) creates/edits an object
   useEffect(() => {
     const handler = () => { if (selectedEnv?.id) loadNavObjects(selectedEnv.id); };
-    window.addEventListener('talentos:refreshObjects', handler);
-    return () => window.removeEventListener('talentos:refreshObjects', handler);
+    window.addEventListener('vercentic:refreshObjects', handler);
+    return () => window.removeEventListener('vercentic:refreshObjects', handler);
   }, [selectedEnv?.id, loadNavObjects]);
 
   // Copilot navigation — switch to a named section or object
@@ -2478,13 +2479,13 @@ activeNavRef.current = activeNav;
         const staticMap = {
           dashboard:'dashboard', reports:'reports', interviews:'interviews',
           calendar:'calendar', campaigns:'campaigns', offers:'offers',
-          settings:'settings', search:'search',
+          settings:'settings', search:'search', orgchart:'orgchart',
         };
         if (staticMap[slug]) switchNav(staticMap[slug]);
       }
     };
-    window.addEventListener('talentos:navigate', handler);
-    return () => window.removeEventListener('talentos:navigate', handler);
+    window.addEventListener('vercentic:navigate', handler);
+    return () => window.removeEventListener('vercentic:navigate', handler);
   }, [navObjects]); // re-run when objects load
 
   // Cmd+K / Ctrl+K → open command palette
@@ -2501,7 +2502,7 @@ activeNavRef.current = activeNav;
 
   const reportNavRef = useRef(null);
   reportNavRef.current = { navObjects, activeNav, setReportPreset, setActiveNav };
-  // Global event listener — dashboard fires talentos:open-report to open Reports with a preset
+  // Global event listener — dashboard fires vercentic:open-report to open Reports with a preset
   useEffect(() => {
     const handler = (e) => {
       const { objectSlug: slugA, object: slugB, objectId: oidA, ...config } = e.detail || {};
@@ -2523,18 +2524,18 @@ activeNavRef.current = activeNav;
         sna("reports");
       }
     };
-    window.addEventListener("talentos:open-report", handler);
-    return () => window.removeEventListener("talentos:open-report", handler);
+    window.addEventListener("vercentic:open-report", handler);
+    return () => window.removeEventListener("vercentic:open-report", handler);
   }, []);
 
   // Listen for list context updates broadcast from RecordsView
   useEffect(() => {
     const handler = (e) => setListContext(e.detail || null);
-    window.addEventListener("talentos:list-context", handler);
-    return () => window.removeEventListener("talentos:list-context", handler);
+    window.addEventListener("vercentic:list-context", handler);
+    return () => window.removeEventListener("vercentic:list-context", handler);
   }, []);
 
-  // talentos:navigate — generic nav event (e.g. "← Dashboard" back button)
+  // vercentic:navigate — generic nav event (e.g. "← Dashboard" back button)
   // detail can be a string ("people", "obj_xxx") or an object ({ slug: "people", record_id: "..." })
   useEffect(() => {
     const handler = (e) => {
@@ -2548,7 +2549,7 @@ activeNavRef.current = activeNav;
       // Object form: { slug, destination, record_id }
       const dest = raw.slug || raw.destination;
       if (raw.record_id) {
-        window.dispatchEvent(new CustomEvent('talentos:openRecord', { detail: { recordId: raw.record_id } }));
+        window.dispatchEvent(new CustomEvent('vercentic:openRecord', { detail: { recordId: raw.record_id } }));
         return;
       }
       if (!dest) return;
@@ -2557,8 +2558,8 @@ activeNavRef.current = activeNav;
       const obj = objs?.find(o => o.slug === dest);
       switchNavRef.current(obj ? `obj_${obj.id}` : dest);
     };
-    window.addEventListener("talentos:navigate", handler);
-    return () => window.removeEventListener("talentos:navigate", handler);
+    window.addEventListener("vercentic:navigate", handler);
+    return () => window.removeEventListener("vercentic:navigate", handler);
   }, []);
   const filterNavRef = useRef(null);
   filterNavRef.current = { activeNav, navObjects, setFilterPreset, setActiveNav };
@@ -2584,15 +2585,15 @@ activeNavRef.current = activeNav;
         sna(`obj_${objectId}`);
       }
     };
-    window.addEventListener("talentos:filter-navigate", handler);
-    return () => window.removeEventListener("talentos:filter-navigate", handler);
+    window.addEventListener("vercentic:filter-navigate", handler);
+    return () => window.removeEventListener("vercentic:filter-navigate", handler);
   }, []);
 
   // Copilot dock state — shrink content area when docked as sidebar
   useEffect(() => {
     const handler = (e) => setCopilotDocked(e.detail?.docked ?? false);
-    window.addEventListener("talentos:copilot-dock", handler);
-    return () => window.removeEventListener("talentos:copilot-dock", handler);
+    window.addEventListener("vercentic:copilot-dock", handler);
+    return () => window.removeEventListener("vercentic:copilot-dock", handler);
   }, []);
 
   // Bulk interview — navigate to Interviews and pre-fill candidates
@@ -2601,12 +2602,12 @@ activeNavRef.current = activeNav;
       const { candidates } = e.detail || {};
       // Store candidates for Interviews page to pick up
       if (candidates?.length) {
-        sessionStorage.setItem("talentos_bulk_interview_candidates", JSON.stringify(candidates));
+        sessionStorage.setItem("vercentic_bulk_interview_candidates", JSON.stringify(candidates));
       }
       setActiveNav("interviews");
     };
-    window.addEventListener("talentos:bulkInterview", handler);
-    return () => window.removeEventListener("talentos:bulkInterview", handler);
+    window.addEventListener("vercentic:bulkInterview", handler);
+    return () => window.removeEventListener("vercentic:bulkInterview", handler);
   }, []);
 
   // Navigate to People list filtered to specific person IDs (from pipeline widget)
@@ -2620,8 +2621,8 @@ activeNavRef.current = activeNav;
       sfp({ fieldKey: '__ids__', fieldValue: personIds.join(','), label: label || 'Pipeline filter' });
       sna(`obj_${peopleObj.id}`);
     };
-    window.addEventListener("talentos:open-people-list", handler);
-    return () => window.removeEventListener("talentos:open-people-list", handler);
+    window.addEventListener("vercentic:open-people-list", handler);
+    return () => window.removeEventListener("vercentic:open-people-list", handler);
   }, []);
 
   // Global bulk communicate handler
@@ -2631,8 +2632,8 @@ activeNavRef.current = activeNav;
       const { recipients, type } = e.detail || {};
       setBulkCompose({ recipients: recipients || [], type: type || null });
     };
-    window.addEventListener("talentos:bulkCommunicate", handler);
-    return () => window.removeEventListener("talentos:bulkCommunicate", handler);
+    window.addEventListener("vercentic:bulkCommunicate", handler);
+    return () => window.removeEventListener("vercentic:bulkCommunicate", handler);
   }, []);
 
   // Show login page if no session
@@ -2864,8 +2865,8 @@ activeNavRef.current = activeNav;
              onNavigateToSearch={(q) => {
             startTransition(() => setActiveNav("search"));
             if (q) {
-              sessionStorage.setItem("talentos_search_query", q);
-              sessionStorage.setItem("talentos_autosearch", "1");
+              sessionStorage.setItem("vercentic_search_query", q);
+              sessionStorage.setItem("vercentic_autosearch", "1");
             }
           }} onNavigateToRecord={(recordId, objectId) => openRecord(recordId, objectId)}
              onCreateRecord={(obj) => {
@@ -2990,7 +2991,7 @@ activeNavRef.current = activeNav;
         ) : activeNav === "help" ? (
           <Suspense fallback={null}>
             <HelpPage onOpenCopilot={(msg) => {
-              window.dispatchEvent(new CustomEvent("talentos:openCopilot", { detail: { message: msg } }));
+              window.dispatchEvent(new CustomEvent("vercentic:openCopilot", { detail: { message: msg } }));
             }} />
           </Suspense>
         ) : activeNav === "settings" ? (
@@ -3167,7 +3168,7 @@ activeNavRef.current = activeNav;
                     onComplete={() => {
                       setShowSetupWizard(false);
                       // Force company profile panel to reload by briefly switching away and back
-                      window.dispatchEvent(new CustomEvent('talentos:company-profile-updated'));
+                      window.dispatchEvent(new CustomEvent('vercentic:company-profile-updated'));
                     }}
                     onSkip={() => setShowSetupWizard(false)}
                   />
@@ -3327,8 +3328,8 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
                 // (setState on unmounting component during logout render)
                 setTimeout(() => {
                   try { localStorage.removeItem(_sessionKey()); } catch {}
-                  try { localStorage.removeItem('talentos_session'); } catch {}
-                  try { localStorage.removeItem('talentos_session_default'); } catch {}
+                  try { localStorage.removeItem('vercentic_session'); } catch {}
+                  try { localStorage.removeItem('vercentic_session_default'); } catch {}
                   clearSession();
                   setSession(null);
                 }, 0);

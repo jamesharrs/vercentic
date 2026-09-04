@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 const now = () => new Date().toISOString();
 
@@ -312,7 +313,7 @@ Generate the complete polished document. Use **bold** for emphasis, # for header
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const r = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 1500,
+      model: MODEL_DEFAULT, max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
     res.json({ body: r.content[0]?.text?.trim() || '',

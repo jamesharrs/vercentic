@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext, lazy, Suspense } from "react";
 import api, { tFetch } from "./apiClient.js";
 import { usePermissions, Gate } from "./PermissionContext.jsx";
+import { useFeatures } from "./hooks/useFeature.jsx";
 import ReactDOM from "react-dom";
 import { useTheme, SCHEMES, FONTS, DENSITIES } from "./Theme.jsx";
 import StyledSelect from "./components/StyledSelect.jsx";
@@ -13,8 +14,8 @@ function _sessionKey() {
     const reserved = ['www','app','api','admin','localhost','client','portal'];
     const isSubdomain = parts.length >= 3 && !reserved.includes(parts[0]) &&
       !['vercel','railway','up','netlify','localhost'].some(r => host.includes(r));
-    return isSubdomain ? `talentos_session_${parts[0]}` : 'talentos_session_default';
-  } catch { return 'talentos_session_default'; }
+    return isSubdomain ? `vercentic_session_${parts[0]}` : 'vercentic_session_default';
+  } catch { return 'vercentic_session_default'; }
 }
 
 
@@ -53,6 +54,7 @@ const DefaultSignatureSettings = lazy(() => import("./EmailSettings").then(m => 
 const IntegrationHub     = lazy(() => import("./IntegrationHub.jsx"));
 const IntegrationsSettings = lazy(() => import("./IntegrationsSettings.jsx"));
 const FormsList          = lazy(() => import("./Forms.jsx").then(m => ({ default: m.FormsList })));
+const ConversationalActionsSettings = lazy(() => import("./settings/ConversationalActionsSettings.jsx"));
 
 const LazyTab = ({ children }) => (
   <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading…</div>}>
@@ -197,6 +199,7 @@ const PATHS = {
   "flag":"M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7",
   "webhook":"M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 000-6 3 3 0 00-3 3c0 .24.04.47.09.7L8.04 9.81A3 3 0 005 9a3 3 0 000 6 3 3 0 003.04-.81l7.12 4.15c-.05.21-.08.43-.08.66a3 3 0 103-3z",
   "gitBranch":"M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9",
+  "messageSquare":"M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z",
   "file":"M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zM13 2v7h7",
 };
 const Ic = ({n,s=16,c="currentColor"}) => (
@@ -1066,6 +1069,16 @@ const SecuritySection = () => {
         </div>
       </Card>
 
+      {/* Career Site Applications */}
+      <Card title="Career Site Applications" subtitle="Control how long candidates can edit their application after submitting">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:16}}>
+          <Inp label="Edit Window (minutes)" type="number" value={settings.application_edit_window_minutes ?? 30} onChange={v=>set("application_edit_window_minutes",parseInt(v))} help="Candidates can freely edit their application within this window after submitting"/>
+        </div>
+        <div style={{marginTop:12,padding:"12px 16px",background:"#f8f9fc",borderRadius:10,fontSize:12,color:C.text3}}>
+          After the window closes, a candidate returning to edit their application will be emailed a one-time verification code before any changes are accepted.
+        </div>
+      </Card>
+
       {/* SSO */}
       <Card title="Single Sign-On (SSO)" subtitle="Allow users to log in via your identity provider">
         <div style={{marginTop:4}}>
@@ -1582,7 +1595,7 @@ const PersonTypeConfig = ({ object, onUpdate }) => {
     const updated = await tFetch(`/api/objects/${object.id}`, {
       method:"PATCH", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ person_type_options: opts }),
-    }).then(r=>r.json());
+    });
     setSaving(false);
     if (onUpdate) onUpdate(updated);
   };
@@ -2183,7 +2196,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
       setDeleteObj(null); setImpact(null);
       if (selObj?.id === deleteObj.id) setSelObj(null);
       reloadObjects();
-      window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+      window.dispatchEvent(new CustomEvent('vercentic:refreshObjects'));
     } catch (err) {
       alert(`Delete failed: ${err.message}`);
     }
@@ -2198,7 +2211,7 @@ const DataModelSection = ({ environment: activeEnv }) => {
       const fresh = await api.get(`/objects/${editObj.id}`).catch(() => null);
       if (fresh?.id) setSelObj(fresh);
     }
-    window.dispatchEvent(new CustomEvent('talentos:refreshObjects'));
+    window.dispatchEvent(new CustomEvent('vercentic:refreshObjects'));
   };
 
   // ── FieldModal & CreateObjectModal are defined at module level above ──
@@ -2348,7 +2361,7 @@ const ConfigSection = ({ environment }) => {
   const handleExport = () => {
     const a = document.createElement('a');
     a.href = `/api/config/export?environment_id=${envId}`;
-    a.download = `talentos-config-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `vercentic-config-${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     setStatus({ type:'success', msg:'Config exported successfully.' });
   };
@@ -2358,9 +2371,8 @@ const ConfigSection = ({ environment }) => {
     setStatus({ type:'info', msg:'Validating config file…' }); setDiff(null); setPending(null);
     try {
       const json = JSON.parse(await file.text());
-      const res  = await tFetch(`/api/config/preview?environment_id=${envId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(json) });
-      const data = await res.json();
-      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Invalid config file.' }); return; }
+      const data = await tFetch(`/api/config/preview?environment_id=${envId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(json) });
+      if (data?.error) { setStatus({ type:'error', msg: data.error||'Invalid config file.' }); return; }
       setDiff(data.diff); setDiffMeta(data.meta); setPending(json);
       setStatus({ type:'info', msg:'Review the changes below, then click Apply Import.' });
     } catch(err) { setStatus({ type:'error', msg:`Parse error: ${err.message}` }); }
@@ -2370,9 +2382,8 @@ const ConfigSection = ({ environment }) => {
   const handleApply = async () => {
     if (!pending) return; setApplying(true);
     try {
-      const res  = await tFetch(`/api/config/import?environment_id=${envId}&mode=${mode}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pending) });
-      const data = await res.json();
-      if (!res.ok) { setStatus({ type:'error', msg: data.error||'Import failed.' }); return; }
+      const data = await tFetch(`/api/config/import?environment_id=${envId}&mode=${mode}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pending) });
+      if (data?.error) { setStatus({ type:'error', msg: data.error||'Import failed.' }); return; }
       const summary = Object.entries(data.results).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ');
       setStatus({ type:'success', msg:`Import complete: ${summary||'no changes'}. Reload to see changes.` });
       setDiff(null); setPending(null);
@@ -2465,7 +2476,7 @@ const ConfigSection = ({ environment }) => {
 };
 
 // ─── Bulk Threshold Setting (sub-component used inside Appearance) ────────────
-const BULK_THRESHOLD_KEY = "talentos_bulk_threshold";
+const BULK_THRESHOLD_KEY = "vercentic_bulk_threshold";
 export const getBulkThreshold = (roleSlug) => {
   if (roleSlug) {
     const v = localStorage.getItem(`${BULK_THRESHOLD_KEY}_${roleSlug}`);
@@ -2630,13 +2641,13 @@ function CompanyProfilePanel({ environment }) {
         .catch(() => setLoading(false));
     };
     load();
-    window.addEventListener('talentos:company-profile-updated', load);
-    return () => window.removeEventListener('talentos:company-profile-updated', load);
+    window.addEventListener('vercentic:company-profile-updated', load);
+    return () => window.removeEventListener('vercentic:company-profile-updated', load);
   }, [envId]);
 
   const launchWizard = () => {
-    if (envId) localStorage.removeItem(`talentos_setup_complete_${envId}`);
-    window.dispatchEvent(new CustomEvent('talentos:launch-setup-wizard'));
+    if (envId) localStorage.removeItem(`vercentic_setup_complete_${envId}`);
+    window.dispatchEvent(new CustomEvent('vercentic:launch-setup-wizard'));
     setLaunched(true);
     setTimeout(() => setLaunched(false), 3000);
   };
@@ -2951,7 +2962,7 @@ const NAV_GROUPS = [
       { id:"users",  icon:"users",  label:"Users",               perm:"manage_users" },
       { id:"groups", icon:"layers", label:"Groups",              perm:"manage_users" },
       { id:"roles",  icon:"shield", label:"Roles & permissions", perm:"manage_roles" },
-      { id:"org",    icon:"layers", label:"Org structure",       perm:"manage_org_structure" },
+      { id:"org",    icon:"layers", label:"Org structure",       perm:"manage_org_structure", feature:"org_chart" },
     ],
   },
   {
@@ -2968,38 +2979,39 @@ const NAV_GROUPS = [
     label: "Data & schema",
     items: [
       { id:"datamodel",    icon:"database",    label:"Data model",        perm:"manage_settings" },
-      { id:"duplicates",   icon:"users",       label:"Duplicates",        perm:"manage_settings" },
+      { id:"duplicates",   icon:"users",       label:"Duplicates",        perm:"manage_settings", feature:"duplicate_detection" },
       { id:"file_types",   icon:"paperclip",   label:"File types",        perm:"manage_settings" },
-      { id:"media_library",icon:"image",       label:"Media Library",     perm:"manage_settings" },
-      { id:"task_groups",  icon:"check-square",label:"Task Groups",        perm:"manage_settings" },
-      { id:"company_docs", icon:"file",        label:"Company Documents" },
-      { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms" },
-      { id:"questions",    icon:"help-circle", label:"Question library" },
-      { id:"datasets",     icon:"layers",      label:"Data Sets" },
-      { id:"enterprise",   icon:"briefcase",   label:"Enterprise Settings", perm:"manage_roles" },
+      { id:"media_library",icon:"image",       label:"Media Library",     perm:"manage_settings", feature:"portals" },
+      { id:"task_groups",  icon:"check-square",label:"Task Groups",        perm:"manage_settings", feature:"workflows" },
+      { id:"company_docs", icon:"file",        label:"Company Documents", feature:"access_documents" },
+      { id:"forms",        icon:"form",        label:"Forms",             perm:"manage_forms", feature:"forms" },
+      { id:"questions",    icon:"help-circle", label:"Question library", feature:"forms" },
+      { id:"datasets",     icon:"layers",      label:"Data Sets", feature:"data_sets" },
+      { id:"enterprise",   icon:"briefcase",   label:"Enterprise Settings", perm:"manage_roles", feature:"enterprise_settings" },
     ],
   },
   {
     id: "processes",
     label: "Processes",
     items: [
-      { id:"brand_kits",      icon:"palette",  label:"Brand Kits" },
+      { id:"brand_kits",      icon:"palette",  label:"Brand Kits", feature:"portals" },
       { id:"email_templates",   icon:"mail",     label:"Email Templates" },
       { id:"default_signature", icon:"mail",     label:"Default Signature", perm:"manage_settings" },
       { id:"talent_profile",  icon:"user",     label:"Talent Profile" },
-      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows" },
-      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews" },
-      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals" },
-      { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles" },
+      { id:"workflows",          icon:"workflow",    label:"Workflows",          perm:"manage_workflows", feature:"workflows" },
+      { id:"interview_templates",icon:"video",       label:"Interview Templates", perm:"manage_interviews", feature:"interviews" },
+      { id:"portals",            icon:"globe",       label:"Portals",             perm:"manage_portals", feature:"portals" },
+      { id:"conversational_actions", icon:"messageSquare", label:"Conversational Actions", perm:"manage_conversational_actions" },
+      { id:"sandbox",   icon:"gitBranch",label:"Sandbox Manager", perm:"manage_roles", feature:"sandbox" },
     ],
   },
   {
     id: "ai",
     label: "AI",
     items: [
-      { id:"ai_governance", icon:"sparkles", label:"AI governance" },
-      { id:"ai_matching",   icon:"zap",      label:"Recommendations" },
-      { id:"agents",        icon:"bot",      label:"Agents" },
+      { id:"ai_governance", icon:"sparkles", label:"AI governance", feature:"ai_governance" },
+      { id:"ai_matching",   icon:"zap",      label:"Recommendations", feature:"ai_matching" },
+      { id:"agents",        icon:"bot",      label:"Agents", feature:"agents" },
     ],
   },
   {
@@ -3016,27 +3028,28 @@ const NAV_GROUPS = [
 export default function SettingsPage({ currentUser, environment, initialSection, onSectionChange, appVersion, appEnv }) {
   const [activeSection, setActiveSectionState] = useState(initialSection || null);
   const { canGlobal } = usePermissions();
+  const { features } = useFeatures();
   const [fullScreenMode, setFullScreenMode] = useState(false);
 
   const setActiveSection = (id) => {
     if (id !== "portals") setFullScreenMode(false);
-    window.dispatchEvent(new CustomEvent("talentos:settings-section", { detail: id }));
+    window.dispatchEvent(new CustomEvent("vercentic:settings-section", { detail: id }));
     setActiveSectionState(id);
     if (onSectionChange) onSectionChange(id);
   };
   // Read section hint from Copilot navigation (on mount + on re-navigate)
   useEffect(() => {
     const checkHint = () => {
-      const hint = sessionStorage.getItem("talentos_settings_section");
+      const hint = sessionStorage.getItem("vercentic_settings_section");
       if (hint) {
-        sessionStorage.removeItem("talentos_settings_section");
+        sessionStorage.removeItem("vercentic_settings_section");
         setActiveSection(hint);
       }
     };
     checkHint(); // check on mount
     const handler = () => setTimeout(checkHint, 50); // check after navigate event
-    window.addEventListener("talentos:navigate", handler);
-    return () => window.removeEventListener("talentos:navigate", handler);
+    window.addEventListener("vercentic:navigate", handler);
+    return () => window.removeEventListener("vercentic:navigate", handler);
   }, []);
   const [search, setSearch]               = useState("");
   const [collapsed, setCollapsed]         = useState({});
@@ -3058,6 +3071,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
     ...g,
     // Filter by: (1) search query, (2) permission — items with no perm are always shown
     items: g.items.filter(i => {
+      if (i.feature && !features.has(i.feature)) return false;
       if (i.perm && !canGlobal(i.perm)) return false;
       if (q && !i.label.toLowerCase().includes(q)) return false;
       return true;
@@ -3224,6 +3238,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="workflows"            && <LazyTab><WorkflowsPage environment={environment}/></LazyTab>}
         {activeSection==="interview_templates"  && <LazyTab><InterviewTemplatesSettings environment={environment}/></LazyTab>}
         {activeSection==="portals"              && <LazyTab><PortalsPage environment={environment} onFullScreen={setFullScreenMode}/></LazyTab>}
+        {activeSection==="conversational_actions" && <LazyTab><ConversationalActionsSettings environment={environment}/></LazyTab>}
         {activeSection==="talent_profile" && (
           <div style={{ maxWidth:700, padding:24 }}>
             <div style={{ marginBottom:20 }}>

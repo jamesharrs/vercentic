@@ -12,6 +12,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, findOne, insert, update, remove, getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // Helper: execute an agent's ai_interview actions against a record
 // Returns array of step log objects { step, status }
@@ -253,7 +254,7 @@ async function triggerWorkflows(event, record, changedFields) {
               const resp = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-                body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 500, messages: [{ role: 'user', content: `Record:\n${JSON.stringify(currentRecord.data,null,2)}\n\n${prompt}` }] })
+                body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens: 500, messages: [{ role: 'user', content: `Record:\n${JSON.stringify(currentRecord.data,null,2)}\n\n${prompt}` }] })
               });
               const aiData = await resp.json();
               const aiOut = aiData.content?.[0]?.text || '';
@@ -523,7 +524,7 @@ router.post('/:id/run', async (req, res) => {
             const response = await fetch('https://api.anthropic.com/v1/messages', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-              body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 500, messages: [{ role: 'user', content: `Record data:\n${JSON.stringify(record.data, null, 2)}\n\n${prompt}` }] })
+              body: JSON.stringify({ model: MODEL_DEFAULT, max_tokens: 500, messages: [{ role: 'user', content: `Record data:\n${JSON.stringify(record.data, null, 2)}\n\n${prompt}` }] })
             });
             const data = await response.json();
             const aiOutput = data.content?.[0]?.text || 'No output';

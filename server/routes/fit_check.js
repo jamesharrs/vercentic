@@ -7,6 +7,7 @@ const express  = require('express');
 const router   = express.Router({ mergeParams: true });
 const Anthropic = require('@anthropic-ai/sdk');
 const { getStore, saveStore } = require('../db/init');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 // ── Scoring logic (mirrors client-side matchCandidateToJob) ─────────────────
 function matchProfileToJob(profile, job) {
@@ -91,7 +92,7 @@ async function extractProfileFromFile(base64, filename) {
     if (!mediaType) return null;
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const resp = await client.messages.create({
-      model:'claude-sonnet-4-6', max_tokens:800,
+      model:MODEL_DEFAULT, max_tokens:800,
       messages:[{ role:'user', content:[
         { type:'image', source:{ type:'base64', media_type:mediaType, data:base64 } },
         { type:'text', text:'Extract any CV or resume information from this image. Return raw text only.' }
@@ -103,14 +104,14 @@ async function extractProfileFromFile(base64, filename) {
 
   const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const extract = await client.messages.create({
-    model:'claude-sonnet-4-6', max_tokens:600,
+    model:MODEL_DEFAULT, max_tokens:600,
     messages:[{ role:'user', content:`Extract fields from this CV. Return ONLY valid JSON (no markdown):
 {"skills":["skill1"],"location":"city, country","years_experience":0,"department":"Engineering","work_type":"Any","current_title":"","first_name":"","last_name":"","email":""}
 
 CV TEXT:\n${text.slice(0,4000)}`}]
   });
   try {
-    const raw = (extract.content[0]?.text||'').replace(/\`\`\`json|\`\`\`/g,'').trim();
+    const raw = (extract.content[0]?.text||'').replace(/```json|```/g,'').trim();
     return JSON.parse(raw);
   } catch { return null; }
 }

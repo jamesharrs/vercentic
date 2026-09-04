@@ -6,13 +6,13 @@ const searchDocuments = (query) => {
   const mockResults = {
     'brand': [
       {
-        document: 'Talentos Brand Guidelines 2024.pdf',
+        document: 'Vercentic Brand Guidelines 2024.pdf',
         page: 8,
         excerpt: 'Our voice is professional yet approachable. We use data to inform decisions but never lose sight of the human element. Avoid corporate jargon and speak directly to candidates as if having a conversation with a colleague.',
         relevance: 0.94
       },
       {
-        document: 'Talentos Brand Guidelines 2024.pdf',
+        document: 'Vercentic Brand Guidelines 2024.pdf',
         page: 12,
         excerpt: 'When writing job descriptions, lead with impact. Start with what the role achieves, not just what it does. Use active voice and "you" language to make it personal.',
         relevance: 0.89
@@ -136,7 +136,7 @@ const CopilotWithDocuments = () => {
   useEffect(() => {
     setMessages([{
       role: 'assistant',
-      content: 'Hi! I\'m Copilot for the **Engineering Manager** role at **Talentos**. I have access to your company profile and all uploaded documents. What would you like help with?',
+      content: 'Hi! I\'m Copilot for the **Engineering Manager** role at **Vercentic**. I have access to your company profile and all uploaded documents. What would you like help with?',
       documentRefs: []
     }]);
   }, []);
@@ -179,7 +179,7 @@ const CopilotWithDocuments = () => {
 
     if (lowerQuery.includes('brand') || lowerQuery.includes('write') || lowerQuery.includes('jd') || lowerQuery.includes('job description')) {
       if (docRefs.length > 0) {
-        return `I've checked our Brand Guidelines. Here's how to write job descriptions in Talentos' voice:
+        return `I've checked our Brand Guidelines. Here's how to write job descriptions in Vercentic' voice:
 
 **Tone & Voice:**
 According to our Brand Guidelines (page 8), we should be "professional yet approachable" and use data to inform decisions without losing the human element. Avoid corporate jargon and speak directly to candidates.
@@ -280,7 +280,7 @@ These should guide how we evaluate candidates and how we present opportunities. 
                 Vercentic Copilot
               </div>
               <div style={{ fontSize: '13px', opacity: 0.9 }}>
-                Engineering Manager @ Talentos • 5 documents indexed
+                Engineering Manager @ Vercentic • 5 documents indexed
               </div>
             </div>
           </div>

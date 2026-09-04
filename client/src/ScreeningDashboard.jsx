@@ -133,7 +133,7 @@ function CandidateListModal({ title, candidates, jobs, onClose, _session }) {
               {scored.map((c,i)=>(
                 <tr key={c.id} style={{ background:i%2===0?"transparent":"#fafafa",cursor:"pointer" }}
                   onClick={()=>{
-                    window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:c.id,objectId:c.object_id}}));
+                    window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:c.id,objectId:c.object_id}}));
                     onClose();
                   }}>
                   <td style={{ padding:"10px 16px" }}>
@@ -397,7 +397,7 @@ export default function ScreeningDashboard({ environment, onNavigate, session })
                 {myJobsFunnel.map(j=>(
                   <div key={j.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 10px",
                     borderRadius:10,background:"#fafafa",cursor:"pointer",border:`1px solid ${C.border}` }}
-                    onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:j.id,objectId:j.object_id}}))}>
+                    onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:j.id,objectId:j.object_id}}))}>
                     <div style={{ flex:1,minWidth:0 }}>
                       <div style={{ fontSize:13,fontWeight:600,color:C.text1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{j.name}</div>
                       <div style={{ fontSize:11,color:C.text3,marginTop:2 }}>{j.total} linked · {j.count} in screening</div>
@@ -426,7 +426,7 @@ export default function ScreeningDashboard({ environment, onNavigate, session })
                 {autoResults.slice(0,10).map(c=>(
                   <div key={c.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:9,
                     background:"#fafafa",border:`1px solid ${C.border}`,cursor:"pointer" }}
-                    onClick={()=>{ window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:c.id,objectId:c.object_id}})); }}>
+                    onClick={()=>{ window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:c.id,objectId:c.object_id}})); }}>
                     <div style={{ width:32,height:32,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
                       background:c.auto_progressed?`${C.green}15`:`${C.red}15` }}>
                       <Ic n={c.auto_progressed?"check":"x"} s={14} c={c.auto_progressed?C.green:C.red}/>
@@ -467,7 +467,7 @@ export default function ScreeningDashboard({ environment, onNavigate, session })
           <tbody>
             {recentApps.map((c,i)=>(
               <tr key={c.id} style={{ background:i%2===0?"transparent":"#fafafa",cursor:"pointer" }}
-                onClick={()=>{ window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:c.id,objectId:c.object_id}})); }}
+                onClick={()=>{ window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:c.id,objectId:c.object_id}})); }}
                 onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
                 onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"transparent":"#fafafa"}>
                 <td style={{ padding:"10px 12px",fontSize:13,fontWeight:600,color:C.accent }}>{c.name}</td>
@@ -475,7 +475,7 @@ export default function ScreeningDashboard({ environment, onNavigate, session })
                 <td style={{ padding:"10px 12px",fontSize:12,color:C.text3 }}>{c.company||'—'}</td>
                 <td style={{ padding:"10px 12px" }}>
                   {c.jobName
-                    ? <button onClick={e=>{ e.stopPropagation(); window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:c.jobId,objectId:jobsObj?.id}})); }}
+                    ? <button onClick={e=>{ e.stopPropagation(); window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:c.jobId,objectId:jobsObj?.id}})); }}
                         style={{ fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:F,fontWeight:600,textDecoration:"underline" }}>
                         {c.jobName}
                       </button>

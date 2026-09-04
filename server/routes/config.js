@@ -40,7 +40,7 @@ router.get('/export', (req, res) => {
   };
 
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename="talentos-config-${environment_id.slice(0,8)}-${Date.now()}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="vercentic-config-${environment_id.slice(0,8)}-${Date.now()}.json"`);
   res.send(JSON.stringify(payload, null, 2));
 });
 

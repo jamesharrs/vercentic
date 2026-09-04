@@ -90,10 +90,16 @@ export default function App() {
 
   if (!PortalComponent) return <ErrorScreen message={`Unknown portal type: ${portal.type}`}/>;
 
+  // The candidate-facing copilot is deliberately NOT shown on the Hiring
+  // Manager Portal — it has its own, more capable internal assistant
+  // (session-gated, sees the whole job history) built into hm_portal's
+  // "New Role → Ask the assistant" flow instead. See POST /:id/hm/chat
+  // in server/routes/hm_portal.js for why it needs to be a separate,
+  // higher-privilege endpoint rather than reusing this one.
   return (
     <>
       <PortalComponent {...props}/>
-      <CandidateCopilot portal={portal} api={api} />
+      {portal.type !== 'hm_portal' && <CandidateCopilot portal={portal} api={api} />}
     </>
   );
 }

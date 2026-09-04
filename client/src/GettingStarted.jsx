@@ -92,12 +92,12 @@ function TaskRow({ task, last, phaseColor, navObjects, onNavigate, onTick, ticki
     }
     if (task.navTarget === "setup_wizard") {
       onNavigate("settings");
-      sessionStorage.setItem("talentos_settings_section", "company_profile");
+      sessionStorage.setItem("vercentic_settings_section", "company_profile");
       return;
     }
     if (task.navTarget) {
       if (task.navSection) {
-        sessionStorage.setItem("talentos_settings_section", task.navSection);
+        sessionStorage.setItem("vercentic_settings_section", task.navSection);
         onNavigate("settings");
         return;
       }

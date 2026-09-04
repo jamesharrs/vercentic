@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { query, insert, update, remove, getStore, saveStore } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { MODEL_DEFAULT } = require('../config/ai_models');
 
 function ensure() {
   const s = getStore();
@@ -170,7 +171,7 @@ Generate the following in JSON format (no markdown, raw JSON only):
 Keep LinkedIn posts under 200 words each. Email subjects under 60 chars. WhatsApp under 100 words.`;
 
     const message = await client.messages.create({
-      model:      'claude-sonnet-4-6',
+      model:      MODEL_DEFAULT,
       max_tokens: 1500,
       messages:   [{ role: 'user', content: prompt }],
     });

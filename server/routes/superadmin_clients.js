@@ -68,7 +68,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   ts.environments = [{ ...environment }];
 
   // Resolve template
-  const { objects, roles, tier } = resolveTemplate(templateKey || getDefaultTemplateKey());
+  const { objects, roles, tier, feature_profile } = resolveTemplate(templateKey || getDefaultTemplateKey());
   const createdObjects = [];
   const createdFields  = [];
   const objectMap      = {};
@@ -125,7 +125,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 
   // Write everything into the isolated tenant store
   ['objects','fields','roles','users','workflows','portals','forms',
-   'file_types','email_templates','interview_types']
+   'file_types','email_templates','interview_types','feature_flags']
     .forEach(col => { if (!ts[col]) ts[col] = []; });
 
   createdObjects          .forEach(o => ts.objects          .push(o));
@@ -138,6 +138,14 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   stdConfig.fileTypes     .forEach(f => ts.file_types       .push(f));
   stdConfig.emailTemplates.forEach(e => ts.email_templates  .push(e));
   stdConfig.interviewTypes.forEach(i => ts.interview_types  .push(i));
+
+  // Feature flags — apply the template's lean feature profile.
+  // Basic ships most modules OFF; other templates leave everything on (default).
+  if (feature_profile?.keep_on) {
+    const { overridesForKeepOn } = require('./feature-flags');
+    overridesForKeepOn(environment.id, feature_profile.keep_on)
+      .forEach(row => ts.feature_flags.push(row));
+  }
 
   // Seed RBAC permissions into the tenant store
   const { seedDefaultPermissions } = require('../middleware/rbac');

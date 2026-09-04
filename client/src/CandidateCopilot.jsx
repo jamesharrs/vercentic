@@ -22,6 +22,45 @@ const Ic = ({ n, s = 16, c = 'currentColor' }) => {
   </svg>);
 };
 
+// Turns **bold** into real emphasis instead of leaving literal asterisks visible.
+function parseInline(text) {
+  return text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, i) => (
+    part.startsWith('**') && part.endsWith('**') && part.length > 4
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : <span key={i}>{part}</span>
+  ));
+}
+
+// Renders assistant/user chat text: collapses the AI's stray blank lines down to
+// one consistent paragraph gap (instead of whatever whiteSpace:'pre-wrap' preserved
+// verbatim, which is what produced the oversized gaps), turns "- " lines into
+// proper bullets (checked per line, not per paragraph, so a bold heading and its
+// bullet list can share one paragraph without the leading "-" leaking through),
+// and resolves **bold** via parseInline.
+function RichText({ text }) {
+  const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const blocks = normalized.split(/\n\n+/);
+  return blocks.map((block, bi) => {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    return (
+      <div key={bi} style={{ marginTop: bi === 0 ? 0 : 8 }}>
+        {lines.map((l, li) => {
+          const bulletMatch = l.match(/^[-*•]\s+(.*)/);
+          if (bulletMatch) {
+            return (
+              <div key={li} style={{ display: 'flex', gap: 6, marginTop: li === 0 ? 0 : 2 }}>
+                <span style={{ flexShrink: 0 }}>•</span>
+                <span>{parseInline(bulletMatch[1])}</span>
+              </div>
+            );
+          }
+          return <div key={li} style={{ marginTop: li === 0 ? 0 : 2 }}>{parseInline(l)}</div>;
+        })}
+      </div>
+    );
+  });
+}
+
 function buildTheme(branding, copilotConfig) {
   const primary = branding.primary_color || branding.primary || '#4361EE';
   const secondary = branding.secondary_color || branding.secondary || branding.accent || primary;
@@ -29,8 +68,9 @@ function buildTheme(branding, copilotConfig) {
   const font = branding.font || branding.font_family || "'DM Sans', -apple-system, sans-serif";
   const radius = branding.border_radius != null ? parseInt(branding.border_radius) : 12;
   const buttonRadius = branding.button_radius != null ? parseInt(branding.button_radius) : 8;
+  const widgetHeight = Math.max(420, Math.min(900, parseInt(copilotConfig.widget_height) || 580));
   return {
-    primary, secondary, bg, font, radius, buttonRadius,
+    primary, secondary, bg, font, radius, buttonRadius, widgetHeight,
     primaryLight: `${primary}10`, primaryMedium: `${primary}20`, primaryBorder: `${primary}30`,
     cardBg: 'white', cardBorder: '#E5E7EB', textPrimary: '#111827', textSecondary: '#6B7280', textMuted: '#9CA3AF',
     name: copilotConfig.name || (branding.company_name ? `${branding.company_name} Assistant` : 'Career Assistant'),
@@ -41,7 +81,8 @@ function buildTheme(branding, copilotConfig) {
 }
 
 const JobCard = ({ job, theme, onView, onApply }) => (
-  <div style={{ background: theme.cardBg, borderRadius: theme.radius, border: `1px solid ${theme.cardBorder}`, padding: '14px 16px', marginBottom: 8, transition: 'all 0.15s' }}
+  <div onClick={() => onView(job)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') onView(job); }}
+    style={{ background: theme.cardBg, borderRadius: theme.radius, border: `1px solid ${theme.cardBorder}`, padding: '14px 16px', marginBottom: 8, transition: 'all 0.15s', cursor: 'pointer' }}
     onMouseEnter={e => { e.currentTarget.style.borderColor = theme.primary; e.currentTarget.style.boxShadow = `0 2px 12px ${theme.primaryLight}`; }}
     onMouseLeave={e => { e.currentTarget.style.borderColor = theme.cardBorder; e.currentTarget.style.boxShadow = 'none'; }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -87,7 +128,7 @@ const JobDetailInline = ({ job, theme, onApply, onBack }) => (
     {(job.salary_min || job.salary_max) && <div style={{ padding: '8px 12px', borderRadius: theme.buttonRadius, background: theme.primaryLight, fontSize: 13, fontWeight: 700, color: theme.primary, marginBottom: 12, display: 'inline-block' }}>
       {job.salary_min && job.salary_max ? `${Number(job.salary_min).toLocaleString()} – ${Number(job.salary_max).toLocaleString()}` : job.salary_min ? `From ${Number(job.salary_min).toLocaleString()}` : `Up to ${Number(job.salary_max).toLocaleString()}`}
     </div>}
-    {job.summary && <div style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 1.7, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{job.summary}</div>}
+    {job.summary && <div style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 1.7, marginBottom: 14 }}><RichText text={job.summary} /></div>}
     {Array.isArray(job.skills) && job.skills.length > 0 && <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Skills & requirements</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -129,12 +170,74 @@ const SuccessCard = ({ jobTitle, theme }) => (
   </div>
 );
 
+const inputStyle = (theme) => ({ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1px solid ${theme.cardBorder}`, fontSize: 12, color: theme.textPrimary, fontFamily: theme.font, outline: 'none', background: theme.bg, boxSizing: 'border-box' });
+
+const ApplyForm = ({ job, form, setForm, theme, onSubmit, onCancel, submitting, fileRef, onFileSelect, isDragging }) => (
+  <div style={{ background: theme.cardBg, borderRadius: theme.radius, border: `1.5px solid ${theme.primaryBorder}`, padding: 16, marginBottom: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div style={{ width: 28, height: 28, borderRadius: theme.buttonRadius, background: theme.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic n="briefcase" s={14} c={theme.primary} /></div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary }}>Apply now</div>
+        <div style={{ fontSize: 11, color: theme.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
+      </div>
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))} placeholder="First name" style={inputStyle(theme)} />
+        <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))} placeholder="Last name" style={inputStyle(theme)} />
+      </div>
+      <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email address" type="email" style={inputStyle(theme)} />
+      <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone (optional)" style={inputStyle(theme)} />
+      <textarea value={form.cover_note} onChange={e => setForm(f => ({ ...f, cover_note: e.target.value }))} placeholder="Cover note (optional)" rows={3} style={{ ...inputStyle(theme), resize: 'vertical' }} />
+      <div onClick={() => fileRef.current?.click()}
+        style={{ border: `1.5px dashed ${isDragging ? theme.primary : theme.cardBorder}`, borderRadius: theme.buttonRadius, padding: '12px 10px', textAlign: 'center', cursor: 'pointer', background: isDragging ? theme.primaryLight : (form.cv_file ? '#F0FDF4' : theme.bg), transition: 'all 0.15s' }}>
+        {form.cv_file ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, color: '#059669', fontWeight: 600 }}>
+            <Ic n="file" s={13} c="#059669" /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{form.cv_file.name}</span>
+            <button onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, cv_file: null })); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}><Ic n="x" s={11} c="#059669" /></button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: theme.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <Ic n="paperclip" s={15} c={theme.textMuted} />
+            <span>{isDragging ? 'Drop your CV here' : 'Click or drag your CV / resume here'}</span>
+          </div>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={onFileSelect} style={{ display: 'none' }} />
+    </div>
+    <div style={{ display: 'flex', gap: 8 }}>
+      <button onClick={onCancel} style={{ flex: 1, padding: '8px', borderRadius: theme.buttonRadius, border: '1px solid #D1D5DB', background: 'white', color: theme.textPrimary, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: theme.font }}>Cancel</button>
+      <button onClick={onSubmit} disabled={submitting || !form.first_name || !form.email}
+        style={{ flex: 2, padding: '8px', borderRadius: theme.buttonRadius, border: 'none', background: theme.primary, color: 'white', fontSize: 12, fontWeight: 700, cursor: (submitting || !form.first_name || !form.email) ? 'default' : 'pointer', fontFamily: theme.font, opacity: (submitting || !form.first_name || !form.email) ? 0.5 : 1 }}>
+        {submitting ? 'Submitting...' : 'Submit Application'}
+      </button>
+    </div>
+  </div>
+);
+
 function parseResponse(text) {
   const parts = []; let remaining = text;
   const jobMatch = remaining.match(/<JOB_CARDS>([\s\S]*?)<\/JOB_CARDS>/);
-  if (jobMatch) { remaining = remaining.replace(jobMatch[0], '').trim(); try { parts.push({ type: 'jobs', jobs: JSON.parse(jobMatch[1]) }); } catch (e) {} }
+  if (jobMatch) {
+    remaining = remaining.replace(jobMatch[0], '').trim();
+    try { parts.push({ type: 'jobs', jobs: JSON.parse(jobMatch[1]) }); }
+    catch (e) { console.warn('[CandidateCopilot] Failed to parse JOB_CARDS block:', e.message, jobMatch[1]); }
+  }
   const appMatch = remaining.match(/<APPLICATION>([\s\S]*?)<\/APPLICATION>/);
-  if (appMatch) { remaining = remaining.replace(appMatch[0], '').trim(); try { parts.push({ type: 'application', data: JSON.parse(appMatch[1]) }); } catch (e) {} }
+  if (appMatch) {
+    remaining = remaining.replace(appMatch[0], '').trim();
+    try { parts.push({ type: 'application', data: JSON.parse(appMatch[1]) }); }
+    catch (e) {
+      // Previously this failure was swallowed entirely (empty catch) — the
+      // model's surrounding text (e.g. "Great, submitting that now!") would
+      // still render normally with no visible sign anything went wrong,
+      // while pendingApp never got set, no Submit button ever appeared, and
+      // /apply was never called — a silent "phantom success" with zero
+      // person record or job link created. Surface it instead.
+      console.warn('[CandidateCopilot] Failed to parse APPLICATION block:', e.message, appMatch[1]);
+      parts.push({ type: 'text', content: "Sorry, I had trouble preparing your application just then. Could you tell me your full name and email again so I can try once more?" });
+    }
+  }
   if (remaining.trim()) parts.push({ type: 'text', content: remaining.trim() });
   return parts;
 }
@@ -151,9 +254,13 @@ export default function CandidateCopilot({ portal, api }) {
   const [submitting, setSubmitting] = useState(false);
   const [cvFile, setCvFile] = useState(null);
   const [viewingJob, setViewingJob] = useState(null);
+  const [applyForm, setApplyForm] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+  const applyFileRef = useRef(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading, open, viewingJob]);
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 100); }, [open]);
@@ -167,7 +274,10 @@ export default function CandidateCopilot({ portal, api }) {
     const newMsgs = [...messages, userMsg];
     setMessages(newMsgs); setInput(''); setLoading(true);
     try {
-      const result = await api.post('/portal-copilot/chat', { portal_id: portal.id, messages: newMsgs, session_id: null });
+      // Strip extra UI fields (e.g. `parsed`) before sending — the Anthropic
+      // API rejects message objects with fields beyond role/content.
+      const cleanMsgs = newMsgs.map(m => ({ role: m.role, content: m.content }));
+      const result = await api.post('/portal-copilot/chat', { portal_id: portal.id, messages: cleanMsgs, session_id: null });
       if (result.error) { setMessages([...newMsgs, { role: 'assistant', content: "I'm having trouble connecting right now. Please try again in a moment." }]); }
       else {
         const parsed = parseResponse(result.reply || '');
@@ -179,24 +289,42 @@ export default function CandidateCopilot({ portal, api }) {
     finally { setLoading(false); }
   }, [messages, loading, portal?.id, api, cvFile]);
 
-  const handleApplyFromCard = (job) => { setViewingJob(null); sendMessage(`I'd like to apply for the ${job.title} position.`); };
-  const handleViewJob = (job) => { setViewingJob(job); sendMessage(`Tell me more about the ${job.title} role${job.department ? ` in ${job.department}` : ''}.`); };
+  const handleApplyFromCard = (job) => {
+    setViewingJob(null); setPendingApp(null);
+    setApplyForm({ job, first_name: '', last_name: '', email: '', phone: '', cover_note: '', cv_file: cvFile || null });
+  };
+  const handleViewJob = (job) => { setApplyForm(null); setViewingJob(job); sendMessage(`Tell me more about the ${job.title} role${job.department ? ` in ${job.department}` : ''}.`); };
 
-  const handleConfirmApplication = async () => {
-    if (!pendingApp || submitting) return; setSubmitting(true);
+  const submitApplication = async (appData) => {
+    if (!appData || submitting) return; setSubmitting(true);
     try {
       const formData = new FormData(); formData.append('portal_id', portal.id);
-      ['first_name','last_name','email','phone','cover_note','job_id','job_title'].forEach(k => { if (pendingApp[k]) formData.append(k, pendingApp[k]); });
-      if (pendingApp.cv_file) formData.append('cv', pendingApp.cv_file);
+      ['first_name','last_name','email','phone','cover_note','job_id','job_title'].forEach(k => { if (appData[k]) formData.append(k, appData[k]); });
+      if (appData.cv_file) formData.append('cv', appData.cv_file);
       const res = await fetch(`${api.baseUrl || ''}/portal-copilot/apply`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.success) { setPendingApp(null); setCvFile(null); setMessages(prev => [...prev, { role: 'assistant', content: '', parsed: [{ type: 'success', jobTitle: pendingApp.job_title }] }]); }
+      if (data.success) { setPendingApp(null); setApplyForm(null); setCvFile(null); setMessages(prev => [...prev, { role: 'assistant', content: '', parsed: [{ type: 'success', jobTitle: appData.job_title }] }]); }
       else { setMessages(prev => [...prev, { role: 'assistant', content: `There was an issue: ${data.error || 'Please try again.'}` }]); }
     } catch (e) { setMessages(prev => [...prev, { role: 'assistant', content: 'Failed to submit. Please try again.' }]); }
     finally { setSubmitting(false); }
   };
 
+  const handleConfirmApplication = () => submitApplication(pendingApp);
+  const handleApplyFormSubmit = () => { if (!applyForm) return; submitApplication({ ...applyForm, job_id: applyForm.job.id, job_title: applyForm.job.title }); };
+  const handleApplyFormFile = (file) => { if (file) setApplyForm(f => f ? { ...f, cv_file: file } : f); };
+
   const handleFileSelect = (e) => { const file = e.target.files?.[0]; if (file) { setCvFile(file); sendMessage(`I've attached my CV: ${file.name}`); } };
+  const handleApplyFileSelect = (e) => { const file = e.target.files?.[0]; handleApplyFormFile(file); };
+
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); dragCounter.current++; setIsDragging(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); dragCounter.current--; if (dragCounter.current <= 0) { dragCounter.current = 0; setIsDragging(false); } };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation(); dragCounter.current = 0; setIsDragging(false);
+    const file = e.dataTransfer.files?.[0]; if (!file) return;
+    if (applyForm) handleApplyFormFile(file);
+    else { setCvFile(file); sendMessage(`I've attached my CV: ${file.name}`); }
+  };
   if (!copilotConfig.enabled) return null;
 
   return (<>
@@ -213,9 +341,18 @@ export default function CandidateCopilot({ portal, api }) {
 
     {/* Chat panel */}
     {open && (
-      <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, width: 400, maxWidth: 'calc(100vw - 32px)', height: 580, maxHeight: 'calc(100vh - 48px)',
+      <div onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+        style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, width: 400, maxWidth: 'calc(100vw - 32px)', height: theme.widgetHeight, maxHeight: 'calc(100vh - 48px)',
         borderRadius: theme.radius + 8, overflow: 'hidden', background: theme.bg, boxShadow: `0 12px 48px rgba(0,0,0,0.15), 0 0 0 1px ${theme.primaryBorder}`,
         display: 'flex', flexDirection: 'column', fontFamily: theme.font }}>
+        {isDragging && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: `${theme.primary}14`, backdropFilter: 'blur(2px)', border: `2px dashed ${theme.primary}`, borderRadius: theme.radius + 8, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ background: theme.cardBg, borderRadius: theme.radius, padding: '16px 22px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <Ic n="file" s={26} c={theme.primary} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary }}>Drop your CV / resume</div>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div style={{ padding: '14px 16px', background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`, color: 'white', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div style={{ width: 38, height: 38, borderRadius: theme.buttonRadius + 2, background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
@@ -263,18 +400,19 @@ export default function CandidateCopilot({ portal, api }) {
                   padding: '10px 14px', fontSize: 13, lineHeight: 1.6, border: isUser ? 'none' : `1px solid ${theme.cardBorder}`,
                   boxShadow: isUser ? `0 2px 8px ${theme.primary}25` : '0 1px 3px rgba(0,0,0,0.04)', wordBreak: 'break-word' }}>
                   {msg.parsed ? msg.parsed.map((block, j) => {
-                    if (block.type === 'text') return <div key={j} style={{ whiteSpace: 'pre-wrap' }}>{block.content}</div>;
+                    if (block.type === 'text') return <div key={j}><RichText text={block.content} /></div>;
                     if (block.type === 'jobs') return <div key={j} style={{ marginTop: 8 }}>{block.jobs.map((job, k) => <JobCard key={k} job={job} theme={theme} onView={handleViewJob} onApply={handleApplyFromCard} />)}</div>;
                     if (block.type === 'application') return null;
                     if (block.type === 'success') return <SuccessCard key={j} jobTitle={block.jobTitle} theme={theme} />;
                     return null;
-                  }) : <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>}
+                  }) : <RichText text={msg.content} />}
                 </div>
               </div>
             );
           })}
 
-          {viewingJob && <JobDetailInline job={viewingJob} theme={theme} onApply={handleApplyFromCard} onBack={() => setViewingJob(null)} />}
+          {viewingJob && !applyForm && <JobDetailInline job={viewingJob} theme={theme} onApply={handleApplyFromCard} onBack={() => setViewingJob(null)} />}
+          {applyForm && <ApplyForm job={applyForm.job} form={applyForm} setForm={setApplyForm} theme={theme} onSubmit={handleApplyFormSubmit} onCancel={() => setApplyForm(null)} submitting={submitting} fileRef={applyFileRef} onFileSelect={handleApplyFileSelect} isDragging={isDragging} />}
           {pendingApp && <ApplicationCard data={pendingApp} theme={theme} onConfirm={handleConfirmApplication} onEdit={() => { setPendingApp(null); sendMessage('I need to change some details on my application.'); }} submitting={submitting} />}
           
           {loading && <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>

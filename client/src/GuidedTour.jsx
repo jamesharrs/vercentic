@@ -281,7 +281,7 @@ export default function GuidedTour({ active, onClose, initialStep=0 }) {
 
     if (step?.navigateTo && !navigated.current) {
       navigated.current = true;
-      window.dispatchEvent(new CustomEvent("talentos:navigate", { detail: step.navigateTo }));
+      window.dispatchEvent(new CustomEvent("vercentic:navigate", { detail: step.navigateTo }));
     }
 
     const selector = step?.target || step?.waitForClick || null;

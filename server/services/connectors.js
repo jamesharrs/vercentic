@@ -584,7 +584,7 @@ class WebhookConnector {
     const url = this.cfg.webhook_url;
     if (!url) throw new Error(`${this.providerName}: no webhook URL`);
     const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: eventType, timestamp: new Date().toISOString(), source: 'talentos', data: payload }) });
+      body: JSON.stringify({ event: eventType, timestamp: new Date().toISOString(), source: 'vercentic', data: payload }) });
     if (!resp.ok) throw new Error(`${this.providerName} webhook → ${resp.status}`);
     return { ok: true, provider: this.providerName };
   }

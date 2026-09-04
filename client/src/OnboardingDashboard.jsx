@@ -216,7 +216,7 @@ export default function OnboardingDashboard({ environment, onNavigate }) {
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead><tr>{["Name","Role","Start Date","Status","Probation End"].map(h=><th key={h} style={{ textAlign:"left", fontSize:11, fontWeight:700, color:C.text3, padding:"6px 12px", textTransform:"uppercase", letterSpacing:"0.05em", borderBottom:`1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
                 <tbody>{onboarding.slice(0,10).map((p,i)=>{ const name=[p.data?.first_name,p.data?.last_name].filter(Boolean).join(' ')||p.data?.email||'Unknown'; const pd=daysUntil(p.data?.probation_end||p.data?.probation_review_date); return (
-                  <tr key={p.id} style={{ background:i%2===0?"transparent":"#fafafa", cursor:"pointer" }} onClick={()=>window.dispatchEvent(new CustomEvent("talentos:openRecord",{detail:{recordId:p.id,objectId:p.object_id}}))}>
+                  <tr key={p.id} style={{ background:i%2===0?"transparent":"#fafafa", cursor:"pointer" }} onClick={()=>window.dispatchEvent(new CustomEvent("vercentic:openRecord",{detail:{recordId:p.id,objectId:p.object_id}}))}>
                     <td style={{ padding:"10px 12px", fontSize:13, fontWeight:600, color:C.accent }}>{name}</td>
                     <td style={{ padding:"10px 12px", fontSize:12, color:C.text2 }}>{p.data?.current_title||p.data?.job_title||'—'}</td>
                     <td style={{ padding:"10px 12px", fontSize:12, color:C.text2 }}>{fmtDate(p.data?.start_date)}</td>

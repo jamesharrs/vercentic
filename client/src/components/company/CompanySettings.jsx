@@ -6,7 +6,7 @@ const CompanySettings = () => {
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved
   
   const [profile, setProfile] = useState({
-    name: 'Talentos',
+    name: 'Vercentic',
     industry: 'Technology Recruitment',
     headquarters: 'London, UK',
     tagline: 'Connecting exceptional talent with ambitious companies',
