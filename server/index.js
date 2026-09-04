@@ -391,6 +391,12 @@ app.use('/api', (req, res, next) => {
   if (req.path.match(/^\/portals\/[^/]+\/draft/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/session$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/jobs($|\/)/)) return next();
+  // Hiring Manager Portal — portal-token-gated wrapper endpoints (not main-app
+  // session auth). Each handler in hm_portal.js independently verifies
+  // x-portal-token against global._portalSessions AND checks sess.portal_id
+  // matches the :id in the URL — this exemption only lets the request past
+  // the main-app session gate, it does not itself grant access.
+  if (req.path.match(/^\/portals\/[^/]+\/hm\//)) return next();
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   next();
@@ -544,6 +550,7 @@ app.use('/api/portal-public', require('./routes/portal_public'));
 app.use('/api/portals/:id',        require('./routes/fit_check'));
 app.use('/api/portals',           require('./routes/portal_generate'));
 app.use('/api/portals',           require('./routes/portals'));
+app.use('/api/portals',           require('./routes/hm_portal'));
 
 // People-links — public endpoint for HM portal
 app.get('/api/people-links', (req, res) => {

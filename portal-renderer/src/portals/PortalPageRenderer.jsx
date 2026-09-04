@@ -1833,6 +1833,20 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
             </tbody>
           </table>
         </div>
+      ) : displayMode === 'kanban' ? (
+        <div style={{ display:'flex', gap:14, overflowX:'auto', paddingBottom:8 }}>
+          {(cfg.stages?.length ? cfg.stages : ['—']).map(stage => {
+            const cols = cfg.stages?.length ? filtered.filter(r => (r.data?.status||'') === stage) : filtered;
+            return (
+              <div key={stage} style={{ minWidth:240, flex:'0 0 240px' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', padding:'6px 10px', background:'#F3F4F6', borderRadius:8, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.04em', fontFamily:ff }}>
+                  {stage} · {cols.length}
+                </div>
+                {cols.map(r => <RecordCard key={r.id} record={r}/>)}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         filtered.map(r => <RecordCard key={r.id} record={r}/>)
       )}
@@ -1849,6 +1863,37 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
               <button onClick={()=>setModal(null)} style={{ flex:1, padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
               <button onClick={async()=>{ const note=document.getElementById('hm-feedback-note').value; await api.patch(`/records/${modal.record.id}`, { data:{ feedback_note:note } }); setModal(null); }} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Submit</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move stage modal */}
+      {modal?.type === 'move_stage' && (
+        <div onClick={()=>setModal(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, padding:28, width:360, boxShadow:'0 32px 80px rgba(0,0,0,0.2)', fontFamily:ff }}>
+            <div style={{ fontSize:16, fontWeight:800, color:tc, marginBottom:4 }}>Move Stage</div>
+            <div style={{ fontSize:12, color:'#9DA8C7', marginBottom:20 }}>{recordTitle(modal.record)}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {(cfg.stages?.length ? cfg.stages : []).map(stage => {
+                const current = (modal.record.data?.status||'') === stage;
+                return (
+                  <button key={stage} disabled={current} onClick={async()=>{
+                    const patchFn = api.patch || ((p, b) => api.post ? api.post(p, { ...b, _method:'PATCH' }) : Promise.resolve());
+                    await patchFn(`/records/${modal.record.id}`, { data:{ status: stage } }).catch(()=>{});
+                    setRecords(rs => rs.map(r => r.id===modal.record.id ? {...r, data:{...r.data, status:stage}} : r));
+                    setModal(null);
+                  }} style={{
+                    padding:'10px 14px', borderRadius:10,
+                    border: current ? `1.5px solid ${pr}` : '1.5px solid #E8ECF8',
+                    background: current ? `${pr}10` : '#fff', color: current ? pr : tc,
+                    fontSize:13, fontWeight:700, textAlign:'left', fontFamily:ff,
+                    cursor: current ? 'default' : 'pointer', opacity: current ? 0.6 : 1
+                  }}>{stage}{current ? ' (current)' : ''}</button>
+                );
+              })}
+              {!(cfg.stages?.length) && <div style={{ fontSize:12, color:'#9DA8C7', fontFamily:ff }}>No stages configured for this widget.</div>}
+            </div>
+            <button onClick={()=>setModal(null)} style={{ marginTop:16, width:'100%', padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
           </div>
         </div>
       )}

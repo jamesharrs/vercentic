@@ -521,7 +521,7 @@ function buildStandardConfig(tier, envId, objectMap, now, uid) {
       ],
       created_at: now, updated_at: now, deleted_at: null,
     },
-    ...(tier === 'standard' ? [{
+    {
       id: uid(), environment_id: envId,
       name: 'Hiring Manager Portal', slug: 'hiring', type: 'hm_portal', status: 'draft',
       company_name: 'Talent Team', tagline: 'Your hiring dashboard',
@@ -529,17 +529,49 @@ function buildStandardConfig(tier, envId, objectMap, now, uid) {
       primary_color: '#334155', secondary_color: '#475569', accent_color: '#4361EE',
       background_color: '#F8FAFC', text_color: '#0F172A',
       font_family: "'DM Sans', sans-serif",
-      logo_url: '', show_apply_button: false, require_auth: true,
+      logo_url: '', show_apply_button: false, require_auth: true, access_type: 'internal',
       show_salary: true, allow_cv_upload: false,
       exposed_objects: ['jobs','people'], access_token: hmToken,
+      // Configurable candidate shortlist (see server/routes/hm_portal.js's
+      // GET /:id/hm/shortlist) — null until an admin picks a Saved View for
+      // "who needs review" in Portal Settings; falls back to every candidate
+      // linked to this HM's jobs when unset.
+      hm_shortlist_saved_view_id: null,
       pages: [
         { id: uid(), name: 'Dashboard', slug: '/', rows: [
-          { id: uid(), preset: '1', bgColor: '#1E293B', padding: 'md', cells: [{ id: uid(), widgetType: 'hero', widgetConfig: { headline: 'Hiring Manager Portal', subheading: 'Your candidates and open roles.' } }] },
-          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'jobs', widgetConfig: {} }] },
+          { id: uid(), preset: '1', bgColor: '#1E293B', padding: 'md', cells: [{ id: uid(), widgetType: 'hero', widgetConfig: { headline: 'Welcome back', subheading: 'Your open roles, candidates and interviews at a glance.' } }] },
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: { data_source: 'hm_my_jobs', display_mode: 'stats' } }] },
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: { data_source: 'hm_my_jobs', display_mode: 'card', widget_title: 'My Open Roles' } }] },
+        ]},
+        { id: uid(), name: 'Shortlist', slug: '/shortlist', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_shortlist', display_mode: 'kanban', widget_title: 'Shortlist for Review',
+            // Only 'Interviewing'/'Offer'/'Placed' are reachable: the shortlist
+            // is gated by a Saved View (hm_shortlist_saved_view_id) scoped to
+            // those statuses by design — earlier-stage candidates (New,
+            // Screening) are recruiter-owned and intentionally hidden from the
+            // hiring manager until they're ready for review. Keeping the kanban
+            // stages list in sync avoids permanently-empty columns.
+            stages: ['Interviewing','Offer','Placed'],
+            cta_buttons: [{ action: 'view_profile', label: 'View Profile' }],
+          } }] },
+        ]},
+        { id: uid(), name: 'Interviews', slug: '/interviews', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_interviews', display_mode: 'card', widget_title: 'Upcoming Interviews',
+            empty_message: 'No interviews scheduled.',
+            cta_buttons: [{ action: 'submit_feedback', label: 'Submit Feedback' }],
+          } }] },
+        ]},
+        { id: uid(), name: 'Onboarding', slug: '/onboarding', rows: [
+          { id: uid(), preset: '1', bgColor: '', padding: 'md', cells: [{ id: uid(), widgetType: 'hm_widget', widgetConfig: {
+            data_source: 'hm_onboarding', display_mode: 'card', widget_title: 'Onboarding',
+            empty_message: 'No candidates currently onboarding.',
+          } }] },
         ]},
       ],
       created_at: now, updated_at: now, deleted_at: null,
-    }] : []),
+    },
   ];
 
   return { workflows, interviewTypes, forms, fileTypes, emailTemplates, portals };

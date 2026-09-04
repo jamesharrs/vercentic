@@ -14,6 +14,83 @@ function ensureTable() {
   if (!store.saved_views) { store.saved_views = []; saveStore(); }
 }
 
+// ── Filter matching engine ─────────────────────────────────────────────────
+// Server-side port of client/src/Records.jsx's testFilter/applyFilters, so a
+// saved view's filters can be executed without any browser-side app state —
+// used by portal widgets (Hiring Manager shortlist, etc.) and any other
+// server-driven consumer. Keep in sync with the client implementation if the
+// operator vocabulary changes there.
+function _matchesMeServer(rawVal, field, op, meCtx) {
+  if (!meCtx) return false;
+  if (field?.field_type === 'people' || field?.field_type === 'multi_lookup') {
+    const arr = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : []);
+    const matched = arr.some(p => {
+      const pid = typeof p === 'object' ? p.id : p;
+      const pname = typeof p === 'object' ? String(p.name || '').toLowerCase() : '';
+      return pid === meCtx.personRecordId || pid === meCtx.userId || pname === (meCtx.fullName || '').toLowerCase();
+    });
+    return (op === 'is not' || op === 'excludes') ? !matched : matched;
+  }
+  if (field?.field_type === 'email') {
+    const sv = String(rawVal || '').toLowerCase();
+    if (op === 'is' || op === '=') return sv === meCtx.email;
+    if (op === 'is not' || op === '≠') return sv !== meCtx.email;
+    if (op === 'contains') return sv.includes(meCtx.email);
+    return sv === meCtx.email;
+  }
+  const sv = String(rawVal || '').toLowerCase(), mn = (meCtx.fullName || '').toLowerCase();
+  if (op === 'is' || op === '=') return sv === mn;
+  if (op === 'is not' || op === '≠') return sv !== mn;
+  if (op === 'contains') return sv.includes(mn);
+  if (op === 'does not contain') return !sv.includes(mn);
+  return sv === mn;
+}
+
+function _testFilterServer(filt, fields, record, meCtx) {
+  const field = fields.find(f => f.id === filt.fieldId);
+  if (!field) return true;
+  const rawVal = record.data ? record.data[field.api_key] : undefined;
+  const op = filt.op; const fv = filt.value;
+  if (fv === '$me') return _matchesMeServer(rawVal, field, op, meCtx);
+  if (op === 'is empty')     return rawVal === null || rawVal === undefined || rawVal === '' || (Array.isArray(rawVal) && rawVal.length === 0);
+  if (op === 'is not empty') return rawVal !== null && rawVal !== undefined && rawVal !== '' && !(Array.isArray(rawVal) && rawVal.length === 0);
+  if (op === 'is true')      return rawVal === true;
+  if (op === 'is false')     return rawVal === false || rawVal === undefined || rawVal === null;
+  const strVal = String(rawVal ?? '').toLowerCase();
+  const strFv  = String(fv ?? '').toLowerCase();
+  switch (op) {
+    case 'contains':          return strVal.includes(strFv);
+    case 'does not contain':  return !strVal.includes(strFv);
+    case 'starts with':       return strVal.startsWith(strFv);
+    case 'is':                return strVal === strFv;
+    case 'is not':            return strVal !== strFv;
+    case '=':                 return Number(rawVal) === Number(fv);
+    case '≠':                 return Number(rawVal) !== Number(fv);
+    case '<': case 'before':  return Number(rawVal) < Number(fv) || new Date(rawVal) < new Date(fv);
+    case '>': case 'after':   return Number(rawVal) > Number(fv) || new Date(rawVal) > new Date(fv);
+    case '≤':                 return Number(rawVal) <= Number(fv);
+    case '≥':                 return Number(rawVal) >= Number(fv);
+    case 'includes':          return Array.isArray(rawVal) ? rawVal.some(v => String(v).toLowerCase() === strFv) : strVal === strFv;
+    case 'excludes':          return Array.isArray(rawVal) ? !rawVal.some(v => String(v).toLowerCase() === strFv) : strVal !== strFv;
+    default:                  return true;
+  }
+}
+
+function _applyFiltersServer(records, filters, fields, meCtx) {
+  if (!filters || !filters.length) return records;
+  return records.filter(record => {
+    let result = null;
+    for (const filt of filters) {
+      const logic = filt.rowLogic || 'AND';
+      const matches = _testFilterServer(filt, fields, record, meCtx);
+      if (result === null) result = matches;
+      else if (logic === 'OR') result = result || matches;
+      else result = result && matches;
+    }
+    return result ?? true;
+  });
+}
+
 // GET /api/saved-views?object_id=&environment_id=&user_id=
 router.get('/', (req, res) => {
   ensureTable();
@@ -77,6 +154,64 @@ router.get('/:id', (req, res) => {
   const view = query('saved_views', v => v.id === req.params.id)[0];
   if (!view) return res.status(404).json({ error: 'View not found' });
   res.json(view);
+});
+
+// GET /api/saved-views/:id/run?environment_id=&viewer_email=
+// Executes a saved view's filters against live records, server-side —
+// no browser app-state required. Primary consumer: portal widgets (e.g. the
+// Hiring Manager Portal's configurable candidate shortlist), where the admin
+// picks a Saved View to define "who needs review" and the portal has to
+// resolve that filter itself with only an environment_id + viewer identity.
+// viewer_email lets filters using the "$me" dynamic token resolve against the
+// requesting viewer (matched to a platform user + Person record by email).
+router.get('/:id/run', (req, res) => {
+  ensureTable();
+  const { environment_id, viewer_email } = req.query;
+  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
+  const view = query('saved_views', v => v.id === req.params.id && !v.deleted_at)[0];
+  if (!view || view.environment_id !== environment_id) return res.status(404).json({ error: 'View not found' });
+
+  const store  = getStore();
+  const fields = (store.fields || store.field_definitions || []).filter(f => f.object_id === view.object_id);
+  let records  = (store.records || []).filter(r =>
+    r.object_id === view.object_id && r.environment_id === environment_id && !r.deleted_at
+  );
+
+  let meCtx = null;
+  if (viewer_email) {
+    const emailLc = String(viewer_email).toLowerCase();
+    const user = (store.users || []).find(u => (u.email || '').toLowerCase() === emailLc);
+    const peopleObj = (store.objects || store.object_definitions || [])
+      .find(o => o.environment_id === environment_id && (o.slug === 'people' || o.name === 'People'));
+    const personMatch = peopleObj
+      ? (store.records || []).find(r => r.object_id === peopleObj.id && r.environment_id === environment_id &&
+          (r.data?.email || '').toLowerCase() === emailLc)
+      : null;
+    meCtx = {
+      userId: user?.id || null,
+      email: emailLc,
+      fullName: user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : '',
+      personRecordId: personMatch?.id || null,
+    };
+  }
+
+  records = _applyFiltersServer(records, view.filters || [], fields, meCtx);
+
+  if (view.sort_by) {
+    const sf  = fields.find(f => f.api_key === view.sort_by || f.id === view.sort_by);
+    const dir = view.sort_dir === 'asc' ? 1 : -1;
+    records = [...records].sort((a, b) => {
+      const av = sf ? a.data?.[sf.api_key] : a[view.sort_by];
+      const bv = sf ? b.data?.[sf.api_key] : b[view.sort_by];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }
+
+  res.json({ view_id: view.id, object_id: view.object_id, count: records.length, records });
 });
 
 // POST /api/saved-views
@@ -163,4 +298,12 @@ router.get('/recently-deleted', (req, res) => {
   res.json(deleted);
 });
 
+// Exported for reuse by other server-side consumers that need to run a saved
+// view's filters without an internal HTTP round-trip — e.g. the Hiring
+// Manager Portal wrapper routes (server/routes/hm_portal.js), which build the
+// same meCtx shape themselves (email/userId/fullName/personRecordId) before
+// calling applyFiltersServer directly.
 module.exports = router;
+module.exports.applyFiltersServer = _applyFiltersServer;
+module.exports.testFilterServer = _testFilterServer;
+module.exports.matchesMeServer = _matchesMeServer;

@@ -31,6 +31,9 @@ const ICON_PATHS = {
   user:       'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z',
   download:   'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3',
   check:      'M20 6L9 17l-5-5',
+  plus:       'M12 5v14M5 12h14',
+  trash:      'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z',
+  copy:       'M20 9H11a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-9a2 2 0 00-2-2zM5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1',
 };
 const Ic = ({ n, s=16, c='currentColor' }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -399,11 +402,15 @@ const ActivitySection = ({ activity, stageHistory }) => {
   );
 };
 
-const FormsSection = ({ formResponses }) => (
-  <SectionShell icon="form" label="Form Responses" defaultOpen={formResponses?.length > 0}>
-    {formResponses?.length > 0
+const FormsSection = ({ formResponses, formIds, label='Form Responses' }) => {
+  const filtered = formIds?.length
+    ? (formResponses||[]).filter(r => formIds.includes(r.form_id) || formIds.includes(r.form_template_id))
+    : (formResponses||[]);
+  return (
+  <SectionShell icon="form" label={label} defaultOpen={filtered?.length > 0}>
+    {filtered?.length > 0
       ? <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {formResponses.map((resp, i) => (
+          {filtered.map((resp, i) => (
             <div key={i} style={{ borderRadius:8, border:'1px solid #e9d5ff', overflow:'hidden' }}>
               <div style={{ padding:'6px 12px', background:PURPLE+'10', fontSize:12, fontWeight:700, color:PURPLE }}>{resp.form_name}</div>
               <div style={{ padding:'12px 16px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:'12px 20px' }}>
@@ -419,12 +426,13 @@ const FormsSection = ({ formResponses }) => (
         </div>
       : <EmptyMsg msg="No form responses."/>}
   </SectionShell>
-);
+  );
+};
 
-const CustomFieldsSection = ({ fields, data, fieldIds }) => {
+const CustomFieldsSection = ({ fields, data, fieldIds, label='Profile Fields' }) => {
   const visible = fields.filter(f => !fieldIds?.length || fieldIds.includes(f.id));
   return (
-    <SectionShell icon="list" label="Profile Fields">
+    <SectionShell icon="list" label={label}>
       {visible.length > 0
         ? <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'14px 20px' }}>
             {visible.map(f => {
@@ -545,6 +553,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
   const [profileData, setProfileData] = useState(null);
   const [config, setConfig]           = useState(null);
   const [loading, setLoading]         = useState(true);
+  const [activeTab, setActiveTab]     = useState('__ungrouped__');
 
   useEffect(() => {
     if (!link?.person_record_id) return;
@@ -555,6 +564,7 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
     ]).then(([profile, cfg]) => {
       setProfileData(profile);
       setConfig(cfg);
+      setActiveTab((cfg?.tabs||[]).slice().sort((a,b)=>(a.order??0)-(b.order??0))[0]?.id || '__ungrouped__');
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [link?.person_record_id]);
@@ -580,6 +590,12 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
     .filter(s => s.enabled)
     .sort((a,b) => a.order - b.order);
 
+  const tabs = (config?.tabs || []).slice().sort((a,b) => (a.order??0) - (b.order??0));
+  const ungroupedSections = sections.filter(s => !s.tab_id);
+  const shownSections = !tabs.length
+    ? sections
+    : (activeTab === '__ungrouped__' ? ungroupedSections : sections.filter(s => s.tab_id === activeTab));
+
   const renderSection = (s) => {
     if (!profileData) return null;
     const { record, fields, attachments, notes, activity, formResponses, link: linkData, stageHistory } = profileData;
@@ -592,9 +608,13 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
       case 'documents':     return <DocumentsSection   key={s.id} attachments={attachments}/>;
       case 'notes':         return <NotesSection       key={s.id} notes={notes}/>;
       case 'activity':      return <ActivitySection    key={s.id} activity={activity} stageHistory={stageHistory}/>;
-      case 'forms':         return <FormsSection       key={s.id} formResponses={formResponses}/>;
-      case 'custom_fields': return <CustomFieldsSection key={s.id} fields={fields||[]} data={d} fieldIds={config?.custom_field_ids}/>;
-      default: return null;
+      case 'forms':         return <FormsSection       key={s.id} formResponses={formResponses} label={s.label}/>;
+      case 'custom_fields': return <CustomFieldsSection key={s.id} fields={fields||[]} data={d} fieldIds={config?.custom_field_ids} label={s.label}/>;
+      default:
+        if (s.id?.startsWith('form:')) {
+          return <FormsSection key={s.id} formResponses={formResponses} formIds={[s.id.slice(5)]} label={s.label||'Form'}/>;
+        }
+        return null;
     }
   };
 
@@ -769,6 +789,27 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#7c3aed', fontSize:13 }}>
               Loading profile…
             </div>
+          ) : tabs.length > 0 ? (
+            <>
+              <div style={{ display:'flex', gap:4, borderBottom:'1.5px solid #e9d5ff', marginBottom:18, flexWrap:'wrap', position:'sticky', top:-24, background:'#f8f5ff', paddingTop:2, zIndex:2 }}>
+                {tabs.map(t => (
+                  <button key={t.id} onClick={()=>setActiveTab(t.id)}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', border:'none', borderBottom:`2.5px solid ${activeTab===t.id?PURPLE:'transparent'}`, background:'transparent', color:activeTab===t.id?PURPLE:'#6b7280', fontSize:12.5, fontWeight:activeTab===t.id?700:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+                    {t.icon && <Ic n={t.icon} s={13} c={activeTab===t.id?PURPLE:'#9ca3af'}/>}
+                    {t.label}
+                  </button>
+                ))}
+                {ungroupedSections.length > 0 && (
+                  <button onClick={()=>setActiveTab('__ungrouped__')}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', border:'none', borderBottom:`2.5px solid ${activeTab==='__ungrouped__'?PURPLE:'transparent'}`, background:'transparent', color:activeTab==='__ungrouped__'?PURPLE:'#6b7280', fontSize:12.5, fontWeight:activeTab==='__ungrouped__'?700:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+                    More
+                  </button>
+                )}
+              </div>
+              {shownSections.length === 0
+                ? <EmptyMsg msg="No sections assigned to this tab yet."/>
+                : shownSections.map(s => renderSection(s))}
+            </>
           ) : (
             sections.map(s => renderSection(s))
           )}
@@ -781,32 +822,138 @@ export default function TalentProfileView({ link, allLinks, onNavigateProfile, m
 
 // ── Settings builder (exported for Settings.jsx) ──────────────────────────────
 export function TalentProfileBuilder({ environmentId }) {
+  const [objects, setObjects]   = useState([]);
+  const [objectId, setObjectId] = useState(null);
+  const [configs, setConfigs]   = useState([]);
+  const [configId, setConfigId] = useState(null);
   const [config, setConfig]     = useState(null);
+  const [loaded, setLoaded]     = useState(false);
+  const [fields, setFields]     = useState([]);
+  const [formsCatalog, setFormsCatalog] = useState([]);
   const [saving, setSaving]     = useState(false);
   const [saved,  setSaved]      = useState(false);
-  const [fields, setFields]     = useState([]);
+  const [busy,   setBusy]       = useState(false);
+  const [newTabName, setNewTabName] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
   const dragIdx = useRef(null);
 
   const SECTION_ICONS = { application:'briefcase', summary:'align', experience:'award', education:'book', skills:'zap', documents:'paperclip', forms:'form', notes:'edit', activity:'activity', custom_fields:'list' };
 
+  // Load objects for this environment once, default to the People object
   useEffect(() => {
     if (!environmentId) return;
-    apiClient.get(`/talent-profile/config?environment_id=${environmentId}`).then(setConfig);
     apiClient.get(`/objects?environment_id=${environmentId}`).then(objs => {
-      const people = (Array.isArray(objs)?objs:[]).find(o=>o.slug==='people'||o.name?.toLowerCase()==='person');
-      if (people) apiClient.get(`/fields?object_id=${people.id}`).then(setFields);
+      const list = Array.isArray(objs) ? objs : [];
+      setObjects(list);
+      setObjectId(prev => {
+        if (prev && list.some(o => o.id === prev)) return prev;
+        const people = list.find(o => o.slug === 'people' || o.name?.toLowerCase() === 'person') || list[0];
+        return people?.id || null;
+      });
     });
   }, [environmentId]);
 
+  // Load configs for the selected object
+  const loadConfigs = async (preferId) => {
+    if (!environmentId || !objectId) return;
+    setLoaded(false);
+    const list = await apiClient.get(`/talent-profile/configs?environment_id=${environmentId}&object_id=${objectId}`);
+    const arr = Array.isArray(list) ? list : [];
+    setConfigs(arr);
+    const pick = (preferId && arr.find(c => c.id === preferId)) || arr.find(c => c.is_default) || arr[0] || null;
+    setConfigId(pick?.id || null);
+    setConfig(pick ? JSON.parse(JSON.stringify(pick)) : null);
+    setLoaded(true);
+  };
+  useEffect(() => { loadConfigs(); }, [environmentId, objectId]);
+
+  // Load fields + forms catalog for the selected object
+  useEffect(() => {
+    if (!environmentId || !objectId) return;
+    apiClient.get(`/fields?object_id=${objectId}`).then(f => setFields(Array.isArray(f) ? f : []));
+    apiClient.get(`/talent-profile/forms-catalog?environment_id=${environmentId}`).then(f => setFormsCatalog(Array.isArray(f) ? f : []));
+  }, [environmentId, objectId]);
+
+  const selectConfig = id => {
+    const found = configs.find(c => c.id === id);
+    if (found) { setConfigId(id); setConfig(JSON.parse(JSON.stringify(found))); }
+  };
+
+  const createConfig = async () => {
+    setBusy(true);
+    const cfg = await apiClient.post('/talent-profile/configs', {
+      environment_id: environmentId, object_id: objectId,
+      name: 'New configuration', is_default: configs.length === 0,
+    });
+    setBusy(false);
+    if (cfg?.id) await loadConfigs(cfg.id);
+  };
+
+  const duplicateConfig = async () => {
+    if (!configId) return;
+    setBusy(true);
+    const cfg = await apiClient.post(`/talent-profile/configs/${configId}/duplicate`, {});
+    setBusy(false);
+    if (cfg?.id) await loadConfigs(cfg.id);
+  };
+
+  const deleteConfig = async () => {
+    if (!configId || !window.confirm(`Delete "${config?.name}"? This cannot be undone.`)) return;
+    setBusy(true);
+    await apiClient.del(`/talent-profile/configs/${configId}`);
+    setBusy(false);
+    await loadConfigs();
+  };
+
+  const setDefault = async () => {
+    if (!config?.id) return;
+    setBusy(true);
+    await apiClient.put(`/talent-profile/configs/${config.id}`, { is_default: true });
+    setBusy(false);
+    await loadConfigs(config.id);
+  };
+
   const save = async () => {
+    if (!config) return;
     setSaving(true);
-    await apiClient.put('/talent-profile/config', { ...config, environment_id: environmentId });
+    const body = {
+      name: config.name, object_id: objectId, sections: config.sections, tabs: config.tabs || [],
+      header_fields: config.header_fields, custom_field_ids: config.custom_field_ids, is_default: config.is_default,
+    };
+    const result = config.id
+      ? await apiClient.put(`/talent-profile/configs/${config.id}`, body)
+      : await apiClient.post('/talent-profile/configs', { ...body, environment_id: environmentId });
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+    await loadConfigs(result?.id || config.id);
   };
 
   const toggleSection = id => setConfig(c => ({ ...c, sections: c.sections.map(s => s.id===id ? {...s, enabled:!s.enabled} : s) }));
+  const removeSection = id => setConfig(c => ({ ...c, sections: c.sections.filter(s => s.id!==id) }));
+  const setSectionTab = (id, tabId) => setConfig(c => ({ ...c, sections: c.sections.map(s => s.id===id ? {...s, tab_id: tabId||undefined} : s) }));
   const toggleField   = id => setConfig(c => { const cur = c.custom_field_ids||[]; return { ...c, custom_field_ids: cur.includes(id) ? cur.filter(x=>x!==id) : [...cur,id] }; });
   const toggleHF      = key => setConfig(c => { const cur = c.header_fields||[]; return { ...c, header_fields: cur.includes(key) ? cur.filter(x=>x!==key) : [...cur,key] }; });
+
+  const addTab = () => {
+    const name = newTabName.trim();
+    if (!name) return;
+    const id = 'tab_' + Date.now().toString(36);
+    setConfig(c => ({ ...c, tabs: [...(c.tabs||[]), { id, label:name, order:(c.tabs||[]).length }] }));
+    setNewTabName('');
+  };
+  const removeTab = tabId => setConfig(c => ({
+    ...c,
+    tabs: (c.tabs||[]).filter(t => t.id!==tabId),
+    sections: c.sections.map(s => s.tab_id===tabId ? {...s, tab_id:undefined} : s),
+  }));
+
+  const addFormSection = form => {
+    setConfig(c => {
+      const id = `form:${form.id}`;
+      if (c.sections.some(s => s.id===id)) return c;
+      return { ...c, sections: [...c.sections, { id, label: form.name, icon:'form', enabled:true, order: c.sections.length }] };
+    });
+    setShowAddForm(false);
+  };
 
   const onDragStart = i => { dragIdx.current = i; };
   const onDrop      = i => {
@@ -820,24 +967,120 @@ export function TalentProfileBuilder({ environmentId }) {
     dragIdx.current = null;
   };
 
-  if (!config) return <div style={{ padding:32, color:'#9ca3af', fontSize:13 }}>Loading…</div>;
-
-  const sortedSections = [...config.sections].sort((a,b) => a.order-b.order);
+  const iconBtnStyle = { width:32, height:32, borderRadius:8, border:'1.5px solid #e5e7eb', background:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' };
   const hfOpts = ['email','phone','location','linkedin','source'];
 
+  const objectPicker = (
+    <div>
+      <div style={{ fontSize:11, color:'#9ca3af', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Object</div>
+      <select value={objectId||''} onChange={e=>setObjectId(e.target.value)}
+        style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:12.5, fontFamily:F, minWidth:160 }}>
+        {objects.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+    </div>
+  );
+
+  if (!objectId || !loaded) return (
+    <div style={{ maxWidth:640 }}>
+      {objects.length > 0 && <div style={{ marginBottom:16 }}>{objectPicker}</div>}
+      <div style={{ padding:32, color:'#9ca3af', fontSize:13 }}>Loading…</div>
+    </div>
+  );
+
+  if (!config) return (
+    <div style={{ maxWidth:640 }}>
+      <div style={{ marginBottom:16 }}>{objectPicker}</div>
+      <div style={{ padding:32, textAlign:'center', border:'1.5px dashed #e9d5ff', borderRadius:14, color:'#9ca3af' }}>
+        <div style={{ fontSize:13, marginBottom:12 }}>No talent profile configurations yet for this object.</div>
+        <button onClick={createConfig} disabled={busy}
+          style={{ padding:'9px 20px', borderRadius:9, border:'none', background:PURPLE, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+          Create first configuration
+        </button>
+      </div>
+    </div>
+  );
+
+  const sortedSections = [...config.sections].sort((a,b) => a.order-b.order);
+
   return (
-    <div style={{ maxWidth:640, display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ maxWidth:680, display:'flex', flexDirection:'column', gap:20 }}>
+      {/* Object + config selector + CRUD */}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'flex-end' }}>
+        {objectPicker}
+        <div>
+          <div style={{ fontSize:11, color:'#9ca3af', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Configuration</div>
+          <select value={configId||''} onChange={e=>selectConfig(e.target.value)}
+            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:12.5, fontFamily:F, minWidth:190 }}>
+            {configs.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_default?' (default)':''}</option>)}
+          </select>
+        </div>
+        <div style={{ display:'flex', gap:6 }}>
+          <button onClick={createConfig} disabled={busy} title="New configuration" style={iconBtnStyle}><Ic n="plus" s={14} c={PURPLE}/></button>
+          <button onClick={duplicateConfig} disabled={busy||!configId} title="Duplicate" style={iconBtnStyle}><Ic n="copy" s={14} c={PURPLE}/></button>
+          <button onClick={deleteConfig} disabled={busy||!configId} title="Delete" style={iconBtnStyle}><Ic n="trash" s={14} c="#ef4444"/></button>
+          <button onClick={setDefault} disabled={busy||!configId||config?.is_default} title="Set as default"
+            style={{ ...iconBtnStyle, background:config?.is_default?`${PURPLE}15`:'white', borderColor:config?.is_default?`${PURPLE}40`:'#e5e7eb' }}>
+            <Ic n="star" s={14} c={config?.is_default?PURPLE:'#9ca3af'}/>
+          </button>
+        </div>
+      </div>
+
+      {/* Config name */}
+      <div>
+        <div style={{ fontSize:11, color:'#9ca3af', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Configuration name</div>
+        <input value={config.name||''} onChange={e=>setConfig(c=>({...c, name:e.target.value}))}
+          style={{ width:'100%', maxWidth:340, padding:'8px 12px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:13, fontFamily:F, fontWeight:600, color:'#374151', boxSizing:'border-box' }}/>
+      </div>
+
+      {/* Tabs */}
+      <div>
+        <div style={{ fontSize:13, fontWeight:800, color:'#374151', marginBottom:4 }}>Tabs</div>
+        <div style={{ fontSize:12, color:'#9ca3af', marginBottom:10 }}>Group sections into tabs, or leave empty for a single flat layout. Assign each section to a tab below.</div>
+        {(config.tabs||[]).length > 0 && (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:10 }}>
+            {(config.tabs||[]).map(t => (
+              <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:99, background:`${PURPLE}10`, border:`1.5px solid ${PURPLE}30`, fontSize:12, fontWeight:600, color:PURPLE }}>
+                {t.label}
+                <button onClick={()=>removeTab(t.id)} style={{ background:'none', border:'none', cursor:'pointer', display:'flex', color:PURPLE, padding:0 }}>
+                  <Ic n="x" s={11} c={PURPLE}/>
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ display:'flex', gap:6 }}>
+          <input value={newTabName} onChange={e=>setNewTabName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTab()}
+            placeholder="New tab name…" style={{ flex:1, maxWidth:260, padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:12, fontFamily:F }}/>
+          <button onClick={addTab} style={{ padding:'7px 12px', borderRadius:8, border:'none', background:PURPLE, color:'white', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+            <Ic n="plus" s={12} c="white"/> Add tab
+          </button>
+        </div>
+      </div>
+
       {/* Sections */}
       <div>
         <div style={{ fontSize:13, fontWeight:800, color:'#374151', marginBottom:8 }}>Profile Sections</div>
-        <div style={{ fontSize:12, color:'#9ca3af', marginBottom:12 }}>Drag to reorder · Toggle to show/hide</div>
+        <div style={{ fontSize:12, color:'#9ca3af', marginBottom:12 }}>Drag to reorder · Toggle to show/hide{(config.tabs||[]).length>0?' · Assign to a tab':''}</div>
         <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
           {sortedSections.map((s,i) => (
             <div key={s.id} draggable onDragStart={()=>onDragStart(i)} onDragOver={e=>e.preventDefault()} onDrop={()=>onDrop(i)}
               style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, border:`1.5px solid ${s.enabled?'#e9d5ff':'#f3f4f6'}`, background:s.enabled?'white':'#f9fafb', cursor:'grab' }}>
               <span style={{ color:'#d1d5db', fontSize:14, cursor:'grab' }}>⠿</span>
-              <Ic n={SECTION_ICONS[s.id]||'list'} s={14} c={s.enabled?PURPLE:'#d1d5db'}/>
+              <Ic n={SECTION_ICONS[s.id]||s.icon||'form'} s={14} c={s.enabled?PURPLE:'#d1d5db'}/>
               <span style={{ flex:1, fontSize:13, fontWeight:600, color:s.enabled?'#374151':'#9ca3af' }}>{s.label}</span>
+              {(config.tabs||[]).length > 0 && (
+                <select value={s.tab_id||''} onChange={e=>setSectionTab(s.id, e.target.value)}
+                  style={{ fontSize:11, padding:'3px 6px', borderRadius:6, border:'1px solid #e5e7eb', color:'#6b7280', background:'white', fontFamily:F }}>
+                  <option value="">No tab</option>
+                  {(config.tabs||[]).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+              )}
+              {s.id.startsWith('form:') && (
+                <button onClick={()=>removeSection(s.id)} title="Remove form section"
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', display:'flex', padding:2 }}>
+                  <Ic n="trash" s={13} c="#ef4444"/>
+                </button>
+              )}
               <button onClick={()=>toggleSection(s.id)}
                 style={{ width:36, height:20, borderRadius:99, border:'none', cursor:'pointer', background:s.enabled?PURPLE:'#e5e7eb', position:'relative', transition:'background .2s' }}>
                 <span style={{ position:'absolute', top:2, left:s.enabled?18:2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left .2s' }}/>
@@ -846,6 +1089,35 @@ export function TalentProfileBuilder({ environmentId }) {
           ))}
         </div>
       </div>
+
+      {/* Add a specific form as its own section */}
+      <div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:'#374151' }}>Add a specific form</div>
+          <button onClick={()=>setShowAddForm(v=>!v)}
+            style={{ padding:'5px 10px', borderRadius:7, border:`1.5px solid ${PURPLE}30`, background:'white', color:PURPLE, fontSize:11.5, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+            <Ic n="plus" s={11} c={PURPLE}/> {showAddForm?'Close':'Browse forms'}
+          </button>
+        </div>
+        {showAddForm && (
+          <div style={{ border:'1.5px solid #e9d5ff', borderRadius:10, maxHeight:220, overflowY:'auto', background:'white' }}>
+            {formsCatalog.length === 0
+              ? <div style={{ padding:14, fontSize:12, color:'#9ca3af' }}>No forms found for this environment.</div>
+              : formsCatalog.map(f => {
+                  const already = config.sections.some(s => s.id===`form:${f.id}`);
+                  return (
+                    <button key={f.id} disabled={already} onClick={()=>addFormSection(f)}
+                      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', border:'none', borderBottom:'1px solid #f3f4f6', background:already?'#f9fafb':'white', cursor:already?'default':'pointer' }}>
+                      <Ic n="form" s={13} c={already?'#d1d5db':PURPLE}/>
+                      <span style={{ flex:1, fontSize:12.5, fontWeight:600, color:already?'#d1d5db':'#374151' }}>{f.name}</span>
+                      {already && <span style={{ fontSize:10, color:'#9ca3af', fontWeight:600 }}>Added</span>}
+                    </button>
+                  );
+                })}
+          </div>
+        )}
+      </div>
+
       {/* Header fields */}
       <div>
         <div style={{ fontSize:13, fontWeight:800, color:'#374151', marginBottom:8 }}>Header Contact Fields</div>
