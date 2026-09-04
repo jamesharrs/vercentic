@@ -686,6 +686,7 @@ function FormulaCard({ formula, fields, onApply, onRemove }) {
   const [name, setName]       = useState(formula.name || "");
   const [expr, setExpr]       = useState(formula.expression || "");
   const [applied, setApplied] = useState(!formula.draft); // already-saved formulas start as applied
+  const [showAI, setShowAI]   = useState(false);
 
   const hasName     = !!name.trim();
   const hasExpr     = !!expr.trim();
@@ -746,7 +747,7 @@ function FormulaCard({ formula, fields, onApply, onRemove }) {
 
       {/* AI generate + Apply button */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <button onClick={()=>{}} style={{ fontSize:11, color:"#8B7EC8", background:"none", border:"none", cursor:"pointer", padding:0, fontFamily:F }}>
+        <button onClick={()=>setShowAI(true)} style={{ fontSize:11, color:"#8B7EC8", background:"none", border:"none", cursor:"pointer", padding:0, fontFamily:F }}>
           ✨ Generate with AI
         </button>
         <button
@@ -760,6 +761,7 @@ function FormulaCard({ formula, fields, onApply, onRemove }) {
           {applied && !isDirty ? "✓ Applied" : "Apply"}
         </button>
       </div>
+      {showAI && <AIExpressionBuilder fields={fields} onInsert={s => { setExpr(s); setApplied(false); }} onClose={()=>setShowAI(false)}/>}
     </div>
   );
 }
