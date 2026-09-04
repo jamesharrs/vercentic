@@ -49,11 +49,15 @@ function _advanceApproval(offer) {
 // GET / — List offers
 router.get('/', (req, res) => {
   ensure();
-  const { environment_id, candidate_id, job_id, status } = req.query;
+  const { environment_id, candidate_id, job_id, job_ids, status } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   let rows = query('offers', o => o.environment_id === environment_id && !o.deleted_at);
   if (candidate_id) rows = rows.filter(o => o.candidate_id === candidate_id);
   if (job_id)       rows = rows.filter(o => o.job_id === job_id);
+  if (job_ids) {
+    const idSet = new Set(String(job_ids).split(',').map(s => s.trim()).filter(Boolean));
+    rows = rows.filter(o => idSet.has(o.job_id));
+  }
   if (status) rows = rows.filter(o => o.status === status);
   rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   // RBAC: filter offers — user must be able to view the people object

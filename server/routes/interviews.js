@@ -59,11 +59,15 @@ function ensure() {
 
 router.get('/', (req, res) => {
   ensure();
-  const { environment_id, candidate_id, job_id } = req.query;
+  const { environment_id, candidate_id, job_id, job_ids } = req.query;
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
   let rows = query('interviews', i => i.environment_id === environment_id && !i.deleted_at);
   if (candidate_id) rows = rows.filter(i => i.candidate_id === candidate_id);
   if (job_id)       rows = rows.filter(i => i.job_id === job_id);
+  if (job_ids) {
+    const idSet = new Set(String(job_ids).split(',').map(s => s.trim()).filter(Boolean));
+    rows = rows.filter(i => idSet.has(i.job_id));
+  }
   res.json(rows.sort((a,b) => new Date(`${a.date}T${a.time||'00:00'}`) - new Date(`${b.date}T${b.time||'00:00'}`)));
 });
 
@@ -214,3 +218,8 @@ router.delete('/:id', async (req, res) => { // eslint-disable-line require-await
 });
 
 module.exports = router;
+// Reused by hm_portal.js (Hiring Manager Portal — separate portal-token auth,
+// does not call these routes directly, only these pure formatting helpers).
+module.exports.buildICS = buildICS;
+module.exports.makeRescheduleToken = makeRescheduleToken;
+module.exports.buildEmailHtml = buildEmailHtml;

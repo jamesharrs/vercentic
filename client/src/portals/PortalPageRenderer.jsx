@@ -3,9 +3,10 @@ import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline, sanitizeCopilot } from '../sanitize.js'
 import { mergePortalBranding } from './portalBranding.js'
-import { API_ORIGIN } from '../apiClient.js'
+import { API_ORIGIN, tFetch } from '../apiClient.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ProfileTabs, DocumentsSection, SectionShell, Ic as ProfileIc } from '../shared/ProfileSections.jsx'
 
 const PADDING_MAP = { none:'0px', sm:'24px', md:'56px', lg:'96px', xl:'140px' }
 
@@ -1764,13 +1765,424 @@ const CtaWidget = ({ cfg, theme }) => {
 
 const CHART_COLORS = ['#4361EE','#7C3AED','#0891B2','#059669','#D97706','#DC2626','#EC4899','#64748B']
 
-const HMPortalWidget = ({ cfg, theme, portal, api }) => {
+// ── Drill-down detail modal (candidate / job) ──────────────────────────────
+// Fetches the full record via the portal-token-gated hm_portal.js detail
+// endpoints and renders only the fields (and, optionally, file attachments)
+// the portal admin selected for this widget in the builder (HMWidgetConfig
+// in Portals.jsx → cfg.drilldown_fields / cfg.drilldown_show_files).
+const DrilldownDetailModal = ({ modal, portal, portalSession, cfg, pr, tc, ff, onClose, onArrangeInterview, records, ctaButtons, onAction, onNavigate }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('overview');
+  useEffect(() => {
+    if (!portal?.id || !portalSession?.token || !modal.targetId) { setLoading(false); return; }
+    setLoading(true);
+    const path = modal.recordType === 'job' ? 'job' : 'candidate';
+    tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/${path}/${modal.targetId}`, { headers: { 'X-Portal-Token': portalSession.token } })
+      .then(res => setData(res?.error ? null : res))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [portal?.id, portalSession?.token, modal.recordType, modal.targetId]);
+
+  // Prev/next navigation across the widget's current (filtered/sorted) record list
+  const navList = records || [];
+  const curIndex = navList.findIndex(r => r.id === modal.record?.id);
+  const prevRecord = curIndex > 0 ? navList[curIndex - 1] : null;
+  const nextRecord = curIndex >= 0 && curIndex < navList.length - 1 ? navList[curIndex + 1] : null;
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'ArrowLeft' && prevRecord) onNavigate?.(prevRecord);
+      if (e.key === 'ArrowRight' && nextRecord) onNavigate?.(nextRecord);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [prevRecord, nextRecord, onClose, onNavigate]);
+
+  const d = data?.record?.data || {};
+  // Header renders instantly from the summary row, then "upgrades" once the full record loads —
+  // so name/avatar/status never blank out while arrowing between records.
+  const source = { ...(modal.record?.data || {}), ...d };
+  const name = [source.first_name, source.last_name].filter(Boolean).join(' ') || source.job_title || source.name || source.title || 'Record';
+  const initials = name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '•';
+  const subtitle = modal.recordType === 'job'
+    ? [source.department, source.location].filter(Boolean).join(' · ')
+    : [source.job_title || source.current_title, source.location].filter(Boolean).join(' · ');
+
+  const HIDDEN = ['id','created_at','updated_at','deleted_at','object_id','environment_id'];
+  const selectedKeys = cfg.drilldown_fields && cfg.drilldown_fields.length ? cfg.drilldown_fields : null;
+  const visibleFields = (data?.fields || [])
+    .filter(f => !HIDDEN.includes(f.api_key))
+    .filter(f => !selectedKeys || selectedKeys.includes(f.api_key));
+  const showFiles = cfg.drilldown_show_files !== false;
+
+  const isSkillField = (f) => /skill/i.test(f.api_key) || /skill/i.test(f.name);
+  const overviewFields = visibleFields.filter(f => !isSkillField(f));
+  const skillFields = visibleFields.filter(f => isSkillField(f));
+  const skillChips = (f) => {
+    const val = d[f.api_key];
+    if (Array.isArray(val)) return val.filter(Boolean);
+    if (typeof val === 'string' && val.trim()) return val.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
+  };
+  const hasPipelineTab = (modal.recordType === 'candidate' && (data?.jobs?.length > 0)) || (modal.recordType === 'job' && !!data?.stats);
+  const tabs = [
+    { key:'overview', label:'Overview' },
+    ...(skillFields.length ? [{ key:'skills', label:'Skills' }] : []),
+    ...(hasPipelineTab ? [{ key:'pipeline', label: modal.recordType === 'job' ? 'Activity' : 'Pipeline' }] : []),
+    ...(showFiles ? [{ key:'files', label:'Files' }] : []),
+  ];
+
+  const fmtVal = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    return String(v);
+  };
+
+  const hasArrangeInterviewCta = (ctaButtons || []).some(b => b.action === 'arrange_interview');
+  const arrowBtnStyle = { position:'fixed', top:'50%', transform:'translateY(-50%)', width:44, height:44, borderRadius:'50%', border:'none', background:'rgba(255,255,255,0.18)', color:'#fff', fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000, backdropFilter:'blur(4px)' };
+
+  // Pipeline / activity stats — HM-portal-specific data with no equivalent
+  // section in the shared Talent Profile config, so it's appended below the
+  // admin-configured sections via ProfileTabs' extraTabs slot rather than
+  // being one of the configurable sections itself.
+  const pipelineExtra = !hasPipelineTab ? null : (
+    <SectionShell icon="activity" label={modal.recordType === 'job' ? 'Pipeline Stats' : 'Pipeline'} accent={pr}>
+      {modal.recordType === 'job' && data?.stats && (
+        <div style={{ display:'flex', gap:10 }}>
+          {[
+            { label:'In pipeline', v: data.stats.pipeline_count },
+            { label:'Upcoming interviews', v: data.stats.upcoming_interviews },
+            { label:'Pending offers', v: data.stats.pending_offers },
+          ].map(s => (
+            <div key={s.label} style={{ flex:1, background:'#F8F9FF', borderRadius:12, padding:'16px 12px', textAlign:'center' }}>
+              <div style={{ fontSize:24, fontWeight:800, color:pr }}>{s.v ?? 0}</div>
+              <div style={{ fontSize:11, color:'#9DA8C7', fontWeight:600, marginTop:4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {modal.recordType === 'candidate' && data?.jobs?.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {data.jobs.map(j => (
+            <div key={j.job_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:'#F8F9FF', borderRadius:10 }}>
+              <span style={{ fontSize:14, fontWeight:700, color:tc }}>{j.job_title}</span>
+              {j.stage && <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99, background:`${pr}14`, color:pr }}>{j.stage}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionShell>
+  );
+
+  // CTA footer — identical regardless of which layout (configured vs. legacy
+  // fallback) rendered above it, computed once so both branches share it.
+  const ctaFooter = (
+    <div style={{ display:'flex', gap:10, flexWrap:'wrap', padding:'16px 32px', borderTop:'1px solid #F3F4F6', flexShrink:0 }}>
+      {(ctaButtons || []).map((btn,i) => (
+        <button key={i} onClick={()=>onAction?.(btn.action, modal.record)} style={{ flex:'1 1 140px', padding:'11px 14px', borderRadius:10, border:'none', background:pr, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>{btn.label || btn.action}</button>
+      ))}
+      {!hasArrangeInterviewCta && modal.recordType === 'candidate' && onArrangeInterview && (
+        <button onClick={() => onArrangeInterview(modal.record)} style={{ flex:'1 1 140px', padding:'11px 14px', borderRadius:10, border:`1.5px solid ${pr}`, background:'#fff', color:pr, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Arrange Interview</button>
+      )}
+      <button onClick={onClose} style={{ flex:'1 1 100px', padding:'11px 14px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Close</button>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      {prevRecord && <button onClick={(e)=>{e.stopPropagation(); onNavigate?.(prevRecord);}} style={{ ...arrowBtnStyle, left:24 }} aria-label="Previous record">‹</button>}
+      {nextRecord && <button onClick={(e)=>{e.stopPropagation(); onNavigate?.(nextRecord);}} style={{ ...arrowBtnStyle, right:24 }} aria-label="Next record">›</button>}
+
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, width:860, maxWidth:'100%', maxHeight:'86vh', overflow:'hidden', boxShadow:'0 32px 80px rgba(0,0,0,0.25)', fontFamily:ff, display:'flex', flexDirection:'column' }}>
+
+        {/* Header banner */}
+        <div style={{ background:`linear-gradient(135deg, ${pr}, ${pr}CC)`, padding:'26px 32px 20px', color:'#fff', position:'relative', flexShrink:0 }}>
+          <button onClick={onClose} style={{ position:'absolute', top:16, right:16, background:'rgba(255,255,255,0.2)', border:'none', borderRadius:8, width:28, height:28, cursor:'pointer', color:'#fff', fontSize:14, lineHeight:1 }}>✕</button>
+          <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', opacity:0.85, marginBottom:10 }}>
+            {modal.recordType === 'job' ? 'Job Detail' : 'Talent Profile'}{navList.length > 1 && curIndex >= 0 ? ` · ${curIndex + 1} of ${navList.length}` : ''}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{ width:56, height:56, borderRadius:14, background:'rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:800, flexShrink:0 }}>{initials}</div>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ fontSize:22, fontWeight:800, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
+              {subtitle && <div style={{ fontSize:13, opacity:0.85, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{subtitle}</div>}
+            </div>
+            {source.status && <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:99, background:'rgba(255,255,255,0.25)', flexShrink:0 }}>{source.status}</span>}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding:'60px 0', textAlign:'center', color:'#9DA8C7', fontSize:13 }}>Loading…</div>
+        ) : !data ? (
+          <div style={{ padding:'60px 0', textAlign:'center', color:'#9DA8C7', fontSize:13 }}>Couldn't load this record.</div>
+        ) : data.profile_config ? (
+          <>
+            {/* Configured Talent Profile — the tabs/sections combo built by the
+                admin in Settings → Talent Profile Builder for this object,
+                shared verbatim with the main app's own record view. */}
+            <div style={{ padding:'22px 32px', overflowY:'auto', flex:1 }}>
+              <ProfileTabs
+                config={data.profile_config}
+                profileData={data}
+                fields={data.fields || []}
+                link={null}
+                accent={pr}
+                stickyTabBar
+                extraTabs={pipelineExtra}
+              />
+            </div>
+            {ctaFooter}
+          </>
+        ) : (
+          <>
+            {/* No Talent Profile config saved for this object yet — fall back
+                to the widget's own drilldown_fields/drilldown_show_files pick. */}
+            {/* Tab bar */}
+            <div style={{ display:'flex', padding:'0 32px', borderBottom:'1.5px solid #F3F4F6', flexShrink:0 }}>
+              {tabs.map(t => (
+                <button key={t.key} onClick={()=>setTab(t.key)} style={{
+                  padding:'12px 4px', marginRight:24, background:'none', border:'none',
+                  borderBottom: tab===t.key ? `2.5px solid ${pr}` : '2.5px solid transparent',
+                  color: tab===t.key ? pr : '#9DA8C7', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff, marginBottom:-1.5
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div style={{ padding:'22px 32px', overflowY:'auto', flex:1 }}>
+              {tab === 'overview' && (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0,1fr))', gap:12 }}>
+                  {overviewFields.length === 0 && (
+                    <div style={{ fontSize:12, color:'#9DA8C7', gridColumn:'1 / -1' }}>No fields selected for this view.</div>
+                  )}
+                  {overviewFields.map(f => {
+                    const val = fmtVal(d[f.api_key]);
+                    return (
+                      <div key={f.id} style={{ background:'#F8F9FF', borderRadius:10, padding:'10px 12px' }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:'#9DA8C7', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:4 }}>{f.name}</div>
+                        <div style={{ fontSize:13, color: val ? tc : '#D1D5DB', fontWeight:600 }}>{val || '—'}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {tab === 'skills' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+                  {skillFields.map(f => {
+                    const chips = skillChips(f);
+                    return (
+                      <div key={f.id}>
+                        <div style={{ fontSize:10, fontWeight:700, color:'#9DA8C7', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8 }}>{f.name}</div>
+                        {chips.length === 0 ? (
+                          <div style={{ fontSize:13, color:'#D1D5DB' }}>—</div>
+                        ) : (
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                            {chips.map((s,i) => (
+                              <span key={i} style={{ fontSize:12, fontWeight:600, padding:'5px 12px', borderRadius:99, background:`${pr}12`, color:pr, border:`1px solid ${pr}28` }}>{s}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {tab === 'pipeline' && (
+                <div>
+                  {modal.recordType === 'job' && data.stats && (
+                    <div style={{ display:'flex', gap:10 }}>
+                      {[
+                        { label:'In pipeline', v: data.stats.pipeline_count },
+                        { label:'Upcoming interviews', v: data.stats.upcoming_interviews },
+                        { label:'Pending offers', v: data.stats.pending_offers },
+                      ].map(s => (
+                        <div key={s.label} style={{ flex:1, background:'#F8F9FF', borderRadius:12, padding:'16px 12px', textAlign:'center' }}>
+                          <div style={{ fontSize:24, fontWeight:800, color:pr }}>{s.v ?? 0}</div>
+                          <div style={{ fontSize:11, color:'#9DA8C7', fontWeight:600, marginTop:4 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {modal.recordType === 'candidate' && data.jobs?.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {data.jobs.map(j => (
+                        <div key={j.job_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:'#F8F9FF', borderRadius:10 }}>
+                          <span style={{ fontSize:14, fontWeight:700, color:tc }}>{j.job_title}</span>
+                          {j.stage && <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99, background:`${pr}14`, color:pr }}>{j.stage}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === 'files' && (
+                <DocumentsSection attachments={data.attachments || []} accent={pr} />
+              )}
+            </div>
+
+            {ctaFooter}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Arrange Interview modal — from the CTA action, or the "Arrange Interview"
+// button inside the candidate drill-down detail above ─────────────────────
+const ArrangeInterviewModal = ({ record, portal, portalSession, pr, tc, ff, onClose, onScheduled }) => {
+  const [types, setTypes] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [typeId, setTypeId] = useState('');
+  const [jobId, setJobId] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('09:00');
+  const [duration, setDuration] = useState(30);
+  const [format, setFormat] = useState('Video Call');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState('');
+  const candidateId = record.data?.candidate_id || record.id;
+
+  useEffect(() => {
+    if (!portal?.id || !portalSession?.token) { setLoading(false); return; }
+    Promise.all([
+      tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/interview-types`, { headers: { 'X-Portal-Token': portalSession.token } }).catch(() => null),
+      tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/candidate/${candidateId}`, { headers: { 'X-Portal-Token': portalSession.token } }).catch(() => null),
+    ]).then(([typesRes, candRes]) => {
+      setTypes(typesRes?.interview_types || []);
+      const js = candRes?.jobs || [];
+      setJobs(js);
+      if (js.length === 1) setJobId(js[0].job_id);
+      else if (record.data?.job_id) setJobId(record.data.job_id);
+    }).finally(() => setLoading(false));
+  }, [portal?.id, portalSession?.token]);
+
+  const applyType = (id) => {
+    setTypeId(id);
+    const t = types.find(x => x.id === id);
+    if (t) {
+      if (t.duration) setDuration(t.duration);
+      if (t.interview_format || t.format) setFormat(t.interview_format || t.format);
+    }
+  };
+
+  const submit = async () => {
+    if (!date) { setErr('Pick a date'); return; }
+    setSubmitting(true); setErr('');
+    const t = types.find(x => x.id === typeId);
+    const res = await tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/interviews`, {
+      method: 'POST',
+      headers: { 'X-Portal-Token': portalSession.token },
+      body: {
+        candidate_id: candidateId,
+        job_id: jobId || null,
+        interview_type_id: typeId || null,
+        interview_type_name: t?.name || 'Interview',
+        date, time, duration, format, notes,
+      },
+    }).catch(() => null);
+    setSubmitting(false);
+    if (!res || res.error) { setErr(res?.error || 'Something went wrong — please try again.'); return; }
+    onScheduled?.();
+    onClose();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, padding:28, width:400, maxWidth:'100%', maxHeight:'85vh', overflowY:'auto', boxShadow:'0 32px 80px rgba(0,0,0,0.2)', fontFamily:ff }}>
+        <div style={{ fontSize:16, fontWeight:800, color:tc, marginBottom:4 }}>Arrange Interview</div>
+        <div style={{ fontSize:12, color:'#9DA8C7', marginBottom:20 }}>
+          {[record.data?.first_name, record.data?.last_name].filter(Boolean).join(' ') || record.data?.name || 'Candidate'}
+        </div>
+
+        {loading ? (
+          <div style={{ padding:'24px 0', textAlign:'center', color:'#9DA8C7', fontSize:13 }}>Loading…</div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            {jobs.length > 0 && (
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>ROLE</div>
+                <select value={jobId} onChange={e=>setJobId(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box', background:'#fff' }}>
+                  <option value="">— No specific role —</option>
+                  {jobs.map(j => <option key={j.job_id} value={j.job_id}>{j.job_title}</option>)}
+                </select>
+              </div>
+            )}
+            {types.length > 0 && (
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>INTERVIEW TYPE</div>
+                <select value={typeId} onChange={e=>applyType(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box', background:'#fff' }}>
+                  <option value="">— Choose —</option>
+                  {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{ display:'flex', gap:10 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>DATE</div>
+                <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>TIME</div>
+                <input type="time" value={time} onChange={e=>setTime(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box' }}/>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>DURATION (MIN)</div>
+                <input type="number" min={5} step={5} value={duration} onChange={e=>setDuration(Number(e.target.value)||30)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>FORMAT</div>
+                <select value={format} onChange={e=>setFormat(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, outline:'none', boxSizing:'border-box', background:'#fff' }}>
+                  {['Video Call','Phone Call','In Person','Panel'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', marginBottom:4 }}>NOTES</div>
+              <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional notes for the candidate…"
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, resize:'vertical', outline:'none', boxSizing:'border-box' }}/>
+            </div>
+            {err && <div style={{ fontSize:12, color:'#DC2626', fontWeight:600 }}>{err}</div>}
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:10, marginTop:20 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
+          <button onClick={submit} disabled={submitting || loading} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor: submitting?'default':'pointer', fontFamily:ff, opacity: submitting?0.7:1 }}>
+            {submitting ? 'Scheduling…' : 'Schedule Interview'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HMPortalWidget = ({ cfg, theme, portal, api, portalSession, pages, onNav }) => {
+  const goToSlug = (slug) => { const pg = (pages||[]).find(p => p.slug === slug); if (pg && onNav) onNav(pg); };
   const [records,    setRecords]    = useState([]);
+  const [hmStats,    setHmStats]    = useState(null);  // raw aggregate counts, for display_mode:'stats'
   const [fields,     setFields]     = useState([]);   // all object fields
   const [listCols,   setListCols]   = useState([]);   // ordered visible fields from saved list
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState(null);
   const [search,     setSearch]     = useState('');
+  const [objSlug,    setObjSlug]    = useState(null);  // resolved object slug, for drill-down record-type detection on custom (non-curated) sources
   const ff = theme.fontFamily || "'DM Sans', sans-serif";
   const pr = cfg.accent_color || theme.primaryColor || '#4361EE';
   const tc = theme.textColor || '#1a1a2e';
@@ -1780,7 +2192,51 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
     return [d.first_name, d.last_name].filter(Boolean).join(' ') || d.job_title || d.name || d.title || d.pool_name || 'Record';
   };
 
+  // ── Genuinely per-HM-scoped data sources ──────────────────────────────────
+  // The generic /records path below has NO per-user scoping — it explicitly
+  // skips any $me filter/token it encounters (see step 5), since a portal
+  // widget normally has no logged-in user context at all. hm_portal.js is a
+  // separate, portal-token-gated API that resolves the real logged-in HM
+  // (via the session set up by PortalApp's login screen) and genuinely
+  // restricts results to their own jobs/candidates/interviews. When cfg
+  // .data_source names one of these, use it instead of the generic path.
+  const HM_ENDPOINTS = { hm_my_jobs: 'my-jobs', hm_shortlist: 'shortlist', hm_interviews: 'interviews', hm_onboarding: 'onboarding' };
+  const hmEndpoint = HM_ENDPOINTS[cfg.data_source];
+
   useEffect(() => {
+    if (hmEndpoint) {
+      if (!portal?.id || !portalSession?.token) { setRecords([]); setLoading(false); return; }
+      setLoading(true);
+      const HM_COLS = {
+        'my-jobs':    [{ id:'department', api_key:'department', name:'Department' }, { id:'location', api_key:'location', name:'Location' }, { id:'pipeline', api_key:'pipeline', name:'Pipeline' }],
+        'shortlist':  [{ id:'role', api_key:'role', name:'Role' }, { id:'stage', api_key:'stage', name:'Stage' }, { id:'location', api_key:'location', name:'Location' }],
+        'interviews': [{ id:'job_title', api_key:'job_title', name:'Role' }, { id:'date', api_key:'date', name:'Date' }, { id:'time', api_key:'time', name:'Time' }, { id:'format', api_key:'format', name:'Format' }],
+        'onboarding': [{ id:'job_title', api_key:'job_title', name:'Role' }, { id:'start_date', api_key:'start_date', name:'Start date' }],
+      };
+      const NORMALIZE = {
+        'my-jobs':    (r) => (r.jobs || []).map(j => ({ id: j.id, created_at: j.created_at, data: { job_title: j.title, department: j.department, location: j.location, status: j.status, employment_type: j.employment_type, pipeline: `${j.pipeline_count} in pipeline` } })),
+        'shortlist':  (r) => (r.candidates || []).map(c => ({ id: c.id, data: { name: c.name, current_title: c.current_title, email: c.email, location: c.location, status: c.status, role: (c.jobs || []).map(j => j.job_title).join(', '), stage: (c.jobs || [])[0]?.stage || '' } })),
+        'interviews': (r) => (r.interviews || []).map(i => ({ id: i.id, data: { name: i.candidate_name || i.person_name || i.title || 'Interview', job_title: i.job_title || '', date: i.date, time: i.time || '', format: i.format || i.type || '', status: i.status || '', candidate_id: i.candidate_id, job_id: i.job_id } })),
+        'onboarding': (r) => (r.onboarding || []).map(o => ({ id: o.offer_id, data: { name: o.candidate_name, job_title: o.job_title, start_date: o.start_date || 'TBC', base_salary: o.base_salary, currency: o.currency, status: 'Onboarding', candidate_id: o.candidate_id, job_id: o.job_id } })),
+      };
+      setListCols(HM_COLS[hmEndpoint] || []);
+      tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/${hmEndpoint}`, { headers: { 'X-Portal-Token': portalSession.token } })
+        .then(res => {
+          setRecords(res?.error ? [] : (NORMALIZE[hmEndpoint]?.(res) || []));
+          if (hmEndpoint === 'my-jobs' && !res?.error) {
+            const jobs = res.jobs || [];
+            setHmStats({
+              jobs: jobs.length,
+              pipeline: jobs.reduce((s, j) => s + (j.pipeline_count || 0), 0),
+              interviews: jobs.reduce((s, j) => s + (j.upcoming_interviews || 0), 0),
+              offers: jobs.reduce((s, j) => s + (j.pending_offers || 0), 0),
+            });
+          }
+        })
+        .catch(() => setRecords([]))
+        .finally(() => setLoading(false));
+      return;
+    }
     if (!portal?.environment_id || !cfg.object_id) { setLoading(false); return; }
     const load = async () => {
       try {
@@ -1822,12 +2278,12 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
         const data = await api.get(url);
         let all = Array.isArray(data) ? data : (data?.records || []);
 
-        // 5. Apply advanced filters (best-effort)
+        // 5. Apply advanced filters (best-effort) — respects rowLogic AND/OR chaining
         if (savedList?.filters?.length && allFields.length) {
           try {
             const fm = {};
             allFields.forEach(f => { fm[f.id] = f.api_key; fm[f.api_key] = f.api_key; });
-            all = all.filter(r => savedList.filters.every(filt => {
+            const testFilter = (r, filt) => {
               // Skip $me filters — can't resolve without a user session in portal context
               if (String(filt.value ?? '') === '$me') return true;
               // Support both filt.field and filt.fieldId (different saved list formats)
@@ -1845,7 +2301,14 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
               if (op === '<') return parseFloat(rv) < parseFloat(filt.value);
               if (op === 'includes') { const arr=Array.isArray(rv)?rv:[rv].filter(Boolean).map(String); return arr.some(v=>v.toLowerCase()===fv); }
               return true;
-            }));
+            };
+            // Sequential fold so a filter's own rowLogic ('AND'/'OR') decides how it
+            // combines with the accumulated result — matches the main app's list builder.
+            all = all.filter(r => savedList.filters.reduce((acc, filt, i) => {
+              const pass = testFilter(r, filt);
+              if (i === 0) return pass;
+              return (filt.rowLogic || 'AND') === 'OR' ? (acc || pass) : (acc && pass);
+            }, true));
           } catch(e) {}
         }
 
@@ -1857,9 +2320,44 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
       }
     };
     load();
-  }, [portal?.environment_id, cfg.object_id, cfg.list_id]);
+  }, [portal?.environment_id, portal?.id, cfg.object_id, cfg.list_id, hmEndpoint, portalSession?.token]);
 
-  const ctaButtons = cfg.cta_buttons || [];
+  // Resolve the underlying object's slug for custom (non-curated) data sources,
+  // so drill-down record-type detection below works the same way it does in
+  // the builder (HMWidgetConfig in Portals.jsx).
+  useEffect(() => {
+    if (hmEndpoint || !cfg.object_id) { setObjSlug(null); return; }
+    api.get(`/objects/${cfg.object_id}`).then(o => setObjSlug(o?.slug || null)).catch(() => setObjSlug(null));
+  }, [hmEndpoint, cfg.object_id]);
+
+  // What kind of record each row represents, for the drill-down detail view —
+  // mirrors the builder's own detection logic exactly (see Portals.jsx).
+  const drilldownRecordType = (() => {
+    if (cfg.data_source === 'hm_my_jobs') return 'job';
+    if (cfg.data_source === 'hm_shortlist' || cfg.data_source === 'hm_onboarding') return 'candidate';
+    if (cfg.data_source === 'hm_interviews') return null; // interview rows aren't a single People/Jobs record
+    if (!cfg.data_source && cfg.object_id) {
+      if (objSlug === 'people') return 'candidate';
+      if (objSlug === 'jobs') return 'job';
+    }
+    return null;
+  })();
+  const drilldownEnabled = !!drilldownRecordType && cfg.drilldown_enabled !== false;
+  // hm_onboarding rows are keyed by offer id, not the candidate's own record id —
+  // the real candidate record id travels separately as data.candidate_id.
+  const drilldownTargetId = (record) => (cfg.data_source === 'hm_onboarding' ? (record.data?.candidate_id || record.id) : record.id);
+  const handleOpenDetail = (record) => {
+    if (!drilldownEnabled) return;
+    setModal({ type:'detail', record, recordType: drilldownRecordType, targetId: drilldownTargetId(record) });
+  };
+
+  // Default action when the portal admin hasn't configured explicit CTA buttons —
+  // without this, cards on pages like the Dashboard render with no way to click
+  // through, even though there's an obvious place for them to go.
+  const ctaButtons = ((cfg.cta_buttons && cfg.cta_buttons.length)
+    ? cfg.cta_buttons
+    : (cfg.data_source === 'hm_my_jobs' ? [{ action:'view_pipeline', label:'View Pipeline' }] : [])
+  ).filter(btn => btn.action !== 'arrange_interview' || drilldownRecordType === 'candidate');
   const displayMode = cfg.display_mode || 'card';
   const [sortCol, setSortCol] = useState(null);  // api_key
   const [sortDir, setSortDir] = useState('asc');
@@ -1881,9 +2379,11 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
   const filtered = search ? sorted.filter(r => JSON.stringify(r.data||{}).toLowerCase().includes(search.toLowerCase())) : sorted;
 
   const handleAction = async (action, record) => {
-    if (action === 'submit_feedback') { setModal({ type:'feedback', record }); return; }
-    if (action === 'move_stage')      { setModal({ type:'move_stage', record }); return; }
-    if (action === 'view_profile')    { window.open(`/people/${record.id}`, '_blank'); return; }
+    if (action === 'submit_feedback')   { setModal({ type:'feedback', record }); return; }
+    if (action === 'move_stage')        { setModal({ type:'move_stage', record }); return; }
+    if (action === 'view_profile')      { window.open(`/people/${record.id}`, '_blank'); return; }
+    if (action === 'view_pipeline')     { goToSlug(cfg.view_pipeline_target || '/shortlist'); return; }
+    if (action === 'arrange_interview') { setModal({ type:'arrange_interview', record }); return; }
     const patchFn = api.patch || ((p, b) => api.post ? api.post(p, { ...b, _method:'PATCH' }) : Promise.resolve());
     if (action === 'approve_offer') {
       await patchFn(`/records/${record.id}`, { data:{ status:'Approved' } }).catch(()=>{});
@@ -1901,8 +2401,14 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
     const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     // Use listCols for extra fields, excluding the title field to avoid duplication
     const extraCols = listCols.filter(f => !['first_name','last_name','job_title','name','title','pool_name'].includes(f.api_key));
+    const clickable = drilldownEnabled;
     return (
-      <div style={{ background:'#fff', borderRadius:14, border:'1.5px solid #E8ECF8', padding:'16px 18px', marginBottom:10 }}>
+      <div
+        onClick={clickable ? () => handleOpenDetail(record) : undefined}
+        onMouseEnter={clickable ? (e) => { e.currentTarget.style.borderColor = pr; e.currentTarget.style.boxShadow = `0 4px 14px ${pr}1a`; } : undefined}
+        onMouseLeave={clickable ? (e) => { e.currentTarget.style.borderColor = '#E8ECF8'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
+        style={{ background:'#fff', borderRadius:14, border:'1.5px solid #E8ECF8', padding:'16px 18px', marginBottom:10, cursor: clickable ? 'pointer' : 'default', transition:'border-color .15s, box-shadow .15s' }}
+      >
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom: (ctaButtons.length || extraCols.length) ? 12 : 0 }}>
           <div style={{ width:42, height:42, borderRadius:12, background:`${pr}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:14, fontWeight:700, color:pr, fontFamily:ff }}>{initials}</div>
           <div style={{ flex:1, minWidth:0 }}>
@@ -1928,7 +2434,7 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
         {ctaButtons.length > 0 && (
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             {ctaButtons.map((btn,i) => (
-              <button key={i} onClick={() => handleAction(btn.action, record)} style={{
+              <button key={i} onClick={(e) => { e.stopPropagation(); handleAction(btn.action, record); }} style={{
                 padding:'6px 12px', borderRadius:8, border:'none', cursor:'pointer',
                 background: pr, color:'white', fontSize:11, fontWeight:700, fontFamily:ff
               }}>{btn.label || btn.action}</button>
@@ -1939,11 +2445,55 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
     );
   };
 
-  if (!cfg.object_id) return (
+  if (!hmEndpoint && !cfg.object_id) return (
     <div style={{ padding:32, textAlign:'center', color:'#9DA8C7', fontFamily:ff }}>
       No data source configured for this widget.
     </div>
   );
+  if (hmEndpoint && !portalSession?.token) return (
+    <div style={{ padding:32, textAlign:'center', color:'#9DA8C7', fontFamily:ff }}>
+      Sign in to view your {hmEndpoint.replace('-', ' ')}.
+    </div>
+  );
+
+  if (displayMode === 'stats') {
+    // Each tile with a real destination page navigates there on click.
+    // 'jobs' has no dedicated tile-target — the jobs list is this very
+    // Dashboard page, so it's left static.
+    // Builder-configured targets (cfg.stat_tile_targets, set via the "Tile
+    // Click-through" section in HM Widget Settings) win when present; these
+    // defaults keep older/unconfigured widgets working as before.
+    const STAT_TILE_TARGETS = { pipeline: '/shortlist', interviews: '/interviews', offers: '/shortlist', ...(cfg.stat_tile_targets||{}) };
+    const statTiles = (cfg.stat_tiles && cfg.stat_tiles.length) ? cfg.stat_tiles : [
+      { key:'jobs',       label:'Open Roles' },
+      { key:'pipeline',   label:'In Pipeline' },
+      { key:'interviews', label:'Upcoming Interviews' },
+      { key:'offers',     label:'Pending Offers' },
+    ];
+    return (
+      <div style={{ padding:'16px 0' }}>
+        {cfg.widget_title && <div style={{ fontSize:18, fontWeight:800, color:tc, marginBottom:16, fontFamily:ff }}>{cfg.widget_title}</div>}
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${statTiles.length}, 1fr)`, gap:14 }}>
+          {statTiles.map(t => {
+            const target = STAT_TILE_TARGETS[t.key];
+            const clickable = !!target && !!(pages||[]).find(p => p.slug === target);
+            return (
+              <div key={t.key}
+                onClick={clickable ? () => goToSlug(target) : undefined}
+                style={{ background:'#fff', border:'1.5px solid #E8ECF8', borderRadius:14, padding:'18px 16px', cursor: clickable ? 'pointer' : 'default', transition:'box-shadow .15s, border-color .15s' }}
+                onMouseEnter={clickable ? (e => { e.currentTarget.style.boxShadow = `0 4px 14px ${pr}22`; e.currentTarget.style.borderColor = pr; }) : undefined}
+                onMouseLeave={clickable ? (e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#E8ECF8'; }) : undefined}>
+                <div style={{ fontSize:28, fontWeight:800, color:pr, fontFamily:ff }}>{loading ? '—' : (hmStats?.[t.key] ?? 0)}</div>
+                <div style={{ fontSize:12, color:'#9DA8C7', marginTop:4, fontWeight:600, fontFamily:ff, display:'flex', alignItems:'center', gap:4 }}>
+                  {t.label}{clickable && <span style={{ color:pr }}>→</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding:'16px 0' }}>
@@ -1983,8 +2533,13 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
             <tbody>
               {filtered.map(r => {
                 const d = r.data || {};
+                const rowClickable = drilldownEnabled;
                 return (
-                  <tr key={r.id} style={{ borderBottom:'1px solid #F3F4F6' }}>
+                  <tr key={r.id}
+                    onClick={rowClickable ? () => handleOpenDetail(r) : undefined}
+                    onMouseEnter={rowClickable ? (e) => { e.currentTarget.style.background = '#F8FAFF'; } : undefined}
+                    onMouseLeave={rowClickable ? (e) => { e.currentTarget.style.background = 'transparent'; } : undefined}
+                    style={{ borderBottom:'1px solid #F3F4F6', cursor: rowClickable ? 'pointer' : 'default', transition:'background .1s' }}>
                     {listCols.map(f => {
                       const val = d[f.api_key];
                       const display = !val && val !== 0
@@ -2002,7 +2557,7 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
                       <td style={{ padding:'12px 16px' }}>
                         <div style={{ display:'flex', gap:6 }}>
                           {ctaButtons.map((btn,i) => (
-                            <button key={i} onClick={() => handleAction(btn.action, r)} style={{
+                            <button key={i} onClick={(e) => { e.stopPropagation(); handleAction(btn.action, r); }} style={{
                               padding:'5px 10px', borderRadius:7, border:'none', cursor:'pointer',
                               background:pr, color:'white', fontSize:11, fontWeight:700, fontFamily:ff
                             }}>{btn.label||btn.action}</button>
@@ -2015,6 +2570,20 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
               })}
             </tbody>
           </table>
+        </div>
+      ) : displayMode === 'kanban' ? (
+        <div style={{ display:'flex', gap:14, overflowX:'auto', paddingBottom:8 }}>
+          {(cfg.stages?.length ? cfg.stages : ['—']).map(stage => {
+            const cols = cfg.stages?.length ? filtered.filter(r => (r.data?.status||'') === stage) : filtered;
+            return (
+              <div key={stage} style={{ minWidth:240, flex:'0 0 240px' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#9DA8C7', padding:'6px 10px', background:'#F3F4F6', borderRadius:8, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.04em', fontFamily:ff }}>
+                  {stage} · {cols.length}
+                </div>
+                {cols.map(r => <RecordCard key={r.id} record={r}/>)}
+              </div>
+            );
+          })}
         </div>
       ) : (
         filtered.map(r => <RecordCard key={r.id} record={r}/>)
@@ -2030,10 +2599,84 @@ const HMPortalWidget = ({ cfg, theme, portal, api }) => {
               style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #E8ECF8', fontSize:13, fontFamily:ff, resize:'vertical', outline:'none', boxSizing:'border-box' }}/>
             <div style={{ display:'flex', gap:10, marginTop:16 }}>
               <button onClick={()=>setModal(null)} style={{ flex:1, padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
-              <button onClick={async()=>{ const note=document.getElementById('hm-feedback-note').value; await api.patch(`/records/${modal.record.id}`, { data:{ feedback_note:note } }); setModal(null); }} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Submit</button>
+              <button onClick={async()=>{
+                const note = document.getElementById('hm-feedback-note').value;
+                if (hmEndpoint === 'interviews') {
+                  // Interview rows aren't generic /records — submit a real scorecard
+                  // against the portal-scoped HM API instead of PATCHing a record.
+                  await tFetch(`${API_ORIGIN}/api/portals/${portal.id}/hm/scorecard`, {
+                    method: 'POST',
+                    headers: { 'X-Portal-Token': portalSession.token },
+                    body: {
+                      interview_id: modal.record.id,
+                      candidate_record_id: modal.record.data?.candidate_id,
+                      job_record_id: modal.record.data?.job_id,
+                      overall_comments: note,
+                      status: 'submitted',
+                    },
+                  }).catch(()=>{});
+                } else {
+                  await api.patch(`/records/${modal.record.id}`, { data:{ feedback_note:note } }).catch(()=>{});
+                }
+                setModal(null);
+              }} style={{ flex:2, padding:'10px', borderRadius:10, border:'none', background:pr, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:ff }}>Submit</button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Move stage modal */}
+      {modal?.type === 'move_stage' && (
+        <div onClick={()=>setModal(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:18, padding:28, width:360, boxShadow:'0 32px 80px rgba(0,0,0,0.2)', fontFamily:ff }}>
+            <div style={{ fontSize:16, fontWeight:800, color:tc, marginBottom:4 }}>Move Stage</div>
+            <div style={{ fontSize:12, color:'#9DA8C7', marginBottom:20 }}>{recordTitle(modal.record)}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {(cfg.stages?.length ? cfg.stages : []).map(stage => {
+                const current = (modal.record.data?.status||'') === stage;
+                return (
+                  <button key={stage} disabled={current} onClick={async()=>{
+                    const patchFn = api.patch || ((p, b) => api.post ? api.post(p, { ...b, _method:'PATCH' }) : Promise.resolve());
+                    await patchFn(`/records/${modal.record.id}`, { data:{ status: stage } }).catch(()=>{});
+                    setRecords(rs => rs.map(r => r.id===modal.record.id ? {...r, data:{...r.data, status:stage}} : r));
+                    setModal(null);
+                  }} style={{
+                    padding:'10px 14px', borderRadius:10,
+                    border: current ? `1.5px solid ${pr}` : '1.5px solid #E8ECF8',
+                    background: current ? `${pr}10` : '#fff', color: current ? pr : tc,
+                    fontSize:13, fontWeight:700, textAlign:'left', fontFamily:ff,
+                    cursor: current ? 'default' : 'pointer', opacity: current ? 0.6 : 1
+                  }}>{stage}{current ? ' (current)' : ''}</button>
+                );
+              })}
+              {!(cfg.stages?.length) && <div style={{ fontSize:12, color:'#9DA8C7', fontFamily:ff }}>No stages configured for this widget.</div>}
+            </div>
+            <button onClick={()=>setModal(null)} style={{ marginTop:16, width:'100%', padding:'10px', borderRadius:10, border:'1.5px solid #E8ECF8', background:'transparent', color:'#6B7280', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:ff }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Drill-down detail modal (Talent Profile / Job Detail) */}
+      {modal?.type === 'detail' && (
+        <DrilldownDetailModal
+          modal={modal} portal={portal} portalSession={portalSession} cfg={cfg}
+          pr={pr} tc={tc} ff={ff}
+          records={filtered}
+          ctaButtons={ctaButtons}
+          onAction={handleAction}
+          onNavigate={(record) => setModal(m => ({ ...m, record, targetId: drilldownTargetId(record) }))}
+          onClose={() => setModal(null)}
+          onArrangeInterview={(record) => setModal({ type:'arrange_interview', record })}
+        />
+      )}
+
+      {/* Arrange Interview modal */}
+      {modal?.type === 'arrange_interview' && (
+        <ArrangeInterviewModal
+          record={modal.record} portal={portal} portalSession={portalSession}
+          pr={pr} tc={tc} ff={ff}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );
@@ -2984,7 +3627,7 @@ const HUB_ICONS = {
   calendar:  "M8 2v3M16 2v3M3 8h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z",
 };
 
-const Widget = ({ cell, theme, portal, api, track }) => {
+const Widget = ({ cell, theme, portal, api, track, portalSession, pages, onNav }) => {
   const cfg = cell.widgetConfig||{}
   switch (cell.widgetType) {
     case 'hero':    return <HeroWidget    cfg={cfg} theme={theme}/>
@@ -3023,7 +3666,7 @@ const Widget = ({ cell, theme, portal, api, track }) => {
     case 'accordion':     return <AccordionWidget     cfg={cfg} theme={theme}/>
     case 'cta':           return <CtaWidget           cfg={cfg} theme={theme}/>
     case 'candidate_hub': return <CandidateHubWidget cfg={cfg} theme={theme} portal={portal} api={api}/>
-    case 'hm_widget':     return <HMPortalWidget       cfg={cfg} theme={theme} portal={portal} api={api}/>
+    case 'hm_widget':     return <HMPortalWidget       cfg={cfg} theme={theme} portal={portal} api={api} portalSession={portalSession} pages={pages} onNav={onNav}/>
     case 'report_widget': return <ReportWidget          cfg={cfg} theme={theme} portal={portal} api={api}/>
     case 'ai_summary':    return <AISummaryWidget       cfg={cfg} theme={theme} portal={portal} api={api}/>
     default:        return null
@@ -3031,7 +3674,7 @@ const Widget = ({ cell, theme, portal, api, track }) => {
 }
 
 
-const PortalRow = ({ row, theme, portal, api, track }) => {
+const PortalRow = ({ row, theme, portal, api, track, portalSession, pages, onNav }) => {
   if(row.condition?.param&&row.condition?.value){const p=new URLSearchParams(window.location.search);if((p.get(row.condition.param)||'').toLowerCase()!==row.condition.value.toLowerCase())return null;}
   const padding = PADDING_MAP[row.padding]||'56px'
   const cellFlex = (ci, total, preset) => {
@@ -3052,7 +3695,7 @@ const PortalRow = ({ row, theme, portal, api, track }) => {
         <div style={{ display:'flex', gap:32, flexWrap:'wrap', alignItems:'flex-start' }}>
           {(row.cells||[]).map((cell, ci) => (
             <div key={cell.id} style={{ flex:cellFlex(ci,(row.cells||[]).length,row.preset), minWidth:0 }}>
-              {cell.widgetType&&<Widget cell={cell} theme={theme} portal={portal} api={api} track={track}/>}
+              {cell.widgetType&&<Widget cell={cell} theme={theme} portal={portal} api={api} track={track} portalSession={portalSession} pages={pages} onNav={onNav}/>}
             </div>
           ))}
         </div>
@@ -3079,7 +3722,7 @@ const PortalFooter = ({ portal, theme }) => {
   </footer>);
 };
 
-const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
+const PortalNav = ({ portal, theme, currentPage, onNav, pages, portalSession, onLogout }) => {
   const nav = portal.nav || {}
   const bg  = nav.bgColor   || theme.bgColor   || '#fff'
   const fg  = nav.overlay ? (nav.textColor || '#FFFFFF') : (nav.textColor || theme.textColor || '#0F1729')
@@ -3163,6 +3806,27 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
             ),
           ].filter(Boolean)}
         </div>
+
+        {/* Signed-in-as indicator + logout — internal (login-gated) portals
+            only. Without this a visitor has no in-app way to switch which
+            TalentOS account they're viewing the portal as (e.g. a generic
+            admin login vs. the actual hiring manager) short of clearing
+            localStorage by hand — see the 2026-09-03 zero-data investigation
+            for exactly the confusion that caused. */}
+        {portalSession?.user && (
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft: alignment==='left' ? 20 : 0, flexShrink:0 }}>
+            <span style={{ fontSize:12, color:fg, opacity:0.55, fontFamily:theme.fontFamily, whiteSpace:'nowrap' }} title={portalSession.user.email}>
+              {[portalSession.user.first_name, portalSession.user.last_name].filter(Boolean).join(' ') || portalSession.user.email}
+            </span>
+            <button onClick={onLogout} style={{
+              background:'none', border:`1.5px solid ${(nav.overlay?fg:activeCol)}40`, cursor:'pointer',
+              padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600,
+              color: fg, fontFamily:theme.fontFamily
+            }}>
+              Log out
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   )
@@ -4315,7 +4979,7 @@ const PortalCopilot = ({ portal, api, onOpenChange }) => {
   );
 };
 
-export default function PortalPageRenderer({ portal, api }) {
+export default function PortalPageRenderer({ portal, api, portalSession, onLogout }) {
   // Merge rather than pick one wholesale — see portalBranding.js for why.
   const theme = mergePortalBranding(portal)
   const rawPages = portal.pages || []
@@ -4435,7 +5099,7 @@ export default function PortalPageRenderer({ portal, api }) {
 
   if (appStatus) return (
     <div style={{ minHeight:'100vh', background:bg, fontFamily:ff, color:tc }}>
-      <PortalNav portal={portal} theme={theme} currentPage={currentPage} onNav={setCurrentPage} pages={pages}/>
+      <PortalNav portal={portal} theme={theme} currentPage={currentPage} onNav={setCurrentPage} pages={pages} portalSession={portalSession} onLogout={onLogout}/>
       <div style={{ maxWidth:640, margin:'0 auto', padding:'60px 24px' }}>
         <div style={{ textAlign:'center', marginBottom:40 }}>
           <div style={{ width:64, height:64, borderRadius:'50%', background:`${pr}15`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
@@ -4489,7 +5153,7 @@ export default function PortalPageRenderer({ portal, api }) {
       {/* WCAG P1-5: Skip navigation link */}
       <a href="#vc-main" style={{ position:'absolute', top:'-100vh', left:16, zIndex:10000, padding:'8px 16px', background:pr, color:'#fff', fontWeight:700, fontSize:14, borderRadius:'0 0 8px 8px', textDecoration:'none', fontFamily:ff }}
         onFocus={e=>e.currentTarget.style.top='0'} onBlur={e=>e.currentTarget.style.top='-100vh'}>Skip to main content</a>
-      <PortalNav portal={portal} theme={theme} currentPage={currentPage} onNav={setCurrentPage} pages={pages}/>
+      <PortalNav portal={portal} theme={theme} currentPage={currentPage} onNav={setCurrentPage} pages={pages} portalSession={portalSession} onLogout={onLogout}/>
 
       {/* Hub page — renders CandidateHubWidget inside the portal layout */}
       <main id="vc-main" tabIndex={-1} style={{outline:'none'}}>
@@ -4498,7 +5162,7 @@ export default function PortalPageRenderer({ portal, api }) {
           <CandidateHubWidget cfg={portal.hub||{}} theme={theme} portal={portal} api={api}/>
         </div>
       ) : (
-        (currentPage?.rows||[]).map(row => <PortalRow key={row.id} row={row} theme={theme} portal={portal} api={api} track={track}/>)
+        (currentPage?.rows||[]).map(row => <PortalRow key={row.id} row={row} theme={theme} portal={portal} api={api} track={track} portalSession={portalSession} pages={pages} onNav={setCurrentPage}/>)
       )}
       </main>
 

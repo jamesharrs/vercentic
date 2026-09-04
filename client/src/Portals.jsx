@@ -521,6 +521,18 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
   const [tab, setTab] = useState("branding");
   const [showDomainSetup, setShowDomainSetup] = useState(false);
   const [wizardMode, setWizardMode] = useState("pages"); // "pages" (WizardBuilder) | "chatbot" (ChatbotFlowConfig)
+  const [hmSavedViews, setHmSavedViews] = useState([]);
+  const [hmViewsLoading, setHmViewsLoading] = useState(false);
+  useEffect(() => {
+    if (portal.type !== "hm_portal" || !portal.environment_id) return;
+    let cancelled = false;
+    setHmViewsLoading(true);
+    apiProp.get(`/saved-views?environment_id=${portal.environment_id}`)
+      .then(views => { if (!cancelled) setHmSavedViews(Array.isArray(views) ? views : []); })
+      .catch(() => { if (!cancelled) setHmSavedViews([]); })
+      .finally(() => { if (!cancelled) setHmViewsLoading(false); });
+    return () => { cancelled = true; };
+  }, [portal.type, portal.environment_id]);
   const gdpr = portal.gdpr || {};
   const br = portal.branding || {};
   const setG = (k,v) => onChange({ ...portal, gdpr: { ...gdpr, [k]: v } });
@@ -550,6 +562,7 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
             {[
               ["branding","palette","Branding"],
               ["access","shield","Access"],
+              ...(portal.type==="hm_portal"?[["hm","users2","HM Setup"]]:[]),
               ["domain","link","Domain & Embed"],
               ["gdpr","lock","GDPR"],
               ["eo","users","Equal Opps"],
@@ -643,6 +656,32 @@ const PortalSettingsDrawer = ({ portal, onChange, onClose, api: apiProp }) => {
               placeholder="e.g. recruiter, hiring_manager" style={inp}/>
             <div style={{fontSize:11,color:C.text3}}>Comma-separated role slugs. Leave empty to allow any authenticated user.</div>
           </>}
+        </>}
+        {tab==="hm"&&<>
+          {lbl("Shortlist — saved view")}
+          <div style={{fontSize:12,color:C.text3,marginTop:-2,marginBottom:2,lineHeight:1.5}}>
+            Pick a Saved View on the People object to define which candidates show up on a hiring manager's "Shortlist" tab.
+            Leave blank to show everyone across the hiring manager's own pipelines by default.
+          </div>
+          {hmViewsLoading
+            ? <div style={{fontSize:12,color:C.text3,padding:"8px 0"}}>Loading saved views…</div>
+            : (
+              <select value={portal.hm_shortlist_saved_view_id||""} onChange={e=>onChange({...portal,hm_shortlist_saved_view_id:e.target.value||null})} style={inp}>
+                <option value="">— No saved view (show everyone) —</option>
+                {hmSavedViews.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            )}
+          {(!hmViewsLoading && hmSavedViews.length===0) && (
+            <div style={{fontSize:11,color:C.text3,marginTop:2}}>No saved views found for this environment yet. Create one from the People list view, then come back here to select it.</div>
+          )}
+          {portal.hm_shortlist_saved_view_id && (
+            <div style={{marginTop:2,display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,background:C.accentLight,border:`1px solid ${C.accent}33`}}>
+              <Ic n="check" s={13} c={C.accent}/>
+              <span style={{fontSize:12,color:C.text1}}>
+                Using <strong>{hmSavedViews.find(v=>v.id===portal.hm_shortlist_saved_view_id)?.name || "this view"}</strong> to build the Shortlist.
+              </span>
+            </div>
+          )}
         </>}
         {tab==="domain"&&<>
           {lbl("Portal URL")}
@@ -1782,6 +1821,17 @@ const HM_CTA_OPTIONS = [
   { action:'approve_offer',      label:'Approve Offer' },
   { action:'reject',             label:'Reject' },
   { action:'view_profile',       label:'View Profile' },
+  { action:'view_pipeline',      label:'View Pipeline' },
+];
+
+// Dashboard-style shortcuts — a curated HM-scoped feed instead of a raw object+list.
+// Picking one sets cfg.data_source and clears object_id/list_id (and vice versa).
+const HM_DATA_SOURCES = [
+  { value:'',              label:'Custom (pick an object + list)' },
+  { value:'hm_my_jobs',     label:'My Open Roles' },
+  { value:'hm_shortlist',   label:'Shortlist Candidates' },
+  { value:'hm_interviews',  label:'Upcoming Interviews' },
+  { value:'hm_onboarding',  label:'Onboarding' },
 ];
 
 // ── ReportWidgetConfig ────────────────────────────────────────────────────────
@@ -2143,7 +2193,9 @@ const ChatbotFlowConfig = ({ portal, onChange }) => {
   );
 };
 
-const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
+const HIDDEN_DRILLDOWN_KEYS = ["id", "created_at", "updated_at", "deleted_at", "object_id", "environment_id"];
+
+const HMWidgetConfig = ({ cfg, set, setMany, environmentId, pages }) => {
   const [objects,    setObjects]    = useState([]);
   const [savedLists, setSavedLists] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -2168,6 +2220,43 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
       .finally(() => setLoadingLists(false));
   }, [cfg.object_id, objects, environmentId]);
 
+  // Determine what kind of record this widget's rows represent, so we know whether
+  // (and which object's fields) to offer for the drill-down detail view.
+  const drilldownRecordType = (() => {
+    if (cfg.data_source === 'hm_my_jobs') return 'job';
+    if (cfg.data_source === 'hm_shortlist' || cfg.data_source === 'hm_onboarding') return 'candidate';
+    if (cfg.data_source === 'hm_interviews') return null; // interview rows aren't a single People/Jobs record
+    if (!cfg.data_source && cfg.object_id) {
+      const obj = objects.find(o => o.id === cfg.object_id);
+      if (obj?.slug === 'people') return 'candidate';
+      if (obj?.slug === 'jobs') return 'job';
+    }
+    return null;
+  })();
+
+  const [drilldownFields, setDrilldownFields] = useState([]);
+  useEffect(() => {
+    if (!drilldownRecordType || !environmentId) { setDrilldownFields([]); return; }
+    const slug = drilldownRecordType === 'candidate' ? 'people' : 'jobs';
+    const obj = objects.find(o => o.slug === slug);
+    if (!obj) { setDrilldownFields([]); return; }
+    api.get(`/fields?object_id=${obj.id}`)
+      .then(d => setDrilldownFields(Array.isArray(d) ? d : []))
+      .catch(() => setDrilldownFields([]));
+  }, [drilldownRecordType, objects, environmentId]);
+
+  const drilldownAvailableFields = drilldownFields.filter(f => !HIDDEN_DRILLDOWN_KEYS.includes(f.api_key));
+  const drilldownSelectedKeys = (cfg.drilldown_fields && cfg.drilldown_fields.length)
+    ? cfg.drilldown_fields
+    : drilldownAvailableFields.map(f => f.api_key);
+  const toggleDrilldownField = (apiKey) => {
+    const next = drilldownSelectedKeys.includes(apiKey)
+      ? drilldownSelectedKeys.filter(k => k !== apiKey)
+      : [...drilldownSelectedKeys, apiKey];
+    set('drilldown_fields', next);
+  };
+  const drilldownShowFiles = cfg.drilldown_show_files !== false;
+
   const accentColor = cfg.accent_color || C.accent;
 
   return (
@@ -2191,7 +2280,24 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
         </div>
       </div>
 
-      {/* Step 1: Object type */}
+      {/* Data source — either a curated HM-scoped feed, or a custom object + list */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+          Data Source
+        </div>
+        <select value={cfg.data_source||''} onChange={e=>setMany({data_source:e.target.value||undefined, object_id:'', list_id:''})}
+          style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:F,outline:'none',background:C.surface}}>
+          {HM_DATA_SOURCES.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        {cfg.data_source && (
+          <div style={{fontSize:11,color:C.text3,marginTop:4}}>
+            This is a built-in Hiring Manager feed — it's scoped to the signed-in manager automatically, so there's no object or list to pick.
+          </div>
+        )}
+      </div>
+
+      {/* Step 1: Object type — only for a custom (non-shortcut) data source */}
+      {!cfg.data_source && (
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
           1 · Object Type
@@ -2202,9 +2308,10 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
           {objects.map(o=><option key={o.id} value={o.id}>{o.plural_name||o.name}</option>)}
         </select>
       </div>
+      )}
 
       {/* Step 2: Saved list (only when object is selected) */}
-      {cfg.object_id && (
+      {!cfg.data_source && cfg.object_id && (
         <div>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
             2 · Saved List (optional — blank shows all records)
@@ -2229,7 +2336,7 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Display Mode</div>
         <div style={{display:'flex',gap:8}}>
-          {['card','table','kanban'].map(m=>(
+          {['card','table','kanban','stats'].map(m=>(
             <button key={m} onClick={()=>set('display_mode',m)} style={{
               flex:1,padding:'8px 0',borderRadius:9,cursor:'pointer',fontFamily:F,
               border:`1.5px solid ${(cfg.display_mode||'card')===m?accentColor:C.border}`,
@@ -2251,28 +2358,126 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId }) => {
         </div>
       )}
 
+      {/* Stat tile drill-down targets — where each number takes the manager when they click it */}
+      {cfg.display_mode==='stats'&&(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+            Tile Click-through
+          </div>
+          <div style={{fontSize:11,color:C.text3,marginBottom:8}}>Choose which page each stat opens. Leave blank to keep a tile static.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {[
+              {key:'pipeline',   label:'In Pipeline'},
+              {key:'interviews', label:'Upcoming Interviews'},
+              {key:'offers',     label:'Pending Offers'},
+            ].map(t=>(
+              <div key={t.key} style={{display:'grid',gridTemplateColumns:'1fr 1.3fr',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:12,color:C.text2,fontWeight:600}}>{t.label}</span>
+                <select value={(cfg.stat_tile_targets||{})[t.key]||''}
+                  onChange={e=>set('stat_tile_targets',{...(cfg.stat_tile_targets||{}),[t.key]:e.target.value||undefined})}
+                  style={{padding:'6px 10px',borderRadius:7,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:'none',background:C.surface}}>
+                  <option value=''>— No link (static) —</option>
+                  {(pages||[]).map(p=><option key={p.id} value={p.slug}>{p.name}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* CTA Actions */}
       <div>
         <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>CTA Actions</div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-          {HM_CTA_OPTIONS.map(opt=>{
-            const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
-            return (
-              <button key={opt.action} onClick={()=>{
-                const btns=active
-                  ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
-                  :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
-                set('cta_buttons',btns);
-              }} style={{
-                padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
-                border:`1.5px solid ${active?accentColor:C.border}`,
-                background:active?`${accentColor}14`:C.surface,
-                color:active?accentColor:C.text2,
-                fontSize:12,fontWeight:600,transition:'all .12s'
-              }}>{active?'✓ ':''}{opt.label}</button>
-            );
-          })}
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {HM_CTA_OPTIONS.map(opt=>{
+              const active=(cfg.cta_buttons||[]).some(b=>b.action===opt.action);
+              return (
+                <button key={opt.action} onClick={()=>{
+                  const btns=active
+                    ?(cfg.cta_buttons||[]).filter(b=>b.action!==opt.action)
+                    :[...(cfg.cta_buttons||[]),{action:opt.action,label:opt.label,color:''}];
+                  set('cta_buttons',btns);
+                }} style={{
+                  padding:'6px 12px',borderRadius:8,cursor:'pointer',fontFamily:F,
+                  border:`1.5px solid ${active?accentColor:C.border}`,
+                  background:active?`${accentColor}14`:C.surface,
+                  color:active?accentColor:C.text2,
+                  fontSize:12,fontWeight:600,transition:'all .12s'
+                }}>{active?'✓ ':''}{opt.label}</button>
+              );
+            })}
+          </div>
+          {/* "View Pipeline" needs a target page — show a picker inline once it's toggled on */}
+          {(cfg.cta_buttons||[]).some(b=>b.action==='view_pipeline')&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:`${accentColor}0a`,border:`1px dashed ${accentColor}44`}}>
+              <span style={{fontSize:11,color:C.text3,fontWeight:600,whiteSpace:'nowrap'}}>→ Goes to page</span>
+              <select value={cfg.view_pipeline_target||''} onChange={e=>set('view_pipeline_target',e.target.value||undefined)}
+                style={{flex:1,padding:'5px 8px',borderRadius:6,border:`1.5px solid ${C.border}`,fontSize:12,fontFamily:F,outline:'none',background:C.surface}}>
+                <option value=''>— Default (Shortlist) —</option>
+                {(pages||[]).map(p=><option key={p.id} value={p.slug}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Drill Down — clicking a row opens a read-only detail view; admin picks the fields/files shown */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Drill Down</div>
+        {!drilldownRecordType ? (
+          <div style={{fontSize:11,color:C.text3,padding:'8px 10px',borderRadius:8,background:C.surface2,border:`1px dashed ${C.border}`}}>
+            {cfg.data_source === 'hm_interviews'
+              ? "This feed lists interviews, not a single People/Jobs record, so there's no detail view to configure."
+              : 'Pick a data source above (or a custom People/Jobs object) to enable a detail view.'}
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderRadius:9,border:`1.5px solid ${C.border}`,background:C.surface}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Open a {drilldownRecordType==='candidate'?'Talent Profile':'Job Detail'} on click</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2}}>Clicking a {drilldownRecordType==='candidate'?'candidate':'role'} opens a read-only detail view with the fields and files you choose below</div>
+              </div>
+              <button onClick={()=>set('drilldown_enabled', !(cfg.drilldown_enabled!==false))} style={{width:36,height:20,borderRadius:10,border:'none',background:(cfg.drilldown_enabled!==false)?accentColor:'#D1D5DB',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+                <div style={{width:16,height:16,borderRadius:'50%',background:'white',position:'absolute',top:2,left:(cfg.drilldown_enabled!==false)?18:2,transition:'left .2s'}}/>
+              </button>
+            </div>
+
+            {(cfg.drilldown_enabled!==false) && (
+              <>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:8,background:C.surface2}}>
+                  <span style={{fontSize:12,color:C.text2,fontWeight:600}}>Show file attachments</span>
+                  <button onClick={()=>set('drilldown_show_files', !drilldownShowFiles)} style={{width:32,height:18,borderRadius:9,border:'none',background:drilldownShowFiles?accentColor:'#D1D5DB',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+                    <div style={{width:14,height:14,borderRadius:'50%',background:'white',position:'absolute',top:2,left:drilldownShowFiles?16:2,transition:'left .2s'}}/>
+                  </button>
+                </div>
+
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>
+                    Fields shown in detail view
+                  </div>
+                  {drilldownAvailableFields.length===0 && (
+                    <div style={{fontSize:11,color:C.text3}}>Loading fields…</div>
+                  )}
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {drilldownAvailableFields.map(f=>{
+                      const active = drilldownSelectedKeys.includes(f.api_key);
+                      return (
+                        <button key={f.api_key} type="button" onClick={()=>toggleDrilldownField(f.api_key)}
+                          style={{
+                            padding:'5px 10px',borderRadius:99,fontSize:11.5,fontWeight:600,fontFamily:F,cursor:'pointer',
+                            border:`1.5px solid ${active?accentColor:C.border}`,
+                            background:active?`${accentColor}14`:C.surface,
+                            color:active?accentColor:C.text3,
+                          }}>{f.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Empty state */}
@@ -2424,7 +2629,7 @@ Output ONLY valid HTML — no markdown fences, no explanation.`;
   );
 };
 
-const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
+const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId, pages }) => {
   // Keep local cfg state so sequential set() calls accumulate rather than overwrite each other
   const [localCfg, setLocalCfg] = useState(cell.widgetConfig || {});
   const localCfgRef = useRef(localCfg);
@@ -2599,7 +2804,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
         <ListWidgetConfig cfg={cfg} set={set} setMany={setMany} inp={inp} lbl={lbl} environmentId={environmentId} cellId={cell.id} defaultSlug="people"/>
       );
       case "hm_widget": return (
-        <HMWidgetConfig cfg={cfg} set={set} setMany={setMany} environmentId={environmentId}/>
+        <HMWidgetConfig cfg={cfg} set={set} setMany={setMany} environmentId={environmentId} pages={pages}/>
       );
       case "report_widget": return (
         <ReportWidgetConfig cfg={cfg} set={set} environmentId={environmentId}/>
@@ -3006,7 +3211,7 @@ const WidgetConfigPanel = ({ cell, onUpdate, onClose, environmentId }) => {
 };
 
 // ─── Widget Cell ──────────────────────────────────────────────────────────────
-const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environmentId }) => {
+const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environmentId, pages }) => {
   const [showPicker, setShowPicker] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -3071,7 +3276,7 @@ const WidgetCell = ({ cell, flex, onUpdate, onRemove, theme, isEditing, environm
         onSelect={type=>{onUpdate({...cell,widgetType:type,widgetConfig:{}});setShowPicker(false);setShowConfig(true);}}
         onClose={()=>setShowPicker(false)}/>}
       {showConfig&&cell.widgetType&&<WidgetConfigPanel
-        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)} environmentId={environmentId}/>}
+        cell={cell} onUpdate={u=>onUpdate(u)} onClose={()=>setShowConfig(false)} environmentId={environmentId} pages={pages}/>}
     </div>
   );
 };
@@ -3323,7 +3528,7 @@ const RowSettings = ({ row, onChange, onClose }) => {
 
 
 // ─── Canvas Row ───────────────────────────────────────────────────────────────
-const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop, environmentId }) => {
+const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, onDuplicate, theme, isEditing, dragTarget, onDragStart, onDragOver, onDrop, environmentId, pages }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [hovered, setHovered] = useState(false);
   const padMap = {none:"0px",sm:"24px",md:"56px",lg:"96px",xl:"140px"};
@@ -3369,7 +3574,7 @@ const CanvasRow = ({ row, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
           {row.cells.map((cell,ci)=>(
             <WidgetCell key={cell.id} cell={cell} flex={cellFlex(ci)}
               onUpdate={u=>updateCell(ci,u)} onRemove={()=>removeWidget(ci)}
-              theme={theme} isEditing={isEditing} environmentId={environmentId}/>
+              theme={theme} isEditing={isEditing} environmentId={environmentId} pages={pages}/>
           ))}
         </div>
       </div>
@@ -3446,7 +3651,7 @@ const AddRowBar = ({ onAdd }) => {
 };
 
 // ─── Canvas ───────────────────────────────────────────────────────────────────
-const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
+const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId, pages }) => {
   const [dragFrom, setDragFrom] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const safeRows = page?.rows || [];
@@ -3499,7 +3704,7 @@ const PortalCanvas = ({ page, onUpdate, theme, isEditing, environmentId }) => {
             theme={theme} isEditing={isEditing}
             dragTarget={dragTarget===i}
             onDragStart={setDragFrom} onDragOver={setDragTarget} onDrop={handleDrop}
-            environmentId={environmentId}/>
+            environmentId={environmentId} pages={pages}/>
         </div>
       ))}
       {isEditing&&<AddRowBar onAdd={preset=>addRow(preset,safeRows.length-1)}/>}
@@ -4941,7 +5146,7 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
             theme={portal.theme}
             onChange={nav=>setPortal(p=>({...p,nav}))}
             isEditing={isEditing}/>
-          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id}/>
+          <PortalCanvas page={page} onUpdate={updatePage} theme={portal.theme} isEditing={isEditing} environmentId={portal.environment_id} pages={portal.pages}/>
           <InlineFooter
             footer={portal.footer||defaultFooter()}
             theme={portal.theme}
