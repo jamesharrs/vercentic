@@ -198,7 +198,8 @@ Rules: use {api_key} curly-brace syntax. Return one expression only.`,
 }
 
 // ── FormulaInput — expression input with field picker + AI button ─────────────
-function FormulaInput({ value, onChange, fields, placeholder, formulaName, onNameChange, onRemove }) {
+function FormulaInput({ value, onChange, fields: fieldsProp, placeholder, formulaName, onNameChange, onRemove }) {
+  const fields = (fieldsProp||[]).filter(f => f.field_type !== 'section_separator');
   const [showPicker, setShowPicker] = useState(false);
   const [showAI,     setShowAI]     = useState(false);
   const [search,     setSearch]     = useState("");
@@ -375,7 +376,8 @@ function ResultRow({ row, cols, groupBy, chartX, onFilter }) {
 
 // ── Main Reports component ────────────────────────────────────────────────────
 // ── ColumnMultiPicker — compact multi-select for report columns ───────────────
-function ColumnMultiPicker({ fields, selCols, setSelCols }) {
+function ColumnMultiPicker({ fields: fieldsProp, selCols, setSelCols }) {
+  const fields = fieldsProp.filter(f => f.field_type !== 'section_separator');
   const [open,   setOpen]   = useState(false);
   const [search, setSearch] = useState("");
   const ref    = useRef(null);
@@ -507,7 +509,8 @@ function ColumnMultiPicker({ fields, selCols, setSelCols }) {
 }
 
 // ── AxisPicker — friendly labeled dropdown for chart X/Y axis ────────────────
-function AxisPicker({ label, value, onChange, resultCols, fields, formulas }) {
+function AxisPicker({ label, value, onChange, resultCols, fields: fieldsProp, formulas }) {
+  const fields = (fieldsProp||[]).filter(f => f.field_type !== 'section_separator');
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -812,7 +815,7 @@ export default function Reports({ environment, initialReport }) {
   useEffect(() => {
     if (!selObject) return;
     api.get(`/fields?object_id=${selObject}`).then(d => {
-      const f = Array.isArray(d)?d:[];
+      const f = (Array.isArray(d)?d:[]).filter(x => x.field_type !== 'section_separator');
       setFields(f);
       if (!skipReset.current) {
         setSelCols(f.filter(x=>x.show_in_list).map(x=>x.id));

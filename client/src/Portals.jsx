@@ -2245,7 +2245,7 @@ const HMWidgetConfig = ({ cfg, set, setMany, environmentId, pages }) => {
       .catch(() => setDrilldownFields([]));
   }, [drilldownRecordType, objects, environmentId]);
 
-  const drilldownAvailableFields = drilldownFields.filter(f => !HIDDEN_DRILLDOWN_KEYS.includes(f.api_key));
+  const drilldownAvailableFields = drilldownFields.filter(f => !HIDDEN_DRILLDOWN_KEYS.includes(f.api_key) && f.field_type !== 'section_separator');
   const drilldownSelectedKeys = (cfg.drilldown_fields && cfg.drilldown_fields.length)
     ? cfg.drilldown_fields
     : drilldownAvailableFields.map(f => f.api_key);
