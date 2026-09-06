@@ -68,8 +68,13 @@ function findChannel(platform, externalWorkspaceId) {
 
 function resolveIdentity(platform, externalUserId) {
   ensureCollections();
-  const link = findOne('chat_bot_identity_links', l => l.platform === platform && l.external_user_id === externalUserId);
-  if (!link) return null;
+  // Prefer a LINKED record if one exists — multiple rows can pile up for the
+  // same external user (one per unrecognized message before they linked), and
+  // findOne() would otherwise return whichever unlinked one happens to sit
+  // first, even after a later row was successfully linked.
+  const links = query('chat_bot_identity_links', l => l.platform === platform && l.external_user_id === externalUserId);
+  const link = links.find(l => l.vercentic_user_id) || links[0];
+  if (!link || !link.vercentic_user_id) return null;
   const user = findOne('users', u => u.id === link.vercentic_user_id && u.status !== 'deactivated');
   if (!user) return null;
   const role = findOne('roles', r => r.id === user.role_id);
@@ -78,6 +83,10 @@ function resolveIdentity(platform, externalUserId) {
 
 function generateLinkCode(environmentId, platform, externalUserId, externalUserName) {
   ensureCollections();
+  // Reuse an existing pending (unlinked) code for this user instead of
+  // spawning a new row on every unrecognized message.
+  const existing = findOne('chat_bot_identity_links', l => l.platform === platform && l.external_user_id === externalUserId && !l.vercentic_user_id);
+  if (existing) return existing.link_code;
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   insert('chat_bot_identity_links', {
     id: uuidv4(), environment_id: environmentId, platform,
