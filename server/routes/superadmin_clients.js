@@ -243,6 +243,22 @@ router.get('/debug/chat-bot-webhook-log', (req, res) => {
   res.json(s.chat_bot_webhook_debug || []);
 });
 
+router.get('/debug/identity-links', (req, res) => {
+  const { external_user_id } = req.query;
+  const { listTenants } = require('../db/init');
+  const candidates = ['master', ...(listTenants ? listTenants() : [])];
+  const scan = candidates.map(slug => {
+    const store = getTenantStore(slug === 'master' ? null : slug);
+    let links = store.chat_bot_identity_links || [];
+    if (external_user_id) links = links.filter(l => l.external_user_id === external_user_id);
+    return {
+      tenant: slug,
+      links: links.map(l => ({ id: l.id, platform: l.platform, external_user_id: l.external_user_id, vercentic_user_id: l.vercentic_user_id || null, link_code: l.link_code, linked_at: l.linked_at })),
+    };
+  }).filter(t => t.links.length > 0);
+  res.json({ external_user_id: external_user_id || '(all)', scan });
+});
+
 router.get('/debug/chat-bot-channel', (req, res) => {
   const { platform, workspace_id } = req.query;
   if (!platform || !workspace_id) return res.status(400).json({ error: 'platform and workspace_id required' });
