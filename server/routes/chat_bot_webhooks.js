@@ -102,12 +102,14 @@ router.post('/slack/events', async (req, res) => {
   res.status(200).end(); // Slack requires a response within 3s — ack, then process async
 
   const event = body.event;
-  if (!event || event.bot_id) return;
-  if (!['app_mention', 'message'].includes(event.type)) return;
-  if (event.channel_type && event.channel_type !== 'im' && event.type !== 'app_mention') return;
+  if (!event || event.bot_id) { debugLog({ event: 'dropped_pre_process', reason: !event ? 'no_event' : 'has_bot_id', body_preview: JSON.stringify(body).slice(0,300) }); return; }
+  if (!['app_mention', 'message'].includes(event.type)) { debugLog({ event: 'dropped_pre_process', reason: 'unhandled_event_type', event_type: event.type }); return; }
+  if (event.channel_type && event.channel_type !== 'im' && event.type !== 'app_mention') { debugLog({ event: 'dropped_pre_process', reason: 'wrong_channel_type', channel_type: event.channel_type, event_type: event.type }); return; }
 
   const text = (event.text || '').replace(/<@[^>]+>/g, '').trim();
-  if (!text) return;
+  if (!text) { debugLog({ event: 'dropped_pre_process', reason: 'empty_text_after_strip', raw_text: event.text }); return; }
+
+  debugLog({ event: 'processing', team_id: teamId, tenant: found.tenantSlug, user: event.user, channel: event.channel, text });
 
   try {
     const response = await gateway.handleInboundMessage({
@@ -115,12 +117,17 @@ router.post('/slack/events', async (req, res) => {
       externalUserId: event.user, externalUserName: null,
       conversationId: event.channel, text,
     });
-    await fetch('https://slack.com/api/chat.postMessage', {
+    debugLog({ event: 'gateway_response', response_text: response?.text, response_blocks: !!response?.blocks });
+
+    const slackResp = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { Authorization: `Bearer ${decryptWithChannelKey(found.channel.bot_token)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel: event.channel, text: response.text, blocks: response.blocks }),
     });
+    const slackData = await slackResp.json();
+    debugLog({ event: 'slack_reply_attempt', slack_ok: slackData.ok, slack_error: slackData.error || null, http_status: slackResp.status });
   } catch (err) {
+    debugLog({ event: 'exception', error: err.message, stack: err.stack?.slice(0, 400) });
     console.error('[ChatBot/Slack] handling error:', err.message);
   }
 });
