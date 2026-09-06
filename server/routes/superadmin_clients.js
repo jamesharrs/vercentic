@@ -222,6 +222,22 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 // TEMPORARY diagnostic — mirrors chat_bot_gateway.js's findChannel() exactly,
 // but returns *why* it did/didn't match instead of just true/false. Never
 // returns secrets. Remove once the Slack connectivity issue is resolved.
+function _debugDecrypt(encoded) {
+  if (!encoded || !encoded.includes(':')) return { ok: false, reason: 'not colon-delimited', raw_length: encoded ? encoded.length : 0 };
+  const ENC_KEY = process.env.INTEGRATION_SECRET
+    ? Buffer.from(process.env.INTEGRATION_SECRET.padEnd(32).slice(0, 32))
+    : crypto.scryptSync('vercentic-dev-only-fallback-key-' + (process.env.NODE_ENV || 'dev'), 'vercentic-salt', 32);
+  try {
+    const [ivHex, tagHex, encHex] = encoded.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const plain = decipher.update(Buffer.from(encHex, 'hex')) + decipher.final('utf8');
+    return { ok: true, length: plain.length, masked: plain.length > 8 ? `${plain.slice(0,4)}...${plain.slice(-4)}` : '(too short to mask)', using_integration_secret: !!process.env.INTEGRATION_SECRET };
+  } catch (e) {
+    return { ok: false, reason: e.message, using_integration_secret: !!process.env.INTEGRATION_SECRET };
+  }
+}
+
 router.get('/debug/chat-bot-channel', (req, res) => {
   const { platform, workspace_id } = req.query;
   if (!platform || !workspace_id) return res.status(400).json({ error: 'platform and workspace_id required' });
@@ -243,9 +259,10 @@ router.get('/debug/chat-bot-channel', (req, res) => {
         bot_token_present: !!c.bot_token,
       })),
       exact_match_found: !!exactMatch,
+      decrypted_secret_check: exactMatch ? _debugDecrypt(exactMatch.signing_secret) : null,
     };
   });
-  res.json({ platform, workspace_id, tenant_count_scanned: candidates.length, scan });
+  res.json({ platform, workspace_id, tenant_count_scanned: candidates.length, scan, INTEGRATION_SECRET_set: !!process.env.INTEGRATION_SECRET });
 });
 
 router.get('/', (req, res) => {
