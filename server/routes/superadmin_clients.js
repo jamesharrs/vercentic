@@ -219,6 +219,35 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 }
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+// TEMPORARY diagnostic — mirrors chat_bot_gateway.js's findChannel() exactly,
+// but returns *why* it did/didn't match instead of just true/false. Never
+// returns secrets. Remove once the Slack connectivity issue is resolved.
+router.get('/debug/chat-bot-channel', (req, res) => {
+  const { platform, workspace_id } = req.query;
+  if (!platform || !workspace_id) return res.status(400).json({ error: 'platform and workspace_id required' });
+  const { listTenants } = require('../db/init');
+  const candidates = ['master', ...(listTenants ? listTenants() : [])];
+  const scan = candidates.map(slug => {
+    const store = getTenantStore(slug === 'master' ? null : slug);
+    const channels = store.chat_bot_channels || [];
+    const exactMatch = channels.find(c => c.platform === platform && c.external_workspace_id === workspace_id && c.status === 'connected');
+    const anyForPlatform = channels.filter(c => c.platform === platform);
+    return {
+      tenant: slug,
+      total_channels_any_platform: channels.length,
+      channels_matching_platform: anyForPlatform.map(c => ({
+        external_workspace_id: c.external_workspace_id,
+        status: c.status,
+        signing_secret_present: !!c.signing_secret,
+        signing_secret_length: c.signing_secret ? c.signing_secret.length : 0,
+        bot_token_present: !!c.bot_token,
+      })),
+      exact_match_found: !!exactMatch,
+    };
+  });
+  res.json({ platform, workspace_id, tenant_count_scanned: candidates.length, scan });
+});
+
 router.get('/', (req, res) => {
   const s = getStore(); ensureCollections();
   const clients = (s.clients||[]).filter(c=>!c.deleted_at).map(c => {
