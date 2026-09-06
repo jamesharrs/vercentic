@@ -18,8 +18,24 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const gateway = require('../services/chat_bot_gateway');
-const { update } = require('../db/init');
+const { update, tenantStorage, insert } = require('../db/init');
 const { postToChannel } = require('./chat_bot_channels');
+
+// TEMPORARY diagnostic logger — writes to master tenant regardless of current
+// context, so failures on any tenant's webhook are readable from one place.
+// Remove alongside the debug route in superadmin_clients.js once resolved.
+function debugLog(entry) {
+  try {
+    tenantStorage.run('master', () => {
+      const { getStore, saveStoreNow } = require('../db/init');
+      const s = getStore();
+      if (!s.chat_bot_webhook_debug) s.chat_bot_webhook_debug = [];
+      s.chat_bot_webhook_debug.unshift({ ts: new Date().toISOString(), ...entry });
+      if (s.chat_bot_webhook_debug.length > 50) s.chat_bot_webhook_debug.length = 50;
+      saveStoreNow('master');
+    });
+  } catch (e) { console.error('[debugLog] failed:', e.message); }
+}
 
 // Same encryption scheme as routes/integrations.js / chat_bot_channels.js
 if (process.env.NODE_ENV === 'production' && !process.env.INTEGRATION_SECRET) {
@@ -46,18 +62,24 @@ function decryptWithChannelKey(encoded) {
 function verifySlackSignature(req, signingSecretPlain) {
   const ts = req.headers['x-slack-request-timestamp'];
   const sig = req.headers['x-slack-signature'];
-  if (!ts || !sig || !req.rawBody) return false;
-  if (Math.abs(Date.now() / 1000 - Number(ts)) > 60 * 5) return false;
+  const diag = { ts_present: !!ts, sig_present: !!sig, rawBody_present: !!req.rawBody, rawBody_length: req.rawBody ? req.rawBody.length : 0 };
+  if (!ts || !sig || !req.rawBody) { debugLog({ event: 'sig_fail', reason: 'missing_ts_sig_or_rawbody', ...diag }); return false; }
+  const skew = Math.abs(Date.now() / 1000 - Number(ts));
+  if (skew > 60 * 5) { debugLog({ event: 'sig_fail', reason: 'timestamp_skew', skew_seconds: skew, ...diag }); return false; }
   const base = `v0:${ts}:${req.rawBody.toString('utf8')}`;
   const hmac = 'v0=' + crypto.createHmac('sha256', signingSecretPlain).update(base).digest('hex');
-  try { return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(sig)); } catch { return false; }
+  let match = false;
+  try { match = crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(sig)); } catch (e) { debugLog({ event: 'sig_fail', reason: 'timingSafeEqual_threw', error: e.message, computed_sig: hmac.slice(0,14)+'...', received_sig: sig.slice(0,14)+'...', ...diag }); return false; }
+  if (!match) debugLog({ event: 'sig_fail', reason: 'mismatch', computed_sig: hmac.slice(0,14)+'...', received_sig: sig.slice(0,14)+'...', body_preview: req.rawBody.toString('utf8').slice(0,80), skew_seconds: skew, ...diag });
+  return match;
 }
 
 function findSlackChannelAndVerify(req, teamId) {
   const found = gateway.findChannel('slack', teamId);
-  if (!found) return null;
+  if (!found) { debugLog({ event: 'channel_not_found', team_id: teamId }); return null; }
   const secret = decryptWithChannelKey(found.channel.signing_secret);
-  if (!secret || !verifySlackSignature(req, secret)) return null;
+  if (!secret) { debugLog({ event: 'secret_decrypt_failed', team_id: teamId, tenant: found.tenantSlug }); return null; }
+  if (!verifySlackSignature(req, secret)) return null;
   return found;
 }
 

@@ -238,6 +238,11 @@ function _debugDecrypt(encoded) {
   }
 }
 
+router.get('/debug/chat-bot-webhook-log', (req, res) => {
+  const s = getStore();
+  res.json(s.chat_bot_webhook_debug || []);
+});
+
 router.get('/debug/chat-bot-channel', (req, res) => {
   const { platform, workspace_id } = req.query;
   if (!platform || !workspace_id) return res.status(400).json({ error: 'platform and workspace_id required' });
