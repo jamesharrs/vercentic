@@ -59,20 +59,26 @@ export default function AvailabilityPicker() {
   if (status === "error" || !req) return <Screen><StatusCard icon="⚠️" title="Not found" sub="This link is invalid or has already been used." color="#6b7280"/></Screen>;
 
   const isHM = req.type === "hiring_manager";
-  const accent = "#7c3aed";
+  const brand = req.brand;
+  const accent = brand?.primary_color || "#7c3aed";
 
   return (
     <Screen>
       <div style={{ maxWidth:560, width:"100%", margin:"0 auto", padding:"0 16px" }}>
         {/* Header */}
         <div style={{ textAlign:"center", marginBottom:32 }}>
-          <div style={{ width:56, height:56, borderRadius:16, background:`${accent}18`,
-            display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </div>
+          {brand?.logo_url ? (
+            <img src={brand.logo_url} alt={brand.company_name||""} style={{ height:40, maxWidth:160, objectFit:"contain", margin:"0 auto 16px", display:"block" }}/>
+          ) : (
+            <div style={{ width:56, height:56, borderRadius:16, background:`${accent}18`,
+              display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+          )}
+          {brand?.company_name && <div style={{ fontSize:12, fontWeight:700, color:accent, marginBottom:6, fontFamily:F }}>{brand.company_name}</div>}
           <h1 style={{ margin:"0 0 8px", fontSize:22, fontWeight:800, color:"#111827", fontFamily:F }}>
             {isHM ? "Your interview availability" : "Select your availability"}
           </h1>

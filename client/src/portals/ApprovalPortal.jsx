@@ -14,6 +14,11 @@ const PATHS = {
   arrow:   "M5 12h14M12 5l7 7-7 7",
   info:    "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-6v-4m0-4h.01",
   warning: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01",
+  briefcase: "M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM8 7V5h8v2",
+  pin:     "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 13a3 3 0 100-6 3 3 0 000 6z",
+  dollar:  "M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",
+  user:    "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z",
+  file:    "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
 };
 function Ic({ n, s=18, c="currentColor" }) {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={PATHS[n]}/></svg>;
@@ -103,18 +108,28 @@ export default function ApprovalPortal() {
     </div>
   );
 
-  const { approval, approver, chain } = data;
+  const { approval, approver, chain, content, brand } = data;
   const approvedCount = chain.filter(a=>a.status==="approved").length;
   const declinedCount = chain.filter(a=>a.status==="declined").length;
   const progress = Math.round((approvedCount/chain.length)*100);
+  // Client's brand kit if one's set as default for this environment — falls
+  // back to Vercentic's own look when there isn't one, never a broken half-state.
+  const primary  = brand?.primary_color || "#4361EE";
+  const pageFont = brand?.font_family ? `'${brand.font_family.replace(/['"]/g,'').split(',')[0].trim()}', 'Geist','Inter',-apple-system,sans-serif` : "'Geist','Inter',-apple-system,sans-serif";
 
   return (
-    <div style={page}>
+    <div style={{...page, fontFamily:pageFont}}>
       {/* Header */}
       <div style={{background:"white",borderBottom:"1px solid #e8ecf8",padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:8,background:"#0f1729",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:"white"}}>V</div>
-          <span style={{fontSize:16,fontWeight:800,color:"#0f1729",letterSpacing:"-0.3px"}}>Vercentic</span>
+          {brand?.logo_url ? (
+            <img src={brand.logo_url} alt={brand.company_name||""} style={{height:28,maxWidth:140,objectFit:"contain"}}/>
+          ) : (
+            <>
+              <div style={{width:32,height:32,borderRadius:8,background:"#0f1729",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:"white"}}>V</div>
+              <span style={{fontSize:16,fontWeight:800,color:"#0f1729",letterSpacing:"-0.3px"}}>Vercentic</span>
+            </>
+          )}
         </div>
         <div style={{fontSize:13,color:"#94a3b8"}}>Approval Portal</div>
       </div>
@@ -149,6 +164,61 @@ export default function ApprovalPortal() {
           </div>
         </div>
 
+        {/* What's being approved — curated job/candidate content */}
+        {content?.job && (
+          <div style={card}>
+            <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
+              <Ic n="briefcase" s={12} c="#94a3b8"/>Job Details
+            </div>
+            <div style={{fontSize:19,fontWeight:800,color:"#0f1729",marginBottom:8}}>{content.job.job_title || "Untitled role"}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:content.job.description?16:0}}>
+              {content.job.department && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#eef2ff",color:"#4338ca",fontSize:12,fontWeight:600}}>{content.job.department}</span>}
+              {content.job.location && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569",fontSize:12,fontWeight:600}}><Ic n="pin" s={11} c="#64748b"/>{content.job.location}</span>}
+              {content.job.work_type && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569",fontSize:12,fontWeight:600}}>{content.job.work_type}</span>}
+              {content.job.employment_type && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569",fontSize:12,fontWeight:600}}>{content.job.employment_type}</span>}
+              {(content.job.salary_min||content.job.salary_max) && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f0fdf4",color:"#16a34a",fontSize:12,fontWeight:600}}><Ic n="dollar" s={11} c="#16a34a"/>{[content.job.salary_min,content.job.salary_max].filter(Boolean).map(n=>Number(n).toLocaleString()).join(" – ")}{content.job.currency?` ${content.job.currency}`:""}</span>}
+            </div>
+            {content.job.description && (
+              <div style={{fontSize:14,color:"#334155",lineHeight:1.7,paddingTop:14,borderTop:"1px solid #eef2f8"}}
+                dangerouslySetInnerHTML={{__html:content.job.description}}/>
+            )}
+          </div>
+        )}
+
+        {content?.person && (
+          <div style={card}>
+            <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
+              <Ic n="user" s={12} c="#94a3b8"/>Candidate
+            </div>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:"#0f1729"}}>{content.person.name || "Unnamed candidate"}</div>
+                {content.person.current_title && <div style={{fontSize:13,color:"#64748b",marginTop:2}}>{content.person.current_title}</div>}
+              </div>
+              {content.cv && (
+                <a href={`${API_BASE}${content.cv.url}`} target="_blank" rel="noreferrer"
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:9,background:"#eef2ff",color:"#4338ca",fontSize:12,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                  <Ic n="file" s={13} c="#4338ca"/>View CV
+                </a>
+              )}
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+              {content.person.location && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569",fontSize:12,fontWeight:600}}><Ic n="pin" s={11} c="#64748b"/>{content.person.location}</span>}
+              {content.person.years_experience!=null && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569",fontSize:12,fontWeight:600}}>{content.person.years_experience} yrs experience</span>}
+            </div>
+            {content.person.skills?.length>0 && (
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
+                {content.person.skills.map((s,i)=>(
+                  <span key={i} style={{padding:"3px 9px",borderRadius:6,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",fontSize:11,fontWeight:600}}>{s}</span>
+                ))}
+              </div>
+            )}
+            {content.person.summary && (
+              <div style={{fontSize:13,color:"#475569",lineHeight:1.65,marginTop:14,paddingTop:14,borderTop:"1px solid #eef2f8"}}>{content.person.summary}</div>
+            )}
+          </div>
+        )}
+
         {/* Chain */}
         <div style={card}>
           <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:16}}>Approval Chain</div>
@@ -156,7 +226,7 @@ export default function ApprovalPortal() {
             const sc = STATUS_COLOR[a.status]||STATUS_COLOR.pending;
             const isThis = a.is_this;
             return <div key={a.id}>
-              <div style={{display:"flex",alignItems:"flex-start",gap:14,padding:"14px 16px",borderRadius:12,background:isThis?"#f8f7ff":"transparent",border:isThis?"1.5px solid #c4b5fd":"1px solid transparent",marginBottom:4}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:14,padding:"14px 16px",borderRadius:12,background:isThis?`${primary}0d`:"transparent",border:isThis?`1.5px solid ${primary}60`:"1px solid transparent",marginBottom:4}}>
                 <div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:sc.bg,border:`2px solid ${sc.border}`,fontSize:12,fontWeight:800,color:sc.text}}>
                   {a.status==="approved"?<Ic n="check" s={14} c={sc.text}/>:a.status==="declined"?<Ic n="x" s={14} c={sc.text}/>:i+1}
                 </div>
@@ -164,7 +234,7 @@ export default function ApprovalPortal() {
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{fontSize:14,fontWeight:isThis?700:500,color:"#0f1729"}}>{a.name}</span>
                     {a.source_label&&<span style={{fontSize:11,color:"#94a3b8"}}>{a.source_label}</span>}
-                    {isThis&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f3f0ff",padding:"2px 8px",borderRadius:99}}>You</span>}
+                    {isThis&&<span style={{fontSize:11,fontWeight:700,color:primary,background:`${primary}14`,padding:"2px 8px",borderRadius:99}}>You</span>}
                     <StatusBadge status={a.status}/>
                   </div>
                   {a.responded_at&&<div style={{fontSize:12,color:"#94a3b8",marginTop:3}}>{STATUS_LABEL[a.status]} · {new Date(a.responded_at).toLocaleString()}</div>}

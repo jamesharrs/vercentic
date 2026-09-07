@@ -573,7 +573,7 @@ const FormField = ({ field, value, onChange }) => {
 
 // ── Form Response Viewer ──────────────────────────────────────────────────────
 const ResponseViewer = ({ response, form, onDelete }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   return (
     <div style={{borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:open?C.accentLight:C.surface}} onClick={()=>setOpen(o=>!o)}>
@@ -740,6 +740,210 @@ function LinkFormModal({ record, objectSlug, environment, currentUser, existingL
   );
 }
 
+// ── Send Form Modal ────────────────────────────────────────────────────────────
+// Sends a form to one or more people via a unique tokenised link, emailed
+// directly or via an email template. Reused from two places: the "Send"
+// button on a single linked form (form + job context already known — skips
+// straight to the email step), and the People list's bulk "Send Form" action
+// (form still needs picking; job context only offered for a single person,
+// via their linked jobs, same as LinkFormModal's context picker above).
+export function SendFormModal({ people, environment, currentUser, preselectedFormId, preselectedContext, onClose, onSent }) {
+  const [forms, setForms]         = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [jobOptions, setJobOptions] = useState([]);
+  const [formId, setFormId]       = useState(preselectedFormId || '');
+  const [contextRec, setContextRec] = useState(preselectedContext || null);
+  const [step, setStep]           = useState(preselectedFormId ? 1 : 0); // 0=setup 1=email 2=review
+  const [emailMode, setEmailMode] = useState('template');
+  const [templateId, setTemplateId] = useState('');
+  const [subject, setSubject]     = useState('');
+  const [body, setBody]           = useState('');
+  const [expiresDays, setExpiresDays] = useState('14');
+  const [sending, setSending]     = useState(false);
+  const [result, setResult]       = useState(null);
+
+  useEffect(() => {
+    if (!environment?.id) return;
+    api.get(`/forms?environment_id=${environment.id}&object_slug=people`).then(d => setForms(Array.isArray(d) ? d : []));
+    api.get(`/email-templates?environment_id=${environment.id}`).then(d => setTemplates(Array.isArray(d) ? d : []));
+  }, [environment?.id]);
+
+  useEffect(() => {
+    if (preselectedContext || people.length !== 1 || !environment?.id) return;
+    api.get(`/records/linked-jobs?person_id=${people[0].id}&environment_id=${environment.id}`)
+      .then(d => setJobOptions(Array.isArray(d) ? d : []));
+  }, [people, environment?.id, preselectedContext]);
+
+  const form = forms.find(f => f.id === formId) || (preselectedFormId ? { id: preselectedFormId, name: 'Selected form' } : null);
+  const tpl  = templates.find(t => t.id === templateId);
+  const DEFAULT_BODY = "Hi {{first_name}},\n\nPlease complete the following: {{form_name}}.\n\n{{form_link}}\n\nThanks,\n{{sent_by}}";
+
+  const handleSend = async () => {
+    setSending(true);
+    const r = await api.post('/form-sends', {
+      environment_id: environment.id,
+      form_id: formId,
+      record_ids: people.map(p => p.id),
+      context_record_id: contextRec?.id || null,
+      context_record_title: contextRec?.title || null,
+      email: emailMode === 'template' ? { template_id: templateId } : { subject, body: body || DEFAULT_BODY },
+      sent_by: currentUser?.name || currentUser?.email || 'Admin',
+      expires_hours: expiresDays ? parseInt(expiresDays, 10) * 24 : null,
+    });
+    setSending(false);
+    setResult(r);
+  };
+
+  const inp = { width:'100%', boxSizing:'border-box', padding:'9px 12px', borderRadius:9, border:`1.5px solid ${C.border}`, fontSize:13, fontFamily:F, outline:'none', color:C.text1 };
+  const canProceedSetup = !!formId;
+  const canProceedEmail = emailMode === 'template' ? !!templateId : !!subject.trim();
+
+  return createPortal(
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:9500,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <div style={{ background:C.surface, borderRadius:16, width:'100%', maxWidth:540,
+        maxHeight:'85vh', display:'flex', flexDirection:'column',
+        boxShadow:'0 24px 64px rgba(0,0,0,.2)', overflow:'hidden', fontFamily:F }}>
+
+        <div style={{ padding:'16px 20px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text1 }}>Send Form</div>
+            <div style={{ fontSize:12, color:C.text3, marginTop:2 }}>
+              To {people.length === 1 ? people[0].name : `${people.length} people`}
+              {contextRec?.title && <span style={{ color:C.accent }}> · {contextRec.title}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.text3, fontSize:18 }}>×</button>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:20 }}>
+          {result ? (
+            <div style={{ textAlign:'center', padding:'12px 0' }}>
+              <div style={{ width:48, height:48, borderRadius:'50%', background:'#DCFCE7', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
+                <Ic n="check" s={22} c="#16A34A"/>
+              </div>
+              <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginBottom:6 }}>
+                Sent to {result.sent?.length || 0} of {people.length}
+              </div>
+              {result.failed?.length > 0 && (
+                <div style={{ fontSize:12, color:C.red, marginTop:8, textAlign:'left', background:'#FEF2F2', borderRadius:8, padding:'10px 12px' }}>
+                  {result.failed.map((f,i) => <div key={i}>{people.find(p=>p.id===f.record_id)?.name || f.record_id}: {f.reason}</div>)}
+                </div>
+              )}
+            </div>
+          ) : step === 0 ? (
+            <>
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>Form to send</div>
+                <select value={formId} onChange={e=>setFormId(e.target.value)} style={inp}>
+                  <option value="">Select a form…</option>
+                  {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </div>
+              {jobOptions.length > 0 && (
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>Application context (optional)</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                    {jobOptions.map(j => {
+                      const active = contextRec?.id === j.id;
+                      return (
+                        <button key={j.id} onClick={()=>setContextRec(active?null:{id:j.id,title:j.title})}
+                          style={{ padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F,
+                            border:`1.5px solid ${active?C.accent:C.border}`, background:active?C.accentLight:C.surface, color:active?C.accent:C.text2 }}>
+                          {j.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : step === 1 ? (
+            <>
+              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+                {['template','custom'].map(m => (
+                  <button key={m} onClick={()=>setEmailMode(m)}
+                    style={{ flex:1, padding:'8px', borderRadius:9, border:`1.5px solid ${emailMode===m?C.accent:C.border}`,
+                      background:emailMode===m?C.accentLight:C.surface, color:emailMode===m?C.accent:C.text2,
+                      fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                    {m==='template' ? 'Use a template' : 'Write custom'}
+                  </button>
+                ))}
+              </div>
+              {emailMode === 'template' ? (
+                <select value={templateId} onChange={e=>setTemplateId(e.target.value)} style={inp}>
+                  <option value="">Select a template…</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              ) : (
+                <>
+                  <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject" style={{...inp, marginBottom:10}}/>
+                  <textarea value={body} onChange={e=>setBody(e.target.value)} rows={7} placeholder={DEFAULT_BODY} style={{...inp, resize:'vertical'}}/>
+                  <div style={{ fontSize:11, color:C.text3, marginTop:8, lineHeight:1.6 }}>
+                    Merge tags: <code style={{ background:C.surface2, padding:'1px 5px', borderRadius:4 }}>{'{{first_name}}'}</code>{' '}
+                    <code style={{ background:C.surface2, padding:'1px 5px', borderRadius:4 }}>{'{{form_name}}'}</code>{' '}
+                    <code style={{ background:C.surface2, padding:'1px 5px', borderRadius:4 }}>{'{{job_title}}'}</code>{' '}
+                    <code style={{ background:C.surface2, padding:'1px 5px', borderRadius:4 }}>{'{{form_link}}'}</code> (always included even if omitted)
+                  </div>
+                </>
+              )}
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.text3, marginBottom:6 }}>Link expires after</div>
+                <select value={expiresDays} onChange={e=>setExpiresDays(e.target.value)} style={inp}>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="">Never</option>
+                </select>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize:13, color:C.text2, lineHeight:1.8 }}>
+              <div><strong>Form:</strong> {form?.name}</div>
+              {contextRec?.title && <div><strong>Context:</strong> {contextRec.title}</div>}
+              <div><strong>Recipients:</strong> {people.map(p=>p.name).join(', ')}</div>
+              <div><strong>Email:</strong> {emailMode==='template' ? (tpl?.name || '—') : (subject || '(untitled)')}</div>
+              <div><strong>Expires:</strong> {expiresDays ? `${expiresDays} days` : 'Never'}</div>
+            </div>
+          )}
+        </div>
+
+        {!result && (
+          <div style={{ padding:'14px 20px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between' }}>
+            <button onClick={() => step === 0 ? onClose() : setStep(s => s - 1)}
+              style={{ padding:'8px 16px', borderRadius:9, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+              {step === 0 ? 'Cancel' : 'Back'}
+            </button>
+            {step < 2 ? (
+              <button onClick={() => setStep(s => s + 1)} disabled={step===0?!canProceedSetup:!canProceedEmail}
+                style={{ padding:'8px 20px', borderRadius:9, border:'none', background:C.accent, color:'#fff', fontSize:13, fontWeight:700,
+                  cursor:(step===0?canProceedSetup:canProceedEmail)?'pointer':'not-allowed', fontFamily:F,
+                  opacity:(step===0?canProceedSetup:canProceedEmail)?1:0.5 }}>
+                Next
+              </button>
+            ) : (
+              <button onClick={handleSend} disabled={sending}
+                style={{ padding:'8px 20px', borderRadius:9, border:'none', background:C.accent, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F, opacity:sending?0.7:1 }}>
+                {sending ? 'Sending…' : `Send to ${people.length}`}
+              </button>
+            )}
+          </div>
+        )}
+        {result && (
+          <div style={{ padding:'14px 20px', borderTop:`1px solid ${C.border}` }}>
+            <button onClick={() => onSent ? onSent(result) : onClose()}
+              style={{ width:'100%', padding:'10px', borderRadius:9, border:'none', background:C.accent, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── Record Form Panel ─────────────────────────────────────────────────────────
 // Shows only forms explicitly linked to this record (not all forms automatically)
 export function RecordFormPanel({ record, objectSlug, environment, currentUser, activeJobContext }) {
@@ -749,8 +953,9 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
   const [formData, setFormData]     = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showNewEntry, setShowNewEntry] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [sendModalLink, setSendModalLink] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [linkedRecords, setLinkedRecords] = useState([]); // records this person is linked to
 
@@ -788,7 +993,7 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
     setActiveLink(link);
     setFormData({});
     setSubmitted(false);
-    setShowHistory(false);
+    setShowNewEntry(false);
   };
 
   const handleUnlink = async (linkId) => {
@@ -869,14 +1074,17 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
               </div>
             </div>
             <div style={{ display:'flex', gap:4 }}>
-              {resCount > 0 && (
-                <button onClick={() => { setActiveLink(link); setShowHistory(true); }}
+              {objectSlug === 'people' && (
+                <button onClick={() => setSendModalLink(link)}
+                  title="Email this person a link to fill it in themselves"
                   style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
-                    padding:'4px 8px', fontSize:10, fontWeight:700, color:C.text3, fontFamily:F }}>{resCount}</button>
+                    padding:'5px 10px', fontSize:11, fontWeight:700, color:C.text2, fontFamily:F, display:'flex', alignItems:'center', gap:4 }}>
+                  <Ic n="mail" s={11} c={C.text2}/> Send
+                </button>
               )}
               <button onClick={() => openLink(link)}
                 style={{ background:cat.color, border:'none', borderRadius:6, cursor:'pointer',
-                  padding:'5px 10px', fontSize:11, fontWeight:700, color:'#fff', fontFamily:F }}>Fill in</button>
+                  padding:'5px 10px', fontSize:11, fontWeight:700, color:'#fff', fontFamily:F }}>{resCount > 0 ? 'View' : 'Fill in'}</button>
               <button onClick={() => handleUnlink(link.id)}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
                   padding:'5px 8px', fontSize:11, color:C.text3, fontFamily:F }}>×</button>
@@ -905,6 +1113,17 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
           onClose={() => setShowPicker(false)}
         />
       )}
+      {sendModalLink && (
+        <SendFormModal
+          people={[{ id: record.id, name: record.data?.first_name ? `${record.data.first_name} ${record.data.last_name||''}`.trim() : (record.data?.email || 'this person') }]}
+          environment={environment}
+          currentUser={currentUser}
+          preselectedFormId={sendModalLink.form.id}
+          preselectedContext={sendModalLink.context_record_id ? { id: sendModalLink.context_record_id, title: sendModalLink.context_record_title } : null}
+          onClose={() => setSendModalLink(null)}
+          onSent={() => setSendModalLink(null)}
+        />
+      )}
     </div>
   );
 
@@ -912,6 +1131,11 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
   const form = activeLink.form;
   const cat  = CATEGORIES.find(c => c.id === form.category) || CATEGORIES[0];
   const existingResponses = responses[form.id] || [];
+  const hasResponses = existingResponses.length > 0;
+  // Show the fill-in form when there's nothing to view yet, or the user
+  // explicitly asked to add another (only offered when the form allows it) —
+  // otherwise the completed data itself is the primary, default view.
+  const showFillForm = !hasResponses || showNewEntry;
 
   return (
     <div>
@@ -925,41 +1149,47 @@ export function RecordFormPanel({ record, objectSlug, environment, currentUser, 
             <div style={{ fontSize:11, color:C.accent }}>Context: {activeLink.context_record_title}</div>
           )}
         </div>
-        {existingResponses.length > 0 && (
-          <button onClick={() => setShowHistory(h => !h)}
-            style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, cursor:'pointer',
-              padding:'4px 8px', fontSize:11, fontWeight:700, color:C.text2, fontFamily:F }}>
-            {showHistory ? 'Fill in' : `History (${existingResponses.length})`}
-          </button>
+        {hasResponses && (
+          <span style={{ fontSize:11, fontWeight:700, color:C.text3 }}>
+            {existingResponses.length} response{existingResponses.length !== 1 ? 's' : ''}
+          </span>
         )}
       </div>
 
-      {showHistory ? (
-        <div>
-          {existingResponses.map(r => (
-            <ResponseViewer key={r.id} response={r} form={form}
-              onDelete={id => handleDeleteResponse(form.id, id)}/>
-          ))}
-        </div>
-      ) : submitted ? (
+      {submitted ? (
         <div style={{ textAlign:'center', padding:'20px 0' }}>
           <div style={{ fontSize:22, marginBottom:8, color:C.green }}>✓</div>
           <div style={{ fontSize:14, fontWeight:700, color:C.green }}>Submitted</div>
           <div style={{ fontSize:12, color:C.text3, marginTop:4, marginBottom:12 }}>Response saved</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
-            {form.allow_multiple && <Btn v='secondary' sz='sm' onClick={() => { setFormData({}); setSubmitted(false); }}>Submit another</Btn>}
-            <Btn v='secondary' sz='sm' onClick={() => setActiveLink(null)}>Back</Btn>
+            {form.allow_multiple && <Btn v='secondary' sz='sm' onClick={() => { setFormData({}); setSubmitted(false); setShowNewEntry(true); }}>Submit another</Btn>}
+            <Btn v='secondary' sz='sm' onClick={() => { setSubmitted(false); setShowNewEntry(false); }}>View responses</Btn>
           </div>
         </div>
-      ) : (
+      ) : showFillForm ? (
         <div>
           <FormRenderer form={form} formData={formData} setFormData={setFormData}/>
           <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
-            <Btn v='ghost' sz='sm' onClick={() => setActiveLink(null)}>Cancel</Btn>
+            <Btn v='ghost' sz='sm' onClick={() => hasResponses ? setShowNewEntry(false) : setActiveLink(null)}>Cancel</Btn>
             <Btn sz='sm' onClick={handleSubmit} disabled={submitting}>
               {submitting ? 'Saving…' : 'Submit'}
             </Btn>
           </div>
+        </div>
+      ) : (
+        <div>
+          {existingResponses.map(r => (
+            <ResponseViewer key={r.id} response={r} form={form}
+              onDelete={id => handleDeleteResponse(form.id, id)}/>
+          ))}
+          {form.allow_multiple && (
+            <button onClick={() => setShowNewEntry(true)}
+              style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                padding:'8px', borderRadius:10, border:`1.5px dashed ${C.border}`, background:'transparent',
+                fontSize:12, fontWeight:600, color:C.text3, cursor:'pointer', fontFamily:F, marginTop:4 }}>
+              <Ic n="plus" s={13} c="currentColor"/> Add another response
+            </button>
+          )}
         </div>
       )}
     </div>

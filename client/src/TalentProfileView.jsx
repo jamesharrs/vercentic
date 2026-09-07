@@ -270,6 +270,7 @@ const SkillsSection = ({ data }) => {
 const DocumentsSection = ({ attachments }) => {
   const [expanded, setExpanded] = useState(null);
   const [blobUrls, setBlobUrls] = useState({}); // index → objectURL
+  const [docxHtml, setDocxHtml] = useState({}); // index → HTML string (srcDoc)
 
   const getPreviewType = (a) => {
     const ext = (a.ext || a.name?.split('.').pop() || '').toLowerCase();
@@ -279,7 +280,10 @@ const DocumentsSection = ({ attachments }) => {
     return null;
   };
 
-  // Fetch blob for PDF/image when expanding so auth headers are sent
+  // Fetch blob for PDF/image when expanding so auth headers are sent.
+  // DOCX preview requires the X-User-Id header too — an <iframe src> can't
+  // carry it, so fetch the mammoth-rendered HTML ourselves and inject via
+  // srcDoc instead of pointing the iframe straight at the API URL.
   const handleExpand = async (i, a, previewType) => {
     if (expanded === i) { setExpanded(null); return; }
     setExpanded(i);
@@ -294,6 +298,15 @@ const DocumentsSection = ({ attachments }) => {
           setBlobUrls(prev => ({ ...prev, [i]: URL.createObjectURL(blob) }));
         }
       } catch(e) { console.warn('blob fetch failed', e); }
+    }
+    if (previewType === 'docx' && docxHtml[i] === undefined && a.url && a.url !== '#') {
+      try {
+        const { authHeaders } = await import('./apiClient.js');
+        const previewUrl = a.url.replace('/api/attachments/file/', '/api/attachments/preview/');
+        const r = await fetch(previewUrl, { headers: authHeaders(), credentials: 'include' });
+        const html = r.ok ? await r.text() : null;
+        setDocxHtml(prev => ({ ...prev, [i]: html }));
+      } catch(e) { console.warn('docx fetch failed', e); setDocxHtml(prev => ({ ...prev, [i]: null })); }
     }
   };
 
@@ -340,8 +353,12 @@ const DocumentsSection = ({ attachments }) => {
                     </div>
                   )}
                   {isExpanded && previewType === 'docx' && (
-                    <iframe src={previewUrl} title={a.name}
-                      style={{ width:'100%', height:440, border:'none', background:'white', display:'block' }}/>
+                    docxHtml[i]
+                      ? <iframe srcDoc={docxHtml[i]} title={a.name}
+                          style={{ width:'100%', height:440, border:'none', background:'white', display:'block' }}/>
+                      : <div style={{ padding:24, color: docxHtml[i]===null ? '#ef4444' : '#9ca3af', fontSize:13, textAlign:'center' }}>
+                          {docxHtml[i]===null ? 'Could not load preview.' : 'Loading…'}
+                        </div>
                   )}
                   {isExpanded && previewType === 'pdf' && (
                     <div style={{ background:'#f3f4f6', padding:8 }}>

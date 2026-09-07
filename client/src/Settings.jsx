@@ -55,6 +55,7 @@ const IntegrationHub     = lazy(() => import("./IntegrationHub.jsx"));
 const IntegrationsSettings = lazy(() => import("./IntegrationsSettings.jsx"));
 const FormsList          = lazy(() => import("./Forms.jsx").then(m => ({ default: m.FormsList })));
 const ConversationalActionsSettings = lazy(() => import("./settings/ConversationalActionsSettings.jsx"));
+const ActivityJournal = lazy(() => import("./ActivityJournal.jsx"));
 
 const LazyTab = ({ children }) => (
   <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading…</div>}>
@@ -1102,7 +1103,7 @@ const SecuritySection = () => {
 };
 
 // ── Audit Log Section ────────────────────────────────────────────────────────
-const AuditLogSection = () => {
+const AuditLogSection = ({ environment }) => {
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
   const [total, setTotal] = useState(0);
@@ -1110,7 +1111,7 @@ const AuditLogSection = () => {
   const [page, setPage] = useState(1);
   const [severityFilter, setSeverityFilter] = useState("");
   const [eventFilter, setEventFilter] = useState("");
-  const [tab, setTab] = useState("events"); // "events" | "summary"
+  const [tab, setTab] = useState("activity"); // "activity" | "events" | "summary"
   const [expanded, setExpanded] = useState(null);
 
   const load = useCallback(async () => {
@@ -1143,22 +1144,31 @@ const AuditLogSection = () => {
   };
 
   return (
-    <Card title="Security Audit Log" subtitle={`${total} events recorded`}
-      action={
+    <Card title="Activity & Security Audit Log" subtitle={tab==="activity" ? "All platform activity, filterable by type and severity" : `${total} security events recorded`}
+      action={tab==="activity" ? null : (
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <Btn v="secondary" sz="sm" onClick={exportCsv}><Ic n="download" s={12}/> Export CSV</Btn>
           <Btn v="secondary" sz="sm" onClick={load}><Ic n="refresh-cw" s={12}/> Refresh</Btn>
         </div>
-      }>
+      )}>
 
       {/* Tabs */}
       <div style={{display:"flex",gap:4,marginTop:12,marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:8}}>
-        {[{id:"events",label:"Events"},{id:"summary",label:"Summary"}].map(t=>(
+        {[{id:"activity",label:"Activity"},{id:"events",label:"Events"},{id:"summary",label:"Summary"}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?700:500,background:tab===t.id?C.accentLight:"transparent",color:tab===t.id?C.accent:C.text3,fontFamily:F}}>{t.label}</button>
         ))}
       </div>
 
-      {tab === "summary" && stats ? (
+      {tab === "activity" ? (
+        <div style={{height:560,margin:"0 -20px -16px",borderTop:`1px solid ${C.border}`}}>
+          <LazyTab>
+            <ActivityJournal environment={environment}
+              onOpenRecord={(recordId, objectId) => {
+                window.dispatchEvent(new CustomEvent("vercentic:openRecord", { detail:{ recordId, objectId } }));
+              }}/>
+          </LazyTab>
+        </div>
+      ) : tab === "summary" && stats ? (
         <div>
           {/* Severity cards */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:20}}>
@@ -3221,7 +3231,7 @@ export default function SettingsPage({ currentUser, environment, initialSection,
         {activeSection==="org"        && <LazyTab><OrgChart environment={environment}/></LazyTab>}
         {activeSection==="security"   && <SecuritySection/>}
         {activeSection==="sessions"   && <SessionsSection/>}
-        {activeSection==="audit"      && <AuditLogSection/>}
+        {activeSection==="audit"      && <AuditLogSection environment={environment}/>}
         {activeSection==="ai_governance" && <LazyTab><AiGovernance environment={environment}/></LazyTab>}
         {activeSection==="ai_matching"  && <LazyTab><AiMatchingSettings/></LazyTab>}
         {activeSection==="file_types"   && <LazyTab><FileTypesSettings environment={environment} objects={[]}/></LazyTab>}

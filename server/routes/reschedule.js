@@ -1,4 +1,5 @@
 const express = require('express');
+const { resolveBrand } = require('../utils/brandKit');
 const router  = express.Router();
 const crypto  = require('crypto');
 const { v4: uuidv4 } = require('uuid');
@@ -25,12 +26,11 @@ router.get('/:id/:token', (req, res) => {
   if (!verifyToken(id, validRole, token)) return res.status(403).json({ error: 'Invalid or expired link' });
 
   // Return safe subset of interview data
-  // Include branding from company profile + default brand kit
+  // Branding — via the shared resolver: environment-scoped is_default kit,
+  // never "whatever brand_kits[0] happens to be" across all environments.
   const store = getStore();
-  const profile  = (store.company_profiles || []).find(p => p.environment_id === iv.environment_id);
-  const brandKit = (store.brand_kits || []).find(k => k.id === profile?.default_brand_kit_id)
-                || (store.brand_kits || [])[0]
-                || null;
+  const profile = (store.company_profiles || []).find(p => p.environment_id === iv.environment_id);
+  const brand   = resolveBrand(store, iv.environment_id, profile?.default_brand_kit_id);
 
   res.json({
     id: iv.id,
@@ -46,10 +46,10 @@ router.get('/:id/:token', (req, res) => {
     proposed_by: iv.proposed_by || null,
     role: validRole,
     // Branding
-    company_name: profile?.name || process.env.SENDGRID_FROM_NAME || 'Vercentic',
-    company_logo: brandKit?.logo || profile?.logo || null,
-    primary_color: brandKit?.theme?.primaryColor || '#4361EE',
-    bg_color: brandKit?.theme?.bgColor || '#f8f9fc',
+    company_name: brand?.company_name || profile?.name || process.env.SENDGRID_FROM_NAME || 'Vercentic',
+    company_logo: brand?.logo_url || profile?.logo || null,
+    primary_color: brand?.primary_color || '#4361EE',
+    bg_color: brand?.bg_color || '#f8f9fc',
   });
 });
 

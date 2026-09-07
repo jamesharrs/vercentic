@@ -310,6 +310,11 @@ function NewApprovalModal({ record, object, environment, users, fields, groups, 
   const [onDeclined,setOnDeclined]= useState("none");
   const [sendNow,   setSendNow]   = useState(true);
   const [templates, setTemplates] = useState([]);
+  // What the public approval page should show. Default: include whichever
+  // side the approval was started from — job details if you're on a Job,
+  // candidate details if you're on a Person.
+  const [includeJob,    setIncludeJob]    = useState(object?.slug === "jobs");
+  const [includePerson, setIncludePerson] = useState(object?.slug === "people");
 
   useEffect(()=>{
     apiGet(`/approvals/templates/list?environment_id=${environment?.id||""}`).then(d=>{if(Array.isArray(d))setTemplates(d);}).catch(()=>{});
@@ -347,6 +352,7 @@ function NewApprovalModal({ record, object, environment, users, fields, groups, 
         expires_hours:expiresH?parseInt(expiresH):null,
         reminder_hours:reminderH?parseInt(reminderH):null,
         send_immediately:sendNow,
+        content_selection:{include_job:includeJob,include_person:includePerson},
       });
       if(result.error)throw new Error(result.error);
       onCreated(result);
@@ -408,6 +414,34 @@ function NewApprovalModal({ record, object, environment, users, fields, groups, 
           )}
           {step===2&&(
             <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:8}}>What should the approver see?</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${includeJob?C.accent:C.border}`,background:includeJob?C.accentLight:"transparent"}}>
+                    <input type="checkbox" checked={includeJob} onChange={e=>setIncludeJob(e.target.checked)} style={{width:16,height:16,accentColor:C.accent,marginTop:1}}/>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Job details</div>
+                      <div style={{fontSize:11,color:C.text3,marginTop:2}}>
+                        {object?.slug==="jobs" ? "This job's title, department, location and description."
+                          : object?.slug==="people" ? "Automatically finds the job this candidate is linked to."
+                          : "Include the linked job, if one can be found."}
+                      </div>
+                    </div>
+                  </label>
+                  <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${includePerson?C.accent:C.border}`,background:includePerson?C.accentLight:"transparent"}}>
+                    <input type="checkbox" checked={includePerson} onChange={e=>setIncludePerson(e.target.checked)} style={{width:16,height:16,accentColor:C.accent,marginTop:1}}/>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text1}}>Candidate details</div>
+                      <div style={{fontSize:11,color:C.text3,marginTop:2}}>
+                        {object?.slug==="people" ? "This candidate's profile, experience and CV."
+                          : object?.slug==="jobs" ? "Automatically finds the candidate linked to this job's pipeline."
+                          : "Include the linked candidate, if one can be found."}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                <div style={{fontSize:11,color:C.text3,marginTop:6}}>Only a curated summary is shown — never the full internal record.</div>
+              </div>
               <div style={{display:"flex",gap:12}}>
                 <label style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:6}}>Expires after (hours)</div><input type="number" min={1} placeholder="e.g. 48" value={expiresH} onChange={e=>setExpiresH(e.target.value)} style={inp}/><div style={{fontSize:11,color:C.text3,marginTop:4}}>Leave blank for no expiry</div></label>
                 <label style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.text2,marginBottom:6}}>Reminder after (hours)</div><input type="number" min={1} placeholder="e.g. 24" value={reminderH} onChange={e=>setReminderH(e.target.value)} style={inp}/><div style={{fontSize:11,color:C.text3,marginTop:4}}>Hours before sending reminder</div></label>
@@ -436,7 +470,7 @@ function NewApprovalModal({ record, object, environment, users, fields, groups, 
           )}
           {step===3&&(
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {[["Title",title],["Mode",mode+(mode==="majority"?` (${majority||Math.ceil(approvers.length/2)} of ${approvers.length})`:"")+(" · "+approvers.length+" approver"+(approvers.length!==1?"s":""))],["Expires",expiresH?`${expiresH} hours`:"No expiry"],["Reminder",reminderH?`After ${reminderH} hours`:"None"],["On approval",onApproved.replace(/_/g," ")],["On decline",onDeclined.replace(/_/g," ")],["Send emails",sendNow?"Yes — immediately":"No — save as draft"]].map(([k,v])=>(
+              {[["Title",title],["Mode",mode+(mode==="majority"?` (${majority||Math.ceil(approvers.length/2)} of ${approvers.length})`:"")+(" · "+approvers.length+" approver"+(approvers.length!==1?"s":""))],["Shows approver",[includeJob&&"Job details",includePerson&&"Candidate details"].filter(Boolean).join(" + ")||"Nothing — text only"],["Expires",expiresH?`${expiresH} hours`:"No expiry"],["Reminder",reminderH?`After ${reminderH} hours`:"None"],["On approval",onApproved.replace(/_/g," ")],["On decline",onDeclined.replace(/_/g," ")],["Send emails",sendNow?"Yes — immediately":"No — save as draft"]].map(([k,v])=>(
                 <div key={k} style={{display:"flex",padding:"8px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}>
                   <span style={{color:C.text3,width:130,flexShrink:0,fontWeight:600}}>{k}</span>
                   <span style={{color:C.text1}}>{v}</span>

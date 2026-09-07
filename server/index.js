@@ -343,6 +343,7 @@ const AUTH_EXEMPT = [
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
   '/people-links',
   '/approvals/token',   // public approve/decline via emailed token — no session
+  '/form-sends/token',  // public form-fill via emailed token — no session
   '/campaign-links',
   '/feature-packs',
   '/release-notes',  // public read — published notes shown to all logged-in users
@@ -519,6 +520,8 @@ app.use('/api/interview-plans',   require('./routes/interview_plans'));
 app.use('/api/interview-coordinator', require('./routes/interview_coordinator'));
 app.use('/api/badges',            require('./routes/badges'));
 app.use('/api/offers',            require('./routes/offers'));
+app.use('/api/form-sends',        require('./routes/form_sends'));
+app.use('/api/feature-requests',  require('./routes/feature_requests'));
 app.use('/api/video-interviews',  require('./routes/video_interviews'));
 app.use('/api/approvals',         require('./routes/approvals'));
 app.use('/api/candidate-hub',     require('./routes/candidate_hub'));

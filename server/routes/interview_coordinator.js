@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const { resolveBrand } = require('../utils/brandKit');
 const { query, findOne, insert, update, getStore, saveStore } = require('../db/init');
 
 // ── Ensure collections exist ───────────────────────────────────────────────
@@ -24,6 +25,7 @@ router.get('/token/:token', (req, res) => {
     interviewer_name: req_.interviewer_name, message: req_.message,
     proposed_slots: req_.proposed_slots || [], duration_minutes: req_.duration_minutes || 45,
     status: req_.status, expires_at: req_.expires_at,
+    brand: resolveBrand(s, req_.environment_id),
   });
 });
 

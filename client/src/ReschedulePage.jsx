@@ -32,15 +32,20 @@ export default function ReschedulePage() {
   };
 
   const inp = { width:"100%", boxSizing:"border-box", padding:"10px 14px", borderRadius:8, border:"1.5px solid #e5e7eb", fontSize:14, fontFamily:F, outline:"none", color:"#111827" };
+  const primary = interview?.primary_color || "#4361EE";
 
   return (
-    <div style={{ minHeight:"100vh", background:"#f0f4ff", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:F, padding:24 }}>
+    <div style={{ minHeight:"100vh", background:interview?.bg_color || "#f0f4ff", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:F, padding:24 }}>
       <div style={{ width:"100%", maxWidth:480 }}>
         <div style={{ textAlign:"center", marginBottom:32 }}>
-          <div style={{ width:44, height:44, borderRadius:12, background:"#4361EE", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:12 }}>
-            <span style={{ color:"white", fontWeight:900, fontSize:20 }}>V</span>
-          </div>
-          <div style={{ fontSize:13, color:"#6b7280" }}>Vercentic</div>
+          {interview?.company_logo ? (
+            <img src={interview.company_logo} alt={interview.company_name||""} style={{ height:36, maxWidth:150, objectFit:"contain", marginBottom:12 }}/>
+          ) : (
+            <div style={{ width:44, height:44, borderRadius:12, background:primary, display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:12 }}>
+              <span style={{ color:"white", fontWeight:900, fontSize:20 }}>{interview?.company_name?.[0]?.toUpperCase() || "V"}</span>
+            </div>
+          )}
+          <div style={{ fontSize:13, color:"#6b7280" }}>{interview?.company_name || "Vercentic"}</div>
         </div>
         <div style={{ background:"white", borderRadius:16, padding:"32px", boxShadow:"0 4px 24px rgba(0,0,0,.08)" }}>
           {loading && <div style={{ textAlign:"center", padding:40, color:"#9ca3af" }}>Loading…</div>}
@@ -92,7 +97,7 @@ export default function ReschedulePage() {
                   <textarea value={message} onChange={e=>setMessage(e.target.value)} placeholder="Let us know why you'd like to reschedule…" rows={3} style={{ ...inp, resize:"vertical" }}/>
                 </div>
                 <button onClick={handleSubmit} disabled={submitting||!newDate}
-                  style={{ padding:"12px 24px", background:submitting||!newDate?"#e5e7eb":"#4361EE", color:submitting||!newDate?"#9ca3af":"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:submitting||!newDate?"not-allowed":"pointer", fontFamily:F }}>
+                  style={{ padding:"12px 24px", background:submitting||!newDate?"#e5e7eb":primary, color:submitting||!newDate?"#9ca3af":"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:submitting||!newDate?"not-allowed":"pointer", fontFamily:F }}>
                   {submitting ? "Submitting…" : "Submit reschedule request"}
                 </button>
               </div>

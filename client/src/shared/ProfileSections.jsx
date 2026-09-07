@@ -244,8 +244,13 @@ export const DocumentsSection = ({ attachments = [], accent = PURPLE }) => {
     setLoading(true);
     try {
       if (t === 'docx') {
+        // The preview endpoint requires the X-User-Id auth header, which an
+        // <iframe src> navigation can't carry — fetch the rendered HTML
+        // ourselves (with headers) and inject it via srcDoc instead.
+        const { authHeaders } = await import('../apiClient.js');
         const rewritten = (a.url || '').replace('/api/attachments/file/', '/api/attachments/preview/');
-        setPreviewUrl(rewritten);
+        const r = await fetch(rewritten, { headers: authHeaders(), credentials: 'include' });
+        setPreviewUrl(r.ok ? await r.text() : null);
       } else {
         const { authHeaders } = await import('../apiClient.js');
         const r = await fetch(a.url, { headers: authHeaders(), credentials: 'include' });
@@ -296,7 +301,7 @@ export const DocumentsSection = ({ attachments = [], accent = PURPLE }) => {
                       </div>
                     </object>
                   ) : previewType === 'docx' && previewUrl ? (
-                    <iframe src={previewUrl} title={a.name} style={{ width: '100%', height: 480, border: 'none', display: 'block' }} />
+                    <iframe srcDoc={previewUrl} title={a.name} style={{ width: '100%', height: 480, border: 'none', display: 'block' }} />
                   ) : (
                     <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
                       Preview unavailable. <a href={a.url} target="_blank" rel="noreferrer" style={{ color: accent, fontWeight: 600 }}>Download</a>

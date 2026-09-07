@@ -23,9 +23,26 @@ const SEVERITY = { INFO: 'info', WARN: 'warn', CRITICAL: 'critical' };
 
 function logSecurityEvent(params) {
   try {
-    const { getStore, saveStore } = require('../db/init');
+    const { getStore, saveStore, findOne } = require('../db/init');
     const store = getStore();
     if (!store.security_audit) store.security_audit = [];
+
+    // Several call sites (role/permission/field-visibility/user changes) have
+    // no environment_id in the request itself — the body is typically just
+    // { role_id, ... } with no environment context. Every event already
+    // carries target_type + target_id though, and roles/users both store
+    // environment_id directly, so backfill from the target record rather
+    // than requiring every call site to thread environment_id through.
+    // Best-effort: never blocks the audit write if the lookup fails.
+    let environmentId = params.environment_id || null;
+    if (!environmentId && params.target_id && (params.target_type === 'role' || params.target_type === 'user')) {
+      try {
+        const table = params.target_type === 'role' ? 'roles' : 'users';
+        const target = findOne(table, r => r.id === params.target_id);
+        if (target?.environment_id) environmentId = target.environment_id;
+      } catch { /* ignore — falls back to null as before */ }
+    }
+
     const entry = {
       id: uuidv4(),
       event: params.event, severity: params.severity || SEVERITY.INFO,
@@ -34,7 +51,7 @@ function logSecurityEvent(params) {
       target_type: params.target_type || null, target_id: params.target_id || null,
       action: params.action || null, object_slug: params.object_slug || null,
       details: params.details || null, ip: params.ip || null,
-      environment_id: params.environment_id || null,
+      environment_id: environmentId,
       timestamp: new Date().toISOString(),
     };
     store.security_audit.push(entry);

@@ -41,6 +41,7 @@ const CSRF_EXEMPT_PREFIXES = [
   '/api/campaign-links',
   '/api/approvals/token/',  // public approve/decline via emailed token — no cookie session
                             // (only the /token/ subpath; the authed panel routes keep CSRF)
+  '/api/form-sends/token/', // public form-fill via emailed token — no cookie session
   '/api/signup',                       // public self-serve signup — no cookie session yet
   '/api/superadmin/auth',
   '/api/superadmin/clients/provision', // called from super admin console

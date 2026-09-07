@@ -77,6 +77,7 @@ const CampaignLinks   = lazyWithRetry(() => import("./CampaignLinks.jsx"));
 const Campaigns       = lazyWithRetry(() => import("./Campaigns.jsx"));
 const SuperAdminConsole = lazyWithRetry(() => import("./SuperAdminConsole.jsx"));
 const ApprovalPortal = lazyWithRetry(() => import("./portals/ApprovalPortal.jsx"));
+const FormFillPage = lazyWithRetry(() => import("./portals/FormFillPage.jsx"));
 const AgentsModule      = lazyWithRetry(() => import("./Agents.jsx"));
 const AvailabilityPickerPage = lazyWithRetry(() => import("./AvailabilityPicker.jsx"));
 const IntegrationsPage  = lazyWithRetry(() => import("./IntegrationsSettings.jsx"));
@@ -85,6 +86,7 @@ const CompanySetupWizard = lazyWithRetry(() => import("./CompanySetupWizard.jsx"
 import GettingStarted, { WelcomeModal } from "./GettingStarted";
 import { ComposeModal } from "./Communications.jsx";
 import { ReleaseNotesLoginModal } from "./ReleaseNotes.jsx";
+import RequestFeatureModal from "./RequestFeatureModal.jsx";
 
 function _sessionKey() {
   try {
@@ -225,6 +227,7 @@ const Icon = ({ name, size = 16, color = "currentColor" }) => {
     "git-branch": "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
     "log-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
     "help-circle": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
+    lightbulb: "M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.5.5 1 1.3 1 2.5h6c0-1.2.5-2 1-2.5A6 6 0 0012 3z",
     calendar: "M3 4h18v18H3V4zM16 2v4M8 2v4M3 10h18",
     "calendar-days": "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 14h.01M13 14h.01M17 14h.01M9 18h.01M13 18h.01",
     dollar: "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
@@ -2813,6 +2816,7 @@ activeNavRef.current = activeNav;
               ? <UserFooterMenu
                   session={session}
                   activeNav={activeNav}
+                  navObjects={navObjects}
                   setActiveNav={setActiveNav}
                   clearSession={clearSession}
                   setSession={setSession}
@@ -3186,9 +3190,31 @@ activeNavRef.current = activeNav;
 // ErrorBoundary: using the reporting version from ErrorBoundary.jsx (reports to /api/error-logs)
 
 
+// ─── Turns an internal nav id (e.g. "obj_<uuid>", "record_<uuid>_<uuid>") into
+// a plain label like "Jobs" / "People" / "Interviews" for display elsewhere
+// (e.g. the Request a Feature modal) — never shows raw ids to the user.
+function humanizeNavLabel(id, navObjects) {
+  if (!id) return null;
+  const STATIC = {
+    "dashboard": "Dashboard", "getting-started": "Getting Started", "search": "Search",
+    "interviews": "Interviews", "offers": "Offers", "reports": "Reports", "calendar": "Calendar",
+    "org-chart": "Org Chart", "orgchart": "Org Chart", "settings": "Settings", "help": "Help",
+    "dashboard_interviews": "Interviews", "dashboard_offers": "Offers", "dashboard_agents": "Agents",
+    "dashboard_custom": "Dashboards", "dashboard_achievements": "Achievements", "dashboard_insights": "Insights",
+  };
+  if (STATIC[id]) return STATIC[id];
+  if (id.startsWith("obj_") || id.startsWith("record_")) {
+    const objId = id.split("_").pop();
+    const obj = navObjects?.find(o => o.id === objId);
+    if (obj) return obj.plural_name || obj.name;
+  }
+  return id.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // ─── User footer menu (Settings / Help / Sign out) ───────────────────────────
-function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSession, t }) {
+function UserFooterMenu({ session, activeNav, navObjects, setActiveNav, clearSession, setSession, t, selectedEnv }) {
   const [open, setOpen] = useState(false);
+  const [showRequestFeature, setShowRequestFeature] = useState(false);
   const [testUsers,     setTestUsers]     = useState([]);
   const [switchLoading, setSwitchLoading] = useState(false);
   const [switchError,   setSwitchError]   = useState('');
@@ -3317,6 +3343,16 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
                   {item.label}
                 </button>
               ))}
+              <button onClick={()=>{setOpen(false);setShowRequestFeature(true);}}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,
+                  padding:"9px 14px",border:"none",background:"transparent",
+                  cursor:"pointer",fontFamily:"inherit",fontSize:13,
+                  fontWeight:500,color:"var(--t-text2)",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <Icon name="lightbulb" size={14} color="var(--t-text3)"/>
+                Request a Feature
+              </button>
             </div>
 
             <div style={{height:1,background:"var(--t-border)"}}/>
@@ -3376,6 +3412,14 @@ function UserFooterMenu({ session, activeNav, setActiveNav, clearSession, setSes
         <Icon name="chevron-up" size={12} color="var(--t-text3)"
           style={{transform:open?"rotate(0deg)":"rotate(180deg)",transition:"transform .2s",flexShrink:0}}/>
       </button>
+
+      {showRequestFeature && (
+        <RequestFeatureModal
+          environment={selectedEnv}
+          contextLabel={humanizeNavLabel(activeNav, navObjects)}
+          onClose={() => setShowRequestFeature(false)}
+        />
+      )}
     </div>
   );
 }
@@ -3407,6 +3451,7 @@ export default function AppRoot() {
   if (_path === '/support' || _path.startsWith('/support/')) return <SupportPortalPage />;
   if (_path === '/superadmin')            return <SuperAdminConsole />;
   if (_path.startsWith('/approval/'))      return <ApprovalPortal />;
+  if (_path.startsWith('/form-fill/'))     return <FormFillPage />;
 
   const botToken = _path.match(/^\/bot\/(.+)$/)?.[1];
   if (botToken) return <BotInterview token={botToken} />;

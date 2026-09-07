@@ -6,6 +6,7 @@
 const express  = require('express');
 const router   = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const { resolveBrand } = require('../utils/brandKit');
 const { query, insert, update, getStore, saveStore } = require('../db/init');
 const { MODEL_DEFAULT } = require('../config/ai_models');
 
@@ -196,7 +197,7 @@ router.get('/take/:token', (req, res) => {
     return res.status(410).json({ error: 'This interview link has expired. Please contact your recruiter.' });
   }
   // Return session without blobs (candidate doesn't need previous recordings on load)
-  const safe = { ...s, responses: (s.responses || []).map(r => ({ ...r, video_blob: undefined })) };
+  const safe = { ...s, responses: (s.responses || []).map(r => ({ ...r, video_blob: undefined })), brand: resolveBrand(getStore(), s.environment_id) };
   res.json(safe);
 });
 
