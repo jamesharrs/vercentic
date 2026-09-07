@@ -256,6 +256,21 @@ function findPersonByName(name) {
   return match || null;
 }
 
+/**
+ * resolvePerson(params)
+ * Card buttons pass an exact record id (params.candidate_id) rather than a
+ * typed name, since the record was already identified when the card was
+ * built — no need to re-run fuzzy name matching. Chat-typed commands
+ * continue to use candidate_name via findPersonByName as before.
+ */
+function resolvePerson(params) {
+  if (params.candidate_id) {
+    const rec = findOne('records', r => r.id === params.candidate_id && !r.deleted_at);
+    if (rec) return rec;
+  }
+  return findPersonByName(params.candidate_name);
+}
+
 const ACTION_REGISTRY = {
   search_records: (user, params, action) => {
     const slug = params.object || action.action_config?.default_object_slug || 'people';
@@ -283,12 +298,14 @@ const ACTION_REGISTRY = {
     };
   },
 
-  update_stage: (user, params) => {
+  update_stage: (user, params, action) => {
     if (!hasGlobalAction(user, 'record_move_stage')) return { error: 'forbidden' };
-    const person = findPersonByName(params.candidate_name);
+    const person = resolvePerson(params);
     if (!person) return { error: `Couldn't find a person named "${params.candidate_name}"` };
-    update('records', r => r.id === person.id, { data: { ...person.data, status: params.stage } });
-    return { ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim(), stage: params.stage };
+    const stage = params.stage || action?.action_config?.stage;
+    if (!stage) return { error: 'No stage specified' };
+    update('records', r => r.id === person.id, { data: { ...person.data, status: stage } });
+    return { ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim(), stage };
   },
 
   my_digest: (user) => {
@@ -363,11 +380,13 @@ const ACTION_REGISTRY = {
     };
   },
 
-  add_note: (user, params) => {
+  add_note: (user, params, action) => {
     if (!hasGlobalAction(user, 'record_add_note')) return { error: 'forbidden' };
-    const person = findPersonByName(params.candidate_name);
+    const person = resolvePerson(params);
     if (!person) return { error: `Couldn't find a person named "${params.candidate_name}"` };
-    insert('notes', { id: uuidv4(), record_id: person.id, content: params.note_text, created_by: `${user.first_name} ${user.last_name}`.trim(), source: 'chat_bot', created_at: new Date().toISOString() });
+    const noteText = params.note_text || action?.action_config?.note_text;
+    if (!noteText) return { error: 'No note text specified' };
+    insert('notes', { id: uuidv4(), record_id: person.id, content: noteText, created_by: `${user.first_name} ${user.last_name}`.trim(), source: 'chat_bot', created_at: new Date().toISOString() });
     return { ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim() };
   },
 
@@ -388,12 +407,24 @@ const ACTION_REGISTRY = {
     return { error: `Unsupported metric "${params.metric}"` };
   },
 
-  bulk_add_to_pool: (user, params) => {
+  bulk_add_to_pool: (user, params, action) => {
     if (!hasGlobalAction(user, 'bulk_actions')) return { error: 'forbidden' };
+    const poolName = params.pool_name || action?.action_config?.pool_name;
+    const poolsObj = findOne('objects', o => ['talent_pools', 'talent-pools'].includes(o.slug) || /talent\s*pool/i.test(o.plural_name || o.name || ''));
+    const pool = poolsObj ? query('records', r => r.object_id === poolsObj.id && !r.deleted_at).find(r => (r.data?.name || '').toLowerCase() === (poolName || '').toLowerCase()) : null;
+    if (!pool) return { error: `Couldn't find a talent pool named "${poolName}"` };
+
+    // Card button path: a single, already-identified record.
+    if (params.candidate_id) {
+      const person = resolvePerson(params);
+      if (!person) return { error: 'Candidate not found' };
+      insert('people_links', { id: uuidv4(), person_id: person.id, record_id: pool.id, linked_at: new Date().toISOString(), source: 'chat_bot' });
+      const name = `${person.data.first_name} ${person.data.last_name || ''}`.trim();
+      return { ok: true, pool_name: poolName, added: [name], requested: 1 };
+    }
+
+    // Chat-typed path: comma-separated names.
     const names = (params.candidate_names || '').split(',').map(n => n.trim()).filter(Boolean);
-    const poolsObj = findOne('objects', o => o.slug === 'talent_pools');
-    const pool = poolsObj ? query('records', r => r.object_id === poolsObj.id && !r.deleted_at).find(r => (r.data?.name || '').toLowerCase() === (params.pool_name || '').toLowerCase()) : null;
-    if (!pool) return { error: `Couldn't find a talent pool named "${params.pool_name}"` };
     const added = [];
     for (const name of names) {
       const person = findPersonByName(name);
@@ -401,7 +432,7 @@ const ACTION_REGISTRY = {
       insert('people_links', { id: uuidv4(), person_id: person.id, record_id: pool.id, linked_at: new Date().toISOString(), source: 'chat_bot' });
       added.push(name);
     }
-    return { ok: true, pool_name: params.pool_name, added, requested: names.length };
+    return { ok: true, pool_name: poolName, added, requested: names.length };
   },
 
   proactive_notify: () => ({ ok: true }),
@@ -452,6 +483,7 @@ function resolveCardConfig(action) {
     subtitle_field: c.subtitle_field || 'email',
     fact_fields: Array.isArray(c.fact_fields) && c.fact_fields.length ? c.fact_fields : ['location', 'status'],
     link_to_record: c.link_to_record !== false,
+    button: c.button && c.button.target_action_id ? { label: c.button.label || 'Take Action', target_action_id: c.button.target_action_id } : null,
   };
 }
 
@@ -482,6 +514,7 @@ function buildRecordCardData(record, cardConfig) {
   return {
     title, subtitle, image_url, facts,
     link_url: cardConfig.link_to_record ? buildRecordUrl(record) : null,
+    button: cardConfig.button ? { label: cardConfig.button.label, target_action_id: cardConfig.button.target_action_id, record_id: record.id } : null,
   };
 }
 
@@ -491,9 +524,19 @@ function buildSlackRecordCardBlocks(cardData) {
     text: { type: 'mrkdwn', text: `*${cardData.title}*${cardData.subtitle ? `\n${cardData.subtitle}` : ''}${cardData.facts.length ? '\n' + cardData.facts.map(f => `${f.label}: ${f.value}`).join('  ·  ') : ''}` },
     ...(cardData.image_url ? { accessory: { type: 'image', image_url: cardData.image_url, alt_text: cardData.title } } : {}),
   }];
+  const actionElements = [];
   if (cardData.link_url) {
-    blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Profile' }, url: cardData.link_url }] });
+    actionElements.push({ type: 'button', text: { type: 'plain_text', text: 'View Profile' }, url: cardData.link_url });
   }
+  if (cardData.button) {
+    actionElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: cardData.button.label },
+      action_id: 'card_action',
+      value: `card_action|${cardData.button.target_action_id}|${cardData.button.record_id}`,
+    });
+  }
+  if (actionElements.length) blocks.push({ type: 'actions', elements: actionElements });
   return blocks;
 }
 
@@ -648,6 +691,33 @@ async function handleInboundMessage({ platform, externalWorkspaceId, externalUse
   });
 }
 
+/**
+ * handleCardAction({ platform, externalWorkspaceId, externalUserId, targetActionId, recordId })
+ * Runs when someone clicks an interactive button on a record card (Settings →
+ * Conversational Actions → Response tab → "button" config). Skips command/
+ * intent matching entirely — the button already identifies exactly which
+ * action and which record — but goes through the same tenant resolution,
+ * identity check and permission gate as a typed message.
+ */
+async function handleCardAction({ platform, externalWorkspaceId, externalUserId, targetActionId, recordId }) {
+  const found = findChannel(platform, externalWorkspaceId);
+  if (!found) return { text: "This workspace isn't connected to a Vercentic environment yet." };
+
+  return tenantStorage.run(found.tenantSlug, async () => {
+    ensureCollections();
+    const startedAt = Date.now();
+    const environmentId = found.channel.environment_id;
+
+    const user = resolveIdentity(platform, externalUserId);
+    if (!user) return { text: "I don't recognise you yet — link your Slack account first (message me anything to get a link code)." };
+
+    const action = findOne('conversational_actions', a => a.id === targetActionId && a.environment_id === environmentId);
+    if (!action) return { text: 'This button is no longer configured — the target action may have been deleted.' };
+
+    return runAction(action, user, { candidate_id: recordId }, platform, environmentId, externalUserId, `[card button: ${action.name}]`, startedAt, null);
+  });
+}
+
 async function runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt, conversationId) {
   if (!checkActionPermission(user, action)) {
     logInvocation({ environment_id: environmentId, action_id: action.id, action_name: action.name, platform, external_user_id: externalUserId, vercentic_user_id: user.id, input_text: text, matched: true, success: false, error: 'forbidden', duration_ms: Date.now() - startedAt });
@@ -763,6 +833,6 @@ async function simulateMessage(user, environmentId, text, conversationId = 'test
 module.exports = {
   ensureCollections, findChannel, resolveIdentity, generateLinkCode, completeLinkByCode,
   matchCommand, matchIntent, checkActionPermission, ACTION_REGISTRY,
-  handleInboundMessage, notifyEvent, formatResponse, logInvocation, simulateMessage,
+  handleInboundMessage, handleCardAction, notifyEvent, formatResponse, logInvocation, simulateMessage,
   getSession, setSession, clearSession,
 };
