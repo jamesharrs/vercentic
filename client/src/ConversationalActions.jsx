@@ -304,7 +304,7 @@ function TemplatePicker({ onClose, onPicked }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // BUILDER MODAL
 // ═══════════════════════════════════════════════════════════════════════════
-function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
+function BuilderModal({ action, environmentId, meta, allActions, onClose, onSaved }) {
   const isEdit = !!action?.id;
   const [tab, setTab] = useState("trigger");
   const [saving, setSaving] = useState(false);
@@ -315,6 +315,7 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
     trigger_event: action?.trigger_event || "",
     parameters: action?.parameters || [],
     action_type: action?.action_type || "",
+    action_config: action?.action_config || {},
     permission_required: action?.permission_required || { type: "global", action: "" },
     approval_required: action?.approval_required || false,
     rate_limit_per_user_per_hour: action?.rate_limit_per_user_per_hour ?? 30,
@@ -323,10 +324,11 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
     card_type: action?.card_type || "",
     response_template: action?.response_template || "",
     status: action?.status || "draft",
-    card_config: action?.card_config || { object_slug: "people", image_field: "", title_template: "{{first_name}} {{last_name}}", subtitle_field: "email", fact_fields: [], link_to_record: true },
+    card_config: action?.card_config || { object_slug: "people", image_field: "", title_template: "{{first_name}} {{last_name}}", subtitle_field: "email", fact_fields: [], link_to_record: true, button: null },
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setCard = (k, v) => setForm(f => ({ ...f, card_config: { ...f.card_config, [k]: v } }));
+  const setActionConfig = (k, v) => setForm(f => ({ ...f, action_config: { ...f.action_config, [k]: v } }));
 
   const [cardObjects, setCardObjects] = useState([]);
   const [cardFields, setCardFields] = useState([]);
@@ -459,6 +461,18 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
                 ))}
               </div>
             </Field>
+            {["update_stage", "bulk_add_to_pool", "add_note"].includes(form.action_type) && (
+              <Field
+                label={form.action_type === "update_stage" ? "Fixed stage" : form.action_type === "bulk_add_to_pool" ? "Fixed talent pool" : "Fixed note text"}
+                hint="Only needed if this action will be triggered by a card button (no chat text to parse a value from). Leave blank if it's driven by a typed command or intent instead."
+              >
+                {form.action_type === "add_note" ? (
+                  <textarea style={{ ...inputStyle, minHeight: 60 }} value={form.action_config.note_text || ""} onChange={e => setActionConfig("note_text", e.target.value)} placeholder="e.g. Shortlisted via Slack" />
+                ) : (
+                  <input style={inputStyle} value={form.action_config[form.action_type === "update_stage" ? "stage" : "pool_name"] || ""} onChange={e => setActionConfig(form.action_type === "update_stage" ? "stage" : "pool_name", e.target.value)} placeholder={form.action_type === "update_stage" ? "e.g. Interview" : "e.g. Sales Pool"} />
+                )}
+              </Field>
+            )}
           </>
         )}
 
@@ -545,6 +559,22 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
                 <Field label="Link to record">
                   <Toggle on={form.card_config.link_to_record} onChange={() => setCard("link_to_record", !form.card_config.link_to_record)} />
                 </Field>
+                <Field label="Action button" hint="Instead of (or alongside) the link, add a button that performs another action directly — clicking it runs that action against this exact record and posts a confirmation, without leaving Slack/Teams.">
+                  <Toggle on={!!form.card_config.button} onChange={() => setCard("button", form.card_config.button ? null : { label: "Add to Pool", target_action_id: "" })} />
+                </Field>
+                {form.card_config.button && (
+                  <div style={{ paddingLeft: 14, borderLeft: "2px solid var(--t-border)", marginTop: -6, marginBottom: 4 }}>
+                    <Field label="Button label">
+                      <input style={inputStyle} value={form.card_config.button.label} onChange={e => setCard("button", { ...form.card_config.button, label: e.target.value })} placeholder="e.g. Add to Pool" />
+                    </Field>
+                    <Field label="Runs which action" hint="Any of your other enabled actions. If it needs fixed settings (e.g. which pool, which stage) that aren't part of the record itself, set those in that action's own Underlying Action config.">
+                      <select style={inputStyle} value={form.card_config.button.target_action_id} onChange={e => setCard("button", { ...form.card_config.button, target_action_id: e.target.value })}>
+                        <option value="">Select an action…</option>
+                        {(allActions || []).filter(a => a.id !== action?.id).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                )}
               </div>
             )}
             {form.response_type === "text" && (
@@ -693,7 +723,7 @@ export default function ConversationalActions({ environment }) {
       {tab === "channels" && <ChannelsPanel environmentId={envId} />}
       {tab === "identity" && <IdentityLinksPanel environmentId={envId} />}
 
-      {editing && <BuilderModal action={editing} environmentId={envId} meta={meta} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {editing && <BuilderModal action={editing} environmentId={envId} meta={meta} allActions={actions} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {showTemplates && <TemplatePicker onClose={() => setShowTemplates(false)} onPicked={handlePickTemplate} />}
     </div>
   );

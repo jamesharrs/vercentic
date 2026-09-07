@@ -141,20 +141,34 @@ router.post('/slack/interactive', express.urlencoded({ extended: true, verify: (
 
   const action = payload.actions?.[0];
   if (!action) return;
-  // Buttons are built with value = "approval_action|<target_id>|<decision>"
-  const [kind, targetId, decision] = (action.value || '').split('|');
-  if (kind !== 'approval_action') return;
+  const [kind, targetId, third] = (action.value || '').split('|');
 
   try {
-    const response = await gateway.handleInboundMessage({
-      platform: 'slack', externalWorkspaceId: teamId,
-      externalUserId: payload.user?.id, externalUserName: payload.user?.name,
-      conversationId: payload.channel?.id,
-      text: `approve ${targetId} ${decision}`,
-    });
+    let response;
+    if (kind === 'approval_action') {
+      // value = "approval_action|<target_id>|<decision>"
+      response = await gateway.handleInboundMessage({
+        platform: 'slack', externalWorkspaceId: teamId,
+        externalUserId: payload.user?.id, externalUserName: payload.user?.name,
+        conversationId: payload.channel?.id,
+        text: `approve ${targetId} ${third}`,
+      });
+    } else if (kind === 'card_action') {
+      // value = "card_action|<target_action_id>|<record_id>" — clicking a
+      // button on a record card (Response tab → button config), not an
+      // approval. Runs the target action directly against that record.
+      response = await gateway.handleCardAction({
+        platform: 'slack', externalWorkspaceId: teamId,
+        externalUserId: payload.user?.id,
+        targetActionId: targetId, recordId: third,
+      });
+    } else {
+      return;
+    }
+
     await fetch(payload.response_url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ replace_original: true, text: response.text, blocks: response.blocks }),
+      body: JSON.stringify({ replace_original: kind === 'approval_action', text: response.text, blocks: response.blocks }),
     });
   } catch (err) {
     console.error('[ChatBot/Slack] interactive error:', err.message);
@@ -215,19 +229,32 @@ router.post('/teams/messages', async (req, res) => {
 
   res.status(200).end();
 
-  if (activity.type !== 'message' || !activity.text) return;
+  if (activity.type !== 'message') return;
 
   update('chat_bot_channels', c => c.id === found.channel.id, {
     conversation_reference: { conversation: activity.conversation, serviceUrl: activity.serviceUrl, bot: activity.recipient, user: activity.from },
   });
 
-  const text = activity.text.replace(/<at>.*?<\/at>/g, '').trim();
   try {
-    const response = await gateway.handleInboundMessage({
-      platform: 'microsoft_teams', externalWorkspaceId: found.channel.external_workspace_id,
-      externalUserId: activity.from?.id, externalUserName: activity.from?.name,
-      conversationId: activity.conversation?.id, text,
-    });
+    let response;
+    if (activity.value?.action === 'card_action') {
+      // Adaptive Card Action.Submit — clicking a button on a record card.
+      // No text to parse; the card's own payload identifies exactly what to run.
+      response = await gateway.handleCardAction({
+        platform: 'microsoft_teams', externalWorkspaceId: found.channel.external_workspace_id,
+        externalUserId: activity.from?.id,
+        targetActionId: activity.value.target_action_id, recordId: activity.value.record_id,
+      });
+    } else if (activity.text) {
+      const text = activity.text.replace(/<at>.*?<\/at>/g, '').trim();
+      response = await gateway.handleInboundMessage({
+        platform: 'microsoft_teams', externalWorkspaceId: found.channel.external_workspace_id,
+        externalUserId: activity.from?.id, externalUserName: activity.from?.name,
+        conversationId: activity.conversation?.id, text,
+      });
+    } else {
+      return;
+    }
     await replyToTeams(activity, found.channel, response);
   } catch (err) {
     console.error('[ChatBot/Teams] handling error:', err.message);
@@ -252,11 +279,20 @@ function buildTeamsRecordContainer(cardData) {
   if (cardData.image_url) {
     columns.push({ type: 'Column', width: 'auto', items: [{ type: 'Image', url: cardData.image_url, size: 'Small', style: 'Person' }] });
   }
+  const actions = [];
+  if (cardData.link_url) actions.push({ type: 'Action.OpenUrl', title: 'View Profile', url: cardData.link_url });
+  if (cardData.button) {
+    actions.push({
+      type: 'Action.Submit',
+      title: cardData.button.label,
+      data: { msteams: { type: 'messageBack' }, action: 'card_action', target_action_id: cardData.button.target_action_id, record_id: cardData.button.record_id },
+    });
+  }
   const textItems = [
     { type: 'TextBlock', text: cardData.title, weight: 'Bolder', wrap: true },
     ...(cardData.subtitle ? [{ type: 'TextBlock', text: cardData.subtitle, isSubtle: true, wrap: true, spacing: 'None' }] : []),
     ...(cardData.facts.length ? [{ type: 'FactSet', facts: cardData.facts.map(f => ({ title: f.label, value: f.value })) }] : []),
-    ...(cardData.link_url ? [{ type: 'ActionSet', actions: [{ type: 'Action.OpenUrl', title: 'View Profile', url: cardData.link_url }] }] : []),
+    ...(actions.length ? [{ type: 'ActionSet', actions }] : []),
   ];
   columns.push({ type: 'Column', width: 'stretch', items: textItems });
   return { type: 'Container', separator: true, items: [{ type: 'ColumnSet', columns }] };
