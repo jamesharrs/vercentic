@@ -22,7 +22,7 @@
 const { v4: uuidv4 } = require('uuid');
 const {
   query, findOne, insert, update, getStore, saveStore,
-  tenantStorage, listTenants, loadTenantStore,
+  tenantStorage, listTenants, loadTenantStore, getCurrentTenant,
 } = require('../db/init');
 const { hasPermission, hasGlobalAction } = require('../middleware/rbac');
 
@@ -488,7 +488,13 @@ function resolveCardConfig(action) {
 }
 
 function buildRecordUrl(record) {
-  const base = (process.env.CLIENT_URL || 'https://app.vercentic.com').replace(/\/$/, '');
+  // Each client is a fully separate tenant on its own subdomain — a record's
+  // link must resolve there, not to the master app (different tenant,
+  // different data, different record numbering entirely).
+  const tenantSlug = getCurrentTenant();
+  const base = (tenantSlug && tenantSlug !== 'master')
+    ? `https://${tenantSlug}.vercentic.com`
+    : (process.env.CLIENT_URL || 'https://app.vercentic.com').replace(/\/$/, '');
   if (!record?.object_slug || !record?.record_number) return null;
   return `${base}/${record.object_slug}/${record.record_number}`;
 }
