@@ -18,24 +18,8 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const gateway = require('../services/chat_bot_gateway');
-const { update, tenantStorage, insert } = require('../db/init');
+const { update } = require('../db/init');
 const { postToChannel } = require('./chat_bot_channels');
-
-// TEMPORARY diagnostic logger — writes to master tenant regardless of current
-// context, so failures on any tenant's webhook are readable from one place.
-// Remove alongside the debug route in superadmin_clients.js once resolved.
-function debugLog(entry) {
-  try {
-    tenantStorage.run('master', () => {
-      const { getStore, saveStoreNow } = require('../db/init');
-      const s = getStore();
-      if (!s.chat_bot_webhook_debug) s.chat_bot_webhook_debug = [];
-      s.chat_bot_webhook_debug.unshift({ ts: new Date().toISOString(), ...entry });
-      if (s.chat_bot_webhook_debug.length > 50) s.chat_bot_webhook_debug.length = 50;
-      saveStoreNow('master');
-    });
-  } catch (e) { console.error('[debugLog] failed:', e.message); }
-}
 
 // Same encryption scheme as routes/integrations.js / chat_bot_channels.js
 if (process.env.NODE_ENV === 'production' && !process.env.INTEGRATION_SECRET) {
@@ -62,24 +46,18 @@ function decryptWithChannelKey(encoded) {
 function verifySlackSignature(req, signingSecretPlain) {
   const ts = req.headers['x-slack-request-timestamp'];
   const sig = req.headers['x-slack-signature'];
-  const diag = { ts_present: !!ts, sig_present: !!sig, rawBody_present: !!req.rawBody, rawBody_length: req.rawBody ? req.rawBody.length : 0 };
-  if (!ts || !sig || !req.rawBody) { debugLog({ event: 'sig_fail', reason: 'missing_ts_sig_or_rawbody', ...diag }); return false; }
-  const skew = Math.abs(Date.now() / 1000 - Number(ts));
-  if (skew > 60 * 5) { debugLog({ event: 'sig_fail', reason: 'timestamp_skew', skew_seconds: skew, ...diag }); return false; }
+  if (!ts || !sig || !req.rawBody) return false;
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 60 * 5) return false;
   const base = `v0:${ts}:${req.rawBody.toString('utf8')}`;
   const hmac = 'v0=' + crypto.createHmac('sha256', signingSecretPlain).update(base).digest('hex');
-  let match = false;
-  try { match = crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(sig)); } catch (e) { debugLog({ event: 'sig_fail', reason: 'timingSafeEqual_threw', error: e.message, computed_sig: hmac.slice(0,14)+'...', received_sig: sig.slice(0,14)+'...', ...diag }); return false; }
-  if (!match) debugLog({ event: 'sig_fail', reason: 'mismatch', computed_sig: hmac.slice(0,14)+'...', received_sig: sig.slice(0,14)+'...', body_preview: req.rawBody.toString('utf8').slice(0,80), skew_seconds: skew, ...diag });
-  return match;
+  try { return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(sig)); } catch { return false; }
 }
 
 function findSlackChannelAndVerify(req, teamId) {
   const found = gateway.findChannel('slack', teamId);
-  if (!found) { debugLog({ event: 'channel_not_found', team_id: teamId }); return null; }
+  if (!found) return null;
   const secret = decryptWithChannelKey(found.channel.signing_secret);
-  if (!secret) { debugLog({ event: 'secret_decrypt_failed', team_id: teamId, tenant: found.tenantSlug }); return null; }
-  if (!verifySlackSignature(req, secret)) return null;
+  if (!secret || !verifySlackSignature(req, secret)) return null;
   return found;
 }
 
@@ -102,14 +80,12 @@ router.post('/slack/events', async (req, res) => {
   res.status(200).end(); // Slack requires a response within 3s — ack, then process async
 
   const event = body.event;
-  if (!event || event.bot_id) { debugLog({ event: 'dropped_pre_process', reason: !event ? 'no_event' : 'has_bot_id', body_preview: JSON.stringify(body).slice(0,300) }); return; }
-  if (!['app_mention', 'message'].includes(event.type)) { debugLog({ event: 'dropped_pre_process', reason: 'unhandled_event_type', event_type: event.type }); return; }
-  if (event.channel_type && event.channel_type !== 'im' && event.type !== 'app_mention') { debugLog({ event: 'dropped_pre_process', reason: 'wrong_channel_type', channel_type: event.channel_type, event_type: event.type }); return; }
+  if (!event || event.bot_id) return;
+  if (!['app_mention', 'message'].includes(event.type)) return;
+  if (event.channel_type && event.channel_type !== 'im' && event.type !== 'app_mention') return;
 
   const text = (event.text || '').replace(/<@[^>]+>/g, '').trim();
-  if (!text) { debugLog({ event: 'dropped_pre_process', reason: 'empty_text_after_strip', raw_text: event.text }); return; }
-
-  debugLog({ event: 'processing', team_id: teamId, tenant: found.tenantSlug, user: event.user, channel: event.channel, text });
+  if (!text) return;
 
   try {
     const response = await gateway.handleInboundMessage({
@@ -117,17 +93,14 @@ router.post('/slack/events', async (req, res) => {
       externalUserId: event.user, externalUserName: null,
       conversationId: event.channel, text,
     });
-    debugLog({ event: 'gateway_response', response_text: response?.text, response_blocks: !!response?.blocks });
 
     const slackResp = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { Authorization: `Bearer ${decryptWithChannelKey(found.channel.bot_token)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel: event.channel, text: response.text, blocks: response.blocks }),
     });
-    const slackData = await slackResp.json();
-    debugLog({ event: 'slack_reply_attempt', slack_ok: slackData.ok, slack_error: slackData.error || null, http_status: slackResp.status });
+    if (!slackResp.ok) console.error('[ChatBot/Slack] reply HTTP error:', slackResp.status);
   } catch (err) {
-    debugLog({ event: 'exception', error: err.message, stack: err.stack?.slice(0, 400) });
     console.error('[ChatBot/Slack] handling error:', err.message);
   }
 });
@@ -221,6 +194,7 @@ async function verifyTeamsToken(req, expectedAppId) {
     const publicKey = await getSigningKey(decodedHeader.header.kid);
     const payload = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
     if (payload.aud !== expectedAppId) return false;
+    if (payload.iss !== 'https://api.botframework.com') return false;
     return true;
   } catch (err) {
     console.warn('[ChatBot/Teams] token verification failed:', err.message);
@@ -266,7 +240,7 @@ async function getTeamsBotToken(appId, appPasswordPlain) {
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: appId, client_secret: appPasswordPlain, scope: 'https://api.botframework.com/.default' }),
   });
   const data = await resp.json();
-  if (!data.access_token) throw new Error('Failed to obtain Bot Framework token');
+  if (!resp.ok || !data.access_token) throw new Error(`Failed to obtain Bot Framework token: ${data.error_description || data.error || resp.status}`);
   return data.access_token;
 }
 
@@ -288,7 +262,9 @@ async function replyToTeams(activity, channel, response) {
       },
     }],
   };
-  await fetch(replyUrl, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(card) });
+  await fetch(replyUrl, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(card) })
+    .then(resp => { if (!resp.ok) console.error('[ChatBot/Teams] reply HTTP error:', resp.status); })
+    .catch(err => console.error('[ChatBot/Teams] reply network error:', err.message));
 }
 
 module.exports = router;
