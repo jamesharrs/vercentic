@@ -24,7 +24,7 @@ _pdfjsInit.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 import SharePicker from "./SharePicker.jsx";
 import { RecordPipelinePanel, PeoplePipelineWidget, LinkedRecordsPanel } from "./Workflows.jsx";
 import CategoryPipelineBar from "./CategoryPipelineBar.jsx";
-import { RecordFormPanel } from "./Forms.jsx";
+import { RecordFormPanel, SendFormModal } from "./Forms.jsx";
 import { MediaPickerModal } from "./MediaLibrary.jsx";
 const CampaignLinksModal = lazy(() => import("./CampaignLinks.jsx").then(m => ({ default: m.CampaignLinksModal })));
 import { evaluateFormula, formatFormulaResult } from "./utils/formula.js";
@@ -1745,6 +1745,8 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [aiTooltip, setAiTooltip] = useState(false);
+  const [aiTooltipRect, setAiTooltipRect] = useState(null);
+  const aiBtnRef = useRef(null);
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const ref = useRef(null);
   const triggerRef = useRef(null);
@@ -1770,6 +1772,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
   // Load categories on mount
   useEffect(() => {
     tFetch("/api/enterprise/skills/search/categories")
+      .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setCategories(d); })
       .catch(() => {});
   }, []);
@@ -1782,7 +1785,8 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
       try {
         const params = new URLSearchParams({ q: q || "", limit: "30" });
         if (cat) params.set("category", cat);
-        const data = await tFetch(`/api/enterprise/skills/search?${params}`);
+        const res = await tFetch(`/api/enterprise/skills/search?${params}`);
+        const data = await res.json();
         setResults(data.results || []);
       } catch { setResults([]); }
       setLoading(false);
@@ -1805,6 +1809,7 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
     }
   };
   const remove = (name, e) => { e.stopPropagation(); onChange(isMulti ? selected.filter(s=>s!==name) : ""); };
+  const clearAll = (e) => { e.stopPropagation(); onChange(isMulti ? [] : ""); setOpen(false); };
 
   // AI skill extraction — calls server-side endpoint that extracts keywords then searches ESCO
   const handleAiExtract = async (e) => {
@@ -1852,19 +1857,35 @@ const SkillsPicker = ({ field, value, onChange, environment, recordData }) => {
           </span>
         ))}
         {selected.length===0 && <span style={{fontSize:13,color:C.text3,userSelect:"none"}}>{field.placeholder||"Add skills…"}</span>}
-        {/* AI extract button */}
-        {hasContext && (
-          <div style={{marginLeft:"auto",position:"relative",flexShrink:0}}
-            onMouseEnter={()=>setAiTooltip(true)} onMouseLeave={()=>setAiTooltip(false)}>
-            <button onClick={handleAiExtract} disabled={extracting}
-              style={{display:"flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:8,border:"none",
-                background:extracting?"#E9ECEF":"linear-gradient(135deg,#7C3AED,#4361EE)",cursor:extracting?"wait":"pointer",transition:"all .15s"}}>
-              {extracting ? <span style={{fontSize:12,color:C.text3}}>…</span> : <span style={{fontSize:14,filter:"brightness(10)"}}>✨</span>}
-            </button>
-            {aiTooltip && !extracting && (
-              <div style={{position:"absolute",bottom:"calc(100% + 8px)",right:0,width:220,padding:"10px 12px",borderRadius:10,background:"#1a1a2e",color:"white",fontSize:11,lineHeight:1.5,zIndex:9999,boxShadow:"0 8px 24px rgba(0,0,0,0.25)"}}>
-                <strong style={{fontSize:12}}>AI Skill Extraction</strong><br/>
-                Analyses the job to suggest matching skills from the full ESCO taxonomy ({categories.reduce((s,c)=>s+c.count,0).toLocaleString()} skills).
+        {/* Trailing controls — Clear all (when anything selected) + AI extract (when context available) */}
+        {(selected.length>0 || hasContext) && (
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            {selected.length>0 && (
+              <button onClick={clearAll} title="Clear all skills"
+                style={{display:"flex",alignItems:"center",gap:3,padding:"5px 8px",borderRadius:8,border:`1px solid ${C.border}`,background:"white",color:C.text3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,flexShrink:0,transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background="#FFF5F5";e.currentTarget.style.borderColor="#e0313140";e.currentTarget.style.color="#e03131";}}
+                onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text3;}}>
+                <Ic n="x" s={10} c="currentColor"/> Clear
+              </button>
+            )}
+            {hasContext && (
+              <div ref={aiBtnRef} style={{position:"relative"}}
+                onMouseEnter={()=>{ const r=aiBtnRef.current?.getBoundingClientRect(); if(r) setAiTooltipRect(r); setAiTooltip(true); }}
+                onMouseLeave={()=>setAiTooltip(false)}>
+                <button onClick={handleAiExtract} disabled={extracting}
+                  style={{display:"flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:8,border:"none",
+                    background:extracting?"#E9ECEF":"linear-gradient(135deg,#7C3AED,#4361EE)",cursor:extracting?"wait":"pointer",transition:"all .15s"}}>
+                  {extracting ? <span style={{fontSize:12,color:C.text3}}>…</span> : <span style={{fontSize:14,filter:"brightness(10)"}}>✨</span>}
+                </button>
+                {/* Portalled to body — a plain absolute tooltip here gets clipped by the
+                    field-section's overflow:hidden container whenever it needs to open upward */}
+                {aiTooltip && !extracting && aiTooltipRect && ReactDOM.createPortal(
+                  <div style={{position:"fixed",top:aiTooltipRect.top-8,left:Math.min(aiTooltipRect.right-220,window.innerWidth-228),transform:"translateY(-100%)",width:220,padding:"10px 12px",borderRadius:10,background:"#1a1a2e",color:"white",fontSize:11,lineHeight:1.5,zIndex:9999,boxShadow:"0 8px 24px rgba(0,0,0,0.25)",pointerEvents:"none"}}>
+                    <strong style={{fontSize:12}}>AI Skill Extraction</strong><br/>
+                    Analyses the job to suggest matching skills from the full ESCO taxonomy ({categories.reduce((s,c)=>s+c.count,0).toLocaleString()} skills).
+                  </div>,
+                  document.body
+                )}
               </div>
             )}
           </div>
@@ -4250,6 +4271,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
   const [confirming,       setConfirming]       = useState(false);
   const [showNoteModal,    setShowNoteModal]    = useState(false);
   const [showLinkModal,    setShowLinkModal]    = useState(false);
+  const [showSendFormModal,setShowSendFormModal] = useState(false);
   const [noteText,         setNoteText]         = useState("");
   const [linkSearch,       setLinkSearch]       = useState("");
   const [linkObjFilter,    setLinkObjFilter]    = useState("");
@@ -4423,6 +4445,7 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
         <BtnDark onClick={() => setShowNoteModal(true)}><Ic n="edit" s={12} c="white"/> Add note</BtnDark>
         <BtnDark onClick={() => onBulkAction?.("interview", {})}><Ic n="calendar" s={12} c="white"/> Interview</BtnDark>
         <BtnDark onClick={() => setShowLinkModal(true)}><Ic n="link" s={12} c="white"/> Link to</BtnDark>
+        <BtnDark onClick={() => setShowSendFormModal(true)}><Ic n="mail" s={12} c="white"/> Send Form</BtnDark>
       </>}
       {onCompare && count >= 2 && count <= 5 && (
         <button onClick={onCompare}
@@ -4645,6 +4668,18 @@ const BulkActionBar = ({ count, total, fields, onSelectAll, onClearAll, onDelete
           </div>
         </div>
       , document.body)}
+      {showSendFormModal && (
+        <SendFormModal
+          people={(selectedRecords||[]).map(r => ({
+            id: r.id,
+            name: r.data?.first_name ? `${r.data.first_name} ${r.data.last_name||''}`.trim() : (r.data?.email || 'Unnamed'),
+          }))}
+          environment={environment}
+          currentUser={session?.user}
+          onClose={() => setShowSendFormModal(false)}
+          onSent={() => setShowSendFormModal(false)}
+        />
+      )}
     </div>
   );
 };
@@ -5986,7 +6021,10 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
   const isText  = ['txt','csv','md','log'].includes(ext);
   const rawUrl  = att.url || '#';
 
-  // For DOCX use server-side mammoth preview endpoint directly (no auth needed)
+  // DOCX preview goes through the same server-side mammoth endpoint, but it
+  // requires the X-User-Id auth header — an <iframe src> navigation can't
+  // attach custom headers, so we fetch the HTML ourselves and inject it via
+  // srcDoc instead (same auth pattern as the PDF/image/text branches below).
   const previewUrl = isDocx && rawUrl !== '#'
     ? rawUrl.replace('/api/attachments/file/', '/api/attachments/preview/')
     : null;
@@ -5994,12 +6032,22 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
   // Fetch blob with auth so iframe/img has no CORS/auth issues
   const [blobUrl,  setBlobUrl]  = useState(null);
   const [blobData, setBlobData] = useState(null); // ArrayBuffer for PDF.js
+  const [docxHtml, setDocxHtml] = useState(null); // HTML string for DOCX srcDoc
   const [loadErr,  setLoadErr]  = useState(false);
 
   useEffect(() => {
     let url = null;
-    // DOCX uses server-side preview — no blob fetch needed
-    if (isDocx) return;
+    if (isDocx) {
+      if (!previewUrl) { setLoadErr(true); return; }
+      fetch(previewUrl, { headers: authHeaders(), credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        })
+        .then(html => setDocxHtml(html))
+        .catch(err => { console.warn('[FilePreview] docx fetch failed:', err); setLoadErr(true); });
+      return;
+    }
     if (!rawUrl || rawUrl === '#') { setLoadErr(true); return; }
     fetch(rawUrl, { headers: authHeaders(), credentials: 'include' })
       .then(r => {
@@ -6040,8 +6088,8 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
             </div>
           </div>
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-            {blobUrl && (
-              <a href={blobUrl} download={att.name}
+            {(blobUrl || (isDocx && rawUrl !== '#')) && (
+              <a href={blobUrl || rawUrl} download={att.name}
                 style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:8, border:'1px solid #e8eaed', background:'#f8f9fc', color:'#374151', fontSize:12, fontWeight:600, textDecoration:'none' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 Download
@@ -6058,7 +6106,7 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
         {/* Content */}
         <div style={{ flex:1, overflow:'hidden', background:'#f0f2f5', display:'flex', flexDirection:'column', alignItems:'stretch', minHeight:0, position:'relative' }}>
           {/* Loading */}
-          {!blobUrl && !loadErr && !isDocx && (
+          {!blobUrl && !docxHtml && !loadErr && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, padding:48 }}>
               <svg width="24" height="24" viewBox="0 0 24 24" style={{animation:'spin 1s linear infinite'}}><path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="#3b5bdb" strokeWidth="2.5" fill="none" strokeLinecap="round"/></svg>
               <span style={{ fontSize:13, color:'#6b7280' }}>Loading file…</span>
@@ -6078,11 +6126,11 @@ const AttachmentPreviewModal = ({ att, onClose }) => {
             </div>
           )}
           {/* DOCX — server-side mammoth → HTML in iframe */}
-          {isDocx && previewUrl && (
-            <iframe src={previewUrl} title={att.name}
+          {isDocx && docxHtml && (
+            <iframe srcDoc={docxHtml} title={att.name}
               style={{ width:'100%', border:'none', minHeight:'78vh', background:'white', flex:1 }}/>
           )}
-          {isDocx && !previewUrl && (
+          {isDocx && !previewUrl && !loadErr && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:8, padding:48, textAlign:'center' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Preview not available</div>

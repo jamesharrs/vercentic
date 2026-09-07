@@ -3145,6 +3145,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   const [categories, setCategories]       = useState([]);
   const [expandedCat, setExpandedCat]     = useState(null);
   const [peopleObjectId, setPeopleObjectId] = useState(null); // cached for onNavigate
+  const loadInFlightRef = useRef(null);           // record_id:environment_id key while a load() is in progress
+  const lastLoadRef      = useRef({ key: null, at: 0 }); // most recent completed load, for the 2s throttle guard
+  const objectsInFlightRef = useRef(null);        // environment_id while the /objects lookup is in progress
 
   // Defined here (before first use) to avoid temporal dead zone error
   const PEOPLE_LINK_TYPES = ["people_link", "linked_person"];
@@ -3158,18 +3161,33 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   const load = async () => {
     if (!record?.id || !environment?.id) return;
+    // Guard against runaway repeat calls: if this exact record+environment was
+    // already fetched (or is currently in flight) very recently, skip. Without
+    // this, an unrelated re-render/remount upstream can cause load() to fire
+    // dozens of times a second, flooding the API and tripping the rate limiter
+    // (429s) on every request this widget makes.
+    const loadKey = `${record.id}:${environment.id}`;
+    const now = Date.now();
+    if (loadInFlightRef.current === loadKey) return;
+    if (lastLoadRef.current.key === loadKey && (now - lastLoadRef.current.at) < 2000) return;
+    loadInFlightRef.current = loadKey;
     setLoading(true);
-    const [asgn, wfs, links, cats] = await Promise.all([
-      api.get(`/workflows/assignments?record_id=${record.id}`),
-      api.get(`/workflows?environment_id=${environment.id}`),
-      api.get(`/workflows/people-links?target_record_id=${record.id}`),
-      api.get(`/stage-categories?environment_id=${environment.id}`),
-    ]);
-    setAssignments(Array.isArray(asgn) ? asgn : []);
-    setAllWorkflows(Array.isArray(wfs)  ? wfs  : []);
-    setPeopleLinks(Array.isArray(links) ? links : []);
-    setCategories(Array.isArray(cats)   ? cats  : []);
-    setLoading(false);
+    try {
+      const [asgn, wfs, links, cats] = await Promise.all([
+        api.get(`/workflows/assignments?record_id=${record.id}`),
+        api.get(`/workflows?environment_id=${environment.id}`),
+        api.get(`/workflows/people-links?target_record_id=${record.id}`),
+        api.get(`/stage-categories?environment_id=${environment.id}`),
+      ]);
+      setAssignments(Array.isArray(asgn) ? asgn : []);
+      setAllWorkflows(Array.isArray(wfs)  ? wfs  : []);
+      setPeopleLinks(Array.isArray(links) ? links : []);
+      setCategories(Array.isArray(cats)   ? cats  : []);
+      lastLoadRef.current = { key: loadKey, at: Date.now() };
+    } finally {
+      loadInFlightRef.current = null;
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [record?.id, environment?.id]);
@@ -3177,13 +3195,14 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
   // Eagerly resolve the People object ID so name-click navigation always works,
   // even before the "Add person" modal has been opened.
   useEffect(() => {
-    if (!environment?.id || peopleObjectId) return;
+    if (!environment?.id || peopleObjectId || objectsInFlightRef.current === environment.id) return;
+    objectsInFlightRef.current = environment.id;
     api.get(`/objects?environment_id=${environment.id}`).then(objs => {
       const po = (Array.isArray(objs) ? objs : []).find(o =>
         o.slug === 'people' || o.name === 'People' || o.name === 'Person'
       );
       if (po) setPeopleObjectId(po.id);
-    }).catch(() => {});
+    }).catch(() => { objectsInFlightRef.current = null; }); // allow retry on genuine failure
   }, [environment?.id, peopleObjectId]);
 
   const assignWorkflow = async (workflow_id) => {
@@ -3416,6 +3435,11 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
 
   // ── Toolbar (compact) mode — just the workflow name + gear + add button ──
   if (toolbarMode) {
+    // Nothing to assign from the compact header strip anymore — that now
+    // happens via the inline "Select a [workflow]…" picker in the main panel
+    // below. Once a workflow is assigned there, this strip appears showing
+    // its name and an enabled Add button.
+    if (!peopleLinkWf) return null;
     return (
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"0 8px",
         borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, height:"100%", flexShrink:0 }}>
@@ -3423,21 +3447,8 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
-        {peopleLinkWf ? (
-          <span style={{ fontSize:12, color:C.text3, whiteSpace:"nowrap",
-            maxWidth:120, overflow:"hidden", textOverflow:"ellipsis" }}>{peopleLinkWf.name}</span>
-        ) : (
-          <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
-            style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8,
-              fontSize:12, fontFamily:F, outline:"none", cursor:"pointer", fontWeight:500,
-              color:C.text2, appearance:"none", WebkitAppearance:"none",
-              backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
-              backgroundRepeat:"no-repeat", backgroundPosition:"right 8px center",
-              paddingRight:"26px", background:"white" }}>
-            <option value="">Assign…</option>
-            {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        )}
+        <span style={{ fontSize:12, color:C.text3, whiteSpace:"nowrap",
+          maxWidth:120, overflow:"hidden", textOverflow:"ellipsis" }}>{peopleLinkWf.name}</span>
         <button
           onClick={openAddPerson}
           disabled={!peopleLinkWf || plSteps.length === 0}
@@ -3609,8 +3620,10 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
         </div>
       )}
 
-            {/* Workflow picker row — hidden when toolbar handles it */}
-            {!toolbarMode && !hidePicker && (
+            {/* Workflow picker row — only shown once a workflow is assigned;
+                before that, the empty-state message below carries an inline
+                picker instead of a separate "Assign…" dropdown up here. */}
+            {!toolbarMode && !hidePicker && peopleLinkWf && (
             <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", borderBottom:`1px solid ${C.border}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 14px",
               borderLeft:`1px solid ${C.border}`, flexShrink:0 }}>
@@ -3618,22 +3631,9 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
-              {peopleLinkWf ? (
-                <span style={{ fontSize:11, color:C.text3, whiteSpace:"nowrap",
-                  maxWidth:130, overflow:"hidden", textOverflow:"ellipsis" }}>{peopleLinkWf.name}</span>
-              ) : (
-                <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
-                  style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8,
-                    fontSize:12, fontFamily:F, outline:"none", cursor:"pointer", fontWeight:500,
-                    color:C.text2, appearance:"none", WebkitAppearance:"none",
-                    backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
-                    backgroundRepeat:"no-repeat", backgroundPosition:"right 8px center",
-                    paddingRight:"26px", background:"white" }}>
-                  <option value="">Assign…</option>
-                  {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
-              )}
-              {peopleLinkWf && peopleLinks.length === 0 && (
+              <span style={{ fontSize:11, color:C.text3, whiteSpace:"nowrap",
+                maxWidth:130, overflow:"hidden", textOverflow:"ellipsis" }}>{peopleLinkWf.name}</span>
+              {peopleLinks.length === 0 && (
                 <div style={{ position:"relative" }} data-wfpicker="1">
                   <button onClick={() => setShowWfPicker(p => !p)}
                     style={{ background:"none", border:"none", cursor:"pointer", padding:"2px", display:"flex", color:C.text3 }}>
@@ -3704,10 +3704,31 @@ export function PeoplePipelineWidget({ record, objectId, environment, onNavigate
           )}
         </div>
       )}
-      {/* No workflow assigned */}
+      {/* No workflow assigned — the word "workflow" here IS the picker now,
+          rather than a separate "Assign…" dropdown up in the header row.
+          Always interactive here (not gated by hidePicker) — this message
+          is the ONLY place a workflow can be assigned from this widget now
+          that the old top-row select has been removed. */}
       {!peopleLinkWf && (
-        <div style={{ padding:"12px 16px", color:C.text3, fontSize:12 }}>
-          Select a workflow above to start tracking people through stages.
+        <div style={{ padding:"12px 16px", color:C.text3, fontSize:12, display:"flex", alignItems:"center", flexWrap:"wrap", gap:4 }}>
+          <span>Select a</span>
+          {/* Invisible <select> overlaid exactly on a plain <span> — the span
+              hugs "workflow" at its true rendered width (no browser select
+              auto-sizing quirks to fight), the select just handles the click
+              and native option list on top of it. */}
+          <span style={{ position:"relative", display:"inline-block" }}>
+            <span style={{ fontWeight:700, color:"#7c3aed", borderBottom:"1.5px dashed #7c3aed",
+              cursor:"pointer", pointerEvents:"none" }}>workflow</span>
+            <select value="" onChange={e => { if (e.target.value) assignWorkflow(e.target.value); }}
+              title="Choose a workflow"
+              style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+                opacity:0, cursor:"pointer", border:"none", padding:0, margin:0, fontSize:12,
+                appearance:"none", WebkitAppearance:"none", MozAppearance:"none" }}>
+              <option value="" disabled>workflow</option>
+              {peopleLinkOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </span>
+          <span>to start tracking people through stages.</span>
         </div>
       )}
 

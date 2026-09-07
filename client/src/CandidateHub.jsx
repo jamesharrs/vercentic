@@ -392,8 +392,9 @@ export default function CandidateHub() {
     </div>
   );
 
-  const { candidate } = state;
+  const { candidate, brand } = state;
   const initials = [(candidate.first_name||'')[0],(candidate.last_name||'')[0]].filter(Boolean).join('').toUpperCase()||'?';
+  const primary = brand?.primary_color || C.accent;
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, fontFamily:F }}>
@@ -401,12 +402,16 @@ export default function CandidateHub() {
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, position:'sticky', top:0, zIndex:50, boxShadow:'0 2px 12px rgba(91,91,214,0.06)' }}>
         <div style={{ padding:'14px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div style={{ width:34, height:34, borderRadius:10, background:`linear-gradient(135deg, ${C.accent}, #4338CA)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <span style={{ color:'white', fontSize:14, fontWeight:900 }}>V</span>
-            </div>
+            {brand?.logo_url ? (
+              <img src={brand.logo_url} alt={brand.company_name||''} style={{ height:30, maxWidth:120, objectFit:'contain' }}/>
+            ) : (
+              <div style={{ width:34, height:34, borderRadius:10, background:`linear-gradient(135deg, ${primary}, #4338CA)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <span style={{ color:'white', fontSize:14, fontWeight:900 }}>{brand?.company_name?.[0]?.toUpperCase() || 'V'}</span>
+              </div>
+            )}
             <div>
               <div style={{ fontSize:13, fontWeight:800, color:C.text1, lineHeight:1 }}>Candidate Hub</div>
-              <div style={{ fontSize:10, color:C.text3, letterSpacing:'0.04em' }}>POWERED BY VERCENTIC</div>
+              <div style={{ fontSize:10, color:C.text3, letterSpacing:'0.04em' }}>{brand?.company_name ? brand.company_name.toUpperCase() : 'POWERED BY VERCENTIC'}</div>
             </div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -414,13 +419,13 @@ export default function CandidateHub() {
               <div style={{ fontSize:13, fontWeight:700, color:C.text1 }}>{candidate.first_name} {candidate.last_name}</div>
               {candidate.email && <div style={{ fontSize:11, color:C.text3 }}>{candidate.email}</div>}
             </div>
-            <div style={{ width:36, height:36, borderRadius:'50%', background:`linear-gradient(135deg, ${C.accent}, #4338CA)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'white' }}>{initials}</div>
+            <div style={{ width:36, height:36, borderRadius:'50%', background:`linear-gradient(135deg, ${primary}, #4338CA)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'white' }}>{initials}</div>
           </div>
         </div>
         <div style={{ display:'flex', borderTop:`1px solid ${C.border}`, overflowX:'auto' }}>
           {TABS.map(tab => (
-            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{ display:'flex', alignItems:'center', gap:7, padding:'11px 18px', border:'none', background:'transparent', cursor:'pointer', fontSize:13, fontWeight:activeTab===tab.id?700:500, color:activeTab===tab.id?C.accent:C.text3, borderBottom:activeTab===tab.id?`2.5px solid ${C.accent}`:'2.5px solid transparent', fontFamily:F, whiteSpace:'nowrap', transition:'color 0.15s' }}>
-              <Ic n={tab.icon} s={15} c={activeTab===tab.id?C.accent:C.text3}/>{tab.label}
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{ display:'flex', alignItems:'center', gap:7, padding:'11px 18px', border:'none', background:'transparent', cursor:'pointer', fontSize:13, fontWeight:activeTab===tab.id?700:500, color:activeTab===tab.id?primary:C.text3, borderBottom:activeTab===tab.id?`2.5px solid ${primary}`:'2.5px solid transparent', fontFamily:F, whiteSpace:'nowrap', transition:'color 0.15s' }}>
+              <Ic n={tab.icon} s={15} c={activeTab===tab.id?primary:C.text3}/>{tab.label}
             </button>
           ))}
         </div>

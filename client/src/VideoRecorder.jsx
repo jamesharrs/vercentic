@@ -29,18 +29,23 @@ function blobToBase64(blob) {
 }
 
 // ── Shell / branding ──────────────────────────────────────────────────────────
-function Shell({ children, company }) {
+function Shell({ children, company, brand }) {
+  const primary = brand?.primary_color || ACCENT;
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#EEF2FF 0%,#F5F3FF 100%)",
       fontFamily:F, display:"flex", flexDirection:"column" }}>
       <div style={{ background:"white", borderBottom:"1px solid #E5E7EB", padding:"14px 24px",
         display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:30, height:30, borderRadius:8,
-            background:`linear-gradient(135deg,${ACCENT},#7C3AED)`,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ color:"white", fontSize:13, fontWeight:900 }}>V</span>
-          </div>
+          {brand?.logo_url ? (
+            <img src={brand.logo_url} alt={brand.company_name||""} style={{ height:26, maxWidth:110, objectFit:"contain" }}/>
+          ) : (
+            <div style={{ width:30, height:30, borderRadius:8,
+              background:`linear-gradient(135deg,${primary},#7C3AED)`,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <span style={{ color:"white", fontSize:13, fontWeight:900 }}>{brand?.company_name?.[0]?.toUpperCase() || "V"}</span>
+            </div>
+          )}
           <span style={{ fontSize:13, fontWeight:700, color:"#1A1A2E" }}>
             {company || "Video Interview"}
           </span>
@@ -279,7 +284,7 @@ export default function VideoRecorder({ token }) {
 
   // ── Phase renders ─────────────────────────────────────────────────────────────
   if (phase === "loading") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
         justifyContent:"center", height:300, gap:12, color:"#9CA3AF" }}>
         <div style={{ width:36, height:36, borderRadius:"50%", border:`3px solid #E5E7EB`,
@@ -291,7 +296,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "error") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ textAlign:"center", padding:"48px 0" }}>
         <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
         <h2 style={{ fontSize:22, fontWeight:800, color:"#111827", margin:"0 0 10px" }}>Something went wrong</h2>
@@ -301,7 +306,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "expired") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ textAlign:"center", padding:"48px 0" }}>
         <div style={{ width:64, height:64, borderRadius:"50%", background:"#FEF3C7",
           display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
@@ -316,7 +321,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "completed") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ textAlign:"center", padding:"48px 0" }}>
         <div style={{ width:72, height:72, borderRadius:"50%",
           background:"linear-gradient(135deg,#4361EE,#7C3AED)",
@@ -333,7 +338,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "done") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ textAlign:"center", padding:"40px 0" }}>
         <div style={{ width:72, height:72, borderRadius:"50%",
           background:"linear-gradient(135deg,#4361EE,#7C3AED)",
@@ -359,7 +364,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "uploading") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
         justifyContent:"center", height:300, gap:16 }}>
         <div style={{ fontSize:15, fontWeight:700, color:"#111827" }}>Uploading your responses…</div>
@@ -373,7 +378,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "welcome") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
         <div style={{ textAlign:"center", marginBottom:28 }}>
           <div style={{ width:64, height:64, borderRadius:"50%",
@@ -419,7 +424,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "setup") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
         <h2 style={{ fontSize:20, fontWeight:800, color:"#111827", margin:"0 0 6px" }}>Camera check</h2>
         <p style={{ fontSize:13, color:"#6B7280", marginBottom:16 }}>
@@ -450,7 +455,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "think") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
         <ProgressBar current={qIndex+1} total={questions.length}/>
         <div style={{ background:"white", borderRadius:16, padding:"20px 22px",
@@ -476,7 +481,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "recording") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
         <ProgressBar current={qIndex+1} total={questions.length}/>
         <div style={{ background:"white", borderRadius:16, padding:"18px 22px",
@@ -506,7 +511,7 @@ export default function VideoRecorder({ token }) {
   );
 
   if (phase === "review") return (
-    <Shell company={company}>
+    <Shell company={company} brand={session?.brand}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
         <ProgressBar current={qIndex+1} total={questions.length}/>
         <div style={{ background:"white", borderRadius:16, padding:"18px 22px",

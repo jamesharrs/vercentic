@@ -1164,9 +1164,9 @@ You are always given the current page and record via "CURRENT PAGE CONTEXT:" in 
 CRITICAL RULES — ACTIONS AND CONFIRMATION:
 1. You NEVER execute any action silently or claim to have done something before the user confirms.
 2. For ANY action that creates, updates, deletes, or moves data, you MUST output a tagged block and wait.
-3. Always describe EXACTLY what will happen BEFORE the user clicks confirm.
-4. Use plain, specific language: "I will create a person record for Ahmed" NOT "I'll handle that."
-5. Always give the user a clear way to cancel before confirming.
+3. Do NOT write out the details in prose before the block — every action block (CREATE_RECORD, UPDATE_RECORD, PROPOSE_ACTION, etc.) renders as its own card showing exactly what will change, so repeating that as bullet points first just duplicates the card underneath it. Say ONE short sentence naming the action (e.g. "I'll update the job description on Backend Engineer — here's what will change:"), then go straight to the block. Never re-list the record, field, or value in prose when the block right below it already shows them.
+4. Use plain, specific language in that one sentence: "I will create a person record for Ahmed" NOT "I'll handle that."
+5. Always give the user a clear way to cancel before confirming — the block's cancel button covers this; you don't need to restate it.
 6. After a user says "yes", "go ahead", "confirm", "do it", or similar — output the action block immediately.
 7. If unsure what the user wants, ASK before proposing any action.
 
@@ -1296,6 +1296,15 @@ When the user asks you to filter, narrow down, show only, or sort the list they 
 
 UPDATE RECORD: When user asks to change a field on a specific record:
 - Show what will change, output: <UPDATE_RECORD>{"record_id":"...","record_name":"...","object_name":"...","field_updates":{"api_key":"value"}}</UPDATE_RECORD>
+- FORMATTING RULE for long-form or rich text fields (job descriptions, notes,
+  summaries, anything more than a short phrase): write the value as clean
+  HTML, not markdown — the field is a rich text editor that renders HTML
+  directly, so markdown symbols (**bold**, - bullets, # headings) will show
+  up as literal asterisks and dashes to the user instead of being formatted.
+  Use <p> for paragraphs, <strong> for bold, <em> for italics, <h3>/<h4> for
+  section headings, and <ul><li> or <ol><li> for lists. Example value:
+  "<p><strong>About the Role</strong></p><p>We are looking for...</p><h3>What You Will Do</h3><ul><li>Design and build...</li></ul>"
+  Do NOT use markdown syntax (**, -, #) inside any field_updates value — ever.
 
 BULK ACTION — HIGH RISK. You MUST follow this exact sequence:
 Step 1: Before outputting the block, explicitly state in your message:
@@ -1476,6 +1485,11 @@ Step 4: When ready, output EXACTLY this format:
 
 RULES:
 - Use arrays for skills/required_skills: ["React", "Node.js"]
+- job_description (and any other rich text field) must be clean HTML, not
+  markdown — use <p>, <strong>, <em>, <h3>/<h4>, and <ul><li>/<ol><li>. Example:
+  "<p><strong>About the Role</strong></p><p>We are looking for...</p><h3>What You Will Do</h3><ul><li>Design and build...</li></ul>"
+  Never put **bold**, - bullets, or # headings into a field value — they
+  render as literal characters in the editor, not formatting.
 - Valid Person status: Active, Passive, Not Looking, Placed, Archived
 - Valid Job status: Draft, Open, On Hold, Filled, Cancelled (default Open)
 - Valid work_type: On-site, Remote, Hybrid
@@ -1575,17 +1589,32 @@ SCHEDULING RULES:
   Keep it to one sentence, warm and direct.
 
 TASK CREATION INSTRUCTIONS:
-When the user asks to create a task, reminder, or to-do:
-Step 1: Confirm what the task is for — title, type, priority, due date.
-Step 2: When you have the key details, output EXACTLY this format:
+When the user asks to create a task, reminder, or to-do — or when THEY mention
+wanting to be reminded of something as part of a bigger request (e.g. "add a
+note AND remind me to call him in 2 weeks"):
+- If you already have enough to act — a clear subject and either an explicit
+  or reasonably inferable due date (compute relative phrases like "in 2 weeks"
+  against today's date yourself) — output the CREATE_TASK block immediately.
+  Do NOT ask a separate confirming question first if the user has already told
+  you what they want. Never say things like "would you also like me to set a
+  reminder?" as a dangling follow-up with nothing behind it — either you have
+  enough to create it now (do it), or you're missing one specific piece of
+  information (ask for exactly that, nothing more).
+- If the user is also asking for something else in the same message (e.g. a
+  note), output BOTH blocks in the same response — do not split a single
+  request across two separate turns.
+- Only ask a clarifying question if something essential is genuinely missing
+  and can't be inferred (e.g. no timeframe mentioned at all, and none implied
+  by context).
+Output format:
 <CREATE_TASK>
 {"title":"Follow up with Ahmed","task_type":"follow_up","priority":"medium","due_date":"2026-04-18","due_time":"09:00","reminder":"1d","description":"Check on application status","record_id":null,"record_name":null}
 </CREATE_TASK>
 task_type: call, email, follow_up, review, interview, meeting, send_docs, chase, other
 priority: urgent, high, medium, low
 reminder: 15m, 30m, 1h, 3h, 1d, 2d (before due) — or omit if no reminder needed
-If the user is viewing a record in CURRENT PAGE CONTEXT, offer to link the task to it.
-Always confirm the key details before outputting the block.
+If the user is viewing a record in CURRENT PAGE CONTEXT, link the task to it
+(record_id, record_name) automatically — don't make them ask for that.
 
 TASK SEARCH INSTRUCTIONS:
 When the user asks to see, find, or list tasks — e.g. "show me my tasks", "what tasks do I have today", "show tasks for this record", "what's overdue" — output EXACTLY this block:
@@ -1600,6 +1629,55 @@ If the user is viewing a record and asks about "my tasks" or "tasks here", defau
 For "show me all my tasks" or "what do I need to do today", always use scope "global".
 Each task result includes: title, due_date, priority, status, record_name (the linked record), record_id, task_id.
 When presenting tasks, group by: overdue → due today → upcoming. Include a clickable summary with the linked record name.
+
+COPILOT CAPABILITIES — READ CAREFULLY
+You can ONLY take the actions described in this system prompt (CREATE_RECORD,
+CREATE_WORKFLOW, CREATE_USER, CREATE_ROLE, CREATE_FORM, CREATE_TASK,
+SCHEDULE_INTERVIEW, SEARCH_TASKS, and any SEARCH_/APPLY_ filter blocks defined
+elsewhere in this prompt). Anything else you can do without a block: summarise
+a record, draft an email/message as text (not send it), answer questions
+about the data, explain how something works.
+
+Never offer, imply, or ask about doing something that isn't one of the above
+— not even as a passing question at the end of a message (e.g. do not say
+"would you like me to also set up X?" unless X is something you can actually
+execute in this same conversation). If you're not sure whether something is
+supported, treat it as unsupported.
+
+If a user asks for something outside this list — recurring/repeating
+reminders, sending SMS/WhatsApp/email directly, calendar sync, bulk edits,
+deleting records, changing permissions, third-party integrations, or
+anything else not covered above — do NOT pretend you can do it and do NOT
+offer it as a next step. Instead:
+  1. Tell them plainly, in one short sentence, that this isn't something you
+     can do yet (don't over-apologise, just be direct and move on).
+  2. Silently emit a FEATURE_REQUEST block so it's captured for the product
+     team. Never mention the block itself, never say "I've logged this" or
+     similar — just answer naturally and include the block.
+
+<FEATURE_REQUEST>
+{"request_text":"what they actually asked for, in plain words","reason":"one short sentence on why it's not currently supported"}
+</FEATURE_REQUEST>
+
+QUICK REPLY — tappable answers to your own question
+Whenever you end a message with a plain conversational question that expects
+a short answer — a yes/no, a pick-one-of-a-few, or "should I do X or Y?" —
+also emit a QUICK_REPLY block listing the exact short replies a tap should
+send, so the user doesn't have to type them. This is NOT for proposing an
+action you can't do (that's covered above) and NOT a replacement for the
+action-confirmation cards (CREATE_RECORD, UPDATE_RECORD, PROPOSE_ACTION etc.
+already have their own Confirm/Cancel buttons — never add QUICK_REPLY to a
+message that also contains one of those blocks). Use it for the ordinary
+back-and-forth moments: "Would you like me to send this to Maya, or would
+you like to make changes first?", "Should I schedule this for tomorrow or
+next week?", "Want me to summarise the whole pipeline or just this job?".
+Keep it to 2–4 options, each written as the literal text the user would want
+to send — not generic labels like "Yes"/"No" unless the question genuinely
+is a plain yes/no.
+
+<QUICK_REPLY>
+{"options":["Send it now","Let me review first"]}
+</QUICK_REPLY>
 
 When a user wants to create a form, questionnaire, scorecard, survey, or data capture template:
 
@@ -2147,78 +2225,115 @@ function getContextActions(activeNav, settingsSection, navObjects, editorContext
 
 const SUGGESTED_ACTIONS = {
   people: [
-    { label: "Schedule interview",   prompt: "Schedule an interview for this candidate" },
-    { label: "Draft outreach email", prompt: "Draft a warm outreach email to this candidate" },
-    { label: "Find matching jobs",   prompt: "Find the best matching jobs for this candidate" },
-    { label: "Add a note",           prompt: "Add a note to this candidate's record" },
+    { icon:"calendar", label: "Schedule interview",   prompt: "Schedule an interview for this candidate" },
+    { icon:"mail",     label: "Draft outreach email", prompt: "Draft a warm outreach email to this candidate" },
+    { icon:"layers",   label: "Find matching jobs",   prompt: "Find the best matching jobs for this candidate" },
+    { icon:"edit",     label: "Add a note",           prompt: "Add a note to this candidate's record" },
   ],
   jobs: [
-    { label: "Find candidates",       prompt: "Find the best matching candidates for this job" },
-    { label: "Write job description", prompt: "Write a compelling job description for this role" },
-    { label: "Schedule interview",    prompt: "Schedule an interview for this role" },
+    { icon:"user",     label: "Find candidates",       prompt: "Find the best matching candidates for this job" },
+    { icon:"fileText", label: "Write job description", prompt: "Write a compelling job description for this role" },
+    { icon:"calendar", label: "Schedule interview",    prompt: "Schedule an interview for this role" },
   ],
   reports: [
-    { label: "Pipeline funnel",    prompt: "Create a funnel chart of candidates by pipeline status" },
-    { label: "Time-to-fill report",prompt: "Build a report showing jobs by time open — group by department" },
-    { label: "Source breakdown",   prompt: "Show a pie chart of candidates by source" },
-    { label: "Filter active only", prompt: "Add a filter to exclude rejected and withdrawn candidates" },
-    { label: "Change chart type",  prompt: "Change this to a funnel chart" },
-    { label: "Add a formula",      prompt: "Add a formula column to calculate something from my data" },
-    { label: "Pin to dashboard",   prompt: "Save and pin this report to the dashboard" },
-    { label: "Schedule this",      prompt: "Schedule this report to email me weekly" },
+    { icon:"bar-chart-2", label: "Pipeline funnel",    prompt: "Create a funnel chart of candidates by pipeline status" },
+    { icon:"calendar",    label: "Time-to-fill report",prompt: "Build a report showing jobs by time open — group by department" },
+    { icon:"layers",      label: "Source breakdown",   prompt: "Show a pie chart of candidates by source" },
+    { icon:"zap",         label: "Filter active only", prompt: "Add a filter to exclude rejected and withdrawn candidates" },
+    { icon:"bar-chart-2", label: "Change chart type",  prompt: "Change this to a funnel chart" },
+    { icon:"edit",        label: "Add a formula",      prompt: "Add a formula column to calculate something from my data" },
+    { icon:"layout",      label: "Pin to dashboard",   prompt: "Save and pin this report to the dashboard" },
+    { icon:"calendar",    label: "Schedule this",      prompt: "Schedule this report to email me weekly" },
   ],
   settings: [
-    { label: "Create a field",     prompt: "I want to create a new field" },
-    { label: "Invite a user",      prompt: "I want to invite a new user" },
-    { label: "Create a workflow",  prompt: "I want to create a new workflow" },
-    { label: "Set up integration", prompt: "Help me configure an integration" },
+    { icon:"edit",   label: "Create a field",     prompt: "I want to create a new field" },
+    { icon:"user",   label: "Invite a user",      prompt: "I want to invite a new user" },
+    { icon:"zap",    label: "Create a workflow",  prompt: "I want to create a new workflow" },
+    { icon:"cpu",    label: "Set up integration", prompt: "Help me configure an integration" },
   ],
   portals: [
-    { label: "Build Portal",       prompt: "I want to build a new portal — a career site or external experience" },
-    { label: "Write Portal Content", prompt: "Help me write compelling content for a career site" },
-    { label: "Design a Theme",     prompt: "Help me design a portal theme — suggest colours, fonts, and button styles" },
-    { label: "SEO & Meta",         prompt: "Write an SEO meta title and description for this portal page" },
+    { icon:"layout",   label: "Build Portal",       prompt: "I want to build a new portal — a career site or external experience" },
+    { icon:"fileText", label: "Write Portal Content", prompt: "Help me write compelling content for a career site" },
+    { icon:"star",     label: "Design a Theme",     prompt: "Help me design a portal theme — suggest colours, fonts, and button styles" },
+    { icon:"search",   label: "SEO & Meta",         prompt: "Write an SEO meta title and description for this portal page" },
   ],
   default: [
-    { label: "Search records",  prompt: "Search for " },
-    { label: "Create a report", prompt: "I want to build a report" },
-    { label: "New person",      prompt: "I want to add a new person" },
-    { label: "New job",         prompt: "I want to create a new job" },
+    { icon:"search",     label: "Search records",  prompt: "Search for " },
+    { icon:"bar-chart-2",label: "Create a report", prompt: "I want to build a report" },
+    { icon:"user",       label: "New person",      prompt: "I want to add a new person" },
+    { icon:"layers",     label: "New job",         prompt: "I want to create a new job" },
   ],
 };
 
 /* ─── AI Copilot ─────────────────────────────────────────────────────────── */
-const SuggestedActions = ({ activeNav, settingsSection, currentObject, onSend, isLastMsg, _canPerm, _canGlobalPerm }) => {
-  if (!isLastMsg) return null;
+// Shared visual style for every suggestion surface in the Copilot — the
+// icon-chip grid, previously only used in the fixed top-of-panel block.
+// Used for: on-record quick actions, page-specific suggestions, proactive
+// nudges, and post-action "next steps" — one consistent look everywhere.
+const ActionChipGrid = ({ items, onSend, baseColor = "#7c3aed", indent = 0 }) => {
+  if (!items?.length) return null;
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginTop:8, marginLeft:indent, maxWidth:`calc(100% - ${indent}px)` }}>
+      {items.map((a, i) => {
+        const col = a.color || baseColor;
+        const colLight = col + "18";
+        const colBorder = col + "30";
+        return (
+          <button key={i} onClick={() => onSend(a.prompt)}
+            style={{ display:"flex", alignItems:"center", justifyContent:a.icon?"flex-start":"center", gap:8, padding:"9px 12px", borderRadius:12,
+              border:`1px solid ${colBorder}`, background:colLight, color:col,
+              fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+              transition:"all .12s", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", textAlign:a.icon?"left":"center" }}
+            onMouseEnter={e=>{ e.currentTarget.style.background=col+"2e"; e.currentTarget.style.transform="translateY(-1px)"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background=colLight; e.currentTarget.style.transform="none"; }}>
+            {a.icon && (
+              <div style={{ width:22, height:22, borderRadius:7, background:col+"28", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <Ic n={a.icon} s={11} c={col}/>
+              </div>
+            )}
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{a.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const SuggestedActions = ({ activeNav, settingsSection, currentObject, currentRecord, nudges, navObjects, editorContext, onSend, isFirstMsg }) => {
+  // Big grid only on first load of a record/page — the persistent strip
+  // above the input covers ongoing access from then on, so we don't repeat
+  // the full set under every single reply.
+  if (!isFirstMsg) return null;
   const slug = currentObject?.slug;
+
+  // On a record — record-specific actions in the object's colour (this used
+  // to be a separate fixed block above the messages; now it sits under the
+  // message like every other suggestion set).
+  if (currentRecord && currentObject) {
+    const actions = RECORD_ACTIONS[slug] || RECORD_ACTIONS.people;
+    return <ActionChipGrid items={actions} onSend={onSend} baseColor={currentObject.color || "#7c3aed"}/>;
+  }
+
   const isReports = activeNav === 'reports';
   const isSettings = activeNav === 'settings';
   const isPortals = isSettings && settingsSection === 'portals';
-
-  // Don't show bottom chips when we'd fall back to the generic default set —
-  // the top CONTEXT_ACTIONS already cover those pages (dashboard, general nav, etc.)
   const hasSpecificActions = isPortals || isSettings || isReports || (slug && SUGGESTED_ACTIONS[slug]);
-  if (!hasSpecificActions) return null;
 
-  const actions = isPortals ? SUGGESTED_ACTIONS.portals
-    : isSettings ? SUGGESTED_ACTIONS.settings
-    : isReports ? SUGGESTED_ACTIONS.reports
-    : SUGGESTED_ACTIONS[slug];
-  return (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginTop:8, marginLeft:34 }}>
-      {actions.map((a, i) => (
-        <button key={i} onClick={() => onSend(a.prompt)}
-          style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 10px",
-            borderRadius:99, border:"1.5px solid #ddd6fe", background:"white",
-            color:"#6d28d9", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-            transition:"all .12s", whiteSpace:"nowrap" }}
-          onMouseEnter={e=>{ e.currentTarget.style.background="#f5f3ff"; e.currentTarget.style.borderColor="#a78bfa"; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#ddd6fe"; }}>
-          {a.label} →
-        </button>
-      ))}
-    </div>
-  );
+  const nudgeItems = (nudges || []).map(n => ({ icon:n.icon, label:n.text, prompt:n.action, color:n.color }));
+
+  if (hasSpecificActions) {
+    const actions = isPortals ? SUGGESTED_ACTIONS.portals
+      : isSettings ? SUGGESTED_ACTIONS.settings
+      : isReports ? SUGGESTED_ACTIONS.reports
+      : SUGGESTED_ACTIONS[slug];
+    return <ActionChipGrid items={[...nudgeItems, ...actions]} onSend={onSend}/>;
+  }
+
+  // General nav with no page-specific set — fall back to nudges (if any)
+  // plus the generic context actions, in the same unified chip format.
+  const contextActions = getContextActions(activeNav, settingsSection, navObjects, editorContext);
+  if (!nudgeItems.length && !contextActions?.length) return null;
+  return <ActionChipGrid items={[...nudgeItems, ...(contextActions || [])]} onSend={onSend}/>;
 };
 
 // Auth headers for fetch calls — reads session from localStorage (same as apiClient)
@@ -2237,6 +2352,39 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [docked,       setDocked]       = useState(false); // sidebar panel mode
   const [messages,     setMessages]     = useState([]);
   const [input,        setInput]        = useState("");
+
+  // Docked (full-height) panel width — resizable via a drag handle on its
+  // left edge, persisted across sessions.
+  const [panelWidth,   setPanelWidth]   = useState(() => {
+    try { return parseInt(localStorage.getItem("vercentic_copilot_width"), 10) || 420; }
+    catch { return 420; }
+  });
+  const panelWidthRef  = useRef(panelWidth);
+  const draggingWidthRef = useRef(false);
+  const onWidthDragStart = (e) => {
+    e.preventDefault();
+    draggingWidthRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev) => {
+      if (!draggingWidthRef.current) return;
+      // Panel is docked to the right edge, so its width is the distance
+      // from the cursor to the right edge of the viewport.
+      const next = Math.min(800, Math.max(320, window.innerWidth - ev.clientX));
+      panelWidthRef.current = next;
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      draggingWidthRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem("vercentic_copilot_width", String(panelWidthRef.current)); } catch {}
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   // Stable ref so event handlers can call sendMessage without TDZ / stale closure
   const sendMessageRef = useRef(null);
@@ -2325,6 +2473,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [pendingInterview, setPendingInterview] = useState(null);
   const [pendingForm,      setPendingForm]      = useState(null);
   const [pendingTask,      setPendingTask]      = useState(null);
+  const [quickReply,       setQuickReply]       = useState(null); // {options:[...]} — tappable answers to the assistant's own question
   const [pendingReport,    setPendingReport]    = useState(null);
   const [pendingPortal,    setPendingPortal]    = useState(null);
   const [pendingDashboard, setPendingDashboard] = useState(null);
@@ -2335,6 +2484,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const [parsedJob,        setParsedJob]        = useState(null);
   const [proposedAction,   setProposedAction]   = useState(null);
   const bottomRef      = useRef(null);
+  const stripRef        = useRef(null); // persistent context-actions strip — for slide left/right buttons
   const lastMsgTopRef  = useRef(null);  // points to top of newest message
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
@@ -2956,6 +3106,27 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     try { return JSON.parse(match[1].trim()); } catch { return null; }
   };
 
+  // Fires silently whenever the Copilot hits something it can't do — see
+  // "COPILOT CAPABILITIES" in the system prompt. No confirmation card; just
+  // logged for the product team via the FEATURE_REQUEST route below.
+  const parseFeatureRequest = (text) => {
+    const match = text.match(/<FEATURE_REQUEST>([\s\S]*?)<\/FEATURE_REQUEST>/);
+    if (!match) return null;
+    try { return JSON.parse(match[1].trim()); } catch { return null; }
+  };
+
+  // Tappable answers to the assistant's own conversational question — plain
+  // yes/no or pick-one moments, distinct from the action-confirmation cards
+  // (those already have their own Confirm/Cancel UI).
+  const parseQuickReply = (text) => {
+    const match = text.match(/<QUICK_REPLY>([\s\S]*?)<\/QUICK_REPLY>/);
+    if (!match) return null;
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      return Array.isArray(parsed?.options) && parsed.options.length ? parsed : null;
+    } catch { return null; }
+  };
+
   const parseApplyFilter = (text) => {
     const m = text.match(/<APPLY_FILTER>([\s\S]*?)<\/APPLY_FILTER>/);
     if (!m) return null;
@@ -3135,6 +3306,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     .replace(/<MOVE_STAGE>[\s\S]*?<\/MOVE_STAGE>/g,"")
     .replace(/<NAVIGATE>[\s\S]*?<\/NAVIGATE>/g,"")
     .replace(/<CREATE_TASK>[\s\S]*?<\/CREATE_TASK>/g,"")
+    .replace(/<FEATURE_REQUEST>[\s\S]*?<\/FEATURE_REQUEST>/g,"")
+    .replace(/<QUICK_REPLY>[\s\S]*?<\/QUICK_REPLY>/g,"")
     .replace(/<SEARCH_TASKS>[\s\S]*?<\/SEARCH_TASKS>/g,"")
     .replace(/<RECOMMEND_CANDIDATES\s*\/?>/g,"")
     .trim();
@@ -3323,6 +3496,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setPendingInterview(null);
     setPendingForm(null);
     setPendingTask(null);
+    setQuickReply(null);
     setPendingPortal(null);
     setPendingPortal(null);
     setPendingReport(null);
@@ -3595,6 +3769,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const interviewData = parseScheduleInterview(reply);
       const formData2     = parseCreateForm(reply);
       const taskData      = parseCreateTask(reply);
+      const quickReplyData = parseQuickReply(reply);
+      const featureReqData = parseFeatureRequest(reply);
       const portalData    = parseCreatePortal(reply);
       const dashboardData = parseCreateDashboard(reply);
       const agentData     = parseCreateAgent(reply);
@@ -3638,6 +3814,22 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       if(interviewData && canRecord('record_schedule_interview')) setPendingInterview(interviewData);
       if(formData2)     setPendingForm(formData2);
       if(taskData)      setPendingTask(taskData);
+      if(quickReplyData) setQuickReply(quickReplyData);
+      if(featureReqData && featureReqData.request_text) {
+        // Silent — no pending state, no card, no user action needed. Fire and
+        // forget; never surface errors from this to the conversation.
+        api.post('/feature-requests', {
+          environment_id: environment?.id || null,
+          source: 'copilot',
+          request_text: featureReqData.request_text,
+          reason: featureReqData.reason || '',
+          context_label: currentRecord && currentObject
+            ? `${currentObject.name || currentObject.slug}: ${(currentRecord.data?.first_name ? `${currentRecord.data.first_name} ${currentRecord.data.last_name||''}`.trim() : null) || currentRecord.data?.job_title || currentRecord.data?.pool_name || 'record'}`
+            : (activeNav || null),
+          context_record_id: currentRecord?.id || null,
+          context_record_type: currentObject?.slug || null,
+        }).catch(() => {});
+      }
       if(portalData)    setPendingPortal(portalData);
       if(dashboardData)  setPendingDashboard(dashboardData);
       if(agentData)      setPendingAgent(agentData);
@@ -3871,7 +4063,8 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     const obj = objects.find(o=>o.slug===pendingRecord.object_slug);
     if(!obj){setCreating(false);return;}
     try {
-      const created = await api.post("/records",{object_id:obj.id,environment_id:environment.id,data:pendingRecord.data,created_by:"Copilot"});
+      const cleanData = sanitizeRichTextUpdates(pendingRecord.data, getFieldsForSlug(pendingRecord.object_slug));
+      const created = await api.post("/records",{object_id:obj.id,environment_id:environment.id,data:cleanData,created_by:"Copilot"});
       if(!created?.id) throw new Error(created?.error || "Record creation failed — no ID returned");
       const d = pendingRecord.data;
       const name = (d.first_name?`${d.first_name} ${d.last_name||""}`.trim():null)||d.job_title||d.pool_name||"Record";
@@ -4103,6 +4296,23 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
         window.dispatchEvent(new CustomEvent('vercentic:recordUpdated', { detail: { recordId: payload.record_id } }));
         resultMsg = `**Done** — Status updated to **${payload.value}**`;
 
+      // ── Multi-field update (documented as "update_record" in the system
+      // prompt's PROPOSE_ACTION shape) — same payload shape as <UPDATE_RECORD>,
+      // just arriving via PROPOSE_ACTION instead. Was previously silently
+      // dropped by the "unknown action_type" fallback below.
+      } else if ((action_type === 'update_record' || action_type === 'update_fields') && payload?.record_id && payload?.field_updates) {
+        const rec = await tFetch(`/api/records/${payload.record_id}`);
+        const objectFields = fields?.[rec.object_id] || [];
+        const cleanUpdates = sanitizeRichTextUpdates(payload.field_updates, objectFields);
+        await tFetch(`/api/records/${payload.record_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...rec.data, ...cleanUpdates } }),
+        });
+        window.dispatchEvent(new CustomEvent('vercentic:recordUpdated', { detail: { recordId: payload.record_id } }));
+        const fl = Object.entries(payload.field_updates).map(([k]) => k).join(', ');
+        resultMsg = `**Done** — Updated ${payload.record_name || 'record'}: ${fl}`;
+
       // ── Log a communication (call / email / sms) ────────────────────────────
       } else if (action_type === 'log_comm' && payload?.record_id) {
         await tFetch('/api/comms', {
@@ -4276,32 +4486,32 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
   const showNextActions = (type, meta = {}) => {
     const suggestions = {
       person_created: [
-        { label:"Schedule an interview",  prompt:`Schedule an interview for ${meta.name||'this person'}` },
-        { label:"Draft outreach email",   prompt:`Draft an outreach email to ${meta.name||'this person'}` },
-        { label:"Find matching jobs",     prompt:`What jobs would suit ${meta.name||'this person'}?` },
+        { icon:"calendar", label:"Schedule an interview",  prompt:`Schedule an interview for ${meta.name||'this person'}` },
+        { icon:"mail",     label:"Draft outreach email",   prompt:`Draft an outreach email to ${meta.name||'this person'}` },
+        { icon:"layers",   label:"Find matching jobs",     prompt:`What jobs would suit ${meta.name||'this person'}?` },
       ],
       job_created: [
-        { label:"Find matching candidates", prompt:`Who are the best candidates for ${meta.name||'this role'}?` },
-        { label:"Write job description",    prompt:`Write a full job description for ${meta.name||'this role'}` },
-        { label:"Set up a workflow",        prompt:`Create a hiring workflow for ${meta.name||'this role'}` },
+        { icon:"user",     label:"Find matching candidates", prompt:`Who are the best candidates for ${meta.name||'this role'}?` },
+        { icon:"fileText", label:"Write job description",    prompt:`Write a full job description for ${meta.name||'this role'}` },
+        { icon:"zap",      label:"Set up a workflow",        prompt:`Create a hiring workflow for ${meta.name||'this role'}` },
       ],
       interview_scheduled: [
-        { label:"Send confirmation email",  prompt:`Write an interview confirmation email for ${meta.name||'this candidate'}` },
-        { label:"Create a scorecard",       prompt:`Create an interview scorecard form for this interview` },
-        { label:"Schedule follow-up",       prompt:`Schedule a follow-up call with ${meta.name||'this candidate'} for next week` },
+        { icon:"mail",     label:"Send confirmation email",  prompt:`Write an interview confirmation email for ${meta.name||'this candidate'}` },
+        { icon:"edit",     label:"Create a scorecard",       prompt:`Create an interview scorecard form for this interview` },
+        { icon:"calendar", label:"Schedule follow-up",       prompt:`Schedule a follow-up call with ${meta.name||'this candidate'} for next week` },
       ],
       stage_moved: [
-        { label:"Send a message",           prompt:`Draft a message to ${meta.name||'this candidate'} about their application progress` },
-        { label:"Schedule next step",       prompt:`Schedule the next interview for ${meta.name||'this candidate'}` },
-        { label:"Check their match score",  prompt:`What is ${meta.name||'this candidate'}'s match score?` },
+        { icon:"mail",     label:"Send a message",           prompt:`Draft a message to ${meta.name||'this candidate'} about their application progress` },
+        { icon:"calendar", label:"Schedule next step",       prompt:`Schedule the next interview for ${meta.name||'this candidate'}` },
+        { icon:"star",     label:"Check their match score",  prompt:`What is ${meta.name||'this candidate'}'s match score?` },
       ],
       record_updated: [
-        { label:"View their profile",       prompt:`Show me ${meta.name||'this record'}'s full profile` },
-        { label:"Send an update",           prompt:`Draft an email to ${meta.name||'this person'} with their status update` },
+        { icon:"user", label:"View their profile",       prompt:`Show me ${meta.name||'this record'}'s full profile` },
+        { icon:"mail", label:"Send an update",           prompt:`Draft an email to ${meta.name||'this person'} with their status update` },
       ],
       bulk_updated: [
-        { label:"Review the changes",       prompt:`Show me all records that were just updated` },
-        { label:"Check for follow-ups",     prompt:`Are there any candidates in this group that need immediate attention?` },
+        { icon:"layers", label:"Review the changes",     prompt:`Show me all records that were just updated` },
+        { icon:"zap",    label:"Check for follow-ups",   prompt:`Are there any candidates in this group that need immediate attention?` },
       ],
     };
     const acts = suggestions[type] || [];
@@ -4310,13 +4520,64 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
     setTimeout(() => setNextActions([]), 45000);
   };
 
+  // Safety net: the system prompt now tells the model to write rich_text
+  // field values as HTML directly, but if it ever slips back into markdown
+  // (or an older message in this conversation already did), convert it
+  // before saving so the editor renders real formatting instead of literal
+  // asterisks and dashes.
+  const looksLikeMarkdown = (v) => typeof v === 'string' && !/<[a-z][\s\S]*>/i.test(v) && (/\*\*[^*]+\*\*/.test(v) || /(^|\n)\s*[-*]\s+\S/.test(v) || /(^|\n)#{1,4}\s+\S/.test(v));
+  const markdownToHtml = (v) => {
+    let s = v.replace(/\r\n/g, '\n');
+    // Headings written as their own line: "**Heading**" or "## Heading"
+    s = s.replace(/(^|\n)\s*#{1,4}\s*(.+?)\s*(\n|$)/g, '$1<h3>$2</h3>$3');
+    s = s.replace(/(^|\n)\s*\*\*([^*\n]{2,60})\*\*\s*(\n|$)/g, '$1<h3>$2</h3>$3');
+    // If the whole thing is still one line (no real newlines), give bullet
+    // sequences a fighting chance by splitting on " - " when it repeats
+    // often enough to actually be a list rather than a stray hyphen.
+    if (!s.includes('\n') && (s.match(/\s-\s/g) || []).length >= 3) {
+      s = s.replace(/\s-\s(?=[A-Z])/g, '\n- ');
+    }
+    const lines = s.split('\n').map(l => l.trim()).filter(Boolean);
+    let html = '', inList = false, listTag = 'ul';
+    for (const line of lines) {
+      if (/^<h[1-6]>/.test(line)) { if (inList) { html += `</${listTag}>`; inList = false; } html += line; continue; }
+      const bullet = line.match(/^[-*]\s+(.+)/);
+      const numbered = line.match(/^\d+\.\s+(.+)/);
+      if (bullet || numbered) {
+        const tag = numbered ? 'ol' : 'ul';
+        if (!inList) { html += `<${tag}>`; inList = true; listTag = tag; }
+        else if (listTag !== tag) { html += `</${listTag}><${tag}>`; listTag = tag; }
+        html += `<li>${(bullet ? bullet[1] : numbered[1]).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</li>`;
+      } else {
+        if (inList) { html += `</${listTag}>`; inList = false; }
+        html += `<p>${line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>')}</p>`;
+      }
+    }
+    if (inList) html += `</${listTag}>`;
+    return html;
+  };
+  const sanitizeRichTextUpdates = (fieldUpdates, objectFields) => {
+    if (!objectFields?.length) return fieldUpdates;
+    const out = { ...fieldUpdates };
+    for (const key of Object.keys(out)) {
+      const f = objectFields.find(f => f.api_key === key);
+      if (f?.field_type === 'rich_text' && looksLikeMarkdown(out[key])) out[key] = markdownToHtml(out[key]);
+    }
+    return out;
+  };
+
   const handleConfirmUpdate = async () => {
     if (!pendingUpdate) return;
     setCreating(true);
     try {
       const existing = await api.get(`/records/${pendingUpdate.record_id}`);
       if (!existing || existing.error) throw new Error('Record not found');
-      await api.patch(`/records/${pendingUpdate.record_id}`, { data: { ...(existing.data || {}), ...pendingUpdate.field_updates } });
+      const objectFields = fields?.[existing.object_id] || [];
+      const cleanUpdates = sanitizeRichTextUpdates(pendingUpdate.field_updates, objectFields);
+      await api.patch(`/records/${pendingUpdate.record_id}`, { data: { ...(existing.data || {}), ...cleanUpdates } });
+      // Notify the open record page to reload — without this the field is
+      // saved correctly but stays stale on screen until a manual refresh
+      window.dispatchEvent(new CustomEvent('vercentic:recordUpdated', { detail: { recordId: pendingUpdate.record_id } }));
       const fl = Object.entries(pendingUpdate.field_updates).map(([k,v]) => `${k} → ${v}`).join(', ');
       setMessages(m => [...m, { role:'assistant', content:`✓ Updated ${pendingUpdate.record_name||'record'}: ${fl}` }]);
       showNextActions('record_updated', { name: pendingUpdate.record_name });
@@ -4819,7 +5080,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
   return (
     <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes popIn{from{opacity:0;transform:scale(.97) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}} @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}} @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.3)}50%{box-shadow:0 0 0 6px rgba(239,68,68,.15)}} .copilot-action-btn:hover{background:rgba(124,58,237,0.1)!important;border-color:rgba(124,58,237,0.4)!important;color:#7c3aed!important;transform:translateY(-1px);}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes popIn{from{opacity:0;transform:scale(.97) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}} @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}} @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.3)}50%{box-shadow:0 0 0 6px rgba(239,68,68,.15)}}`}</style>
 
       {/* Floating button — hidden when docked */}
       {!docked&&(
@@ -4835,7 +5096,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       {open&&(
         <div data-tour="copilot-panel" style={docked ? {
           // Docked sidebar mode
-          position:"fixed",top:0,right:0,width:420,height:"100vh",
+          position:"fixed",top:0,right:0,width:panelWidth,height:"100vh",
           background:"#fafbff",borderLeft:"1px solid rgba(124,58,237,.15)",
           boxShadow:"-8px 0 32px rgba(80,40,180,.12)",
           zIndex:800,display:"flex",flexDirection:"column",overflow:"hidden",
@@ -4847,6 +5108,21 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           zIndex:800,display:"flex",flexDirection:"column",overflow:"hidden",
           border:"1px solid rgba(124,58,237,.15)",animation:"popIn .22s cubic-bezier(.175,.885,.32,1.275)"
         }}>
+
+          {/* Width resize handle — docked mode only, drag to resize the panel */}
+          {docked && (
+            <div
+              onMouseDown={onWidthDragStart}
+              title="Drag to resize"
+              style={{
+                position:"absolute", left:0, top:0, bottom:0, width:6,
+                cursor:"col-resize", zIndex:20, background:"transparent",
+                transition:"background .15s",
+              }}
+              onMouseEnter={e=>{ e.currentTarget.style.background = "rgba(124,58,237,.25)"; }}
+              onMouseLeave={e=>{ if (!draggingWidthRef.current) e.currentTarget.style.background = "transparent"; }}
+            />
+          )}
 
           {/* Header */}
           <div style={{padding:"18px 20px 16px",background:"linear-gradient(135deg,#5b21b6 0%,#4338ca 60%,#3b5bdb 100%)",display:"flex",alignItems:"center",gap:12,flexShrink:0,position:"relative",overflow:"hidden"}}>
@@ -4895,76 +5171,6 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
               <Ic n="x" s={13} c="white"/>
             </button>
           </div>
-
-          {/* Quick actions */}
-          {messages.length<=1&&(
-            <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(124,58,237,.1)",flexShrink:0,background:"white"}}>
-              {currentRecord&&currentObject ? (
-                // On a record — show record-specific actions in the object's colour
-                (()=>{
-                  const actions = RECORD_ACTIONS[currentObject.slug] || RECORD_ACTIONS.people;
-                  const col = currentObject.color || "#7c3aed";
-                  const colLight = col + "18";
-                  const colBorder = col + "30";
-                  return (
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-                      {actions.map(a=>(
-                        <button key={a.id} onClick={()=>sendMessage(a.prompt)}
-                          style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:10,border:`1px solid ${colBorder}`,background:colLight,color:col,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s",textAlign:"left"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=col+"2e";e.currentTarget.style.transform="translateY(-1px)";}}
-                          onMouseLeave={e=>{e.currentTarget.style.background=colLight;e.currentTarget.style.transform="none";}}>
-                          <div style={{width:22,height:22,borderRadius:6,background:col+"28",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            <Ic n={a.icon} s={11} c={col}/>
-                          </div>
-                          <span style={{lineHeight:1.2}}>{a.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()
-              ) : (
-                // Not on a record — show nudges (if any) then the create actions grid
-                <>
-                  {nudges.length > 0 && (
-                    <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:8}}>
-                      <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2,paddingLeft:2}}>Suggested actions</div>
-                      {nudges.map((n,i) => (
-                        <button key={i} onClick={() => sendMessage(n.action)}
-                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:10,
-                            border:`1.5px solid ${n.color}28`,background:`${n.color}08`,
-                            cursor:"pointer",fontFamily:F,textAlign:"left",width:"100%",transition:"all .12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=`${n.color}14`;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background=`${n.color}08`;}}>
-                          <div style={{width:24,height:24,borderRadius:7,background:`${n.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            <Ic n={n.icon} s={12} c={n.color}/>
-                          </div>
-                          <span style={{fontSize:11,fontWeight:600,color:n.color,flex:1,lineHeight:1.3}}>{n.text}</span>
-                          <span style={{fontSize:11,color:n.color,opacity:0.6,flexShrink:0}}>→</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {(()=>{
-                    const actions = getContextActions(activeNav, settingsSection, navObjects, editorContext);
-                    const cols = actions.length <= 4 ? "1fr 1fr" : "1fr 1fr 1fr";
-                    return (
-                  <div style={{display:"grid",gridTemplateColumns:cols,gap:6}}>
-                    {actions.map(a=>(
-                      <button key={a.id} onClick={()=>sendMessage(a.prompt)} className="copilot-action-btn"
-                        style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:10,border:"1px solid rgba(124,58,237,.18)",background:"rgba(124,58,237,.04)",color:"#5b21b6",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F,transition:"all .12s",textAlign:"left"}}>
-                        <div style={{width:22,height:22,borderRadius:6,background:"rgba(124,58,237,.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          <Ic n={a.icon} s={11} c="#7c3aed"/>
-                        </div>
-                        <span style={{lineHeight:1.2}}>{a.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                    );
-                  })()}
-                </>
-              )}
-            </div>
-          )}
 
           {/* ── Move Stage Card ── */}
           {pendingMoveStage && (
@@ -5097,8 +5303,12 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                         activeNav={activeNav}
                         settingsSection={settingsSection}
                         currentObject={currentObject}
+                        currentRecord={currentRecord}
+                        nudges={nudges}
+                        navObjects={navObjects}
+                        editorContext={editorContext}
                         onSend={sendMessage}
-                        isLastMsg={i===messages.length-1}
+                        isFirstMsg={i===0}
                       />
                     )}
                   </div>
@@ -5408,7 +5618,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
 
                 {/* ── UPDATE RECORD Card ── */}
-                {pendingUpdate && (
+                {pendingUpdate && i===messages.length-1 && (
                   <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #4361EE",background:"#EEF2FF",fontFamily:F}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                       <Ic n="edit" s={13} c="#4361EE"/>
@@ -5416,13 +5626,22 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                     </div>
                     <div style={{fontSize:11,color:"#374151",marginBottom:6}}><strong>{pendingUpdate.record_name}</strong> · {pendingUpdate.object_name}</div>
                     <div style={{background:"#dbeafe",borderRadius:8,padding:"8px 10px",marginBottom:10}}>
-                      {Object.entries(pendingUpdate.field_updates||{}).map(([k,v])=>(
-                        <div key={k} style={{display:"flex",gap:6,alignItems:"center",fontSize:12,marginBottom:2}}>
-                          <code style={{background:"#bfdbfe",padding:"1px 5px",borderRadius:4,fontSize:10}}>{k}</code>
-                          <span style={{color:"#6b7280"}}>→</span>
-                          <strong style={{color:"#1e3a8a"}}>{String(v)}</strong>
-                        </div>
-                      ))}
+                      {Object.entries(pendingUpdate.field_updates||{}).map(([k,v])=>{
+                        const isHtml = typeof v === 'string' && /<[a-z][\s\S]*>/i.test(v);
+                        return (
+                          <div key={k} style={{marginBottom:isHtml?8:2}}>
+                            <div style={{display:"flex",gap:6,alignItems:"center",fontSize:12,marginBottom:isHtml?4:0}}>
+                              <code style={{background:"#bfdbfe",padding:"1px 5px",borderRadius:4,fontSize:10}}>{k}</code>
+                              <span style={{color:"#6b7280"}}>→</span>
+                              {!isHtml && <strong style={{color:"#1e3a8a"}}>{String(v)}</strong>}
+                            </div>
+                            {isHtml && (
+                              <div style={{background:"white",borderRadius:6,padding:"8px 10px",fontSize:12,color:"#1f2937",lineHeight:1.5,maxHeight:180,overflowY:"auto",border:"1px solid #bfdbfe"}}
+                                dangerouslySetInnerHTML={{__html:sanitizeCopilot(v)}}/>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       <button onClick={()=>setPendingUpdate(null)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #bfdbfe",background:"transparent",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F}}>Cancel</button>
@@ -5432,7 +5651,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 )}
 
                 {/* ── BULK ACTION Card — two-step, explicit, danger-styled ── */}
-                {pendingBulk && (
+                {pendingBulk && i===messages.length-1 && (
                   <div style={{margin:"8px 0",borderRadius:12,border:"2px solid #dc2626",overflow:"hidden",fontFamily:F}}>
                     <div style={{background:"#dc2626",padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}>
                       <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
@@ -5489,7 +5708,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 )}
 
                 {/* ── MOVE STAGE Card ── */}
-                {pendingStage && (
+                {pendingStage && i===messages.length-1 && (
                   <div style={{margin:"8px 0",padding:"14px",borderRadius:12,border:"1.5px solid #7c3aed",background:"#f5f3ff",fontFamily:F}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
@@ -5510,25 +5729,13 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
                 {/* ── Suggested Next Actions strip ── */}
                 {nextActions.length > 0 && (
-                  <div style={{margin:"4px 0 8px",padding:"10px 12px",borderRadius:12,background:"linear-gradient(135deg,rgba(67,97,238,.06),rgba(124,58,237,.06))",border:"1px solid rgba(67,97,238,.15)"}}>
-                    <div style={{fontSize:10,fontWeight:700,color:"#4361EE",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Suggested next steps</div>
-                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                      {nextActions.map((a,i) => (
-                        <button key={i} onClick={()=>{setNextActions([]); sendMessage(a.prompt);}}
-                          style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,
-                            border:"1px solid rgba(67,97,238,.2)",background:"rgba(67,97,238,.04)",
-                            cursor:"pointer",fontFamily:F,textAlign:"left",width:"100%",transition:"all .1s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background="rgba(67,97,238,.1)";e.currentTarget.style.borderColor="rgba(67,97,238,.4)";}}
-                          onMouseLeave={e=>{e.currentTarget.style.background="rgba(67,97,238,.04)";e.currentTarget.style.borderColor="rgba(67,97,238,.2)";}}>
-                          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#4361EE" strokeWidth={2.5}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                          <span style={{fontSize:11,fontWeight:600,color:"#3730a3",flex:1}}>{a.label}</span>
-                        </button>
-                      ))}
-                      <button onClick={()=>setNextActions([])}
-                        style={{padding:"4px",background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#9ca3af",fontFamily:F,textAlign:"right",marginTop:2}}>
-                        Dismiss
-                      </button>
-                    </div>
+                  <div style={{margin:"4px 0 8px"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#4361EE",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Suggested next steps</div>
+                    <ActionChipGrid items={nextActions} onSend={(p)=>{setNextActions([]); sendMessage(p);}} baseColor="#4361EE"/>
+                    <button onClick={()=>setNextActions([])}
+                      style={{padding:"4px",background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#9ca3af",fontFamily:F,marginTop:2}}>
+                      Dismiss
+                    </button>
                   </div>
                 )}
 
@@ -5746,6 +5953,16 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                   </div>
                 );})()}
 
+                {/* ── Quick Reply — tappable answers to the assistant's own question ── */}
+                {quickReply && i===messages.length-1 && msg.role==="assistant" && (
+                  <ActionChipGrid
+                    items={quickReply.options.map(o => ({ label:o, prompt:o }))}
+                    onSend={(p) => { setQuickReply(null); sendMessage(p); }}
+                    baseColor="#4361EE"
+                    indent={34}
+                  />
+                )}
+
                 {/* ── Report card ── */}
                 {msg.role==="assistant"&&msg.hasReport&&msg.reportData&&i===messages.length-1&&(()=>{
                   const rpt = msg.reportData;
@@ -5898,33 +6115,49 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
 
           {/* ── Persistent context actions strip — only shown once conversation is active ── */}
           {messages.length > 1 && (()=>{
-            // On a record: show record-specific actions; elsewhere: show page context actions
+            // On a record: show record-specific actions; elsewhere: show page context actions.
+            // Full list (no truncation) — with the big grid now only shown on first
+            // load, this strip is the ongoing access point, so it carries everything.
             const actions = (currentRecord && currentObject)
-              ? (RECORD_ACTIONS[currentObject.slug] || RECORD_ACTIONS.people).slice(0, 4)
-              : getContextActions(activeNav, settingsSection, navObjects, editorContext).slice(0, 5);
+              ? (RECORD_ACTIONS[currentObject.slug] || RECORD_ACTIONS.people)
+              : getContextActions(activeNav, settingsSection, navObjects, editorContext);
             const col = (currentRecord && currentObject)
               ? (currentObject.color || "#7c3aed")
               : "#7c3aed";
+            const scrollBy = (dx) => stripRef.current?.scrollBy({ left: dx, behavior: "smooth" });
             return (
               <div style={{
-                padding:"8px 14px 6px",
+                padding:"8px 6px 6px",
                 borderTop:"1px solid rgba(124,58,237,.08)",
-                display:"flex", gap:5, flexShrink:0, background:"white",
-                overflowX:"auto", scrollbarWidth:"none",
+                display:"flex", alignItems:"center", gap:2, flexShrink:0, background:"white",
               }}>
-                {actions.map(a=>(
-                  <button key={a.id} onClick={()=>sendMessage(a.prompt)}
-                    style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",
-                      borderRadius:99, border:`1px solid ${col}28`,
-                      background:`${col}08`, color:col,
-                      fontSize:11, fontWeight:600, cursor:"pointer",
-                      fontFamily:F, whiteSpace:"nowrap", flexShrink:0, transition:"all .12s"}}
-                    onMouseEnter={e=>{ e.currentTarget.style.background=`${col}18`; e.currentTarget.style.borderColor=`${col}50`; }}
-                    onMouseLeave={e=>{ e.currentTarget.style.background=`${col}08`; e.currentTarget.style.borderColor=`${col}28`; }}>
-                    <Ic n={a.icon} s={10} c={col}/>
-                    {a.label}
-                  </button>
-                ))}
+                <button onClick={()=>scrollBy(-160)} title="Scroll left"
+                  style={{flexShrink:0,width:22,height:22,borderRadius:"50%",border:"1px solid rgba(124,58,237,.2)",background:"white",color:"#7c3aed",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <div ref={stripRef} style={{
+                  padding:"0 6px",
+                  display:"flex", gap:5, flex:1, minWidth:0,
+                  overflowX:"auto", scrollbarWidth:"none",
+                }}>
+                  {actions.map(a=>(
+                    <button key={a.id} onClick={()=>sendMessage(a.prompt)}
+                      style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",
+                        borderRadius:99, border:`1px solid ${col}28`,
+                        background:`${col}08`, color:col,
+                        fontSize:11, fontWeight:600, cursor:"pointer",
+                        fontFamily:F, whiteSpace:"nowrap", flexShrink:0, transition:"all .12s"}}
+                      onMouseEnter={e=>{ e.currentTarget.style.background=`${col}18`; e.currentTarget.style.borderColor=`${col}50`; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background=`${col}08`; e.currentTarget.style.borderColor=`${col}28`; }}>
+                      <Ic n={a.icon} s={10} c={col}/>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={()=>scrollBy(160)} title="Scroll right"
+                  style={{flexShrink:0,width:22,height:22,borderRadius:"50%",border:"1px solid rgba(124,58,237,.2)",background:"white",color:"#7c3aed",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+                </button>
               </div>
             );
           })()}
@@ -5978,7 +6211,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
                 }
                 return "Ask anything or say 'create a job'…";
               })()}
-              rows={1} style={{flex:1,padding:"10px 14px",borderRadius:12,border:"1.5px solid #e5e7eb",fontSize:13,fontFamily:F,outline:"none",resize:"none",color:C.text1,lineHeight:1.4,maxHeight:80,overflowY:"auto",background:"#fafbff",transition:"border-color .15s"}}
+              rows={2} style={{flex:1,padding:"10px 14px",borderRadius:12,border:"1.5px solid #e5e7eb",fontSize:13,fontFamily:F,outline:"none",resize:"none",color:C.text1,lineHeight:1.4,maxHeight:100,overflowY:"auto",background:"#fafbff",transition:"border-color .15s"}}
               onFocus={e=>e.target.style.borderColor="rgba(124,58,237,.5)"}
               onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
             {/* Mic button */}

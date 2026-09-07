@@ -347,7 +347,11 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   ensure();
   const kit = { id: crypto.randomUUID(), ...req.body, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-  const s = getStore(); s.brand_kits.push(kit); saveStore();
+  const s = getStore();
+  if (kit.is_default === true && kit.environment_id) {
+    s.brand_kits.forEach(k => { if (k.environment_id === kit.environment_id && k.is_default) k.is_default = false; });
+  }
+  s.brand_kits.push(kit); saveStore();
   res.status(201).json(kit);
 });
 
@@ -355,6 +359,16 @@ router.patch('/:id', (req, res) => {
   ensure();
   const s = getStore(); const i = s.brand_kits.findIndex(k => k.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Not found' });
+  // Enforce "only one default per environment" server-side too — the settings
+  // UI already does this with two separate PATCH calls, but that's a client-side
+  // convention, not a guarantee. Any caller setting is_default:true here gets
+  // the invariant enforced regardless of how they got there.
+  if (req.body.is_default === true) {
+    const envId = s.brand_kits[i].environment_id;
+    s.brand_kits.forEach((k, idx) => {
+      if (idx !== i && k.environment_id === envId && k.is_default) k.is_default = false;
+    });
+  }
   s.brand_kits[i] = { ...s.brand_kits[i], ...req.body, updated_at: new Date().toISOString() };
   saveStore(); res.json(s.brand_kits[i]);
 });

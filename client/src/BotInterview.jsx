@@ -136,7 +136,7 @@ export default function BotInterview({ token }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 32 }}>
           <BotAvatar size={64} />
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", margin: "16px 0 8px", textAlign: "center" }}>Hi{session?.candidate_name ? `, ${session.candidate_name.split(" ")[0]}` : ""}! 👋</h1>
-          <p style={{ fontSize: 15, color: "#6b7280", textAlign: "center", lineHeight: 1.6, maxWidth: 440 }}>I'm the Vercentic interview assistant. I'll ask you a few questions to help the hiring team get to know you better.</p>
+          <p style={{ fontSize: 15, color: "#6b7280", textAlign: "center", lineHeight: 1.6, maxWidth: 440 }}>I'm {session?.brand?.company_name ? `${session.brand.company_name}'s` : "the Vercentic"} interview assistant. I'll ask you a few questions to help the hiring team get to know you better.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
           <InfoCard icon="⏱" label="Estimated time" value="10–20 minutes" />

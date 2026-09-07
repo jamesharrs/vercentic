@@ -27,6 +27,9 @@ const ICONS = {
   briefcase:       "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
   layers:          "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   "bar-chart-2":   "M18 20V10M12 20V4M6 20v-6",
+  shield:          "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  "shield-alert":  "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 8v4M12 16h.01",
+  "shield-check":  "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",
 };
 
 function Ic({ n, s = 14, c = C.accent }) {
@@ -65,7 +68,14 @@ const SOURCE_TYPES = [
   { id:"interview", label:"Interviews",      icon:"calendar" },
   { id:"offer",     label:"Offers",          icon:"file-check" },
   { id:"stage",     label:"Stage moves",     icon:"arrow-right" },
+  { id:"security",  label:"Security",        icon:"shield" },
 ];
+
+const SEVERITY_META = {
+  critical: { label:"Critical", color:"#E03131" },
+  warn:     { label:"Warning",  color:"#F59F00" },
+  info:     { label:"Info",     color:"#3B5BDB" },
+};
 
 // ── Dense single row ─────────────────────────────────────────────────────────
 function FeedRow({ item, onOpenRecord, isLast }) {
@@ -106,6 +116,15 @@ function FeedRow({ item, onOpenRecord, isLast }) {
             color:item.object_color||C.accent, flexShrink:0, whiteSpace:"nowrap" }}>
             <Ic n={objIconName} s={7} c={item.object_color||C.accent}/>
             {item.object_name}
+          </span>
+        )}
+
+        {item.source === "security" && item.severity && (
+          <span style={{ fontSize:8.5, fontWeight:800, padding:"1px 6px", borderRadius:99,
+            textTransform:"uppercase", letterSpacing:"0.04em", flexShrink:0,
+            background:`${SEVERITY_META[item.severity]?.color||C.text3}18`,
+            color:SEVERITY_META[item.severity]?.color||C.text3 }}>
+            {item.severity}
           </span>
         )}
 
@@ -166,6 +185,7 @@ export default function ActivityJournal({ environment, onOpenRecord }) {
   const [search,       setSearch]       = useState("");
   const [typeFilter,   setTypeFilter]   = useState("all");
   const [objectFilter, setObjectFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
   const [objects,      setObjects]      = useState([]);
   const [page,         setPage]         = useState(1);
   const LIMIT = 40;
@@ -198,10 +218,15 @@ export default function ActivityJournal({ environment, onOpenRecord }) {
     countByObject[o.id] = items.filter(a => a.object_id === o.id).length;
   });
 
+  // Severity counts — only meaningful for security-sourced entries
+  const countBySeverity = { critical:0, warn:0, info:0 };
+  items.forEach(a => { if (a.source === "security" && countBySeverity[a.severity] != null) countBySeverity[a.severity]++; });
+
   // Filtering
   const filtered = items.filter(a => {
     if (typeFilter !== "all" && a.source !== typeFilter) return false;
     if (objectFilter !== "all" && a.object_id !== objectFilter) return false;
+    if (severityFilter !== "all" && a.severity !== severityFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (a.record_name||"").toLowerCase().includes(q)
@@ -260,6 +285,22 @@ export default function ActivityJournal({ environment, onOpenRecord }) {
             icon={f.icon} count={countBySource[f.id]}
             onClick={() => { setTypeFilter(f.id); setPage(1); }}/>
         ))}
+
+        {/* Severity filter — only shown once there's at least one security event */}
+        {(countBySeverity.critical + countBySeverity.warn + countBySeverity.info) > 0 && (
+          <>
+            <div style={{ fontSize:9.5, fontWeight:700, color:C.text3, letterSpacing:"0.06em",
+              textTransform:"uppercase", padding:"14px 10px 4px" }}>Severity</div>
+            <SideBtn active={severityFilter==="all"} label="All severities" icon="shield"
+              onClick={() => { setSeverityFilter("all"); setPage(1); }}/>
+            {["critical","warn","info"].filter(s=>countBySeverity[s]>0).map(s => (
+              <SideBtn key={s} active={severityFilter===s}
+                label={SEVERITY_META[s].label} icon="shield-alert"
+                count={countBySeverity[s]} color={SEVERITY_META[s].color}
+                onClick={() => { setSeverityFilter(s); setPage(1); }}/>
+            ))}
+          </>
+        )}
 
         {/* Object filter */}
         {objects.length > 0 && (

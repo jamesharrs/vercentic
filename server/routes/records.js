@@ -525,6 +525,57 @@ router.get('/activity/feed', (req, res) => {
     });
   });
 
+  // 5. Security audit events — merged in alongside record activity so admins
+  // get one unified, filterable feed instead of two disconnected screens.
+  // Gated on the same permission the standalone Security Audit Log already
+  // requires, so users without that permission never see these mixed in.
+  if (hasGlobalAction(req.currentUser, 'view_audit_log')) {
+    // Some security events (e.g. role/permission changes) are logged without
+    // an environment_id — the standalone Security Audit Log has always shown
+    // these unscoped, so treat null the same way here rather than silently
+    // hiding them from the merged view.
+    const secEvents = (store.security_audit || [])
+      .filter(e => e.environment_id === environment_id || e.environment_id == null)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, Math.ceil(n / 2));
+
+    const SEV_COLOR = { critical: '#E03131', warn: '#F59F00', info: '#3B5BDB' };
+    const SEV_ICON  = { critical: 'shield-alert', warn: 'shield', info: 'shield-check' };
+    const humanizeEvent = s => (s || 'security_event').replace(/_/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+
+    secEvents.forEach(e => {
+      // Most security events target a role/user/endpoint rather than a
+      // clickable object record — only wire up record_id/object_id when the
+      // target genuinely is a record, so FeedRow's click guard stays safe.
+      const targetIsRecord = e.target_type === 'record' && recordMap[e.target_id];
+      const targetRec = targetIsRecord ? recordMap[e.target_id] : null;
+      const targetObj = targetRec ? objectMap[targetRec.object_id] : null;
+
+      entries.push({
+        id: `sec_${e.id}`,
+        type: `security_${e.event}`,
+        label: humanizeEvent(e.event),
+        record_id: targetIsRecord ? e.target_id : null,
+        record_name: targetIsRecord ? getRecordName(targetRec)
+          : (e.user_email || (e.target_type ? `${e.target_type}: ${e.action || e.target_id || ''}`.trim() : 'System')),
+        object_name: targetObj?.plural_name || targetObj?.name || 'Security',
+        object_color: targetObj?.color || SEV_COLOR[e.severity] || '#6B7280',
+        object_slug: targetObj?.slug || '',
+        object_id: targetIsRecord ? targetRec.object_id : null,
+        actor: resolveActor(e.user_id) || e.user_email || null,
+        detail: e.details ? Object.entries(e.details).slice(0, 2)
+          .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ').slice(0, 100)
+          : (e.object_slug || ''),
+        icon: SEV_ICON[e.severity] || 'shield',
+        color: SEV_COLOR[e.severity] || '#6B7280',
+        severity: e.severity || 'info',
+        created_at: e.timestamp,
+        source: 'security',
+      });
+    });
+  }
+
   // Merge, sort, dedupe, limit
   const typeFilter = types ? types.split(',') : null;
   const sorted = entries
@@ -659,6 +710,20 @@ router.post('/', validate(createRecordSchema), (req, res) => {
   const effectiveCreator = created_by || req.headers['x-user-id'] || null;
   const record = insert('records', {id:uuidv4(),record_number,object_id,environment_id,data:resolvedData,org_unit_id,created_by:effectiveCreator,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),deleted_at:null});
   insert('activity', {id:uuidv4(),environment_id,record_id:record.id,object_id,action:'created',actor:effectiveCreator,changes:resolvedData,created_at:new Date().toISOString()});
+  // Auto-assign the Linked Person workflow when this object has exactly one —
+  // e.g. every new Job gets the single "Job Pipeline" workflow automatically,
+  // so recruiters don't have to manually assign it on each record. If an
+  // object has zero or more than one Linked Person workflow, this is a no-op
+  // and the user picks manually as before.
+  const _linkWfs = query('workflows', w => w.object_id === object_id && !w.deleted_at
+    && ['people_link','linked_person'].includes(w.workflow_type));
+  if (_linkWfs.length === 1) {
+    insert('record_workflow_assignments', {
+      id: uuidv4(), record_id: record.id, workflow_id: _linkWfs[0].id, type: 'people_link',
+      environment_id: _linkWfs[0].environment_id || environment_id,
+      created_at: new Date().toISOString(),
+    });
+  }
   // Fire agent triggers + workflow automation triggers
   getEngine().fireEventTrigger('record_created', record, null).catch(()=>{});
   fireTrigger('record_created', record, []);

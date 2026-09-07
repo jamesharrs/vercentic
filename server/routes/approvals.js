@@ -20,6 +20,7 @@
 const express  = require('express');
 const router   = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const { resolveBrand } = require('../utils/brandKit');
 
 // DB helpers
 let _db;
@@ -180,6 +181,75 @@ function portalUrl(baseUrl, token) {
   return `${base}/approval/${token}`;
 }
 
+// ── Curated content for the public approval page ────────────────────────────
+// Only ever returns a hand-picked whitelist of fields — never the raw record
+// data — so internal notes, source, recruiter comments etc. never leak to an
+// external approver. Infers the "other side" (job<->candidate) via
+// people_links when it isn't explicitly chosen at creation time.
+function curateJobFields(d = {}) {
+  return {
+    job_title: d.job_title || d.title || null,
+    department: d.department || null,
+    location: d.location || null,
+    employment_type: d.employment_type || null,
+    work_type: d.work_type || null,
+    salary_min: d.salary_min || null,
+    salary_max: d.salary_max || null,
+    currency: d.currency || null,
+    description: d.job_description || d.description || null,
+  };
+}
+function curatePersonFields(d = {}) {
+  const name = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.name || null;
+  return {
+    name,
+    current_title: d.current_title || d.job_title || null,
+    location: d.location || null,
+    years_experience: d.years_experience ?? null,
+    skills: Array.isArray(d.skills) ? d.skills : (d.skills ? [d.skills] : []),
+    summary: d.summary || d.bio || null,
+  };
+}
+function findLinkedRecord(store, fromId, direction) {
+  // direction "job->person": fromId is a job, find the linked candidate
+  // direction "person->job": fromId is a person, find their linked job
+  const links = store.people_links || [];
+  const link = direction === 'job->person'
+    ? links.find(l => (l.record_id || l.target_record_id) === fromId)
+    : links.find(l => (l.person_id || l.person_record_id) === fromId);
+  if (!link) return null;
+  const targetId = direction === 'job->person' ? (link.person_id || link.person_record_id) : (link.record_id || link.target_record_id);
+  return (store.records || []).find(r => r.id === targetId) || null;
+}
+function resolveApprovalContent(approval, store) {
+  const sel = approval.content_selection || {};
+  if (!sel.include_job && !sel.include_person) return null;
+
+  const primary = approval.record_id ? (store.records || []).find(r => r.id === approval.record_id) : null;
+  const primaryObj = primary ? (store.objects || store.object_definitions || []).find(o => o.id === primary.object_id) : null;
+
+  let jobRecord = null, personRecord = null;
+  if (sel.include_job) {
+    if (primaryObj?.slug === 'jobs') jobRecord = primary;
+    else if (sel.job_id) jobRecord = (store.records || []).find(r => r.id === sel.job_id);
+    else if (primaryObj?.slug === 'people' && primary) jobRecord = findLinkedRecord(store, primary.id, 'person->job');
+  }
+  if (sel.include_person) {
+    if (primaryObj?.slug === 'people') personRecord = primary;
+    else if (sel.person_id) personRecord = (store.records || []).find(r => r.id === sel.person_id);
+    else if (primaryObj?.slug === 'jobs' && primary) personRecord = findLinkedRecord(store, primary.id, 'job->person');
+  }
+
+  const content = {};
+  if (jobRecord) content.job = curateJobFields(jobRecord.data || {});
+  if (personRecord) {
+    content.person = curatePersonFields(personRecord.data || {});
+    const cv = (store.attachments || []).find(a => a.record_id === personRecord.id && /cv|resume/i.test(a.file_type_name || a.name || ''));
+    if (cv) content.cv = { name: cv.name, url: cv.url };
+  }
+  return Object.keys(content).length ? content : null;
+}
+
 async function sendApprovalEmail({ approval, approver, baseUrl, isReminder = false }) {
   const url = portalUrl(baseUrl, approver.token);
   let messaging;
@@ -258,8 +328,6 @@ router.get('/token/:token', (req, res) => {
   if (!approval) return res.status(404).json({ error: 'Approval not found' });
   const approver = approval.approvers.find(ap => ap.token === token);
   if (!approver) return res.status(404).json({ error: 'Approver not found' });
-  let record = null;
-  if (approval.record_id) record = (s.records || []).find(r => r.id === approval.record_id) || null;
   const safeChain = (approval.approvers || []).map(a => ({
     id: a.id, name: a.name, source_label: a.source_label, order: a.order,
     status: a.status, responded_at: a.responded_at, note: a.note, is_this: a.id === approver.id,
@@ -270,7 +338,8 @@ router.get('/token/:token', (req, res) => {
       created_at: approval.created_at, majority_threshold: approval.majority_threshold },
     approver: { id: approver.id, name: approver.name, status: approver.status },
     chain: safeChain,
-    record: record ? { id: record.id, data: record.data } : null,
+    content: resolveApprovalContent(approval, s),
+    brand: resolveBrand(s, approval.environment_id),
     already_responded: approver.status !== 'pending',
   });
 });
@@ -346,7 +415,7 @@ router.post('/', async (req, res) => {
   ensureTables();
   const { environment_id, record_id, object_id, title, summary, approver_configs,
     mode, majority_threshold, on_approved, on_declined, expires_hours,
-    reminder_hours, email_template_id, send_immediately } = req.body;
+    reminder_hours, email_template_id, send_immediately, content_selection } = req.body;
   if (!title || !approver_configs?.length) return res.status(400).json({ error: 'title and approver_configs required' });
   const s = getStore();
   const record = record_id ? (s.records || []).find(r => r.id === record_id) : null;
@@ -359,6 +428,10 @@ router.post('/', async (req, res) => {
     object_id: object_id || null, title, summary: summary || null,
     mode: mode || 'sequential', majority_threshold: threshold, approvers: resolvedApprovers,
     approver_configs, status: 'pending',
+    // What the public approval page should show — see resolveApprovalContent().
+    // include_job/include_person: booleans; job_id/person_id: explicit override
+    // when the inferred link isn't the right one (e.g. multiple candidates on a job).
+    content_selection: content_selection || { include_job: false, include_person: false, job_id: null, person_id: null },
     on_approved: on_approved || { action: 'none' },
     on_declined: on_declined || { action: 'none' },
     expires_at: expires_hours ? new Date(Date.now() + expires_hours * 3600000).toISOString() : null,

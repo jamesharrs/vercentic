@@ -7,6 +7,7 @@ import AIUsageReport from './superadmin/AIUsageReport.jsx';
 import DemoDataManager from './superadmin/DemoDataManager';
 import FeaturePacksAdmin from './superadmin/FeaturePacks';
 import ErrorLogViewer from './superadmin/ErrorLogViewer.jsx';
+import FeatureRequests from './superadmin/FeatureRequests.jsx';
 import { ReleaseNotesAdmin } from './ReleaseNotes.jsx';
 import CaseManager from './superadmin/CaseManager.jsx';
 import AIDiagnosisPanel from './superadmin/AIDiagnosisPanel.jsx';
@@ -349,6 +350,7 @@ const NAV_ICONS = {
   eye:      "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
   eyeOff:   "M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22",
   layers:   "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+  feature_requests: "M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.5.5 1 1.3 1 2.5h6c0-1.2.5-2 1-2.5A6 6 0 0012 3z",
 };
 
 const NavIcon = ({ id, size=14, color="currentColor" }) => {
@@ -368,6 +370,7 @@ const NAV_ITEMS = [
   { id:'errors',   label:'Error Logs',            icon:'errors',   desc:'App errors across all environments' },
   { id:'release_notes', label:'Release Notes',    icon:'bell',     desc:'Manage platform release notes' },
   { id:'cases',    label:'Support Cases',         icon:'cases',    desc:'Customer service case management' },
+  { id:'feature_requests', label:'Feature Requests', icon:'feature_requests', desc:'What the Copilot couldn\'t do, plus what users have asked for directly' },
   { id:'diagnose', label:'AI Diagnose',           icon:'health',   desc:'AI environment health check for any client' },
   { id:'sequencer',label:'Email Sequencer',       icon:'mail',     desc:'Client onboarding email automation' },
   { id:'ai_usage', label:'AI Usage',             icon:'cpu',      desc:'Token usage, costs & quota management' },
@@ -1042,6 +1045,7 @@ export default function SuperAdminConsole() {
         {section === 'errors' && <ErrorLogViewer/>}
         {section === 'release_notes' && <ReleaseNotesAdmin />}
         {section === 'cases' && <CaseManager />}
+        {section === 'feature_requests' && <FeatureRequests />}
         {section === 'diagnose' && (
           <div>
             <div style={{marginBottom:20}}>

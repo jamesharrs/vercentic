@@ -4,6 +4,7 @@
 
 const express  = require('express');
 const router   = express.Router();
+const { resolveBrand } = require('../utils/brandKit');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore } = require('../db/init');
 const crypto   = require('crypto');
@@ -91,6 +92,7 @@ router.get('/verify/:token', (req, res) => {
       location: d.location || '',
     },
     environment_id: hubToken.environment_id, token_id: hubToken.id, expires_at: hubToken.expires_at,
+    brand: resolveBrand(store, hubToken.environment_id),
   });
 });
 
