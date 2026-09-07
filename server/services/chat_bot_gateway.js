@@ -263,16 +263,24 @@ const ACTION_REGISTRY = {
     const obj = findOne('objects', o => o.slug === slug);
     if (!obj) return { error: `Unknown object "${slug}"` };
     const q = (params.query || '').toLowerCase();
-    const max = action.action_config?.max_results || 5;
-    const results = query('records', r => r.object_id === obj.id && !r.deleted_at)
-      .filter(r => JSON.stringify(r.data || {}).toLowerCase().includes(q))
-      .slice(0, max)
-      .map(r => ({
-        id: r.id,
-        title: r.data?.first_name ? `${r.data.first_name} ${r.data.last_name || ''}`.trim() : (r.data?.job_title || r.data?.name || 'Untitled'),
-        subtitle: r.data?.email || r.data?.department || r.data?.location || '',
-      }));
-    return { ok: true, results, object_slug: slug };
+    const pageSize = action.action_config?.page_size || 3;
+    const offset = params._offset || 0;
+    const allMatches = query('records', r => r.object_id === obj.id && !r.deleted_at)
+      .filter(r => JSON.stringify(r.data || {}).toLowerCase().includes(q));
+    const page = allMatches.slice(offset, offset + pageSize).map(r => ({
+      id: r.id,
+      record_number: r.record_number,
+      object_slug: slug,
+      data: r.data,
+      title: r.data?.first_name ? `${r.data.first_name} ${r.data.last_name || ''}`.trim() : (r.data?.job_title || r.data?.name || 'Untitled'),
+      subtitle: r.data?.email || r.data?.department || r.data?.location || '',
+    }));
+    return {
+      ok: true, results: page, object_slug: slug,
+      total_count: allMatches.length, shown_count: offset + page.length,
+      has_more: offset + page.length < allMatches.length,
+      _pagination: { action_type: 'search_records', params: { ...params, _offset: offset + pageSize } },
+    };
   },
 
   update_stage: (user, params) => {
@@ -348,7 +356,11 @@ const ACTION_REGISTRY = {
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 300, messages: [{ role: 'user', content: prompt }] }),
     });
     const data = await resp.json();
-    return { ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim(), summary: data?.content?.[0]?.text || 'No summary available.' };
+    return {
+      ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim(),
+      summary: data?.content?.[0]?.text || 'No summary available.',
+      record: { id: person.id, record_number: person.record_number, object_slug: 'people', data: person.data },
+    };
   },
 
   add_note: (user, params) => {
@@ -426,19 +438,95 @@ function renderTemplate(template, data) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => (data?.[key] !== undefined ? data[key] : ''));
 }
 
+// ── Configurable record cards ────────────────────────────────────────────────
+// Lets an admin pick, per object, which fields render as the image/title/
+// subtitle/facts on a card — so the same action works sensibly whether the
+// underlying object is a stock "People" object or a client's heavily
+// customised one. Falls back to sane guesses (first_name/last_name, email,
+// location, status) when no card_config has been set on the action.
+function resolveCardConfig(action) {
+  const c = action.card_config || {};
+  return {
+    image_field: c.image_field || null,
+    title_template: c.title_template || '{{first_name}} {{last_name}}',
+    subtitle_field: c.subtitle_field || 'email',
+    fact_fields: Array.isArray(c.fact_fields) && c.fact_fields.length ? c.fact_fields : ['location', 'status'],
+    link_to_record: c.link_to_record !== false,
+  };
+}
+
+function buildRecordUrl(record) {
+  const base = (process.env.CLIENT_URL || 'https://app.vercentic.com').replace(/\/$/, '');
+  if (!record?.object_slug || !record?.record_number) return null;
+  return `${base}/${record.object_slug}/${record.record_number}`;
+}
+
+function fieldLabel(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * buildRecordCardData(record, cardConfig)
+ * Returns a platform-agnostic card content object: { title, subtitle,
+ * image_url, facts: [{label, value}], link_url }. Both Slack and Teams
+ * formatters convert this into their own native card shape.
+ */
+function buildRecordCardData(record, cardConfig) {
+  const data = record?.data || {};
+  const title = renderTemplate(cardConfig.title_template, data).trim() || 'Untitled';
+  const subtitle = data[cardConfig.subtitle_field] || '';
+  const image_url = cardConfig.image_field ? (data[cardConfig.image_field] || null) : null;
+  const facts = cardConfig.fact_fields
+    .filter(k => data[k] !== undefined && data[k] !== null && data[k] !== '')
+    .map(k => ({ label: fieldLabel(k), value: String(data[k]) }));
+  return {
+    title, subtitle, image_url, facts,
+    link_url: cardConfig.link_to_record ? buildRecordUrl(record) : null,
+  };
+}
+
+function buildSlackRecordCardBlocks(cardData) {
+  const blocks = [{
+    type: 'section',
+    text: { type: 'mrkdwn', text: `*${cardData.title}*${cardData.subtitle ? `\n${cardData.subtitle}` : ''}${cardData.facts.length ? '\n' + cardData.facts.map(f => `${f.label}: ${f.value}`).join('  ·  ') : ''}` },
+    ...(cardData.image_url ? { accessory: { type: 'image', image_url: cardData.image_url, alt_text: cardData.title } } : {}),
+  }];
+  if (cardData.link_url) {
+    blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Profile' }, url: cardData.link_url }] });
+  }
+  return blocks;
+}
+
 function formatSlackResponse(action, result, template) {
   if (result?.error) return { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚠️ ${result.error}` } }] };
   if (template) return { text: renderTemplate(template, result) };
   switch (action.card_type) {
-    case 'record_summary':
+    case 'record_summary': {
       if (!result.results?.length) return { text: 'No matches found.' };
-      return { blocks: result.results.map(r => ({ type: 'section', text: { type: 'mrkdwn', text: `*${r.title}*\n${r.subtitle}` } })) };
+      const cardConfig = resolveCardConfig(action);
+      const blocks = [];
+      result.results.forEach((r, i) => {
+        blocks.push(...buildSlackRecordCardBlocks(buildRecordCardData(r, cardConfig)));
+        if (i < result.results.length - 1) blocks.push({ type: 'divider' });
+      });
+      if (result.has_more) {
+        blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `Showing ${result.shown_count} of ${result.total_count} — ask "show more" to see the rest.` }] });
+      }
+      return { blocks };
+    }
     case 'digest':
       return { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*Good to see you, ${result.user_name}* 👋\n📅 ${result.interviews_today} interview(s) today\n✅ ${result.pending_approvals} pending approval(s)` } }] };
     case 'interview_confirmation':
       return { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `📅 *Interview scheduled*\n${result.candidate_name} — ${result.interview_type}\n${result.date} ${result.time || ''}` } }] };
-    case 'ai_summary':
-      return { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*${result.candidate_name}*\n${result.summary}` } }] };
+    case 'ai_summary': {
+      const blocks = [];
+      if (result.record) {
+        const cardConfig = resolveCardConfig(action);
+        blocks.push(...buildSlackRecordCardBlocks(buildRecordCardData(result.record, cardConfig)));
+      }
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: result.summary } });
+      return { blocks };
+    }
     case 'bulk_result':
       return { text: `Added ${result.added?.length || 0}/${result.requested || 0} candidate(s) to *${result.pool_name}*.` };
     case 'approval_result':
@@ -452,15 +540,22 @@ function formatTeamsResponse(action, result, template) {
   if (result?.error) return { title: '⚠️ Error', text: result.error, facts: [] };
   if (template) return { title: action.name, text: renderTemplate(template, result), facts: [] };
   switch (action.card_type) {
-    case 'record_summary':
+    case 'record_summary': {
       if (!result.results?.length) return { title: 'No matches', text: 'No matches found.', facts: [] };
-      return { title: `${result.results.length} result(s)`, text: result.results.map(r => `**${r.title}** — ${r.subtitle}`).join('\n\n'), facts: [] };
+      const cardConfig = resolveCardConfig(action);
+      const cards = result.results.map(r => buildRecordCardData(r, cardConfig));
+      const footer = result.has_more ? `Showing ${result.shown_count} of ${result.total_count} — ask "show more" to see the rest.` : null;
+      return { title: `${result.total_count} result(s)`, cards, text: footer || '', facts: [] };
+    }
     case 'digest':
       return { title: `Your day, ${result.user_name}`, text: '', facts: [{ label: 'Interviews today', value: String(result.interviews_today) }, { label: 'Pending approvals', value: String(result.pending_approvals) }] };
     case 'interview_confirmation':
       return { title: '📅 Interview Scheduled', text: `${result.candidate_name} — ${result.interview_type}`, facts: [{ label: 'Date', value: result.date }, { label: 'Time', value: result.time || 'TBC' }] };
-    case 'ai_summary':
-      return { title: result.candidate_name, text: result.summary, facts: [] };
+    case 'ai_summary': {
+      const cardConfig = resolveCardConfig(action);
+      const cards = result.record ? [buildRecordCardData(result.record, cardConfig)] : [];
+      return { title: result.candidate_name, cards, text: result.summary, facts: [] };
+    }
     case 'bulk_result':
       return { title: 'Bulk add complete', text: `Added ${result.added?.length || 0}/${result.requested || 0} to ${result.pool_name}`, facts: [] };
     case 'approval_result':
@@ -506,6 +601,14 @@ async function handleInboundMessage({ platform, externalWorkspaceId, externalUse
       a.environment_id === environmentId && a.status === 'enabled' && (a.channels || []).includes(platform)
     );
 
+    // "show more" continues a previous paginated result (e.g. search_records)
+    // rather than being matched as a fresh command/intent.
+    if (session?.pending_pagination && /^\s*(show\s+)?(more|next)\s*$/i.test(text)) {
+      const { action_type, params: pageParams } = session.pending_pagination;
+      const action = enabledActions.find(a => a.action_type === action_type);
+      if (action) return runAction(action, user, pageParams, platform, environmentId, externalUserId, text, startedAt, conversationId);
+    }
+
     if (session?.awaiting && session.pending_action_id) {
       const action = findOne('conversational_actions', a => a.id === session.pending_action_id);
       if (action) {
@@ -518,7 +621,7 @@ async function handleInboundMessage({ platform, externalWorkspaceId, externalUse
             return { text: `Got it. Now, ${stillMissing.label.toLowerCase()}?` };
           }
           clearSession(platform, conversationId);
-          return runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt);
+          return runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt, conversationId);
         }
       }
     }
@@ -541,11 +644,11 @@ async function handleInboundMessage({ platform, externalWorkspaceId, externalUse
       return { text: `Sure — ${missing.label.toLowerCase()}?` };
     }
 
-    return runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt);
+    return runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt, conversationId);
   });
 }
 
-async function runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt) {
+async function runAction(action, user, params, platform, environmentId, externalUserId, text, startedAt, conversationId) {
   if (!checkActionPermission(user, action)) {
     logInvocation({ environment_id: environmentId, action_id: action.id, action_name: action.name, platform, external_user_id: externalUserId, vercentic_user_id: user.id, input_text: text, matched: true, success: false, error: 'forbidden', duration_ms: Date.now() - startedAt });
     return { text: `You don't have permission to do that (${action.name}).` };
@@ -569,6 +672,12 @@ async function runAction(action, user, params, platform, environmentId, external
 
   const response = formatResponse(platform, action, result);
   response.__meta = { action_id: action.id, action_name: action.name };
+
+  // Track/clear pagination state so a later "show more" continues correctly.
+  if (conversationId) {
+    setSession(platform, conversationId, { pending_pagination: result?.has_more ? result._pagination : null });
+  }
+
   return response;
 }
 
@@ -628,7 +737,7 @@ async function simulateMessage(user, environmentId, text, conversationId = 'test
           return { reply: `Got it. Now, ${stillMissing.label.toLowerCase()}?`, matched_action: action.name };
         }
         clearSession(platform, conversationId);
-        const r = await runAction(action, user, params, platform, environmentId, 'test-user', text, startedAt);
+        const r = await runAction(action, user, params, platform, environmentId, 'test-user', text, startedAt, conversationId);
         return { reply: r.text || JSON.stringify(r), matched_action: action.name, raw: r };
       }
     }
@@ -647,7 +756,7 @@ async function simulateMessage(user, environmentId, text, conversationId = 'test
     setSession(platform, conversationId, { awaiting: 'clarification', pending_action_id: action.id, pending_params: params });
     return { reply: `Sure — ${missing.label.toLowerCase()}?`, matched_action: action.name, confidence: matched.confidence };
   }
-  const r = await runAction(action, user, params, platform, environmentId, 'test-user', text, startedAt);
+  const r = await runAction(action, user, params, platform, environmentId, 'test-user', text, startedAt, conversationId);
   return { reply: r.text || JSON.stringify(r), matched_action: action.name, confidence: matched.confidence, raw: r };
 }
 
