@@ -323,8 +323,19 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
     card_type: action?.card_type || "",
     response_template: action?.response_template || "",
     status: action?.status || "draft",
+    card_config: action?.card_config || { object_slug: "people", image_field: "", title_template: "{{first_name}} {{last_name}}", subtitle_field: "email", fact_fields: [], link_to_record: true },
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setCard = (k, v) => setForm(f => ({ ...f, card_config: { ...f.card_config, [k]: v } }));
+
+  const [cardObjects, setCardObjects] = useState([]);
+  const [cardFields, setCardFields] = useState([]);
+  useEffect(() => { api.get(`/objects?environment_id=${environmentId}`).then(d => setCardObjects(Array.isArray(d) ? d : [])); }, [environmentId]);
+  useEffect(() => {
+    const obj = cardObjects.find(o => o.slug === form.card_config.object_slug);
+    if (!obj) { setCardFields([]); return; }
+    api.get(`/fields?object_id=${obj.id}`).then(d => setCardFields(Array.isArray(d) ? d : []));
+  }, [form.card_config.object_slug, cardObjects]);
 
   const [testText, setTestText] = useState("");
   const [testResult, setTestResult] = useState(null);
@@ -494,6 +505,47 @@ function BuilderModal({ action, environmentId, meta, onClose, onSaved }) {
                   {(meta.card_types || []).map(ct => <option key={ct} value={ct}>{ct}</option>)}
                 </select>
               </Field>
+            )}
+            {form.response_type === "card" && ["record_summary", "ai_summary"].includes(form.card_type) && (
+              <div style={{ marginTop: 4, marginBottom: 16, padding: 14, background: "var(--t-surface2)", borderRadius: 10, border: "1px solid var(--t-border)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--t-text1)", marginBottom: 10 }}>Card Fields</div>
+                <Field label="Object" hint="Which of your data model's fields are available to show on the card.">
+                  <select style={inputStyle} value={form.card_config.object_slug} onChange={e => setCard("object_slug", e.target.value)}>
+                    {cardObjects.map(o => <option key={o.slug} value={o.slug}>{o.plural_name || o.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Photo field" hint="Optional — shown as the card's avatar/image.">
+                  <select style={inputStyle} value={form.card_config.image_field} onChange={e => setCard("image_field", e.target.value)}>
+                    <option value="">None</option>
+                    {cardFields.filter(f => f.field_type === "image").map(f => <option key={f.api_key} value={f.api_key}>{f.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Title" hint="Use {{field_key}} tokens — e.g. {{first_name}} {{last_name}}.">
+                  <input style={inputStyle} value={form.card_config.title_template} onChange={e => setCard("title_template", e.target.value)} />
+                </Field>
+                <Field label="Subtitle field">
+                  <select style={inputStyle} value={form.card_config.subtitle_field} onChange={e => setCard("subtitle_field", e.target.value)}>
+                    <option value="">None</option>
+                    {cardFields.map(f => <option key={f.api_key} value={f.api_key}>{f.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Fact fields" hint="Shown as key facts on the card — click to toggle.">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {cardFields.map(f => {
+                      const on = form.card_config.fact_fields.includes(f.api_key);
+                      return (
+                        <button key={f.api_key} type="button" onClick={() => setCard("fact_fields", on ? form.card_config.fact_fields.filter(k => k !== f.api_key) : [...form.card_config.fact_fields, f.api_key])}
+                          style={{ padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: "pointer", border: `1px solid ${on ? "var(--t-accent)" : "var(--t-border)"}`, background: on ? "var(--t-accent)" : "var(--t-bg)", color: on ? "#fff" : "var(--t-text2)" }}>
+                          {f.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+                <Field label="Link to record">
+                  <Toggle on={form.card_config.link_to_record} onChange={() => setCard("link_to_record", !form.card_config.link_to_record)} />
+                </Field>
+              </div>
             )}
             {form.response_type === "text" && (
               <Field label="Text template" hint="Use {{key}} tokens to insert values from the action's result.">

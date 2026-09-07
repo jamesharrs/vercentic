@@ -88,6 +88,7 @@ router.post('/', (req, res) => {
     channels: req.body.channels || [],
     response_type: req.body.response_type || 'text',
     card_type: req.body.card_type || null,
+    card_config: req.body.card_config || null,
     response_template: req.body.response_template || null,
     status: req.body.status || 'draft',
     is_system: false,

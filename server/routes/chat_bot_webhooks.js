@@ -244,23 +244,40 @@ async function getTeamsBotToken(appId, appPasswordPlain) {
   return data.access_token;
 }
 
+// Renders one record's card data (title/subtitle/image/facts/link) as a
+// bordered Adaptive Card Container — used when a response includes multiple
+// record cards (search results) or a single one (AI summary profile card).
+function buildTeamsRecordContainer(cardData) {
+  const columns = [];
+  if (cardData.image_url) {
+    columns.push({ type: 'Column', width: 'auto', items: [{ type: 'Image', url: cardData.image_url, size: 'Small', style: 'Person' }] });
+  }
+  const textItems = [
+    { type: 'TextBlock', text: cardData.title, weight: 'Bolder', wrap: true },
+    ...(cardData.subtitle ? [{ type: 'TextBlock', text: cardData.subtitle, isSubtle: true, wrap: true, spacing: 'None' }] : []),
+    ...(cardData.facts.length ? [{ type: 'FactSet', facts: cardData.facts.map(f => ({ title: f.label, value: f.value })) }] : []),
+    ...(cardData.link_url ? [{ type: 'ActionSet', actions: [{ type: 'Action.OpenUrl', title: 'View Profile', url: cardData.link_url }] }] : []),
+  ];
+  columns.push({ type: 'Column', width: 'stretch', items: textItems });
+  return { type: 'Container', separator: true, items: [{ type: 'ColumnSet', columns }] };
+}
+
 async function replyToTeams(activity, channel, response) {
   const appPassword = decryptWithChannelKey(channel.app_password);
   const token = await getTeamsBotToken(channel.app_id, appPassword);
   const replyUrl = `${activity.serviceUrl}v3/conversations/${activity.conversation.id}/activities/${activity.id}`;
+  const body = [
+    { type: 'TextBlock', text: response.title || 'Vercentic', weight: 'Bolder', size: 'Medium' },
+  ];
+  if ((response.cards || []).length) {
+    response.cards.forEach(c => body.push(buildTeamsRecordContainer(c)));
+  }
+  if (response.text) body.push({ type: 'TextBlock', text: response.text, wrap: true });
+  if ((response.facts || []).length) body.push({ type: 'FactSet', facts: response.facts.map(f => ({ title: f.label, value: f.value })) });
+
   const card = {
     type: 'message',
-    attachments: [{
-      contentType: 'application/vnd.microsoft.card.adaptive',
-      content: {
-        type: 'AdaptiveCard', version: '1.4',
-        body: [
-          { type: 'TextBlock', text: response.title || 'Vercentic', weight: 'Bolder', size: 'Medium' },
-          ...(response.text ? [{ type: 'TextBlock', text: response.text, wrap: true }] : []),
-          ...((response.facts || []).length ? [{ type: 'FactSet', facts: response.facts.map(f => ({ title: f.label, value: f.value })) }] : []),
-        ],
-      },
-    }],
+    attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', content: { type: 'AdaptiveCard', version: '1.4', body } }],
   };
   await fetch(replyUrl, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(card) })
     .then(resp => { if (!resp.ok) console.error('[ChatBot/Teams] reply HTTP error:', resp.status); })
