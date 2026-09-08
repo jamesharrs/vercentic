@@ -111,6 +111,33 @@ function buildScorecardForm(envId) {
 }
 
 
+function buildScreeningAgent(envId, peopleObjId) {
+  const now = new Date().toISOString();
+  const AGENT_TEMPLATES = require('./agent_templates');
+  const tpl = AGENT_TEMPLATES.find(t => t.id === 'tpl_screening_interview');
+  return {
+    id: uuidv4(),
+    name: tpl?.name || 'AI Screening Interview',
+    description: tpl?.description || 'Sends the candidate an AI screening interview when they reach the Screening stage.',
+    environment_id: envId,
+    trigger_type: 'stage_changed',
+    trigger_config: { stage_value: 'Screening' },
+    conditions: [],
+    actions: tpl?.actions || [],
+    target_object_id: peopleObjId || null,
+    schedule_time: '09:00',
+    is_active: 1,
+    avatar_icon: tpl?.category_icon || 'filter',
+    avatar_color: tpl?.category_color || '#7c3aed',
+    run_count: 0,
+    sharing: { visibility: 'private', user_ids: [], group_ids: [] },
+    agent_scope: 'object',
+    scope_object_id: peopleObjId || null,
+    created_by: null,
+    created_at: now, updated_at: now,
+  };
+}
+
 const ADDITIONAL_WORKFLOWS = [
   {
     name: 'Standard Application Process',
@@ -235,6 +262,13 @@ async function applyStarterConfig(tenantSlug, environment, objects, clientData={
     if(!store.forms) store.forms=[];
     store.forms.push(buildScorecardForm(envId));
 
+    // Seed the AI Screening Interview agent, active by default, scoped to People
+    if(!store.agents) store.agents=[];
+    const existingScreeningAgent = store.agents.find(a => a.environment_id===envId && a.trigger_type==='stage_changed' && a.trigger_config?.stage_value==='Screening');
+    if(!existingScreeningAgent){
+      store.agents.push(buildScreeningAgent(envId, peopleObj?.id));
+    }
+
     // Seed stage categories so dashboards (Screening, Interviews, Offers, Onboarding) work
     const DEFAULT_STAGE_CATEGORIES = [
       { name:'New',            color:'#3B82F6', icon:'inbox',        sort_order:0,  is_system:true, is_terminal:false },
@@ -279,8 +313,8 @@ async function applyStarterConfig(tenantSlug, environment, objects, clientData={
       store.environments[envIdx].starter_config_applied_at=new Date().toISOString();
     }
     saveStoreNow(tenantSlug);
-    console.log(`[starter] Applied to tenant "${tenantSlug}": ${templates.length} templates, ${steps.length} pipeline stages, career site, scorecard`);
+    console.log(`[starter] Applied to tenant "${tenantSlug}": ${templates.length} templates, ${steps.length} pipeline stages, career site, scorecard, AI Screening Interview agent (active)`);
   });
 }
 
-module.exports = { applyStarterConfig, HIRING_STAGES };
+module.exports = { applyStarterConfig, HIRING_STAGES, buildScreeningAgent };

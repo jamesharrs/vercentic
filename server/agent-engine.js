@@ -1,7 +1,7 @@
 // server/agent-engine.js
 // Handles automatic agent execution: scheduled triggers + event-based triggers
 const cron = require('node-cron');
-const { query, insert, getStore, saveStore } = require('./db/init');
+const { query, insert, getStore, saveStore, getCurrentTenant, tenantStorage } = require('./db/init');
 const { v4: uuidv4 } = require('uuid');
 
 // ── SHARED EXECUTION LOGIC (mirrors agents.js) ────────────────────────────────
@@ -43,14 +43,108 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       break;
     }
     case 'send_email': case 'ai_draft_email': {
-      if (record_id) {
-        const lines = (aiOutput||'').split('\n');
-        const subj = lines.find(l=>l.startsWith('Subject:'));
-        insert('communications', { id:uuidv4(), record_id, environment_id, type:'email', direction:'outbound',
-          subject: subj ? subj.replace('Subject:','').trim() : (action.email_subject||'Agent email'),
-          body: lines.filter(l=>!l.startsWith('Subject:')).join('\n').trim() || action.email_body||'',
-          status: action.type==='ai_draft_email' ? 'draft' : 'sent', sent_by:'Agent', created_at:new Date().toISOString() });
+      if (!record_id) break;
+      const rec = query('records', r=>r.id===record_id)[0];
+      const interpolate = (str) => (str||'').replace(/\{\{(\w+)\}\}/g, (_,k) => rec?.data?.[k] ?? `{{${k}}}`);
+      // Latest pending interview link generated for this record (if an ai_interview step ran earlier)
+      const latestToken = (s.agent_tokens || [])
+        .filter(t => t.candidate_id === record_id && t.status === 'pending')
+        .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      const interviewUrl = latestToken
+        ? `${process.env.APP_URL || process.env.CLIENT_URL || 'http://localhost:3000'}/interview/${latestToken.token}`
+        : null;
+      const lines = (aiOutput||'').split('\n');
+      const subjLine = lines.find(l=>l.startsWith('Subject:'));
+      let subject = subjLine ? subjLine.replace('Subject:','').trim() : interpolate(action.subject ?? action.email_subject ?? 'Agent email');
+      let body    = subjLine ? lines.filter(l=>!l.startsWith('Subject:')).join('\n').trim() : interpolate(action.body ?? action.email_body ?? '');
+      if (interviewUrl) { subject = subject.replace(/\{\{interview_link\}\}/g, interviewUrl); body = body.replace(/\{\{interview_link\}\}/g, interviewUrl); }
+
+      let status = action.type === 'ai_draft_email' ? 'draft' : 'sent';
+      if (action.type === 'send_email') {
+        if (rec?.data?.email) {
+          try {
+            const msg = require('./services/messaging');
+            const res = await msg.sendEmail({ to: rec.data.email, subject, text: body, html: body.replace(/\n/g,'<br>'), tags: { environment_id } });
+            status = res?.simulated ? 'simulated' : 'sent';
+          } catch (e) {
+            console.error('[Agent] send_email failed:', e.message);
+            status = 'failed';
+          }
+        } else {
+          status = 'failed';
+        }
       }
+      insert('communications', { id:uuidv4(), record_id, environment_id, type:'email', direction:'outbound',
+        subject, body, status, sent_by:'Agent', created_at:new Date().toISOString() });
+      break;
+    }
+    case 'ai_interview': {
+      if (!record_id) break;
+      const s2 = getStore();
+      if (!s2.agent_tokens) s2.agent_tokens = [];
+      const rec2 = (s2.records || []).find(r => r.id === record_id);
+      if (!rec2) break;
+      const d2 = rec2.data || {};
+      const questionSource = action.question_source || 'job';
+      let qIds = action.question_ids || [];
+      let sourceLabel = action.question_source === 'manual' ? 'manually selected' : '';
+      if (questionSource === 'manual') {
+        if (qIds.length === 0) break;
+      } else {
+        const link = (s2.people_links || []).find(l => l.person_record_id === record_id);
+        const linkedJobId = link?.target_record_id || null;
+        if (!linkedJobId) break;
+        const jobRec = (s2.records || []).find(r => r.id === linkedJobId);
+        const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
+        const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === linkedJobId);
+        qIds = jobAssignments.map(a => a.question_id);
+        if (qIds.length === 0) break;
+        sourceLabel = `linked job "${jobName}"`;
+        rec2.data._interview_job_id = linkedJobId;
+      }
+      const allQuestions = s2.question_bank_v2 || [];
+      const scorecardQuestions = qIds.map(id => allQuestions.find(q => q.id === id)).filter(Boolean)
+        .map(q => ({ id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' }));
+      if (scorecardQuestions.length === 0) break;
+      const token = require('crypto').randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+      s2.agent_tokens.push({
+        id: uuidv4(), token, agent_id: action.agent_id || null,
+        persona_name: action.persona_name || 'Alex',
+        persona_description: action.persona_description || '',
+        avatar_color: action.avatar_color || '#6366f1',
+        voice: action.voice || 'en-US',
+        candidate_id: record_id,
+        candidate_name: [d2.first_name, d2.last_name].filter(Boolean).join(' ') || 'Candidate',
+        candidate_email: d2.email || null,
+        environment_id, scorecard_questions: scorecardQuestions,
+        question_source: questionSource,
+        status: 'pending',
+        created_at: new Date().toISOString(), expires_at: expiresAt,
+        started_at: null, completed_at: null,
+      });
+      rec2.data._interview_question_ids = qIds;
+      rec2.data._interview_question_source = questionSource;
+      rec2.updated_at = new Date().toISOString();
+      if (!s2.record_notes) s2.record_notes = [];
+      s2.record_notes.push({
+        id: uuidv4(), record_id,
+        content: `AI Interview link generated — ${scorecardQuestions.length} question${scorecardQuestions.length !== 1 ? 's' : ''} from ${sourceLabel}. Link expires in 72 hours: /interview/${token}`,
+        created_by: 'agent', created_at: new Date().toISOString(),
+      });
+      saveStore();
+      try {
+        const _currentTenantSlug = getCurrentTenant();
+        tenantStorage.run('master', () => {
+          const masterStore = getStore();
+          if (!masterStore.interview_token_index) masterStore.interview_token_index = [];
+          masterStore.interview_token_index.push({
+            token, tenant_slug: _currentTenantSlug, agent_id: action.agent_id || null,
+            created_at: new Date().toISOString(), expires_at: expiresAt,
+          });
+          saveStore();
+        });
+      } catch (e) { console.error('[Agent] interview_token_index write failed:', e.message); }
       break;
     }
     case 'webhook': {
