@@ -174,6 +174,7 @@ async function matchIntent(text, actions, session) {
         example_phrases: a.trigger_phrases,
         parameters: (a.parameters || []).map(p => ({ key: p.key, label: p.label, required: p.required, hint: p.extract_hint })),
       }));
+      const objectsCatalogue = query('objects', () => true).map(o => ({ slug: o.slug, name: o.name, plural_name: o.plural_name }));
       const sessionHint = session?.awaiting
         ? `\n\nNote: the user is mid-conversation. Pending action: ${session.pending_action_id}. Already collected: ${JSON.stringify(session.pending_params)}. This message likely answers a follow-up rather than starting something new.`
         : '';
@@ -181,6 +182,9 @@ async function matchIntent(text, actions, session) {
 
 Catalogue:
 ${JSON.stringify(catalogue, null, 2)}
+
+Available record types in this environment (this client may have renamed the defaults — e.g. "Jobs" shown as "Requests" — so always use the "slug" value below, never invent one, and map common recruiting terms like "candidates"/"applicants" to whichever of these is the people-records object):
+${JSON.stringify(objectsCatalogue, null, 2)}
 ${sessionHint}
 
 User message: "${text}"
@@ -271,12 +275,37 @@ function resolvePerson(params) {
   return findPersonByName(params.candidate_name);
 }
 
+/**
+ * findObjectByAnyName(nameOrSlug)
+ * Objects get renamed per client (e.g. "Jobs" → "Requests"), and their slug
+ * doesn't always match the underscore/hyphen convention consistently either
+ * (talent_pools vs talent-pools bit us once already). Rather than hardcode
+ * a slug per feature, match loosely against slug, name, and plural_name —
+ * with and without a trailing "s", case-insensitive — so admin renames
+ * don't silently break every bot feature that looks up a specific object.
+ */
+function findObjectByAnyName(nameOrSlug) {
+  if (!nameOrSlug) return null;
+  const needle = nameOrSlug.toLowerCase().trim();
+  const dashed = needle.replace(/\s+/g, '-');
+  const underscored = needle.replace(/\s+/g, '_');
+  const singular = needle.replace(/s$/, '');
+  return findOne('objects', o => {
+    const slug = (o.slug || '').toLowerCase();
+    const name = (o.name || '').toLowerCase();
+    const plural = (o.plural_name || '').toLowerCase();
+    return slug === needle || slug === dashed || slug === underscored
+      || name === needle || name === singular
+      || plural === needle || plural.replace(/s$/, '') === singular;
+  });
+}
+
 const ACTION_REGISTRY = {
   search_records: (user, params, action) => {
     const slug = params.object || action.action_config?.default_object_slug || 'people';
-    if (!hasPermission(user, slug, 'view')) return { error: 'forbidden' };
-    const obj = findOne('objects', o => o.slug === slug);
+    const obj = findObjectByAnyName(slug);
     if (!obj) return { error: `Unknown object "${slug}"` };
+    if (!hasPermission(user, obj.slug, 'view')) return { error: 'forbidden' };
     const q = (params.query || '').toLowerCase();
     const pageSize = action.action_config?.page_size || 3;
     const offset = params._offset || 0;
@@ -285,13 +314,13 @@ const ACTION_REGISTRY = {
     const page = allMatches.slice(offset, offset + pageSize).map(r => ({
       id: r.id,
       record_number: r.record_number,
-      object_slug: slug,
+      object_slug: obj.slug,
       data: r.data,
       title: r.data?.first_name ? `${r.data.first_name} ${r.data.last_name || ''}`.trim() : (r.data?.job_title || r.data?.name || 'Untitled'),
       subtitle: r.data?.email || r.data?.department || r.data?.location || '',
     }));
     return {
-      ok: true, results: page, object_slug: slug,
+      ok: true, results: page, object_slug: obj.slug,
       total_count: allMatches.length, shown_count: offset + page.length,
       has_more: offset + page.length < allMatches.length,
       _pagination: { action_type: 'search_records', params: { ...params, _offset: offset + pageSize } },
@@ -390,27 +419,74 @@ const ACTION_REGISTRY = {
     return { ok: true, candidate_name: `${person.data.first_name} ${person.data.last_name || ''}`.trim() };
   },
 
+  /**
+   * report_query — answers "how many X" and "who is the most recent X"
+   * style questions. Deliberately object-agnostic: instead of a hardcoded
+   * whitelist of metric strings tied to specific object slugs (which broke
+   * completely the moment an object was renamed, e.g. Jobs → Requests),
+   * this resolves whatever object name the person actually used against
+   * the real schema, then either counts records or finds the newest one.
+   *
+   * Backward compatible with the old { metric: 'open_jobs'|'candidate_count' }
+   * shape from existing configured actions, and forward-looking to a
+   * { object, mode, filter_field, filter_value } shape for anything new.
+   */
   report_query: (user, params) => {
     if (!hasGlobalAction(user, 'run_reports')) return { error: 'forbidden' };
-    const jobsObj = findOne('objects', o => o.slug === 'jobs');
-    if (params.metric === 'open_jobs') {
-      let jobs = query('records', r => r.object_id === jobsObj?.id && !r.deleted_at && r.data?.status === 'Open');
-      if (params.filter_field && params.filter_value) jobs = jobs.filter(r => r.data?.[params.filter_field] === params.filter_value);
-      return { ok: true, metric: 'open_jobs', count: jobs.length };
+
+    // Normalise whichever shape of params we got into one intent.
+    let objectHint = params.object;
+    let mode = params.mode || (/recent|latest|newest/i.test(params.metric || params.query || '') ? 'latest' : 'count');
+    if (!objectHint && params.metric) {
+      // Old free-text metric strings like "open_jobs", "candidate_count",
+      // or whatever Claude invented on the fly like "open_Requests" — strip
+      // known prefixes/suffixes and use what's left as the object name.
+      objectHint = params.metric.replace(/^open_/i, '').replace(/_count$/i, '').replace(/^candidate$/i, 'people');
     }
-    if (params.metric === 'candidate_count') {
-      const peopleObj = findOne('objects', o => o.slug === 'people');
-      let people = query('records', r => r.object_id === peopleObj?.id && !r.deleted_at);
-      if (params.filter_field && params.filter_value) people = people.filter(r => r.data?.[params.filter_field] === params.filter_value);
-      return { ok: true, metric: 'candidate_count', count: people.length };
+    if (!objectHint) return { error: 'Which record type did you mean?' };
+
+    const obj = findObjectByAnyName(objectHint);
+    if (!obj) return { error: `I don't recognise "${objectHint}" as something I can report on.` };
+    if (!hasPermission(user, obj.slug, 'view')) return { error: 'forbidden' };
+
+    let records = query('records', r => r.object_id === obj.id && !r.deleted_at);
+
+    // "open jobs" implies status filtering even without an explicit filter.
+    if (!params.filter_field && /open/i.test(params.metric || '') && records.some(r => r.data?.status)) {
+      records = records.filter(r => /open/i.test(r.data?.status || ''));
     }
-    return { error: `Unsupported metric "${params.metric}"` };
+
+    if (params.filter_field && params.filter_value) {
+      const fields = query('fields', f => f.object_id === obj.id);
+      const matchedField = fields.find(f =>
+        (f.api_key || '').toLowerCase() === params.filter_field.toLowerCase() ||
+        (f.label || '').toLowerCase() === params.filter_field.toLowerCase()
+      );
+      const key = matchedField?.api_key || params.filter_field;
+      const needle = params.filter_value.toLowerCase();
+      records = records.filter(r => String(r.data?.[key] ?? '').toLowerCase().includes(needle));
+    }
+
+    const objectLabel = obj.plural_name || obj.name;
+
+    if (mode === 'latest') {
+      const top = [...records].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      if (!top) return { ok: true, mode: 'latest', object_label: objectLabel, found: false };
+      const label = top.data?.first_name ? `${top.data.first_name} ${top.data.last_name || ''}`.trim() : (top.data?.job_title || top.data?.name || `#${top.record_number}`);
+      return { ok: true, mode: 'latest', object_label: obj.name, found: true, label, record_url: buildRecordUrl({ ...top, object_slug: obj.slug }) };
+    }
+
+    return {
+      ok: true, mode: 'count', object_label: objectLabel, count: records.length,
+      filtered: !!(params.filter_field && params.filter_value),
+      filter_description: params.filter_field && params.filter_value ? `${params.filter_field}: ${params.filter_value}` : null,
+    };
   },
 
   bulk_add_to_pool: (user, params, action) => {
     if (!hasGlobalAction(user, 'bulk_actions')) return { error: 'forbidden' };
     const poolName = params.pool_name || action?.action_config?.pool_name;
-    const poolsObj = findOne('objects', o => ['talent_pools', 'talent-pools'].includes(o.slug) || /talent\s*pool/i.test(o.plural_name || o.name || ''));
+    const poolsObj = findObjectByAnyName('talent pools');
     const pool = poolsObj ? query('records', r => r.object_id === poolsObj.id && !r.deleted_at).find(r => (r.data?.name || '').toLowerCase() === (poolName || '').toLowerCase()) : null;
     if (!pool) return { error: `Couldn't find a talent pool named "${poolName}"` };
 
@@ -546,9 +622,27 @@ function buildSlackRecordCardBlocks(cardData) {
   return blocks;
 }
 
+/**
+ * reportResultText(result)
+ * report_query's result self-identifies via mode:'count'|'latest' rather
+ * than relying on the action's card_type — so this renders correctly
+ * regardless of how the action happens to be configured.
+ */
+function reportResultText(result) {
+  if (result.mode === 'latest') {
+    if (!result.found) return `I couldn't find any ${result.object_label.toLowerCase()}.`;
+    return result.record_url
+      ? `Most recent ${result.object_label.toLowerCase()}: *${result.label}* — ${result.record_url}`
+      : `Most recent ${result.object_label.toLowerCase()}: *${result.label}*`;
+  }
+  const filterText = result.filtered ? ` (${result.filter_description})` : '';
+  return `*${result.count}* ${result.object_label.toLowerCase()}${filterText}`;
+}
+
 function formatSlackResponse(action, result, template) {
   if (result?.error) return { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚠️ ${result.error}` } }] };
   if (template) return { text: renderTemplate(template, result) };
+  if (result?.ok && (result.mode === 'count' || result.mode === 'latest')) return { text: reportResultText(result) };
   switch (action.card_type) {
     case 'record_summary': {
       if (!result.results?.length) return { text: 'No matches found.' };
@@ -588,6 +682,7 @@ function formatSlackResponse(action, result, template) {
 function formatTeamsResponse(action, result, template) {
   if (result?.error) return { title: '⚠️ Error', text: result.error, facts: [] };
   if (template) return { title: action.name, text: renderTemplate(template, result), facts: [] };
+  if (result?.ok && (result.mode === 'count' || result.mode === 'latest')) return { title: action.name, text: reportResultText(result), facts: [] };
   switch (action.card_type) {
     case 'record_summary': {
       if (!result.results?.length) return { title: 'No matches', text: 'No matches found.', facts: [] };
