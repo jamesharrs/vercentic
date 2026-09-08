@@ -788,9 +788,9 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
     api.get(`/agents?environment_id=${environment.id}`).then(d => {
       const list = Array.isArray(d) ? d : (d.agents || []);
       const filteredAgents = list.filter(a => !a.deleted_at && (
-        !a.type ||
+        (a.actions||[]).some(ac => ac.type === 'ai_interview' || ac.action_type === 'ai_interview') ||
         (a.steps||[]).some(s => s.type === 'ai_interview') ||
-        a.type === 'interview' || a.type === 'ai_interview'
+        a.agent_type === 'ai_interview' || a.type === 'interview' || a.type === 'ai_interview' || a.can_interview
       ));
       setSchedAvailableAgents(filteredAgents);
     }).catch(() => {});
