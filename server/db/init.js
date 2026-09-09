@@ -173,7 +173,15 @@ async function withBatch(fn, slugOverride) {
 
 function saveStore(slugOverride) {
   if (_batchMode) return; // suppress during batch — caller will call saveStoreNow at end
-  const key = slugOverride || getCurrentTenant();
+  // Many call sites across the codebase call saveStore(store) — passing back the
+  // very store object they got from getStore() — instead of saveStore() or a tenant
+  // slug string. Historically this silently no-oped: the object coerced to the
+  // property key "[object Object]", storeCache[key] was always undefined there, and
+  // the whole write (JSON file AND Postgres flush) returned early with nothing
+  // written to disk or DB — changes only ever lived in that request's in-memory
+  // store. Guard against any non-string argument and fall back to the current
+  // tenant, which is always what these call sites actually meant.
+  const key = (typeof slugOverride === 'string' && slugOverride) ? slugOverride : getCurrentTenant();
   if (_saveTimers[key]) clearTimeout(_saveTimers[key]);
   _saveTimers[key] = setTimeout(async () => {
     delete _saveTimers[key];
@@ -198,7 +206,9 @@ function saveStore(slugOverride) {
 }
 
 function saveStoreNow(slugOverride) {
-  const key = slugOverride || getCurrentTenant();
+  // Same guard as saveStore() — a store object (rather than a tenant slug string)
+  // must never become the cache key. See saveStore() for the full explanation.
+  const key = (typeof slugOverride === 'string' && slugOverride) ? slugOverride : getCurrentTenant();
   if (_saveTimers[key]) { clearTimeout(_saveTimers[key]); delete _saveTimers[key]; }
   const store = storeCache[key];
   if (!store) return;
