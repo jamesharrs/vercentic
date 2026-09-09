@@ -346,7 +346,6 @@ const AUTH_EXEMPT = [
   '/form-sends/token',  // public form-fill via emailed token — no session
   '/campaign-links',
   '/feature-packs',
-  '/release-notes',  // public read — published notes shown to all logged-in users
   '/superadmin', '/bot',
   '/chat-bot-hooks',        // Slack + Teams inbound webhooks — self-authenticate via HMAC signature / bot JWT
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
@@ -386,6 +385,17 @@ app.use('/api', (req, res, next) => {
   // ErrorBoundary reports crashes before login — allow anonymous WRITE only.
   // Reading/managing logs still requires auth (GET/PATCH/DELETE fall through).
   if (req.method === 'POST' && path === '/error-logs') return next();
+  // Release notes — public READ only (published notes shown to all logged-in
+  // users, including the login-modal check before a session exists). Writes
+  // (POST/PATCH/DELETE) must NOT be exempt — those are gated per-route in
+  // release_notes.js via isSuperAdmin() or the internal-service key.
+  if (req.method === 'GET' && (path === '/release-notes' || path.startsWith('/release-notes/'))) return next();
+  // Internal-service auth — lets the CI deploy pipeline create a draft release
+  // note with no user session, via a shared secret header. Real authorization
+  // (this key OR isSuperAdmin) is re-checked inside release_notes.js itself;
+  // this line only lets a correctly-keyed request past the session gate.
+  if ((path === '/release-notes' || path.startsWith('/release-notes/')) &&
+      process.env.INTERNAL_API_KEY && req.headers['x-internal-key'] === process.env.INTERNAL_API_KEY) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/check-email$/)) return next();
   if (req.path.match(/^\/portals\/[^/]+\/apply\/send-otp$/)) return next();
