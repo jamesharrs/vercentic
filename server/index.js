@@ -367,6 +367,9 @@ const AUTH_EXEMPT = [
   '/cohort-auth', // candidate portal auth — no main app session
   '/attachments/file', // serve uploaded files publicly — PDFs, images, CVs
   '/ai-interview/session', // public token-authenticated interview sessions
+  '/ai-interview/chat',    // candidate's in-session chat turn — self-authenticates via token in body
+  '/ai-interview/complete', // candidate finishing the interview — self-authenticates via token in body
+  '/ai-interview/tts',     // text-to-speech for the AI interviewer's replies during a candidate session
   '/video-interviews/take', // public candidate video interview (token-gated)
   '/interview-coordinator/token', // public availability response pages
 ];
