@@ -97,7 +97,7 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         if (linkedJobId) {
           const jobRec = (s2.records || []).find(r => r.id === linkedJobId);
           const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
-          const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === linkedJobId);
+          const jobAssignments = (s2.job_questions || []).filter(a => a.job_id === linkedJobId);
           qIds = jobAssignments.map(a => a.question_id);
           if (qIds.length > 0) {
             sourceLabel = `linked job "${jobName}"`;

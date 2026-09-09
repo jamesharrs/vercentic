@@ -270,11 +270,11 @@ router.post('/jobs/:job_id/generate', async (req, res) => {
 
   // Fetch existing questions so Claude avoids duplicates
   const { query } = require('../db/init');
-  const existing = query('question_bank_questions', () => true);
+  const existing = query('question_bank_v2', () => true);
   const existingTexts = existing.map(q => q.text).join('\n- ');
 
   // Also fetch already-assigned questions for this job
-  const assignments = query('question_bank_job_assignments', r => r.job_id === job_id);
+  const assignments = query('job_questions', r => r.job_id === job_id);
   const assignedIds = new Set(assignments.map(a => a.question_id));
   // Include both library questions and job-only inline questions in dedup
   const jobOnlyTexts = assignments.filter(a => a.question_data).map(a => a.question_data.text);
