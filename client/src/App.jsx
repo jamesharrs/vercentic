@@ -2890,7 +2890,7 @@ activeNavRef.current = activeNav;
                />
              } />
         {/* Page content */}
-        <div style={{ flex: 1, display:"flex", flexDirection:"column", padding: (activeNav.startsWith("record_") || activeNav.startsWith("obj_") || activeNav === "activity_journal") ? 0 : "28px 32px", overflow: "auto", minHeight: 0, position: "relative", zIndex: 0 }}>
+        <div data-tour="tour-content" style={{ flex: 1, display:"flex", flexDirection:"column", padding: (activeNav.startsWith("record_") || activeNav.startsWith("obj_") || activeNav === "activity_journal") ? 0 : "28px 32px", overflow: "auto", minHeight: 0, position: "relative", zIndex: 0 }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#9ca3af" }}>Loading…</div>
         ) : !selectedEnv ? (
