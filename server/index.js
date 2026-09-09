@@ -336,27 +336,24 @@ const AUTH_EXEMPT = [
   '/favicon.ico', '/favicon.svg', '/robots.txt',
   '/events/stream', '/events/status',
   '/notification-preferences/digest',
-  '/digest/preview',
-  '/digest/send',
   '/portals/public', '/portals/by-slug', '/portals/slug',
   '/portals/job-alerts', '/portals/application-status', '/portals/public', '/portal-public', '/portal-auth/login', '/portal-auth/me', '/portal-auth/logout', '/portal-auth/users',
   '/portal-analytics', '/portal-feedback', '/portal-copilot',
-  '/people-links',
+  '/people-links',  // GET-only, in-route auth check requires req.currentUser OR matching-env req.portalUser
   '/approvals/token',   // public approve/decline via emailed token — no session
   '/form-sends/token',  // public form-fill via emailed token — no session
-  '/campaign-links',
-  '/feature-packs',
-  '/superadmin', '/bot',
+  '/superadmin/auth',   // SA console login — password-gated inside the route; everything else under
+                         // /superadmin requires a real session (set by /auth) + requireSuperAdmin per-router
   '/chat-bot-hooks',        // Slack + Teams inbound webhooks — self-authenticate via HMAC signature / bot JWT
   '/candidate-hub',         // all candidate hub endpoints — token-authenticated, no session
   '/sequencer/unsubscribe',
   '/sequencer/track-open',           // open-tracking pixel (no auth — email clients fetch without credentials)
-  '/records/by-number',  // used for URL routing before session is established
+  '/records/by-number',  // used for URL routing before session is established; route response is
+                          // truncated to {id, object_id} only — no record field data returned
   '/cv-parse',
   '/comms/webhook',
   '/question-bank/jobs', // wizard fetches screening questions for a job — no user session in portal
   '/screening/job',      // wizard fetches screening rules for portal screening block
-  '/tenant-reset', '/cleanup-seeds', '/seed-dashboards',
   '/cases/magic-send',
   '/cases/magic-verify',
   '/signup',        // public self-serve signup — no auth needed
@@ -415,6 +412,17 @@ app.use('/api', (req, res, next) => {
   // matches the :id in the URL — this exemption only lets the request past
   // the main-app session gate, it does not itself grant access.
   if (req.path.match(/^\/portals\/[^/]+\/hm\//)) return next();
+  // Bot / AI-screening candidate sessions — token-in-URL self-auth (see bot.js).
+  // Scoped narrowly: this must NOT exempt /bot/sessions (list), /bot/sessions
+  // (POST create), /bot/sessions/by-interview/:id, /bot/questions*, or
+  // /bot/scorecards* — those all require a real recruiter session.
+  if (req.method === 'GET'  && req.path.match(/^\/bot\/sessions\/[^/]+$/)) return next();
+  if (req.method === 'POST' && req.path.match(/^\/bot\/sessions\/[^/]+\/(start|answer)$/)) return next();
+  // Campaign-link public redirect + conversion ping — no session, called by
+  // anyone clicking a shared link. All other /campaign-links routes (create,
+  // list, stats, delete) require a real session.
+  if (req.method === 'GET'  && req.path.match(/^\/campaign-links\/[^/]+\/click$/)) return next();
+  if (req.method === 'POST' && req.path.match(/^\/campaign-links\/[^/]+\/joined$/)) return next();
   if (req.method === 'OPTIONS') return next();
   if (!req.currentUser) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   next();
@@ -572,9 +580,13 @@ app.use('/api/portals',           require('./routes/portal_generate'));
 app.use('/api/portals',           require('./routes/portals'));
 app.use('/api/portals',           require('./routes/hm_portal'));
 
-// People-links — public endpoint for HM portal
+// People-links — main-app session, OR HM-portal token scoped to the same environment
 app.get('/api/people-links', (req, res) => {
   const { environment_id } = req.query;
+  const portalOk = req.portalUser && environment_id && req.portalUser.environment_id === environment_id;
+  if (!req.currentUser && !portalOk) {
+    return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
+  }
   const { getStore } = require('./db/init');
   const s = getStore();
   const links = (s.people_links || [])

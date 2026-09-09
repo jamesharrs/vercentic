@@ -140,6 +140,27 @@ function isSuperAdmin(user) {
   return user?.role?.slug === SUPER_ADMIN_SLUG || user?.is_super_admin === true;
 }
 
+// Gate for the internal Vercentic Super Admin console (client management,
+// provisioning, env var editor, tenant reset, demo seeding, perf metrics).
+// This is deliberately independent of the SA console's own `/api/superadmin/auth`
+// password check — that check only sets req.session.userId + tenantSlug='master'
+// on success, so by the time this middleware runs on any *subsequent* request,
+// attachUser has already resolved req.currentUser from that same session cookie.
+// Requiring isSuperAdmin() here (rather than just "any session") ensures a
+// regular tenant user's session can never reach these routes even if they
+// somehow guessed the console's front-door password.
+function requireSuperAdmin(req, res, next) {
+  const user = req.currentUser || resolveUser(req);
+  if (!user) return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
+  if (!isSuperAdmin(user)) {
+    req._accessDenialLogged = true;
+    logAccessDenied(req, '__global__', 'super_admin_console', 'Not a super admin');
+    return res.status(403).json({ error: 'Super admin access required', code: 'FORBIDDEN' });
+  }
+  req.currentUser = user;
+  next();
+}
+
 function hasPermission(user, objectSlug, action) {
   if (!user) return false;
   if (isSuperAdmin(user)) return true;
@@ -424,10 +445,10 @@ function getHiddenFieldKeys(user, objectId) {
 }
 
 module.exports = {
-  attachUser, requireAuth, requirePermission, requireGlobalAction,
+  attachUser, requireAuth, requireSuperAdmin, requirePermission, requireGlobalAction,
   hasPermission, hasGlobalAction, getUserPermissions, seedDefaultPermissions,
   seedPermissionsForNewObject,
-  isSuperAdmin, ACTIONS, GLOBAL_ACTIONS,
+  isSuperAdmin, resolveUser, ACTIONS, GLOBAL_ACTIONS,
   applyFieldVisibility, applyFieldVisibilityBulk, getHiddenFieldKeys,
   invalidateUserCache, invalidateRoleCache,
 };

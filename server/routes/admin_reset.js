@@ -6,8 +6,20 @@ const express = require('express');
 const router  = express.Router();
 const { getStore, saveStore, tenantStorage } = require('../db/init');
 const pg = require('../db/postgres');
+const { requireSuperAdmin } = require('../middleware/rbac');
 
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'talentos-internal-2026';
+
+// This router used to rely solely on the `password` field checked inside each
+// handler below (matched against SUPER_ADMIN_PASSWORD) and was listed in
+// server/index.js's AUTH_EXEMPT allowlist so it could be called without a
+// session. That left a tenant-wide data-wipe endpoint reachable by anyone who
+// knew (or found) the shared SA password, with no session/identity check at
+// all. Requiring an authenticated super admin session here — in addition to,
+// not instead of, the existing password check — closes that gap. Nothing in
+// the client or CI currently calls this route (verified via repo-wide grep),
+// so this cannot break an existing flow.
+router.use(requireSuperAdmin);
 
 // DELETE /api/admin/tenant/:slug/records
 // Clears all records (and related data) for a tenant, leaving schema intact.

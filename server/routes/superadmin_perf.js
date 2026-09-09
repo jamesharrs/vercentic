@@ -3,6 +3,12 @@
 const express = require('express');
 const router = express.Router();
 const { getStore, listTenants, loadTenantStore } = require('../db/init');
+const { requireSuperAdmin } = require('../middleware/rbac');
+
+// Cross-tenant response-time and AI-cost data for every client — require an
+// authenticated super admin (was previously reachable by anyone via the
+// blanket '/superadmin' AUTH_EXEMPT entry).
+router.use(requireSuperAdmin);
 
 // Cost per million tokens (must match admin_dashboard.js)
 const CPM = { input: 3.0, output: 15.0 };

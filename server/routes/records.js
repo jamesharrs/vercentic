@@ -657,7 +657,11 @@ router.get('/by-number', (req, res) => {
     !r.deleted_at
   );
   if (!record) return res.status(404).json({ error: 'Record not found', hint: `No record #${num} in ${object_slug}` });
-  res.json({ ...record, object_id: obj.id });
+  // This endpoint is unauthenticated (used for URL routing before a session
+  // exists — see AUTH_EXEMPT in index.js), so it must only ever return the
+  // record's identity, never its field data. The caller already has the
+  // record_number from the URL — it does not need it echoed back.
+  res.json({ id: record.id, object_id: obj.id });
 });
 
 // People-links for a specific person record — used by AssessmentsPanel job picker

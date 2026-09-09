@@ -44,6 +44,13 @@ router.post('/auth', (req, res) => {
   }
 });
 
+// ── Gate everything below this line ───────────────────────────────────────────
+// /auth (above) is the only route that may be called without an existing
+// session. Every other route in this file reads/writes raw env vars, system
+// info, or tenant data and must require an authenticated super admin.
+const { requireSuperAdmin } = require('../middleware/rbac');
+router.use(requireSuperAdmin);
+
 // ── Read .env ─────────────────────────────────────────────────────────────────
 router.get('/env', (req, res) => {
   try {

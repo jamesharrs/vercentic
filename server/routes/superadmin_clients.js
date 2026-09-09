@@ -4,9 +4,19 @@ const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
 const { getStore, saveStore, saveStoreNow, tenantStorage, provisionTenant, loadTenantStore } = require('../db/init');
+const { requireSuperAdmin } = require('../middleware/rbac');
 
 const bcrypt = require('bcryptjs');
 const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
+
+// Client provisioning, impersonation-token minting, user PATCH (incl. password
+// reset for any tenant user), and tenant deletion all live in this router with
+// no auth of their own — they relied entirely on server/index.js's AUTH_EXEMPT
+// allowlist ('/superadmin') never being audited. Require a real super admin
+// session for every route here; the SA console already sends its session
+// cookie on every request (saApi.js uses credentials:'include'), so this is a
+// non-breaking change for legitimate use.
+router.use(requireSuperAdmin);
 
 function ensureCollections() {
   const s = getStore();
