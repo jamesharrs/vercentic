@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import api from "./apiClient.js";
+import { useInterviewAgents } from "./hooks/useInterviewAgents.js";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -748,7 +749,7 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
   const [schedAiAgentId, setSchedAiAgentId]             = useState('');
   const [schedAiTrigger, setSchedAiTrigger]             = useState('now');     // 'now' | 'scheduled'
   const [schedAiTriggerAt, setSchedAiTriggerAt]         = useState('');
-  const [schedAvailableAgents, setSchedAvailableAgents] = useState([]);
+  const { agents: schedAvailableAgents, loading: schedAgentsLoading, creating: schedAgentCreating, createDefaultAgent: createSchedDefaultAgent } = useInterviewAgents(environment?.id);
   // Self-loading when used standalone (environment prop provided)
   const [ownInterviews, setOwnInterviews] = useState([]);
   const [ownTypes, setOwnTypes] = useState([]);
@@ -783,16 +784,6 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
           job_title: r.data?.job_title || r.data?.current_title || '',
         })));
       }).catch(() => {});
-    }).catch(() => {});
-    // Load AI-interview-capable agents
-    api.get(`/agents?environment_id=${environment.id}`).then(d => {
-      const list = Array.isArray(d) ? d : (d.agents || []);
-      const filteredAgents = list.filter(a => !a.deleted_at && (
-        (a.actions||[]).some(ac => ac.type === 'ai_interview' || ac.action_type === 'ai_interview') ||
-        (a.steps||[]).some(s => s.type === 'ai_interview') ||
-        a.agent_type === 'ai_interview' || a.type === 'interview' || a.type === 'ai_interview' || a.can_interview
-      ));
-      setSchedAvailableAgents(filteredAgents);
     }).catch(() => {});
     // Reset AI state when modal opens
     setSchedInterviewerMode('employee');
@@ -1186,7 +1177,19 @@ export default function CalendarView({ interviews: interviewsProp, interviewType
                             <label style={labelSt}>Select AI Agent</label>
                             {schedAvailableAgents.length === 0
                               ? <div style={{ padding:'10px 12px', borderRadius:9, border:'1px dashed #e5e7eb', fontSize:12, color:'#9ca3af' }}>
-                                  No AI interview agents configured. Create one in Settings → Agents.
+                                  {schedAgentsLoading ? "Loading AI agents…" : (
+                                    <>
+                                      No AI interview agents configured yet.
+                                      <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                                        <button type="button" disabled={schedAgentCreating}
+                                          onClick={()=>createSchedDefaultAgent().then(a=>{ if(a?.id) setSchedAiAgentId(a.id); }).catch(()=>{})}
+                                          style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#6d28d9",color:"white",fontSize:11,fontWeight:700,cursor:schedAgentCreating?"default":"pointer",opacity:schedAgentCreating?0.7:1}}>
+                                          {schedAgentCreating ? "Creating…" : "+ Quick create AI agent"}
+                                        </button>
+                                        <a href="/agents" target="_blank" rel="noreferrer" style={{color:"#6d28d9",fontWeight:600,fontSize:11,alignSelf:"center"}}>Or build one in Settings →</a>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               : <select value={schedAiAgentId} onChange={e=>setSchedAiAgentId(e.target.value)} style={{...inpSt, background:'white'}}>
                                   <option value="">Choose an agent…</option>
