@@ -1,14 +1,40 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
-const { loadTenantStore, saveStore } = require('../db/init');
+const { loadTenantStore, saveStore, storeCache } = require('../db/init');
 const { v4: uuidv4 } = require('uuid');
+const { isSuperAdmin } = require('../middleware/rbac');
+
+// ── Write authorization ───────────────────────────────────────────────────────
+// Release notes are visible to every user on the platform, so creating/editing/
+// deleting them must be locked down to either:
+//   (a) a logged-in Super Admin (the ReleaseNotesAdmin UI), or
+//   (b) the deploy pipeline, authenticated via a shared secret header — used
+//       to auto-draft a note after a production release with no user session.
+// NOTE: the /api gateway in index.js also lets an x-internal-key-bearing
+// request past the session gate for this path; this is the real check.
+function requireWriteAccess(req, res, next) {
+  const key = process.env.INTERNAL_API_KEY;
+  if (key && req.headers['x-internal-key'] === key) return next();
+  if (isSuperAdmin(req.currentUser)) return next();
+  return res.status(403).json({ error: 'Super Admin access required' });
+}
 
 // ── Master store helpers ──────────────────────────────────────────────────────
 // Release notes are global (Vercentic-wide), not per-tenant.
 // We bypass AsyncLocalStorage entirely and access the master store directly.
+//
+// IMPORTANT: check storeCache first — same pattern already used by
+// middleware/tenant.js and routes/signup.js for master-store access.
+// loadTenantStore(null) unconditionally re-reads the JSON file from disk and
+// overwrites storeCache['master'] in memory. saveStore() debounces its disk
+// write by 150ms — if getMaster() were called again inside that window (e.g.
+// the admin UI refetching the list right after a create), the stale on-disk
+// copy would clobber the in-memory store, and when the debounced write fires
+// 150ms later it persists that stale copy — silently reverting the write
+// that was still in flight. Reusing the cached store avoids the race.
 function getMaster() {
-  return loadTenantStore(null); // null = master store
+  return storeCache['master'] || loadTenantStore(null); // null = master store
 }
 function saveMaster() {
   saveStore('master');
@@ -100,7 +126,7 @@ router.get('/:id', (req, res) => {
 });
 
 // ── POST / — create ───────────────────────────────────────────────────────────
-router.post('/', (req, res) => {
+router.post('/', requireWriteAccess, (req, res) => {
   try {
     const { version, title, summary = '', summary_rich = null, category = 'feature',
             features = [], published = false, scheduled_at = null, display_at_login = false } = req.body;
@@ -125,7 +151,7 @@ router.post('/', (req, res) => {
 });
 
 // ── PATCH /:id ────────────────────────────────────────────────────────────────
-router.patch('/:id', (req, res) => {
+router.patch('/:id', requireWriteAccess, (req, res) => {
   try {
     const s = getMaster();
     const idx = (s.release_notes || []).findIndex(n => n.id === req.params.id);
@@ -145,7 +171,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireWriteAccess, (req, res) => {
   try {
     const s = getMaster();
     s.release_notes = (s.release_notes || []).filter(n => n.id !== req.params.id);
