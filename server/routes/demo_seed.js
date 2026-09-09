@@ -10,6 +10,13 @@ const path    = require('path');
 const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore, saveStoreNow, storeCache, tenantStorage, listTenants, loadTenantStore } = require('../db/init');
+const { requireSuperAdmin } = require('../middleware/rbac');
+
+// Seeds/clears 300+ fabricated candidates, jobs and workflows into any named
+// tenant. Was reachable with no auth at all via the blanket '/superadmin'
+// AUTH_EXEMPT entry — not referenced by CI/E2E, so gating it behind a real
+// super admin session is a pure security fix with no functional impact.
+router.use(requireSuperAdmin);
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const pick    = arr => arr[Math.floor(Math.random() * arr.length)];

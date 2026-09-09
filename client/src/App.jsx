@@ -2428,7 +2428,11 @@ activeNavRef.current = activeNav;
     api.get(`/records/by-number?object_slug=${slug}&number=${number}&environment_id=${selectedEnv.id}`)
       .then(rec => {
         if (!rec?.id) { setActiveNav('dashboard'); return; }
-        openRecord(rec.id, rec.object_id, rec.record_number);
+        // Server response is intentionally truncated to {id, object_id} (this
+        // endpoint is unauthenticated — see AUTH_EXEMPT in server/index.js).
+        // Reuse the `number` we already parsed from the URL instead of a
+        // (no-longer-present) rec.record_number field.
+        openRecord(rec.id, rec.object_id, number);
       })
       .catch(() => setActiveNav('dashboard'));
   // eslint-disable-next-line react-hooks/exhaustive-deps

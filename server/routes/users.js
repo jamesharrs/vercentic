@@ -431,7 +431,21 @@ router.post('/logout', (req, res) => {
 
 // ── POST /api/users/ensure-test-users ────────────────────────────────────────
 // Idempotently creates the 5 role-based test/demo users.
+//
+// This route is intentionally listed in server/index.js's AUTH_EXEMPT
+// allowlist so local/dev/staging setup scripts can bootstrap demo accounts
+// before any session exists. That also means, without the guard below, ANY
+// unauthenticated caller could POST here with an X-Tenant-Slug header for a
+// real client tenant and either (a) create a brand-new super_admin account
+// using the well-known email/password pair hardcoded below, or (b) claim
+// login access to an existing admin@talentos.io-style account that has no
+// password set yet — a full, silent tenant takeover with no session or
+// password guessing required. Hard-blocking this in production closes that
+// while leaving local/dev/staging bootstrap exactly as it was.
 router.post('/ensure-test-users', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Not available in production' });
+  }
   try {
     const roles = query('roles', () => true);
     const findRole = slug => roles.find(r => r.slug === slug);
