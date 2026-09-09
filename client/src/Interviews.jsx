@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom";
 import api from './apiClient.js';
 import CalendarView from "./CalendarView";
+import { useInterviewAgents } from "./hooks/useInterviewAgents.js";
 const F = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const C = {
   bg:"#EEF2FF", surface:"#FFFFFF", border:"#E8ECF8", border2:"#d1d5db",
@@ -307,22 +308,26 @@ const VIDEO_PLATFORMS = [
 
 // ── AI Agent selector (interview-capable agents only) ─────────────────────────
 const AIAgentSelector = ({ value, onChange, envId }) => {
-  const [agents, setAgents] = useState([]);
-  useEffect(() => {
-    if (!envId) return;
-    api.get(`/agents?environment_id=${envId}`)
-      .then(d => setAgents((Array.isArray(d)?d:[]).filter(a =>
-        (a.actions||[]).some(ac => ac.type === "ai_interview" || ac.action_type === "ai_interview") ||
-        a.agent_type === "ai_interview" || a.type === "interview" || a.can_interview
-      )))
-      .catch(()=>{});
-  }, [envId]);
+  const { agents, loading, creating, createDefaultAgent } = useInterviewAgents(envId);
+  const handleQuickCreate = () => {
+    createDefaultAgent().then(agent => { if (agent?.id) onChange(agent.id); }).catch(()=>{});
+  };
   return (
     <div>
       {agents.length === 0 ? (
         <div style={{padding:"12px 16px",borderRadius:10,border:`1.5px dashed ${C.border}`,background:"#fafafa",fontSize:12,color:C.text3,textAlign:"center"}}>
-          No AI interview agents configured yet.
-          <br/><a href="/agents" style={{color:C.accent,fontWeight:600}} target="_blank" rel="noreferrer">Create an AI Interview Agent →</a>
+          {loading ? "Loading AI agents…" : (
+            <>
+              No AI interview agents configured yet.
+              <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
+                <button type="button" onClick={handleQuickCreate} disabled={creating}
+                  style={{padding:"6px 12px",borderRadius:8,border:"none",background:C.accent,color:"white",fontSize:11,fontWeight:700,cursor:creating?"default":"pointer",opacity:creating?0.7:1}}>
+                  {creating ? "Creating…" : "+ Quick create AI agent"}
+                </button>
+                <a href="/agents" style={{color:C.accent,fontWeight:600,fontSize:11,alignSelf:"center"}} target="_blank" rel="noreferrer">Or build one in Settings →</a>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1007,7 +1012,7 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
   const [candSearch, setCandSearch] = useState("");
   const candTriggerRef = useRef(null);
   const [jobInterviewers, setJobInterviewers] = useState([]);
-  const [availableAgents, setAvailableAgents] = useState([]);
+  const { agents: availableAgents, loading: agentsLoading, creating: agentCreating, createDefaultAgent } = useInterviewAgents(envId);
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -1029,16 +1034,6 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
         setJobs(jr.map(r=>({id:r.id,name:r.data?.job_title||r.data?.name||r.id, interviewers:r.data?.interviewers||[]})));
       });
     });
-    // Load AI-interview-capable agents
-    api.get(`/agents?environment_id=${envId}`).then(d => {
-      const list = Array.isArray(d) ? d : (d.agents || []);
-      const filtered = list.filter(a => !a.deleted_at && (
-        (a.actions||[]).some(ac => ac.type === 'ai_interview' || ac.action_type === 'ai_interview') ||
-        (a.steps||[]).some(s => s.type === 'ai_interview') ||
-        a.agent_type === 'ai_interview' || a.type === 'interview' || a.type === 'ai_interview' || a.can_interview
-      ));
-      setAvailableAgents(filtered);
-    }).catch(() => {});
   }, [envId]);
 
   // When candidate changes, fetch their linked jobs to filter the dropdown
@@ -1386,7 +1381,19 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
                     <label style={labelSt}>Select AI Agent</label>
                     {availableAgents.length === 0
                       ? <div style={{padding:"10px 12px",borderRadius:9,border:`1px dashed ${C.border}`,fontSize:12,color:C.text3}}>
-                          No AI interview agents configured. Create one in Settings → Agents.
+                          {agentsLoading ? "Loading AI agents…" : (
+                            <>
+                              No AI interview agents configured yet.
+                              <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                                <button type="button" disabled={agentCreating}
+                                  onClick={()=>createDefaultAgent().then(a=>{ if(a?.id) set("ai_agent_id",a.id); }).catch(()=>{})}
+                                  style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#6d28d9",color:"white",fontSize:11,fontWeight:700,cursor:agentCreating?"default":"pointer",opacity:agentCreating?0.7:1}}>
+                                  {agentCreating ? "Creating…" : "+ Quick create AI agent"}
+                                </button>
+                                <a href="/agents" target="_blank" rel="noreferrer" style={{color:"#6d28d9",fontWeight:600,fontSize:11,alignSelf:"center"}}>Or build one in Settings →</a>
+                              </div>
+                            </>
+                          )}
                         </div>
                       : <select value={form.ai_agent_id} onChange={e=>set("ai_agent_id",e.target.value)} style={inpSt}>
                           <option value="">Choose an agent…</option>
