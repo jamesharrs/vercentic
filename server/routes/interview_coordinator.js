@@ -117,7 +117,7 @@ async function startCoordination({ candidate_id, job_id, environment_id, config 
   const candidateEmail = d.email || null;
 
   // Find linked job if not passed
-  let jobRec = null;
+  let jobRec;
   let jobTitle = config.job_title || 'the role';
   let hiringManagerName  = config.hiring_manager_name || 'Hiring Manager';
   let hiringManagerEmail = config.hiring_manager_email || null;

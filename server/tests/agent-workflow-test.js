@@ -1342,7 +1342,7 @@ async function main() {
   await wfActionTest('Stage Action: send_invitation_email', async () => {
     // Need a pending interview token. In local mode, read from store.
     // In live mode, create one via the ai_interview agent we already ran.
-    let hasPendingToken = false;
+    let hasPendingToken;
     if (!LIVE_MODE) {
       const { getStore } = require('../db/init');
       const pendingToken = (getStore().agent_tokens || []).find(t =>
@@ -1645,7 +1645,7 @@ async function main() {
   // ── M. Manual run: share_record ──────────────────────────────────────────
   await wfActionTest('Manual Action: share_record', async () => {
     // Find a target user
-    let targetUserId = null;
+    let targetUserId;
     if (LIVE_MODE) {
       const usersRes = await client.get('/api/users?limit=5');
       const users = Array.isArray(usersRes.body) ? usersRes.body

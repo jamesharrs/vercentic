@@ -391,7 +391,7 @@ function buildEmailHtml({ subject, previewText, bodyHtml, brandKit, template, tr
   }
 
   // ── Header ──────────────────────────────────────────────────────────────
-  let headerHtml = '';
+  let headerHtml;
   const logoUrl  = bk.logo_url || '';
   const compName = bk.company_name || '';
 

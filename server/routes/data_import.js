@@ -64,7 +64,7 @@ async function parseFile(filePath, originalName) {
       if (!jsonData.length) return { headers: [], rows: [] };
       return { headers: Object.keys(jsonData[0]), rows: jsonData };
     } catch (e) {
-      throw new Error('Failed to parse Excel file. Install xlsx package: npm install xlsx');
+      throw new Error('Failed to parse Excel file. Install xlsx package: npm install xlsx', { cause: e });
     }
   }
 
