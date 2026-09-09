@@ -79,3 +79,32 @@ jobs:
 
       - name: All checks passed
         run: echo "✅ Production deployment healthy."
+
+  # ── Auto-draft a "What's New" release note from feat: commits ────────────────
+  # Scans the commits included in this deploy for Conventional Commit `feat:`
+  # subjects and drafts (never auto-publishes) a new release note via a
+  # shared-secret-authenticated request — no user session involved. A Super
+  # Admin reviews and publishes it from Settings → Release Notes.
+  # continue-on-error: the script itself is already fully non-fatal (missing
+  # key, no feat: commits, API errors, etc. all just log + exit 0), but this
+  # is a second layer of safety — a real deploy must never be marked failed
+  # because of this best-effort, purely-additive step.
+  release-note:
+    name: Draft release note from feat commits
+    runs-on: ubuntu-latest
+    needs: health-check
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — need `before` commit for `git log before..after`
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Generate draft release note
+        run: node scripts/generate-release-note.js
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_EVENT_AFTER: ${{ github.event.after }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+          RELEASE_NOTES_API_URL: https://talentos-production-4045.up.railway.app
