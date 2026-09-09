@@ -27,6 +27,7 @@ const {
   resolveTemplate, buildStandardConfig, listTemplates, getDefaultTemplateKey, DEFAULT_ROLES,
 } = require('../data/templates');
 const TEMPLATES = require('../data/templates').TEMPLATES;
+const { buildScreeningAgent, buildGeneralScreeningQuestions } = require('../data/starter_config');
 
 // ─── Main provision function ──────────────────────────────────────────────────
 async function provisionClient(clientData, envData, adminUser, templateKey) {
@@ -125,7 +126,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
 
   // Write everything into the isolated tenant store
   ['objects','fields','roles','users','workflows','portals','forms',
-   'file_types','email_templates','interview_types','feature_flags']
+   'file_types','email_templates','interview_types','feature_flags','agents']
     .forEach(col => { if (!ts[col]) ts[col] = []; });
 
   createdObjects          .forEach(o => ts.objects          .push(o));
@@ -138,6 +139,12 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   stdConfig.fileTypes     .forEach(f => ts.file_types       .push(f));
   stdConfig.emailTemplates.forEach(e => ts.email_templates  .push(e));
   stdConfig.interviewTypes.forEach(i => ts.interview_types  .push(i));
+
+  // Seed the AI Screening Interview agent, active by default, scoped to People
+  if(!ts.question_bank_v2) ts.question_bank_v2=[];
+  const generalQuestions = buildGeneralScreeningQuestions();
+  ts.question_bank_v2.push(...generalQuestions);
+  ts.agents.push(buildScreeningAgent(environment.id, objectMap['people'], generalQuestions.map(q=>q.id)));
 
   // Feature flags — apply the template's lean feature profile.
   // Basic ships most modules OFF; other templates leave everything on (default).
@@ -177,6 +184,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     file_types_seeded:      stdConfig.fileTypes.length,
     email_templates_seeded: stdConfig.emailTemplates.length,
     interview_types_seeded: stdConfig.interviewTypes.length,
+    agents_seeded:           1,
     provisioned_at: now,
   });
   saveStore();
@@ -215,6 +223,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
     file_types_seeded:      stdConfig.fileTypes.length,
     email_templates_seeded: stdConfig.emailTemplates.length,
     interview_types_seeded: stdConfig.interviewTypes.length,
+    agents_seeded:           1,
   };
 }
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -550,17 +559,25 @@ router.post('/:id/add-environment', async (req, res) => {
           const { objects } = resolveTemplate(template);
           if (!ts.objects) ts.objects = [];
           if (!ts.fields)  ts.fields  = [];
+          let newPeopleObjId = null;
           for (const objDef of (objects||[])) {
             const obj = { id:uuidv4(), environment_id:environment.id, slug:objDef.slug,
               name:objDef.name, plural_name:objDef.plural_name, icon:objDef.icon||'database',
               color:objDef.color||'#4361EE', is_system:objDef.is_system!==false,
               sort_order:ts.objects.length, created_at:now, updated_at:now, deleted_at:null };
             ts.objects.push(obj);
+            if (objDef.slug === 'people') newPeopleObjId = obj.id;
             (objDef.fields||[]).forEach((fDef,i)=>{
               ts.fields.push({ id:uuidv4(), environment_id:environment.id, object_id:obj.id,
                 ...fDef, sort_order:i, created_at:now, updated_at:now, deleted_at:null });
             });
           }
+          // Seed the AI Screening Interview agent for this new environment, active by default
+          if (!ts.agents) ts.agents = [];
+          if (!ts.question_bank_v2) ts.question_bank_v2 = [];
+          const generalQuestions = buildGeneralScreeningQuestions();
+          ts.question_bank_v2.push(...generalQuestions);
+          ts.agents.push(buildScreeningAgent(environment.id, newPeopleObjId, generalQuestions.map(q=>q.id)));
         }
         saveStoreNow(client.tenant_slug);
       });

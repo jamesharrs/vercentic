@@ -23,6 +23,7 @@ export default [
         process: 'readonly', console: 'readonly', Buffer: 'readonly',
         setTimeout: 'readonly', clearTimeout: 'readonly',
         setInterval: 'readonly', clearInterval: 'readonly',
+        setImmediate: 'readonly', clearImmediate: 'readonly',
         URL: 'readonly', URLSearchParams: 'readonly',
         // Node 18+ globals
         fetch: 'readonly', FormData: 'readonly', Headers: 'readonly',

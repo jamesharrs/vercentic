@@ -111,6 +111,58 @@ function buildScorecardForm(envId) {
 }
 
 
+// General, role-agnostic screening questions used as a fallback by the
+// AI Screening Interview agent when a candidate's linked job has no
+// questions assigned (or there's no linked job at all) — so the agent
+// never silently no-ops out of the box.
+function buildGeneralScreeningQuestions() {
+  const now = new Date().toISOString();
+  const defs = [
+    { text: 'Tell me about your relevant experience for this type of role.', competency: 'Experience', good_answer_guidance: 'Specific, relevant examples with clear outcomes.', red_flags: 'Vague or unrelated experience.' },
+    { text: 'Why are you interested in this opportunity?', competency: 'Motivation', good_answer_guidance: 'Genuine, specific interest in the role or company.', red_flags: 'Generic answer, no research done.' },
+    { text: 'Describe a challenge you faced in a previous role and how you handled it.', competency: 'Problem Solving', good_answer_guidance: 'Clear situation, action, and result.', red_flags: 'No ownership, blames others.' },
+    { text: 'What are you looking for in your next role?', competency: 'Career Goals', good_answer_guidance: 'Aligns with what the role actually offers.', red_flags: 'Major mismatch with the role on offer.' },
+    { text: 'Do you have any questions for us at this stage?', competency: 'Engagement', good_answer_guidance: 'Thoughtful questions showing genuine interest.', red_flags: 'No questions at all.' },
+  ];
+  return defs.map(d => ({
+    id: uuidv4(), text: d.text, type: 'open', competency: d.competency, weight: 1,
+    follow_ups: [], good_answer_guidance: d.good_answer_guidance, red_flags: d.red_flags,
+    is_general: true, created_at: now, updated_at: now,
+  }));
+}
+
+function buildScreeningAgent(envId, peopleObjId, fallbackQuestionIds) {
+  const now = new Date().toISOString();
+  const AGENT_TEMPLATES = require('./agent_templates');
+  const tpl = AGENT_TEMPLATES.find(t => t.id === 'tpl_screening_interview');
+  // Deep-clone the template's actions — they must not share array/object
+  // references across environments (each agent instance gets its own).
+  const actions = JSON.parse(JSON.stringify(tpl?.actions || []));
+  const interviewAction = actions.find(a => a.type === 'ai_interview');
+  if (interviewAction) interviewAction.fallback_question_ids = fallbackQuestionIds || [];
+  return {
+    id: uuidv4(),
+    name: tpl?.name || 'AI Screening Interview',
+    description: tpl?.description || 'Sends the candidate an AI screening interview when they reach the Screening stage.',
+    environment_id: envId,
+    trigger_type: 'stage_changed',
+    trigger_config: { stage_value: 'Screening' },
+    conditions: [],
+    actions,
+    target_object_id: peopleObjId || null,
+    schedule_time: '09:00',
+    is_active: 1,
+    avatar_icon: tpl?.category_icon || 'filter',
+    avatar_color: tpl?.category_color || '#7c3aed',
+    run_count: 0,
+    sharing: { visibility: 'private', user_ids: [], group_ids: [] },
+    agent_scope: 'object',
+    scope_object_id: peopleObjId || null,
+    created_by: null,
+    created_at: now, updated_at: now,
+  };
+}
+
 const ADDITIONAL_WORKFLOWS = [
   {
     name: 'Standard Application Process',
@@ -235,6 +287,16 @@ async function applyStarterConfig(tenantSlug, environment, objects, clientData={
     if(!store.forms) store.forms=[];
     store.forms.push(buildScorecardForm(envId));
 
+    // Seed the AI Screening Interview agent, active by default, scoped to People
+    if(!store.agents) store.agents=[];
+    const existingScreeningAgent = store.agents.find(a => a.environment_id===envId && a.trigger_type==='stage_changed' && a.trigger_config?.stage_value==='Screening');
+    if(!existingScreeningAgent){
+      if(!store.question_bank_v2) store.question_bank_v2=[];
+      const generalQuestions = buildGeneralScreeningQuestions();
+      store.question_bank_v2.push(...generalQuestions);
+      store.agents.push(buildScreeningAgent(envId, peopleObj?.id, generalQuestions.map(q=>q.id)));
+    }
+
     // Seed stage categories so dashboards (Screening, Interviews, Offers, Onboarding) work
     const DEFAULT_STAGE_CATEGORIES = [
       { name:'New',            color:'#3B82F6', icon:'inbox',        sort_order:0,  is_system:true, is_terminal:false },
@@ -279,8 +341,8 @@ async function applyStarterConfig(tenantSlug, environment, objects, clientData={
       store.environments[envIdx].starter_config_applied_at=new Date().toISOString();
     }
     saveStoreNow(tenantSlug);
-    console.log(`[starter] Applied to tenant "${tenantSlug}": ${templates.length} templates, ${steps.length} pipeline stages, career site, scorecard`);
+    console.log(`[starter] Applied to tenant "${tenantSlug}": ${templates.length} templates, ${steps.length} pipeline stages, career site, scorecard, AI Screening Interview agent (active)`);
   });
 }
 
-module.exports = { applyStarterConfig, HIRING_STAGES };
+module.exports = { applyStarterConfig, HIRING_STAGES, buildScreeningAgent, buildGeneralScreeningQuestions };
