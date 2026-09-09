@@ -8,9 +8,8 @@ function _checkGA(req, res, action) {
 const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { query, insert, update, getStore, saveStore } = require('../db/init');
+const { query, insert, update, getStore, saveStore, tenantStorage, getCurrentTenant } = require('../db/init');
 const { createInterviewMeeting, fireEvent } = require('../services/connectors');
-/* global setImmediate */
 const crypto = require('crypto');
 function makeRescheduleToken(interviewId, role) {
   const secret = process.env.RESCHEDULE_SECRET || 'vercentic-resch-2026';
@@ -75,7 +74,8 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
   if (_checkGA(req, res, 'manage_interviews') === false) return;
   ensure();
   const { environment_id, interview_type_id, interview_type_name, candidate_id, candidate_name,
-          job_id, job_name, date, time, duration, format, interviewers, notes, status, interviewer_emails } = req.body;
+          job_id, job_name, date, time, duration, format, interviewers, notes, status, interviewer_emails,
+          ai_agent_id, ai_agent_name } = req.body;
   const isAi = (req.body.interviewer_mode === 'ai_agent' || req.body.status === 'ai_pending');
   if (!environment_id) return res.status(400).json({ error: 'environment_id and date required' });
   if (!isAi && !date) return res.status(400).json({ error: 'environment_id and date required' });
@@ -127,10 +127,62 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
       const candidateRecord = (store2.records || []).find(r => r.id === rec.candidate_id);
       const candidateEmail = candidateRecord?.data?.email;
 
-      // ── AI Agent interview — send a simple "you've been invited" email ──────
+      // ── AI Agent interview — create a real session token, then invite ───────
       if (isAi) {
+        if (!store2.agent_tokens) store2.agent_tokens = [];
+
+        // Resolve a scorecard from the linked job, if any (job_questions -> question_bank_v2)
+        let scorecardQuestions = [];
+        let questionSource = 'manual';
+        if (job_id) {
+          const jobAssignments = (store2.job_questions || []).filter(a => a.job_id === job_id);
+          const allQs = store2.question_bank_v2 || [];
+          scorecardQuestions = jobAssignments
+            .map(a => {
+              const q = allQs.find(qq => qq.id === a.question_id);
+              if (q) return { id: q.id, text: q.text, type: q.type, competency: q.competency, weight: q.weight, follow_ups: q.follow_ups || [], good_answer_guidance: q.good_answer_guidance || '', red_flags: q.red_flags || '' };
+              if (a.question_data) return { id: a.question_id, ...a.question_data };
+              return null;
+            })
+            .filter(Boolean);
+          if (scorecardQuestions.length) questionSource = 'job';
+        }
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        store2.agent_tokens.push({
+          id: uuidv4(), token, agent_id: ai_agent_id || null,
+          persona_name: ai_agent_name || 'Alex',
+          persona_description: '',
+          avatar_color: '#6d28d9',
+          voice: 'en-US',
+          candidate_id: resolvedCandidateId,
+          candidate_name: resolvedCandidateName,
+          candidate_email: candidateEmail || null,
+          environment_id, scorecard_questions: scorecardQuestions,
+          question_source: questionSource,
+          status: 'pending',
+          created_at: new Date().toISOString(), expires_at: expiresAt,
+          started_at: null, completed_at: null,
+        });
+        saveStore();
+
+        // Also index in master store so findInterviewToken works cross-tenant (Railway PG fix)
+        const _currentTenantSlug = getCurrentTenant();
+        tenantStorage.run('master', () => {
+          const masterStore = getStore();
+          if (!masterStore.interview_token_index) masterStore.interview_token_index = [];
+          masterStore.interview_token_index.push({
+            token, tenant_slug: _currentTenantSlug, agent_id: ai_agent_id || null,
+            created_at: new Date().toISOString(), expires_at: expiresAt,
+          });
+          saveStore();
+        });
+
+        const interviewLink = `${appUrl}/interview/${token}`;
+        update('interviews', i => i.id === rec.id, { meeting_link: interviewLink, updated_at: new Date().toISOString() });
+
         if (candidateEmail) {
-          const interviewLink = `${appUrl}/interview/${rec.id}`;
           const msg = require('../services/messaging');
           await msg.sendEmail({
             to: candidateEmail, toName: resolvedCandidateName,
@@ -155,7 +207,9 @@ router.post('/', async (req, res) => { // eslint-disable-line require-await
   </div>
 </div>`,
           });
-          console.log(`[Interviews] AI interview invite sent to ${candidateEmail}`);
+          console.log(`[Interviews] AI interview invite sent to ${candidateEmail} — token ${token.slice(0,8)}…`);
+        } else {
+          console.warn(`[Interviews] AI interview token ${token.slice(0,8)}… created but no candidate email on file — invite not sent.`);
         }
         await fireEvent(environment_id, 'interview_scheduled', { candidateName: resolvedCandidateName, jobTitle: job_name, format: 'AI Interview', interviewers: [] });
         return;
