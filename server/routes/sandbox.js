@@ -67,7 +67,7 @@ function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) 
 // Field type patterns used to detect what kind of data a field contains
 const PII_KEYS = /^(first_name|last_name|name|full_name|email|phone|mobile|address|street|city|postcode|zip|dob|date_of_birth|national_id|passport|ssn|linkedin|twitter|instagram|facebook|salary|compensation|pay|bank|iban|account)/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE = /^[\d\s\+\-\(\)]{7,}$/;
+const PHONE_RE = /^[\d\s+\-()]{7,}$/;
 
 function obfuscateValue(key, value) {
   if (value === null || value === undefined || value === '') return value;

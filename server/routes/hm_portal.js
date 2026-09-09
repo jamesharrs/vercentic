@@ -20,7 +20,6 @@ const { v4: uuidv4 } = require('uuid');
 const { query, insert, update, getStore, saveStore } = require('../db/init');
 const { MODEL_DEFAULT } = require('../config/ai_models');
 const { createInterviewMeeting, fireEvent } = require('../services/connectors');
-/* global setImmediate */
 
 let _savedViewsRoute = null;
 function savedViewsHelpers() {

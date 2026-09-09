@@ -1,4 +1,3 @@
-/* global setImmediate */
 /**
  * server/routes/signup.js — Public self-serve signup
  * POST /api/signup — creates client + tenant + admin user in one call.

@@ -28,6 +28,7 @@ export default [
         // Node 18+ globals
         fetch: 'readonly', FormData: 'readonly', Headers: 'readonly',
         Request: 'readonly', Response: 'readonly', ReadableStream: 'readonly',
+        AbortController: 'readonly', AbortSignal: 'readonly',
         // Crypto
         crypto: 'readonly',
       },

@@ -99,7 +99,7 @@ router.get('/assignments', (req, res) => {
 });
 
 // Assign a template to a record — spawns the actual calendar_tasks
-router.post('/assignments', async (req, res) => { try {
+router.post('/assignments', async (req, res, next) => { try {
   const s = getStore(); ensure(s);
   const { template_id, record_id, record_name, environment_id, assigned_by, anchor_date, due_offset_anchor } = req.body;
   if (!template_id || !record_id) return res.status(400).json({ error: 'template_id and record_id required' });
