@@ -27,7 +27,7 @@ const {
   resolveTemplate, buildStandardConfig, listTemplates, getDefaultTemplateKey, DEFAULT_ROLES,
 } = require('../data/templates');
 const TEMPLATES = require('../data/templates').TEMPLATES;
-const { buildScreeningAgent } = require('../data/starter_config');
+const { buildScreeningAgent, buildGeneralScreeningQuestions } = require('../data/starter_config');
 
 // ─── Main provision function ──────────────────────────────────────────────────
 async function provisionClient(clientData, envData, adminUser, templateKey) {
@@ -141,7 +141,10 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   stdConfig.interviewTypes.forEach(i => ts.interview_types  .push(i));
 
   // Seed the AI Screening Interview agent, active by default, scoped to People
-  ts.agents.push(buildScreeningAgent(environment.id, objectMap['people']));
+  if(!ts.question_bank_v2) ts.question_bank_v2=[];
+  const generalQuestions = buildGeneralScreeningQuestions();
+  ts.question_bank_v2.push(...generalQuestions);
+  ts.agents.push(buildScreeningAgent(environment.id, objectMap['people'], generalQuestions.map(q=>q.id)));
 
   // Feature flags — apply the template's lean feature profile.
   // Basic ships most modules OFF; other templates leave everything on (default).
@@ -571,7 +574,10 @@ router.post('/:id/add-environment', async (req, res) => {
           }
           // Seed the AI Screening Interview agent for this new environment, active by default
           if (!ts.agents) ts.agents = [];
-          ts.agents.push(buildScreeningAgent(environment.id, newPeopleObjId));
+          if (!ts.question_bank_v2) ts.question_bank_v2 = [];
+          const generalQuestions = buildGeneralScreeningQuestions();
+          ts.question_bank_v2.push(...generalQuestions);
+          ts.agents.push(buildScreeningAgent(environment.id, newPeopleObjId, generalQuestions.map(q=>q.id)));
         }
         saveStoreNow(client.tenant_slug);
       });

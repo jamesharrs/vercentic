@@ -88,19 +88,30 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       const questionSource = action.question_source || 'job';
       let qIds = action.question_ids || [];
       let sourceLabel = action.question_source === 'manual' ? 'manually selected' : '';
+      let usedFallback = false;
       if (questionSource === 'manual') {
         if (qIds.length === 0) break;
       } else {
         const link = (s2.people_links || []).find(l => l.person_record_id === record_id);
         const linkedJobId = link?.target_record_id || null;
-        if (!linkedJobId) break;
-        const jobRec = (s2.records || []).find(r => r.id === linkedJobId);
-        const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
-        const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === linkedJobId);
-        qIds = jobAssignments.map(a => a.question_id);
-        if (qIds.length === 0) break;
-        sourceLabel = `linked job "${jobName}"`;
-        rec2.data._interview_job_id = linkedJobId;
+        if (linkedJobId) {
+          const jobRec = (s2.records || []).find(r => r.id === linkedJobId);
+          const jobName = jobRec?.data?.job_title || jobRec?.data?.title || 'linked job';
+          const jobAssignments = (s2.job_question_assignments || []).filter(a => a.job_id === linkedJobId);
+          qIds = jobAssignments.map(a => a.question_id);
+          if (qIds.length > 0) {
+            sourceLabel = `linked job "${jobName}"`;
+            rec2.data._interview_job_id = linkedJobId;
+          }
+        }
+        if (qIds.length === 0) {
+          // No linked job, or the linked job has no questions assigned —
+          // fall back to the agent's general screening question set.
+          qIds = action.fallback_question_ids || [];
+          if (qIds.length === 0) break;
+          sourceLabel = 'the general screening question set';
+          usedFallback = true;
+        }
       }
       const allQuestions = s2.question_bank_v2 || [];
       const scorecardQuestions = qIds.map(id => allQuestions.find(q => q.id === id)).filter(Boolean)
@@ -118,13 +129,13 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         candidate_name: [d2.first_name, d2.last_name].filter(Boolean).join(' ') || 'Candidate',
         candidate_email: d2.email || null,
         environment_id, scorecard_questions: scorecardQuestions,
-        question_source: questionSource,
+        question_source: usedFallback ? 'general_fallback' : questionSource,
         status: 'pending',
         created_at: new Date().toISOString(), expires_at: expiresAt,
         started_at: null, completed_at: null,
       });
       rec2.data._interview_question_ids = qIds;
-      rec2.data._interview_question_source = questionSource;
+      rec2.data._interview_question_source = usedFallback ? 'general_fallback' : questionSource;
       rec2.updated_at = new Date().toISOString();
       if (!s2.record_notes) s2.record_notes = [];
       s2.record_notes.push({

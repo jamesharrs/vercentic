@@ -1248,13 +1248,35 @@ function AgentBuilderModal({ agent, environment, objects, onClose, onSave }) {
                             })}
                           </div>
 
-                          {/* Linked-job mode info box */}
+                          {/* Linked-job mode: info box + general fallback questions */}
                           {(a.question_source||"job")==="job"&&(
-                            <div style={{padding:"9px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}25`,fontSize:11,color:C.text2,lineHeight:1.5}}>
-                              Questions are pulled from the job the candidate is linked to when the agent runs.
-                              If the linked job has no questions assigned, the agent will <strong>log a warning and skip</strong> the interview.
-                              Assign questions to jobs via <strong>Settings → Question Bank</strong>.
-                            </div>
+                            <>
+                              <div style={{padding:"9px 12px",borderRadius:8,background:`${C.purple}08`,border:`1px solid ${C.purple}25`,fontSize:11,color:C.text2,lineHeight:1.5,marginBottom:12}}>
+                                Questions are pulled from the job the candidate is linked to when the agent runs.
+                                If the linked job has no questions assigned (or there's no linked job), the <strong>general fallback questions</strong> below are used instead — the interview is only skipped if both are empty.
+                                Assign questions to jobs via <strong>Settings → Question Bank</strong>.
+                              </div>
+                              <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".05em",marginBottom:8}}>General fallback questions</div>
+                              <div style={{fontSize:11,fontWeight:600,color:C.text3,marginBottom:6}}>{(a.fallback_question_ids||[]).length} question{(a.fallback_question_ids||[]).length!==1?"s":""} selected</div>
+                              <div style={{maxHeight:200,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
+                                {questions.length===0
+                                  ?<div style={{color:C.text3,fontSize:12,padding:4}}>No questions yet — add them in Settings → Question Bank.</div>
+                                  :questions.map(q=>{
+                                    const sel=(a.fallback_question_ids||[]).includes(q.id);
+                                    return(
+                                      <div key={q.id} onClick={()=>{const ids=a.fallback_question_ids||[];updateAction(i,'fallback_question_ids',sel?ids.filter(x=>x!==q.id):[...ids,q.id]);}}
+                                        style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:6,cursor:"pointer",background:sel?`${C.purple}08`:"transparent",marginBottom:2}}>
+                                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?C.purple:C.border}`,background:sel?C.purple:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                          {sel&&<Ic n="check" s={9} c="white"/>}
+                                        </div>
+                                        <span style={{flex:1,fontSize:11,color:C.text1}}>{q.text}</span>
+                                        <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${Q_TYPE_COLORS[q.type]||C.text3}18`,color:Q_TYPE_COLORS[q.type]||C.text3,fontWeight:700}}>{q.type}</span>
+                                      </div>
+                                    );
+                                  })
+                                }
+                              </div>
+                            </>
                           )}
 
                           {/* Manual mode: question checklist */}
