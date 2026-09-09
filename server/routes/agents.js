@@ -634,14 +634,41 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
       break;
     }
     case 'send_email': case 'ai_draft_email': {
-      if (record_id) {
-        const lines = (aiOutput||'').split('\n');
-        const subjectLine = lines.find(l => l.startsWith('Subject:'));
-        insert('communications', { id: uuidv4(), record_id, environment_id, type: 'email', direction: 'outbound',
-          subject: subjectLine ? subjectLine.replace('Subject:','').trim() : (action.email_subject||'Agent email'),
-          body: lines.filter(l => !l.startsWith('Subject:')).join('\n').trim() || action.email_body || '',
-          status: action.type === 'ai_draft_email' ? 'draft' : 'sent', sent_by: 'Agent', created_at: new Date().toISOString() });
+      if (!record_id) break;
+      const emailRec = (s.records || []).find(r => r.id === record_id);
+      const interpolate = (str) => (str||'').replace(/\{\{(\w+)\}\}/g, (_,k) => emailRec?.data?.[k] ?? `{{${k}}}`);
+      const latestToken = (s.agent_tokens || [])
+        .filter(t => t.candidate_id === record_id && t.status === 'pending')
+        .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      const interviewUrl = latestToken
+        ? `${process.env.APP_URL || process.env.CLIENT_URL || 'http://localhost:3000'}/interview/${latestToken.token}`
+        : null;
+      const lines = (aiOutput||'').split('\n');
+      const subjectLine = lines.find(l => l.startsWith('Subject:'));
+      let subject = subjectLine ? subjectLine.replace('Subject:','').trim() : interpolate(action.subject ?? action.email_subject ?? 'Agent email');
+      let body    = subjectLine ? lines.filter(l => !l.startsWith('Subject:')).join('\n').trim() : interpolate(action.body ?? action.email_body ?? '');
+      if (interviewUrl) { subject = subject.replace(/\{\{interview_link\}\}/g, interviewUrl); body = body.replace(/\{\{interview_link\}\}/g, interviewUrl); }
+
+      let status = action.type === 'ai_draft_email' ? 'draft' : 'sent';
+      if (action.type === 'send_email') {
+        if (emailRec?.data?.email) {
+          try {
+            const msg = require('../services/messaging');
+            const res = await msg.sendEmail({ to: emailRec.data.email, subject, text: body, html: body.replace(/\n/g,'<br>'), tags: { environment_id } });
+            status = res?.simulated ? 'simulated' : 'sent';
+            addStep(res?.simulated ? `[Sim] Email → ${emailRec.data.email}` : `✓ Email sent → ${emailRec.data.email}`);
+          } catch (e) {
+            console.error('[Agent] send_email failed:', e.message);
+            status = 'failed';
+            addStep(`⚠ Email send failed: ${e.message}`);
+          }
+        } else {
+          status = 'failed';
+          addStep('⚠ send_email: record has no email address');
+        }
       }
+      insert('communications', { id: uuidv4(), record_id, environment_id, type: 'email', direction: 'outbound',
+        subject, body, status, sent_by: 'Agent', created_at: new Date().toISOString() });
       break;
     }
     case 'webhook': {
@@ -719,8 +746,8 @@ async function executeAction(action, record_id, environment_id, aiOutput, modifi
         }
       } else {
         // sourceLabel will be set below once we know the job name
-        const link = (s2.people_links || []).find(l => l.person_id === record_id);
-        const linkedJobId = link?.record_id || null;
+        const link = (s2.people_links || []).find(l => l.person_record_id === record_id);
+        const linkedJobId = link?.target_record_id || null;
 
         if (!linkedJobId) {
           addStep(`⚠ AI Interview skipped — candidate is not linked to any job. Link the candidate to a job first.`);

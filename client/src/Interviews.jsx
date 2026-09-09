@@ -1046,14 +1046,25 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
     if (!form.candidate_id || !envId) { setCandidateLinkedJobIds(null); return; }
     // If linkedJobIds was passed as a prop, use that directly
     if (linkedJobIds?.length) { setCandidateLinkedJobIds(linkedJobIds); return; }
-    // Otherwise fetch pipeline links for this person
-    api.get(`/records/people-links?person_id=${form.candidate_id}&environment_id=${envId}`)
+    // Otherwise fetch this candidate's linked jobs. NOTE: this used to call
+    // `/records/people-links?person_id=...`, but that route (records.js) only
+    // ever filters by environment_id — it silently ignores person_id and returns
+    // every link in the environment — and its entries use `target_record_id`,
+    // not the `record_id` field this code was reading, so `jobIds` was always
+    // empty and the filter fell back to "show all jobs". `/records/linked-jobs`
+    // is the endpoint that actually filters by person (already used by the
+    // Communications "Related to" picker) and returns `{id, title, ...}` per job.
+    api.get(`/records/linked-jobs?person_id=${form.candidate_id}&environment_id=${envId}&open_only=false`)
       .then(d => {
-        const links = Array.isArray(d) ? d : (d.links || []);
-        const jobIds = [...new Set(links.map(l => l.record_id).filter(Boolean))];
-        setCandidateLinkedJobIds(jobIds.length ? jobIds : null); // null = show all if no links found
+        const links = Array.isArray(d) ? d : [];
+        const jobIds = [...new Set(links.map(l => l.id).filter(Boolean))];
+        // [] (genuinely no linked jobs) is intentionally kept as [] — not null —
+        // so the dropdown correctly filters to nothing and shows its
+        // "No linked jobs found for this candidate" empty state, instead of
+        // falling back to showing every job in the system.
+        setCandidateLinkedJobIds(jobIds);
       })
-      .catch(() => setCandidateLinkedJobIds(null));
+      .catch(() => setCandidateLinkedJobIds(null)); // fetch failed — don't block scheduling, show all jobs
   }, [form.candidate_id, envId, linkedJobIds]);
 
   // When job changes, load its interviewers and pre-check them
@@ -1073,9 +1084,17 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
     });
   }, [form.job_id, jobs]);
 
+  // Date/time is only required for synchronous, employee-led interviews.
+  // Async formats (video/AI bot) hide the date/time inputs entirely, and
+  // AI-agent interviewer mode disables them (that path is driven by
+  // ai_trigger/ai_trigger_at instead) — so requiring date/time in either of
+  // those cases meant the submit button could never be enabled ("stays greyed
+  // out"). This single flag is now the one source of truth used both here and
+  // by the submit button's `disabled` condition below.
+  const needsDateTime = !isAsyncFormat && form.interviewer_mode !== "ai_agent";
+
   const handle = async () => {
-    // date/time not required for async or AI bot formats
-    if (!isAsyncFormat && (!form.date || !form.time)) return;
+    if (needsDateTime && (!form.date || !form.time)) return;
     setSaving(true);
     const isAi = form.interviewer_mode === "ai_agent";
     await onSave({
@@ -1449,7 +1468,7 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
                 setBulkIdx(i => i + 1);
                 set("candidate_id", next.id);
                 set("candidate_name", next.name);
-              }} disabled={saving||!form.date||!form.time} icon="calendar">
+              }} disabled={saving||(needsDateTime&&(!form.date||!form.time))} icon="calendar">
                 {saving ? "Saving…" : `Save & next (${bulkIdx + 2} of ${bulkCandidates.length})`}
               </Btn>
             ) : (
@@ -1462,7 +1481,7 @@ export const ScheduleModal = ({ interviewType, allTypes, envId, onSave, onClose,
                   await handle();
                 }
                 setSaving(false);
-              }} disabled={saving||(bulkCandidates?.length > 1 ? (!form.date||!form.time) : (!form.candidate_id||!form.date||!form.time))} icon="calendar">
+              }} disabled={saving||(bulkCandidates?.length > 1 ? (needsDateTime&&(!form.date||!form.time)) : (!form.candidate_id||(needsDateTime&&(!form.date||!form.time))))} icon="calendar">
                 {saving ? "Saving…" : isEdit ? "Save Changes" : bulkCandidates?.length > 1 ? `Schedule Last (${bulkCandidates.length} of ${bulkCandidates.length})` : "Schedule Interview"}
               </Btn>
             )}

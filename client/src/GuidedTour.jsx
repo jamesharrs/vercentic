@@ -32,12 +32,12 @@ const STEPS = [
   },
   {
     id:"dashboard",
-    target:null,
+    target:"[data-tour='tour-content']",
     title:"Your Dashboard",
     body:"Your home page shows live pipeline stats, hiring activity, open reqs by department, and a real-time activity feed. Every chart and stat is clickable — it takes you straight to the matching records.",
     placement:"center",
     navigateTo:"dashboard",
-    dim:false,
+    dim:true,
   },
   {
     id:"people-prompt",
@@ -52,18 +52,28 @@ const STEPS = [
   },
   {
     id:"people-list",
-    target:null,
+    target:"[data-tour='tour-content']",
     title:"The People list",
     body:"Every candidate and employee lives here. Use the Columns picker to choose what you see, Filters to narrow results, and save custom views as Lists to share with your team.",
     placement:"center",
-    dim:false,
+    dim:true,
   },
   {
-    id:"jobs",
+    id:"jobs-prompt",
     target:"[data-tour='nav-jobs']",
     title:"Jobs",
-    body:"Manage every open role from here. The linked pipeline bar at the top of each job shows all candidates by stage — click a count to expand and advance candidates without leaving the page.",
+    body:"Now let's look at the Jobs list — click Jobs in the left sidebar to open it.",
     placement:"right",
+    waitForClick:"[data-tour='nav-jobs']",
+    hideNext:true,
+    dim:true,
+  },
+  {
+    id:"jobs-list",
+    target:"[data-tour='tour-content']",
+    title:"Managing Jobs",
+    body:"Manage every open role from here. The linked pipeline bar at the top of each job shows all candidates by stage — click a count to expand and advance candidates without leaving the page.",
+    placement:"center",
     dim:true,
   },
   {
@@ -236,6 +246,15 @@ function Tooltip({ step, stepIndex, total, onNext, onPrev, onSkip, position, isF
 
 export default function GuidedTour({ active, onClose, initialStep=0 }) {
   const [stepIndex, setStepIndex] = useState(initialStep);
+  // The tour component stays mounted (it just renders null while inactive), so
+  // stepIndex would otherwise stay stuck on whatever step it last reached (e.g.
+  // the final "done" step) the next time the tour is (re)started. Reset it back
+  // to initialStep every time `active` transitions from false -> true.
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (active) setStepIndex(initialStep);
+  }
   const [spotRect,  setSpotRect]  = useState(null);
   const [pos,       setPos]       = useState({ top:"50%", left:"50%", transform:"translate(-50%,-50%)" });
   const scrollRef  = useRef(null);
