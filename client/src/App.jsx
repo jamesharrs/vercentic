@@ -2076,6 +2076,10 @@ activeNavRef.current = activeNav;
 
   useEffect(() => {
     if (apiOnline !== true) return;
+    // Not logged in yet (e.g. still on the login screen) — /environments
+    // requires auth and would 401, spuriously firing the "session expired"
+    // toast for a session that never existed. Bail until userId is set.
+    if (!userId) return;
     // Re-runs when userId changes (i.e. after login) so we always fetch
     // environments in the correct tenant context.
     const fetchEnvs = (retries, delay) => {
@@ -3356,6 +3360,19 @@ function UserFooterMenu({ session, activeNav, navObjects, setActiveNav, clearSes
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <Icon name="lightbulb" size={14} color="var(--t-text3)"/>
                 Request a Feature
+              </button>
+              <button onClick={()=>{
+                  try { localStorage.removeItem('vercentic_force_desktop'); } catch {}
+                  window.location.href = window.location.origin + '/';
+                }}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,
+                  padding:"9px 14px",border:"none",background:"transparent",
+                  cursor:"pointer",fontFamily:"inherit",fontSize:13,
+                  fontWeight:500,color:"var(--t-text2)",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background="var(--t-surface2)"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <Icon name="smartphone" size={14} color="var(--t-text3)"/>
+                Use Mobile View
               </button>
             </div>
 
