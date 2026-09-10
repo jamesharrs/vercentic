@@ -2076,6 +2076,10 @@ activeNavRef.current = activeNav;
 
   useEffect(() => {
     if (apiOnline !== true) return;
+    // Not logged in yet (e.g. still on the login screen) — /environments
+    // requires auth and would 401, spuriously firing the "session expired"
+    // toast for a session that never existed. Bail until userId is set.
+    if (!userId) return;
     // Re-runs when userId changes (i.e. after login) so we always fetch
     // environments in the correct tenant context.
     const fetchEnvs = (retries, delay) => {
