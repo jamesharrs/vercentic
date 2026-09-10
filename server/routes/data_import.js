@@ -55,20 +55,69 @@ async function parseFile(filePath, originalName) {
     return parseCSV(raw.toString('utf8'), ',');
   }
 
-  if (ext === '.xls' || ext === '.xlsx') {
+  if (ext === '.xls') {
+    // Legacy binary Excel format — exceljs (unlike the old xlsx/SheetJS lib
+    // we moved off) only reads the modern OOXML .xlsx/.xlsm format. Fail
+    // clearly rather than letting workbook.xlsx.load() throw a confusing
+    // "not a valid zip" error on a binary .xls buffer.
+    throw new Error('Legacy .xls files are not supported. Please open the file in Excel and save it as .xlsx, then re-upload.');
+  }
+
+  if (ext === '.xlsx' || ext === '.xlsm') {
     try {
-      const XLSX = require('xlsx');
-      const wb = XLSX.read(raw, { type: 'buffer' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      if (!jsonData.length) return { headers: [], rows: [] };
-      return { headers: Object.keys(jsonData[0]), rows: jsonData };
+      const ExcelJS = require('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(raw);
+      const ws = workbook.worksheets[0];
+      if (!ws) return { headers: [], rows: [] };
+
+      // Row 1 = headers. eachCell with includeEmpty:false skips blank header
+      // cells so a stray formatted-but-empty column doesn't become "".
+      const colIndexToHeader = {};
+      const headers = [];
+      ws.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const h = xlsxCellToString(cell.value).trim();
+        if (h) { colIndexToHeader[colNumber] = h; headers.push(h); }
+      });
+      if (!headers.length) return { headers: [], rows: [] };
+
+      const rows = [];
+      for (let r = 2; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        const obj = {};
+        let hasValue = false;
+        for (const [colIndex, header] of Object.entries(colIndexToHeader)) {
+          const val = xlsxCellToString(row.getCell(Number(colIndex)).value);
+          obj[header] = val;
+          if (val !== '') hasValue = true;
+        }
+        if (hasValue) rows.push(obj); // skip fully-blank rows (common at sheet tail)
+      }
+      return { headers, rows };
     } catch (e) {
-      throw new Error('Failed to parse Excel file. Install xlsx package: npm install xlsx', { cause: e });
+      if (e.message?.includes('.xls files')) throw e;
+      throw new Error('Failed to parse Excel file. Make sure it is a valid, uncorrupted .xlsx file.', { cause: e });
     }
   }
 
-  throw new Error(`Unsupported file format: ${ext}. Use CSV, TSV, JSON, XLS, or XLSX.`);
+  throw new Error(`Unsupported file format: ${ext}. Use CSV, TSV, JSON, or XLSX.`);
+}
+
+// Flattens an exceljs cell value (which can be a plain primitive, a Date, or
+// a rich object for formulas/hyperlinks/rich text) down to a plain string —
+// every downstream mapping/dedup function in this file treats rawValue as a
+// string (.toLowerCase(), .split(), .replace()), so this keeps that contract
+// true for every cell type Excel can produce, not just plain text/number cells.
+function xlsxCellToString(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(t => t.text).join('');
+    if ('result' in v) return xlsxCellToString(v.result);   // formula cell
+    if ('text' in v) return String(v.text);                  // hyperlink cell
+    return '';
+  }
+  return String(v);
 }
 
 // ── Duplicate scoring (reuse from duplicates route) ───────────────────────────
