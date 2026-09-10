@@ -11,6 +11,29 @@ const C = {
   green: "#059669", red: "#dc2626", amber: "#d97706", purple: "#7c3aed",
 };
 
+// Brand kits are stored in two shapes depending on how they were created — flat
+// camelCase fields on the wizard-created kit (kit.primaryColor, kit.logoUrl...),
+// or nested under kit.theme on kits saved via the AI Brand Kit Agent (see
+// server/utils/brandKit.js's own comment for the full explanation, which this
+// mirrors client-side). Every read of a kit's colours/fonts/logo in this file
+// should go through this rather than reaching into `kit.xxx` directly, so a
+// nested kit shows correctly here too instead of silently falling back to
+// every default swatch/colour.
+const kitTheme = (kit) => {
+  if (!kit) return null;
+  const t = kit.theme || {};
+  const pick = (...vals) => { for (const v of vals) if (v !== undefined && v !== null && v !== '') return v; return null; };
+  return {
+    name:           kit.name || t.companyName || 'Brand Kit',
+    logoUrl:        pick(kit.logoUrl, kit.logo_url, kit.logo, t.logoUrl, t.logo),
+    primaryColor:   pick(kit.primaryColor, t.primaryColor),
+    secondaryColor: pick(kit.secondaryColor, t.secondaryColor),
+    accentColor:    pick(kit.accentColor, t.accentColor),
+    bgColor:        pick(kit.bgColor, t.bgColor),
+    textColor:      pick(kit.textColor, t.textColor),
+  };
+};
+
 const ICON_PATHS = {
   mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
   plus: "M12 5v14M5 12h14", check: "M20 6L9 17l-5-5", x: "M18 6L6 18M6 6l12 12",
@@ -136,7 +159,7 @@ export default function EmailTemplateBuilder({ environment }) {
     // If system template has html_body but no blocks, apply brand kit colours then show
     if (editing.html_body && !(editing.blocks || []).length) {
       let html = editing.html_body;
-      const kit = brandKits.find(k => k.id === editing.brand_kit_id);
+      const kit = kitTheme(brandKits.find(k => k.id === editing.brand_kit_id));
       if (kit) {
         // Replace brand placeholders with kit colours
         const primary = kit.primaryColor || '#4361EE';
@@ -165,6 +188,7 @@ export default function EmailTemplateBuilder({ environment }) {
         subject: editing.subject || '',
         preview_text: editing.preview_text || '',
         brand_kit_id: editing.brand_kit_id || null,
+        environment_id: editing.environment_id || envId,
       });
       setPreviewHtml(result.html || '');
       setHtmlCode(result.html || '');
@@ -264,7 +288,7 @@ export default function EmailTemplateBuilder({ environment }) {
 
   // ── Editor ──────────────────────────────────────────────────────────────────
   if (editing) {
-    const selectedKit = brandKits.find(k => k.id === editing.brand_kit_id);
+    const selectedKit = kitTheme(brandKits.find(k => k.id === editing.brand_kit_id));
     return (
       <div style={{ fontFamily: F, display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
         {/* Top bar */}
@@ -635,7 +659,7 @@ export default function EmailTemplateBuilder({ environment }) {
         {/* Custom templates */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
           {templates.filter(t => !t.is_system).map(t => {
-            const kit = brandKits.find(k => k.id === t.brand_kit_id);
+            const kit = kitTheme(brandKits.find(k => k.id === t.brand_kit_id));
             const catLabel = CATEGORIES.find(c => c.value === t.category)?.label || t.category;
             return (
               <div key={t.id} onClick={() => { setEditing({ ...t }); setHtmlEdited(!!t.html_override); setHtmlCode(t.html_override || ''); }} style={{

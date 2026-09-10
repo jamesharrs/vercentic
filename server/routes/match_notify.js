@@ -15,6 +15,7 @@
 const router  = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 const { getStore, saveStore } = require('../db/init');
+const { resolveBrand } = require('../utils/brandKit');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -169,92 +170,167 @@ ${jobsCtx}`;
 }
 
 /**
- * Render a template's blocks (stored in the email_builder format) to HTML.
- * Handles header, text, button, image, divider, spacer, two_column, footer, ai_content blocks.
+ * Convert the legacy plain-text-with-lightweight-Markdown format used by
+ * store.email_templates[].body into branded HTML. Supports:
+ *   **bold**              -> <strong>
+ *   [Label](url)          -> inline link, coloured with the brand's primary color
+ *   a paragraph that is ONLY a [Label](url) -> rendered as a branded CTA button
+ *     (matches real content like "[Start Interview →]({{interview_link}})")
+ *   blank-line-separated paragraphs -> individual <div> blocks
+ * `text` is expected to already have merge tags and {{ai: ...}} blocks
+ * resolved (same order used by the blocks-based renderer below).
+ * Deliberately does NOT HTML-escape — matches this file's existing
+ * convention of injecting merge-tag/AI values raw everywhere else, and
+ * avoids corrupting any real HTML resolveAiBlocks may have produced.
  */
-async function renderTemplateToHtml(template, mergeCtx, person, jobs, portal, matchSummaries) {
-  const blocks = template.blocks || [];
-  // If no blocks but has html_body, use that
-  if (!blocks.length && template.html_body) {
-    let html = resolveMerge(template.html_body, mergeCtx);
-    html = await resolveAiBlocks(html, person, jobs, portal, matchSummaries);
-    return html;
-  }
+function renderBodyMarkdownToHtml(text, { primaryColor, fontFamily }) {
+  const SOLO_LINK_RE = /^\[([^\]]+)\]\(([^)]+)\)$/;
+  const paragraphs = String(text || '')
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
 
-  const brand = template.brand_kit || {};
+  return paragraphs.map(para => {
+    const soloLink = para.match(SOLO_LINK_RE);
+    if (soloLink) {
+      const [, label, url] = soloLink;
+      return `
+        <div style="padding:8px 32px 16px;text-align:center">
+          <a href="${url}" style="display:inline-block;background:${primaryColor};color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;font-family:${fontFamily}">${label}</a>
+        </div>`;
+    }
+    const html = para
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" style="color:${primaryColor};text-decoration:underline">$1</a>`)
+      .replace(/\n/g, '<br/>');
+    return `<div style="padding:0 32px 16px;font-size:15px;line-height:1.7;color:#374151;font-family:${fontFamily}">${html}</div>`;
+  }).join('');
+}
+
+/**
+ * Render a template to HTML. A template's content can come from one of three
+ * sources, in priority order: `blocks` (the block-based email builder
+ * format), `html_body` (a pre-built raw HTML body from an older/simpler
+ * editor), or `body` (the legacy plain-text-with-lightweight-Markdown format
+ * used by the real, live store.email_templates records). Brand/font
+ * variables are computed once, unconditionally, up front so ALL THREE
+ * content sources get consistent branding — previously they were computed
+ * only inside the blocks branch, AFTER an early-return for html_body (which
+ * therefore never got brand/font applied at all), and `body` was never read
+ * anywhere in this function (every real template rendered a blank email).
+ * All three branches funnel into one shared final HTML shell/wrapper below.
+ */
+async function renderTemplateToHtml(template, mergeCtx, person, jobs, portal, matchSummaries, brand = {}) {
+  const blocks = template.blocks || [];
+
+  brand = brand || {};
   const primaryColor = brand.primary_color || '#4361EE';
-  const fontFamily   = brand.font_family   || "'DM Sans', Arial, sans-serif";
+  // brand.font_family (from resolveBrand/toBrandPayload) is a bare font name
+  // like "Poppins" with no fallback stack — quote it and append a generic
+  // fallback the same way email_builder.js's buildEmailHtml() does, so a
+  // configured brand font actually applies instead of silently falling
+  // through to serif defaults in clients that ignore unquoted/unknown names.
+  const fontFamily   = brand.font_family
+    ? `'${brand.font_family}', Arial, Helvetica, sans-serif`
+    : "'DM Sans', Arial, sans-serif";
+  // heading_font is a distinct, optional field on a brand kit (e.g. a display
+  // font used only for headings) — previously read nowhere in this file, so
+  // it was silently dropped even when correctly configured. Falls back to
+  // the body fontFamily (already-quoted) when not set.
+  const headingFont = brand.heading_font
+    ? `'${brand.heading_font}', Arial, Helvetica, sans-serif`
+    : fontFamily;
   const companyName  = brand.company_name  || mergeCtx.company_name || '';
   const logoUrl      = brand.logo_url      || '';
 
   let bodyHtml = '';
 
-  for (const block of blocks) {
-    switch (block.type) {
-      case 'header': {
-        bodyHtml += `
-          <div style="background:${primaryColor};padding:24px 32px;text-align:center">
-            ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="height:40px;max-width:200px;object-fit:contain;display:block;margin:0 auto"/>` : ''}
-            ${block.config?.showCompanyName && companyName ? `<div style="color:white;font-size:13px;font-weight:600;margin-top:8px;opacity:.85">${companyName}</div>` : ''}
-          </div>`;
-        break;
+  if (blocks.length) {
+    for (const block of blocks) {
+      switch (block.type) {
+        case 'header': {
+          bodyHtml += `
+            <div style="background:${primaryColor};padding:24px 32px;text-align:center">
+              ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="height:40px;max-width:200px;object-fit:contain;display:block;margin:0 auto"/>` : ''}
+              ${block.config?.showCompanyName && companyName ? `<div style="color:white;font-size:13px;font-weight:600;margin-top:8px;opacity:.85;font-family:${fontFamily}">${companyName}</div>` : ''}
+            </div>`;
+          break;
+        }
+        case 'heading': {
+          const text = resolveMerge(block.content || '', mergeCtx);
+          bodyHtml += `<h2 style="margin:24px 32px 8px;font-size:22px;font-weight:700;color:#111827;font-family:${headingFont}">${text}</h2>`;
+          break;
+        }
+        case 'text': {
+          let text = resolveMerge(block.content || '', mergeCtx);
+          text = await resolveAiBlocks(text, person, jobs, portal, matchSummaries);
+          bodyHtml += `<div style="padding:0 32px 16px;font-size:15px;line-height:1.7;color:#374151;font-family:${fontFamily}">${text}</div>`;
+          break;
+        }
+        case 'button': {
+          const cfg = block.config || {};
+          const btnText = resolveMerge(cfg.text || 'View', mergeCtx);
+          const btnUrl  = resolveMerge(cfg.url  || '', mergeCtx);
+          const align   = cfg.align === 'center' ? 'center' : cfg.align === 'right' ? 'right' : 'left';
+          bodyHtml += `
+            <div style="padding:8px 32px 16px;text-align:${align}">
+              <a href="${btnUrl}" style="display:inline-block;background:${primaryColor};color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;font-family:${fontFamily}">${btnText}</a>
+            </div>`;
+          break;
+        }
+        case 'image': {
+          const src = resolveMerge(block.config?.src || block.config?.url || '', mergeCtx);
+          if (src) bodyHtml += `<div style="padding:0 32px 16px"><img src="${src}" alt="" style="max-width:100%;border-radius:8px"/></div>`;
+          break;
+        }
+        case 'divider': {
+          bodyHtml += `<div style="margin:8px 32px"><hr style="border:none;border-top:1px solid #e5e7eb"/></div>`;
+          break;
+        }
+        case 'spacer': {
+          const h = block.config?.height || 24;
+          bodyHtml += `<div style="height:${h}px"></div>`;
+          break;
+        }
+        case 'ai_content': {
+          // Dedicated AI content block — the entire block is AI-generated
+          const prompt = block.config?.prompt || block.prompt || '';
+          if (!prompt) break;
+          const resolved = await resolveAiBlocks(`{{ai: ${prompt}}}`, person, jobs, portal, matchSummaries);
+          bodyHtml += `<div style="padding:0 32px 16px;font-size:15px;line-height:1.7;color:#374151;font-family:${fontFamily}">${resolved}</div>`;
+          break;
+        }
+        case 'footer': {
+          const year = new Date().getFullYear();
+          bodyHtml += `
+            <div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;text-align:center;font-size:12px;color:#9ca3af;font-family:${fontFamily}">
+              ${companyName ? `<div style="margin-bottom:4px;font-weight:600;color:#6b7280">${companyName}</div>` : ''}
+              <div>© ${year} · <a href="${mergeCtx.unsubscribe_link||'#'}" style="color:#9ca3af">Unsubscribe</a></div>
+            </div>`;
+          break;
+        }
+        default:
+          break;
       }
-      case 'heading': {
-        const text = resolveMerge(block.content || '', mergeCtx);
-        bodyHtml += `<h2 style="margin:24px 32px 8px;font-size:22px;font-weight:700;color:#111827">${text}</h2>`;
-        break;
-      }
-      case 'text': {
-        let text = resolveMerge(block.content || '', mergeCtx);
-        text = await resolveAiBlocks(text, person, jobs, portal, matchSummaries);
-        bodyHtml += `<div style="padding:0 32px 16px;font-size:15px;line-height:1.7;color:#374151">${text}</div>`;
-        break;
-      }
-      case 'button': {
-        const cfg = block.config || {};
-        const btnText = resolveMerge(cfg.text || 'View', mergeCtx);
-        const btnUrl  = resolveMerge(cfg.url  || '', mergeCtx);
-        const align   = cfg.align === 'center' ? 'center' : cfg.align === 'right' ? 'right' : 'left';
-        bodyHtml += `
-          <div style="padding:8px 32px 16px;text-align:${align}">
-            <a href="${btnUrl}" style="display:inline-block;background:${primaryColor};color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">${btnText}</a>
-          </div>`;
-        break;
-      }
-      case 'image': {
-        const src = resolveMerge(block.config?.src || block.config?.url || '', mergeCtx);
-        if (src) bodyHtml += `<div style="padding:0 32px 16px"><img src="${src}" alt="" style="max-width:100%;border-radius:8px"/></div>`;
-        break;
-      }
-      case 'divider': {
-        bodyHtml += `<div style="margin:8px 32px"><hr style="border:none;border-top:1px solid #e5e7eb"/></div>`;
-        break;
-      }
-      case 'spacer': {
-        const h = block.config?.height || 24;
-        bodyHtml += `<div style="height:${h}px"></div>`;
-        break;
-      }
-      case 'ai_content': {
-        // Dedicated AI content block — the entire block is AI-generated
-        const prompt = block.config?.prompt || block.prompt || '';
-        if (!prompt) break;
-        const resolved = await resolveAiBlocks(`{{ai: ${prompt}}}`, person, jobs, portal, matchSummaries);
-        bodyHtml += `<div style="padding:0 32px 16px;font-size:15px;line-height:1.7;color:#374151">${resolved}</div>`;
-        break;
-      }
-      case 'footer': {
-        const year = new Date().getFullYear();
-        bodyHtml += `
-          <div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;text-align:center;font-size:12px;color:#9ca3af">
-            ${companyName ? `<div style="margin-bottom:4px;font-weight:600;color:#6b7280">${companyName}</div>` : ''}
-            <div>© ${year} · <a href="${mergeCtx.unsubscribe_link||'#'}" style="color:#9ca3af">Unsubscribe</a></div>
-          </div>`;
-        break;
-      }
-      default:
-        break;
     }
+  } else if (template.html_body) {
+    // Pre-built raw HTML body from an older/simpler editor. Previously this
+    // path returned bare, unstyled HTML directly — bypassing brand/font
+    // application AND the shared email shell below entirely. It's now
+    // resolved the same way and funnelled into the same wrapper so it gets
+    // consistent typography and the surrounding <html>/<style> scaffold.
+    let html = resolveMerge(template.html_body, mergeCtx);
+    html = await resolveAiBlocks(html, person, jobs, portal, matchSummaries);
+    bodyHtml = html;
+  } else if (template.body) {
+    // Legacy format used by the 21 real store.email_templates records:
+    // plain text with lightweight Markdown (**bold**, [label](url)),
+    // paragraphs separated by blank lines. Previously `template.body` was
+    // never read anywhere in this function, so every one of these templates
+    // rendered a completely empty email body.
+    let text = resolveMerge(template.body, mergeCtx);
+    text = await resolveAiBlocks(text, person, jobs, portal, matchSummaries);
+    bodyHtml = renderBodyMarkdownToHtml(text, { primaryColor, fontFamily });
   }
 
   return `<!DOCTYPE html>
@@ -281,6 +357,16 @@ router.post('/preview', async (req, res) => {
     // Load template from email_builder collection
     const template = (store.email_builder_templates || store.email_templates || []).find(t => t.id === template_id);
     if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    // Resolve the environment's brand kit once for this whole preview batch.
+    // Priority (via resolveBrand/resolveBrandKit): an explicit kit set on the
+    // template (template.brand_kit_id) → a kit that has opted in to
+    // auto-apply for the 'email' surface → the environment's default kit →
+    // null (falls back to renderTemplateToHtml's own hardcoded defaults).
+    // Previously this always read template.brand_kit, a field nothing ever
+    // populated, so every match-notify email silently ignored the client's
+    // actual brand kit and rendered with hardcoded fallback colours/fonts.
+    const brand = resolveBrand(store, environment_id, template.brand_kit_id || null, 'email') || {};
 
     // Load portal
     const portal = portal_id ? (store.portals || []).find(p => p.id === portal_id) : null;
@@ -321,7 +407,7 @@ router.post('/preview', async (req, res) => {
       const subject = resolveMerge(template.subject || 'We found roles for you', mergeCtx);
 
       // Render body HTML (resolves all AI blocks)
-      const html_body = await renderTemplateToHtml(template, mergeCtx, person, personJobs, portal, matchSummaries);
+      const html_body = await renderTemplateToHtml(template, mergeCtx, person, personJobs, portal, matchSummaries, brand);
 
       // Plain text fallback — strip HTML tags
       const text_body = html_body.replace(/<[^>]+>/g, '').replace(/\s{2,}/g, ' ').trim();

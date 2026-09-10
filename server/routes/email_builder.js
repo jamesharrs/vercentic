@@ -3,6 +3,48 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert, getStore, saveStore, findOne } = require('../db/init');
+const { resolveBrandKit, toBrandPayload } = require('../utils/brandKit');
+
+// Brand kits exist in two incompatible shapes in the store (flat camelCase from
+// the onboarding wizard, or nested under `.theme` from the AI Brand Kit Agent —
+// see server/utils/brandKit.js for the full explanation). renderBlock() and
+// buildEmailHtml() below were both written against the flat wizard shape only,
+// so a nested kit silently rendered with every colour/font falling back to
+// hardcoded defaults. Rather than rewrite every `bk.xxx` reference in those two
+// (long, easy-to-regress) functions, this adapter takes ANY raw kit row, runs
+// it through the shared toBrandPayload() resolver (which already handles both
+// shapes), and re-shapes the result back into the camelCase keys this file's
+// renderer already expects — plus a few extra fields (social links, address,
+// footer/unsubscribe copy) that live only on the flat kit / kit.theme and
+// aren't part of the canonical cross-app payload.
+function toRenderKit(rawKit) {
+  if (!rawKit) return null;
+  const payload = toBrandPayload(rawKit);
+  const t = rawKit.theme || {};
+  const pick = (...vals) => { for (const v of vals) if (v !== undefined && v !== null && v !== '') return v; return null; };
+  return {
+    ...payload, // company_name, company_website, logo_url, primary_color, ... (snake_case, canonical)
+    primaryColor:   payload.primary_color,
+    secondaryColor: payload.secondary_color,
+    accentColor:    payload.accent_color,
+    bgColor:        payload.bg_color,
+    textColor:      payload.text_color,
+    fontFamily:     payload.font_family,
+    headingFont:    payload.heading_font,
+    buttonStyle:    payload.button_style,
+    buttonRadius:   payload.button_radius,
+    borderRadius:   payload.border_radius,
+    logo_url:       payload.logo_url,
+    company_name:   payload.company_name,
+    headingWeight:      pick(rawKit.headingWeight, t.headingWeight),
+    maxWidth:           pick(rawKit.maxWidth, t.maxWidth),
+    social_links:       pick(rawKit.social_links, t.socialLinks),
+    company_address:    pick(rawKit.company_address, t.companyAddress),
+    privacy_url:        pick(rawKit.privacy_url, t.privacyUrl),
+    footer_text:        pick(rawKit.footer_text, t.footerText),
+    unsubscribe_text:   pick(rawKit.unsubscribe_text, t.unsubscribeText),
+  };
+}
 
 // ── CRUD for email templates ──────────────────────────────────────────────────
 
@@ -110,11 +152,15 @@ router.post('/:id/duplicate', (req, res) => {
 // ── Render template with data ─────────────────────────────────────────────────
 router.post('/render', (req, res) => {
   try {
-    const { template_id, record_data = {}, job_data = {}, custom_data = {}, brand_kit_id_override } = req.body;
+    const { template_id, record_data = {}, job_data = {}, custom_data = {}, brand_kit_id_override, environment_id } = req.body;
     const template = findOne('email_templates_v2', t => t.id === template_id && !t.deleted_at);
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
-    // Resolve brand kit — check brand rules first, then override, then template default
+    // Resolve brand kit — check brand rules first, then override, then template
+    // default. `resolveBrandKit` itself then falls through to whichever kit has
+    // opted in to auto-apply for the 'email' surface, then to the environment's
+    // default kit — so a template with NO explicit brand_kit_id and no matching
+    // rule still gets branded automatically when the admin has turned that on.
     let resolvedKitId = brand_kit_id_override || template.brand_kit_id;
     if (!brand_kit_id_override && template.brand_rules?.length) {
       for (const rule of template.brand_rules) {
@@ -128,17 +174,18 @@ router.post('/render', (req, res) => {
       }
     }
 
-    const brandKit = resolvedKitId
-      ? findOne('brand_kits', k => k.id === resolvedKitId && !k.deleted_at)
-      : null;
+    const store = getStore();
+    const envId = environment_id || template.environment_id || record_data.environment_id;
+    const rawKit = resolveBrandKit(store, envId, resolvedKitId, 'email');
+    const brandKit = toRenderKit(rawKit);
 
     // Merge all data for tag resolution
     const mergeData = {
       ...record_data,
       ...Object.fromEntries(Object.entries(job_data).map(([k, v]) => [`job_${k}`, v])),
       ...custom_data,
-      company_name: brandKit?.company_name || '',
-      company_website: brandKit?.company_website || '',
+      company_name: brandKit?.company_name || record_data.company_name || '',
+      company_website: brandKit?.company_website || record_data.company_website || '',
       current_year: new Date().getFullYear(),
     };
 
@@ -146,8 +193,14 @@ router.post('/render', (req, res) => {
     const subject = resolveTags(template.subject, mergeData);
     const previewText = resolveTags(template.preview_text, mergeData);
 
-    // Render blocks to HTML
-    const bodyHtml = template.blocks.map(block => renderBlock(block, mergeData, brandKit)).join('');
+    // Render blocks to HTML — legacy/system templates carry their body in
+    // html_body (with %%BRAND_%% / {{tag}} placeholders) rather than in the
+    // block builder's `blocks` array, so an empty blocks list falls back to
+    // resolving tags directly against html_body instead of silently emitting
+    // an empty email.
+    const bodyHtml = (template.blocks && template.blocks.length)
+      ? template.blocks.map(block => renderBlock(block, mergeData, brandKit)).join('')
+      : resolveTags(template.html_body || '', mergeData);
 
     // Build full email HTML
     const html = buildEmailHtml({
@@ -155,7 +208,7 @@ router.post('/render', (req, res) => {
       trackingId: null, // set when actually sending
     });
 
-    res.json({ subject, preview_text: previewText, html, brand_kit_used: resolvedKitId });
+    res.json({ subject, preview_text: previewText, html, brand_kit_used: rawKit?.id || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -164,7 +217,7 @@ router.post('/render', (req, res) => {
 // ── Preview with sample data ──────────────────────────────────────────────────
 router.post('/preview', (req, res) => {
   try {
-    const { blocks = [], subject = '', preview_text = '', brand_kit_id } = req.body;
+    const { blocks = [], subject = '', preview_text = '', brand_kit_id, environment_id, html_body = '' } = req.body;
     const sampleData = {
       first_name: 'James', last_name: 'Harrison', email: 'james@example.com',
       current_title: 'Senior Engineer', company_name: 'Acme Corporation',
@@ -174,19 +227,28 @@ router.post('/preview', (req, res) => {
       offer_salary: 'AED 35,000/month', current_year: new Date().getFullYear(),
     };
 
-    const brandKit = brand_kit_id
-      ? findOne('brand_kits', k => k.id === brand_kit_id && !k.deleted_at)
-      : null;
+    // NOTE: this endpoint doubles as the *live send* rendering path (see
+    // Communications.jsx's save()), not just the WYSIWYG builder's preview —
+    // so its brand-kit resolution needs the same dual-schema + auto-apply
+    // handling as /render, not a stripped-down version of it.
+    const store = getStore();
+    const rawKit = environment_id
+      ? resolveBrandKit(store, environment_id, brand_kit_id, 'email')
+      : (brand_kit_id ? findOne('brand_kits', k => k.id === brand_kit_id && !k.deleted_at) : null);
+    const brandKit = toRenderKit(rawKit);
 
     if (brandKit) {
       sampleData.company_name = brandKit.company_name || sampleData.company_name;
+      sampleData.company_website = brandKit.company_website || sampleData.company_website || '';
     }
 
     const resolvedSubject = resolveTags(subject, sampleData);
-    const bodyHtml = blocks.map(block => renderBlock(block, sampleData, brandKit)).join('');
+    const bodyHtml = (blocks && blocks.length)
+      ? blocks.map(block => renderBlock(block, sampleData, brandKit)).join('')
+      : resolveTags(html_body || '', sampleData);
     const html = buildEmailHtml({ subject: resolvedSubject, previewText: resolveTags(preview_text, sampleData), bodyHtml, brandKit, template: { track_opens: false, track_clicks: false } });
 
-    res.json({ html, subject: resolvedSubject });
+    res.json({ html, subject: resolvedSubject, brand_kit_used: rawKit?.id || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -513,7 +575,7 @@ router.post('/seed-system', (req, res) => {
       supports_reschedule_link: true,
       description: 'Sent automatically to the candidate and all interviewers when an interview is scheduled. Includes an ICS calendar attachment.',
       subject: 'Interview Confirmed: {{candidate_name}}{{job_name ? " — " + job_name : ""}}',
-      html_body: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#4361EE;padding:24px 32px;border-radius:12px 12px 0 0">
     <h2 style="color:white;margin:0;font-size:20px">Interview Scheduled</h2>
   </div>
@@ -543,7 +605,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent when a candidate requests access to their application hub. Contains a one-time magic link that expires in 15 minutes.',
       subject: 'Your {{company_name}} application hub',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <div style="width:40px;height:40px;border-radius:10px;background:{{brand_color}};margin-bottom:24px;"></div>
   <h2 style="margin:0 0 8px;font-size:20px;color:#0F1729;">Your application hub link</h2>
   <p style="color:#4B5675;line-height:1.6;margin:0 0 24px;">Hi {{first_name}}, click below to access your candidate hub. This link expires in 15 minutes.</p>
@@ -560,7 +622,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent when a candidate saves their in-progress application on a career portal. Contains a link to resume where they left off (expires in 7 days).',
       subject: 'Continue your application — {{company_name}}',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#0F1729;">Your saved application</h2>
   <p style="color:#4B5675;line-height:1.6;">Hi{{first_name ? " " + first_name : ""}},</p>
   <p style="color:#4B5675;line-height:1.6;">You saved your application. Click below to pick up where you left off. This link expires in 7 days.</p>
@@ -576,7 +638,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent when a new platform user is invited. Contains their login credentials and a link to the platform.',
       subject: 'You have been invited to {{company_name}}',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#0F1729;">Welcome to {{company_name}}</h2>
   <p style="color:#4B5675;line-height:1.6;">Hi {{first_name}}, you have been invited to join the {{company_name}} recruitment platform.</p>
   <table style="width:100%;border-collapse:collapse;margin:20px 0">
@@ -596,7 +658,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to interviewers as a reminder to submit their scorecard/feedback after an interview.',
       subject: 'Feedback needed — {{candidate_name}} interview',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#0F1729;">Feedback reminder</h2>
   <p style="color:#4B5675;line-height:1.6;">Hi,</p>
   <p style="color:#4B5675;line-height:1.6;">Just a reminder to submit your interview feedback for <strong>{{candidate_name}}</strong>{{job_title ? " applying for " + job_title : ""}}.</p>
@@ -613,7 +675,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a candidate when a formal offer is made. Links to the offer letter for review and acceptance.',
       subject: 'Your offer from {{company_name}}',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#0F1729;">Congratulations, {{first_name}}!</h2>
   <p style="color:#4B5675;line-height:1.6;">We are delighted to offer you the position of <strong>{{job_title}}</strong> at <strong>{{company_name}}</strong>.</p>
   <p style="color:#4B5675;line-height:1.6;">Please review your offer letter and let us know your decision by <strong>{{expiry_date}}</strong>.</p>
@@ -629,7 +691,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to the recruiting team when a candidate accepts their offer.',
       subject: '✅ Offer accepted — {{candidate_name}} ({{job_title}})',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#059669;">Offer Accepted 🎉</h2>
   <p style="color:#4B5675;line-height:1.6;"><strong>{{candidate_name}}</strong> has accepted the offer for <strong>{{job_title}}</strong>.</p>
   <p style="color:#4B5675;line-height:1.6;">Start date: <strong>{{start_date}}</strong></p>
@@ -645,7 +707,7 @@ router.post('/seed-system', (req, res) => {
       is_system: true,
       description: 'Sent to a new hire after their offer is accepted, welcoming them to the company.',
       subject: 'Welcome to the team, {{first_name}}!',
-      html_body: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+      html_body: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
   <h2 style="font-size:20px;color:#0F1729;">Welcome, {{first_name}}! 🎉</h2>
   <p style="color:#4B5675;line-height:1.6;">We are absolutely delighted to welcome you to <strong>{{company_name}}</strong>!</p>
   <p style="color:#4B5675;line-height:1.6;">Your start date is confirmed as <strong>{{start_date}}</strong> and we'll be in touch shortly with everything you need to know before day one.</p>

@@ -4272,6 +4272,15 @@ const DomainWizard = ({ portal, onSave, onClose }) => {
 };
 
 // ─── Brand Kit AI Agent ───────────────────────────────────────────────────────
+// Surfaces a brand kit can be told to apply itself to automatically —
+// resolved server-side via resolveBrandKit(..., surface) in
+// server/utils/brandKit.js whenever a template/portal doesn't have an
+// explicit brand_kit_id of its own.
+const AUTO_APPLY_SURFACES = [
+  { id:"email",          label:"Email templates" },
+  { id:"career_site",    label:"Career site" },
+  { id:"hiring_manager", label:"Hiring manager portal" },
+];
 const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
   const [url,          setUrl]          = useState("");
   const [loading,      setLoading]      = useState(false);
@@ -4281,6 +4290,7 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
   const [error,   setError]   = useState("");
   const [kits,    setKits]    = useState([]);
   const [tab,     setTab]     = useState("extract");
+  const [autoApply, setAutoApply] = useState([]); // surfaces to auto-apply this kit to, picked before Save
 
   useEffect(()=>{ api.get(`/brand-kits?environment_id=${environmentId}`).then(d=>setKits(Array.isArray(d)?d:[])).catch(()=>{}); },[environmentId]);
 
@@ -4322,8 +4332,18 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
 
   const saveKit = async () => {
     if(!result) return;
-    const s = await api.post("/brand-kits",{name:result.title||result.source_url,source_url:result.source_url,logo:activeLogo,colors:result.colors,fonts:result.fonts,theme:result.theme,environment_id:environmentId});
+    const s = await api.post("/brand-kits",{name:result.title||result.source_url,source_url:result.source_url,logo:activeLogo,colors:result.colors,fonts:result.fonts,theme:result.theme,environment_id:environmentId,auto_apply_surfaces:autoApply});
     setKits(k=>[s,...k]); setTab("saved");
+  };
+
+  // Toggle a saved kit's auto-apply surfaces in place — used from the Saved
+  // Kits tab so a user doesn't have to re-extract just to turn this on.
+  const toggleKitSurface = async (kit, surfaceId) => {
+    const current = kit.auto_apply_surfaces || [];
+    const next = current.includes(surfaceId) ? current.filter(s=>s!==surfaceId) : [...current, surfaceId];
+    setKits(ks=>ks.map(k=>k.id===kit.id?{...k,auto_apply_surfaces:next}:k)); // optimistic
+    try { await api.patch(`/brand-kits/${kit.id}`,{auto_apply_surfaces:next}); }
+    catch(e){ setKits(ks=>ks.map(k=>k.id===kit.id?{...k,auto_apply_surfaces:current}:k)); } // revert on failure
   };
 
   const Swatch = ({color}) => <div title={color} onClick={()=>navigator.clipboard?.writeText(color)} style={{width:26,height:26,borderRadius:6,background:color,border:"1px solid rgba(0,0,0,.1)",cursor:"pointer",flexShrink:0}}/>;
@@ -4475,6 +4495,21 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
                   </div>
                 </div>
               </div>}
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Auto-apply to <span style={{fontWeight:400,textTransform:"none",color:C.text3,letterSpacing:0}}>· optional</span></div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {AUTO_APPLY_SURFACES.map(s=>{
+                    const on = autoApply.includes(s.id);
+                    return (
+                      <button key={s.id} type="button"
+                        onClick={()=>setAutoApply(a=>on?a.filter(x=>x!==s.id):[...a,s.id])}
+                        style={{padding:"6px 12px",borderRadius:99,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accentLight:C.surface,color:on?C.accent:C.text2,fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:5}}>
+                        {on&&<Ic n="check" s={11} c={C.accent}/>}{s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div style={{display:"flex",gap:8,paddingTop:4}}>
                 <button onClick={saveKit} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:12,fontWeight:600,color:C.text2,fontFamily:F}}><Ic n="bookmark" s={13} c={C.text2}/>Save kit</button>
                 <button onClick={()=>{onApply(result.theme,activeLogo);onClose();}} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px 20px",borderRadius:8,background:C.accent,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,color:"white",fontFamily:F}}><Ic n="check" s={13} c="white"/>Apply to portal</button>
@@ -4505,6 +4540,19 @@ const BrandKitAgent = ({ environmentId, onApply, onClose }) => {
                 {kit.theme&&<div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",height:5}}>
                   {[kit.theme.primaryColor,kit.theme.secondaryColor,kit.theme.accentColor,kit.theme.bgColor,kit.theme.textColor].map((c,i)=><div key={i} style={{background:c||"#ccc"}}/>)}
                 </div>}
+                <div style={{padding:"8px 16px 12px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginRight:2}}>Auto-apply</span>
+                  {AUTO_APPLY_SURFACES.map(s=>{
+                    const on = (kit.auto_apply_surfaces||[]).includes(s.id);
+                    return (
+                      <button key={s.id} type="button"
+                        onClick={()=>toggleKitSurface(kit,s.id)}
+                        style={{padding:"3px 9px",borderRadius:99,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accentLight:"transparent",color:on?C.accent:C.text3,fontSize:10.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:3}}>
+                        {on&&<Ic n="check" s={9} c={C.accent}/>}{s.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>}
@@ -4825,6 +4873,71 @@ const AiSiteGenerator = ({ portal, api, onApply, onClose }) => {
       </div>
     </div>
   );
+};
+
+// ─── Frozen theme-colour cleanup ───────────────────────────────────────────────
+// When a page is generated (AI site generator, section templates), row/cell
+// colours are frequently written as literal hex/rgb copies of *that moment's*
+// theme (e.g. a CTA row's bgColor === theme.primaryColor at generation time,
+// or a hero overlay tinted with theme.textColor). Because they're frozen
+// literals rather than live references, applying a *different* brand kit
+// updates `portal.theme` but leaves these rows/cells stuck showing the old
+// brand's colours — the page can look almost entirely unchanged even though
+// the kit "applied" successfully.
+//
+// This walks every row/cell colour-ish field and clears it ONLY if its value
+// exactly matches one of the OLD theme's colours (normalised to hex) — i.e.
+// it looks like a frozen snapshot of the previous brand, not an independent
+// design choice (a hand-picked accent, a generic neutral divider, a stock
+// photo overlay tuned for contrast). Cleared fields fall through to the
+// renderer's live theme-based defaults, so the section immediately reflects
+// the newly-applied kit. `bgImage`/`videoUrl` (and any non-colour value) never
+// match the hex/rgb parser and are always left untouched.
+const _hexFromAny = (val) => {
+  if (typeof val !== 'string') return null;
+  const s = val.trim().toLowerCase();
+  if (/^#([0-9a-f]{6}|[0-9a-f]{8})$/.test(s)) return s.slice(0, 7); // drop alpha
+  const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)$/);
+  if (m) {
+    const [r, g, b] = [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0'));
+    return `#${r}${g}${b}`;
+  }
+  return null;
+};
+const clearFrozenThemeColors = (pages, oldTheme = {}, oldBranding = {}) => {
+  const staleHexes = new Set(
+    [
+      oldTheme.primaryColor, oldTheme.secondaryColor, oldTheme.accentColor,
+      oldTheme.textColor, oldTheme.bgColor,
+      oldBranding.primary_color, oldBranding.secondary_color, oldBranding.accent_color,
+      oldBranding.text_color, oldBranding.background_color,
+    ].map(_hexFromAny).filter(Boolean)
+  );
+  if (!staleHexes.size || !Array.isArray(pages)) return pages;
+  const maybeClear = (val) => {
+    const hex = _hexFromAny(val);
+    return hex && staleHexes.has(hex) ? '' : val;
+  };
+  return pages.map(page => ({
+    ...page,
+    rows: (page.rows || []).map(row => {
+      const next = { ...row };
+      if (next.bgColor !== undefined) next.bgColor = maybeClear(next.bgColor);
+      if (next.overlayColor !== undefined) next.overlayColor = maybeClear(next.overlayColor);
+      if (Array.isArray(next.cells)) {
+        next.cells = next.cells.map(cell => {
+          const cfg = cell.widgetConfig;
+          if (!cfg || typeof cfg !== 'object') return cell;
+          const nextCfg = { ...cfg };
+          for (const key of Object.keys(nextCfg)) {
+            if (/color/i.test(key)) nextCfg[key] = maybeClear(nextCfg[key]);
+          }
+          return { ...cell, widgetConfig: nextCfg };
+        });
+      }
+      return next;
+    }),
+  }));
 };
 
 // ─── Portal Builder (full-screen editor) ──────────────────────────────────────
@@ -5168,7 +5281,23 @@ const PortalBuilder = ({ portal:init, onSave, onClose }) => {
       {showPortalSettings&&<PortalSettingsDrawer portal={portal} onChange={updated=>setPortal(updated)} onClose={()=>setShowPortalSettings(false)} api={api}/>}
       {showBrandKit&&<BrandKitAgent
         environmentId={portal.environment_id}
-        onApply={(theme,logo)=>setPortal(p=>({...p,theme:{...p.theme,...theme},nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||""}}))}
+        onApply={(theme,logo)=>setPortal(p=>({
+          ...p,
+          theme:{...p.theme,...theme},
+          // Clear any hardcoded nav/footer colour overrides left behind by
+          // the portal template. PortalNav/PortalFooter both resolve as
+          // `override || theme.X`, so a stale override here would silently
+          // outrank the freshly-applied theme — updating `theme` but making
+          // the page look completely unchanged. Setting them undefined
+          // drops out of that check (and is stripped entirely on save).
+          nav:{...p.nav,logoUrl:logo||p.nav?.logoUrl||"",bgColor:undefined,textColor:undefined},
+          footer:{...p.footer,bgColor:undefined,textColor:undefined},
+          // Same problem, one level deeper: individual rows/cells (hero
+          // background, CTA bands, dividers) can carry their own frozen
+          // copies of the *previous* theme's colours. Unfreeze anything that
+          // still matches the old palette so it picks up the new one.
+          pages: clearFrozenThemeColors(p.pages, p.theme, p.branding),
+        }))}
         onClose={()=>setShowBrandKit(false)}/>}
       {showAiGen&&<AiSiteGenerator portal={portal} api={api} onApply={p=>{setPortal(p);setShowAiGen(false);}} onClose={()=>setShowAiGen(false)}/>}
       {showTheme&&<>
