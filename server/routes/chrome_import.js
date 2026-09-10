@@ -3,18 +3,25 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query, insert } = require('../db/init');
 const { MODEL_DEFAULT } = require('../config/ai_models');
+const { requireExtensionKey } = require('../middleware/extension_auth');
+const { aiCostLimiter } = require('../middleware/security');
 
 // Allow CORS from any origin for chrome extension content scripts
 router.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-Slug, X-User-Id');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Tenant-Slug, X-User-Id, X-Extension-Key, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
 
+// Shared-secret gate — see middleware/extension_auth.js. No-op until
+// CHROME_EXTENSION_API_KEY is configured, so this ships with zero behavior
+// change to the live extension today.
+router.use(requireExtensionKey);
+
 // POST /api/chrome-import/extract
-router.post('/extract', async (req, res) => {
+router.post('/extract', aiCostLimiter, async (req, res) => {
   const { page_text, page_url, page_title, environment_id } = req.body;
   if (!page_text) return res.status(400).json({ error: 'page_text required' });
   if (!environment_id) return res.status(400).json({ error: 'environment_id required' });

@@ -3,8 +3,58 @@ const router   = express.Router();
 const { trackAIUsage } = require('./admin_dashboard');
 const path     = require('path');
 const fs       = require('fs');
+const dns      = require('dns').promises;
+const net      = require('net');
 const { upload, verifyMime, handleMulterError, UPLOAD_DIR } = require('../middleware/upload');
+const { aiCostLimiter } = require('../middleware/security');
 const { MODEL_OPUS } = require('../config/ai_models');
+
+// This endpoint is intentionally public — it's called anonymously from the
+// public career site (a candidate uploading their CV before any application
+// or account exists) as well as from the authenticated internal AI copilot.
+// aiCostLimiter throttles only the anonymous path (see middleware/security.js)
+// so real staff usage from a shared office IP is never affected.
+router.use(aiCostLimiter);
+
+// ── SSRF guard for the url-fetch path below ───────────────────────────────────
+// Resolves the hostname and rejects anything pointing at a private, loopback,
+// or link-local address (incl. the 169.254.169.254 cloud metadata endpoint) —
+// this is a server-side fetch of an attacker-suppliable URL, so it must never
+// be allowed to reach internal-only services.
+function isPrivateIp(ip) {
+  const version = net.isIP(ip);
+  if (version === 4) {
+    const p = ip.split('.').map(Number);
+    return p[0] === 127 || p[0] === 10 || p[0] === 0 ||
+      (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+      (p[0] === 192 && p[1] === 168) ||
+      (p[0] === 169 && p[1] === 254);
+  }
+  if (version === 6) {
+    const lower = ip.toLowerCase();
+    if (lower === '::1' || lower === '::') return true;
+    if (lower.startsWith('::ffff:')) return isPrivateIp(lower.slice(7));
+    if (/^fe[89ab][0-9a-f]:/.test(lower)) return true; // link-local fe80::/10
+    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;  // unique local fc00::/7
+    return false;
+  }
+  return true; // unknown/unparseable — fail closed
+}
+
+async function assertPublicHost(hostname) {
+  if (/^(localhost|127\.|0\.0\.0\.0)$/i.test(hostname) || hostname === '::1') {
+    throw new Error('That URL points to a local address and cannot be fetched.');
+  }
+  let addresses;
+  try {
+    addresses = await dns.lookup(hostname, { all: true });
+  } catch {
+    throw new Error('Could not resolve that URL.');
+  }
+  if (!addresses.length || addresses.some(a => isPrivateIp(a.address))) {
+    throw new Error('That URL resolves to a private/internal address and cannot be fetched.');
+  }
+}
 
 // ── Extract text from file ────────────────────────────────────────────────────
 async function extractText(filePath, mimetype) {
@@ -115,30 +165,44 @@ router.post('/', (req, res, next) => {
     try {
       const { URL } = require('url');
       const parsedUrl = new URL(rawUrl);
-      const protocol = parsedUrl.protocol === 'https:' ? require('https') : require('http');
-
-      const fetchUrl = (u, redirectCount = 0) => new Promise((resolve, reject) => {
-        if (redirectCount > 5) return reject(new Error('Too many redirects'));
-        const mod = u.startsWith('https') ? require('https') : require('http');
-        mod.get(u, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-          }
-        }, (r) => {
-          // Follow redirects
-          if ([301, 302, 303, 307, 308].includes(r.statusCode) && r.headers.location) {
-            return resolve(fetchUrl(r.headers.location, redirectCount + 1));
-          }
-          if (r.statusCode >= 400) {
-            return reject(new Error(`HTTP ${r.statusCode}`));
-          }
-          let data = '';
-          r.on('data', c => data += c);
-          r.on('end', () => resolve(data));
-        }).on('error', reject);
-      });
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return res.status(422).json({ error: 'Only http and https URLs are supported.' });
+      }
+      try {
+        await assertPublicHost(parsedUrl.hostname);
+      } catch (e) {
+        return res.status(422).json({ error: e.message });
+      }
+      const fetchUrl = async (u, redirectCount = 0) => {
+        if (redirectCount > 5) throw new Error('Too many redirects');
+        // Re-validate on every hop — a redirect is just as attacker-suppliable
+        // as the original URL (e.g. a public page 302'ing to 169.254.169.254).
+        const hop = new URL(u);
+        if (!['http:', 'https:'].includes(hop.protocol)) throw new Error('Redirected to an unsupported protocol.');
+        await assertPublicHost(hop.hostname);
+        return new Promise((resolve, reject) => {
+          const mod = hop.protocol === 'https:' ? require('https') : require('http');
+          mod.get(u, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5',
+            }
+          }, (r) => {
+            // Follow redirects
+            if ([301, 302, 303, 307, 308].includes(r.statusCode) && r.headers.location) {
+              const next = new URL(r.headers.location, u).toString();
+              return resolve(fetchUrl(next, redirectCount + 1));
+            }
+            if (r.statusCode >= 400) {
+              return reject(new Error(`HTTP ${r.statusCode}`));
+            }
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => resolve(data));
+          }).on('error', reject);
+        });
+      };
 
       const html = await fetchUrl(rawUrl);
       // Strip scripts, styles, nav, footer — keep meaningful content

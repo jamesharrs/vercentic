@@ -42,6 +42,25 @@ const apiLimiter = rateLimit({
     req.originalUrl === '/api/health' || req.originalUrl.startsWith('/api/health?'),
 });
 
+// Throttles expensive, unauthenticated Claude-API calls (cv-parse, chrome-import
+// extract) that legitimately have no session — a candidate on a public career
+// site, or a Chrome-extension call with no verified identity yet. Skips anyone
+// with a real attached session/X-User-Id (attachUser already ran by the time
+// this is reached, since it's mounted globally before routes) — authenticated
+// staff are accountable via their own session and shouldn't be throttled just
+// for sharing an office IP with other recruiters.
+const aiCostLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !!req.currentUser,
+  message: {
+    error: 'Too many requests. Please wait a few minutes before trying again.',
+    code: 'RATE_LIMITED',
+  },
+});
+
 function secureHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -114,4 +133,4 @@ function validateUpload(req, res, next) {
   next();
 }
 
-module.exports = { loginLimiter, apiLimiter, secureHeaders, generateToken, hashToken, validateUpload };
+module.exports = { loginLimiter, apiLimiter, aiCostLimiter, secureHeaders, generateToken, hashToken, validateUpload };
