@@ -3705,7 +3705,14 @@ const PortalRow = ({ row, theme, portal, api, track, portalSession, pages, onNav
 }
 
 const PortalFooter = ({ portal, theme }) => {
-  const f=portal.footer||{}; const bg=f.bgColor||'#0F1729'; const fg=f.textColor||'#F1F5F9';
+  const f=portal.footer||{};
+  // Footer defaults to a dark surface with light text even when no explicit
+  // footer colours are set — but it must still reflect an applied brand kit
+  // rather than sitting hardcoded navy forever. In a normal light theme,
+  // theme.textColor is dark and theme.bgColor is light, so swapping them
+  // here reproduces the dark-footer-on-light-page look while actually
+  // tracking the kit (a colourful kit's dark text tint carries through).
+  const bg=f.bgColor||theme.textColor||'#0F1729'; const fg=f.textColor||theme.bgColor||'#F1F5F9';
   return(<footer style={{background:bg,padding:'48px 24px 24px',fontFamily:theme.fontFamily}}>
     <div style={{maxWidth:theme.maxWidth||'1200px',margin:'0 auto'}}>
       {(f.columns||[]).length>0&&(<div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min((f.columns||[]).length,4)},1fr)`,gap:32,marginBottom:40}}>

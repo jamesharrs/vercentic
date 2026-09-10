@@ -61,7 +61,10 @@ router.get('/slug/:slug', (req, res) => {
   // Merge theme + branding rather than picking one wholesale — legacy portals
   // store their config under `theme`, the current admin UI writes to `branding`.
   // `branding` wins per-key when both exist, since it reflects the latest edit.
-  res.json({ ...portal, branding: mergePortalBranding(portal), type: portal.type || 'career_site' });
+  // Passing `store` also layers in a live auto-applied brand kit as a
+  // fallback for anything the portal hasn't set explicitly — see
+  // server/utils/portalBranding.js.
+  res.json({ ...portal, branding: mergePortalBranding(portal, store), type: portal.type || 'career_site' });
 });
 
 

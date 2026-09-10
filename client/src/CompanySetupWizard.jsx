@@ -90,17 +90,6 @@ const LocationPill = ({ loc }) => (
   </div>
 );
 
-const FieldSuggestionRow = ({ field, checked, onChange }) => (
-  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,border:`1.5px solid ${checked?C.accent:C.border}`,background:checked?C.accentLight:C.card,cursor:"pointer",transition:"all 0.15s"}}>
-    <input type="checkbox" checked={checked} onChange={onChange} style={{accentColor:C.accent,width:16,height:16}}/>
-    <div style={{flex:1}}>
-      <div style={{fontSize:13,fontWeight:600,color:C.text1}}>{field.name}</div>
-      <div style={{fontSize:11,color:C.text3,marginTop:2}}>{field.field_type}{field.options?` · ${field.options.slice(0,3).join(', ')}…`:''}</div>
-    </div>
-    <span style={{padding:"2px 8px",borderRadius:99,background:"#F3F4F6",fontSize:10,fontWeight:700,color:C.text3,textTransform:"uppercase"}}>{field.field_type}</span>
-  </label>
-);
-
 const EmailTemplateCard = ({ template, checked, onChange }) => (
   <label style={{display:"flex",gap:12,padding:"14px",borderRadius:12,border:`1.5px solid ${checked?C.accent:C.border}`,background:checked?C.accentLight:C.card,cursor:"pointer",transition:"all 0.15s"}}>
     <input type="checkbox" checked={checked} onChange={onChange} style={{accentColor:C.accent,width:16,height:16,marginTop:3,flexShrink:0}}/>
@@ -134,6 +123,98 @@ const LogoCandidate = ({ candidate, selected, onSelect }) => {
   );
 };
 
+// Small inline-editable input styled as a pill (industry/size/founded/tone)
+const EditablePill = ({ value, onChange, placeholder, bg, color, prefix="" }) => (
+  <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:99,background:bg,fontSize:12}}>
+    {prefix&&<span style={{color,fontWeight:600,marginRight:2}}>{prefix}</span>}
+    <input value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      size={Math.max((value||placeholder||"").length,4)}
+      style={{border:"none",outline:"none",background:"transparent",fontSize:12,fontFamily:F,color,fontWeight:600,padding:0}}/>
+  </span>
+);
+
+// Editable single-line text with a subtle dashed underline hinting it's editable
+const EditableText = ({ value, onChange, placeholder, style }) => (
+  <input value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    onFocus={e=>e.currentTarget.style.borderBottomColor=C.accent}
+    onBlur={e=>e.currentTarget.style.borderBottomColor="transparent"}
+    style={{border:"none",borderBottom:"1.5px dashed transparent",outline:"none",background:"transparent",fontFamily:F,
+      width:"100%",padding:"2px 0",boxSizing:"border-box",transition:"border-color 0.15s",...style}}/>
+);
+
+// Editable multi-line text with the same subtle affordance
+const EditableTextarea = ({ value, onChange, placeholder, rows=3, style }) => (
+  <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    onFocus={e=>e.currentTarget.style.borderColor=C.accent}
+    onBlur={e=>e.currentTarget.style.borderColor=C.border}
+    style={{border:`1.5px dashed ${C.border}`,borderRadius:8,outline:"none",background:"transparent",fontFamily:F,
+      width:"100%",padding:"8px 10px",resize:"vertical",boxSizing:"border-box",transition:"border-color 0.15s",...style}}/>
+);
+
+// Add/remove tag list editor — used for EVP pillars and Typical Roles
+const TagListEditor = ({ items, onChange, addLabel="Add", tagBg, tagColor }) => {
+  const [draft, setDraft] = React.useState("");
+  const list = items || [];
+  const addTag = () => {
+    const v = draft.trim();
+    if (!v) return;
+    onChange([...list, v]);
+    setDraft("");
+  };
+  const removeTag = (i) => onChange(list.filter((_,idx)=>idx!==i));
+  return (
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+      {list.map((tag,i)=>(
+        <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 6px 4px 12px",borderRadius:99,background:tagBg,color:tagColor,fontSize:12,fontWeight:600}}>
+          {tag}
+          <button onClick={()=>removeTag(i)} title="Remove" style={{border:"none",background:"rgba(0,0,0,0.08)",borderRadius:"50%",width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0,color:tagColor}}>
+            <Ic n="x" s={9} c={tagColor}/>
+          </button>
+        </span>
+      ))}
+      <input value={draft} onChange={e=>setDraft(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addTag(); } }}
+        placeholder={addLabel}
+        style={{border:`1.5px dashed ${C.border}`,borderRadius:99,padding:"4px 12px",fontSize:12,fontFamily:F,outline:"none",background:"transparent",color:C.text2,minWidth:90}}/>
+      {draft.trim() && (
+        <button onClick={addTag} style={{border:"none",background:C.accent,color:"white",borderRadius:99,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0,fontSize:14,fontWeight:700,lineHeight:1}}>+</button>
+      )}
+    </div>
+  );
+};
+
+// Structured add/remove editor for office locations
+const LocationsEditor = ({ locations, onChange }) => {
+  const list = locations || [];
+  const update = (i, field, val) => onChange(list.map((loc,idx)=>idx===i?{...loc,[field]:val}:loc));
+  const remove = (i) => onChange(list.filter((_,idx)=>idx!==i));
+  const add = () => onChange([...list, { city:"", country:"", is_hq:list.length===0 }]);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {list.map((loc,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"#F9FAFB"}}>
+          <Ic n="map" s={11} c={loc.is_hq?C.accent:C.text3}/>
+          <input value={loc.city||""} onChange={e=>update(i,"city",e.target.value)} placeholder="City"
+            style={{border:"none",outline:"none",background:"transparent",fontSize:12,fontFamily:F,color:C.text1,width:70}}/>
+          <span style={{color:C.text3,fontSize:12}}>,</span>
+          <input value={loc.country||""} onChange={e=>update(i,"country",e.target.value)} placeholder="Country"
+            style={{border:"none",outline:"none",background:"transparent",fontSize:12,fontFamily:F,color:C.text1,width:80,flex:1}}/>
+          <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:loc.is_hq?C.accent:C.text3,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <input type="checkbox" checked={!!loc.is_hq} onChange={e=>update(i,"is_hq",e.target.checked)} style={{accentColor:C.accent,width:12,height:12}}/>
+            HQ
+          </label>
+          <button onClick={()=>remove(i)} title="Remove location" style={{border:"none",background:"transparent",cursor:"pointer",padding:2,display:"flex",color:C.text3}}>
+            <Ic n="x" s={13} c={C.text3}/>
+          </button>
+        </div>
+      ))}
+      <button onClick={add} style={{alignSelf:"flex-start",display:"flex",alignItems:"center",gap:5,border:`1.5px dashed ${C.border}`,borderRadius:8,padding:"5px 10px",background:"transparent",color:C.text2,fontSize:12,fontFamily:F,cursor:"pointer"}}>
+        <span style={{fontSize:14,fontWeight:700,lineHeight:1}}>+</span> Add location
+      </button>
+    </div>
+  );
+};
+
 // Swatch for brand kit colour picker
 const ColorSwatch = ({ color, label, onChange }) => (
   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
@@ -156,10 +237,8 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   const [error, setError] = useState(null);
   const [profile, setProfile] = useState(null);
   const [emailTemplates, setEmailTemplates] = useState([]);
-  const [suggestedFields, setSuggestedFields] = useState([]);
   const [editedProfile, setEditedProfile] = useState(null);
   const [selectedTemplates, setSelectedTemplates] = useState(new Set());
-  const [selectedFields, setSelectedFields] = useState(new Set());
   const [createBrandKit, setCreateBrandKit] = useState(true);
 
   // Brand kit state — pre-filled from research data
@@ -200,9 +279,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       });
       setProfile(data.profile); setEditedProfile(data.profile);
       setEmailTemplates(data.email_templates||[]);
-      setSuggestedFields(data.suggested_fields||[]);
       setSelectedTemplates(new Set((data.email_templates||[]).map((_,i)=>i)));
-      setSelectedFields(new Set((data.suggested_fields||[]).map((_,i)=>i)));
       setStep(1);
       api.post('/company-research/save', {
         environment_id: environmentId, profile: data.profile,
@@ -308,38 +385,46 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
         {/* Company info */}
         <div style={{flex:1}}>
-          <h2 style={{fontSize:22,fontWeight:800,color:C.text1,margin:"0 0 4px"}}>{editedProfile.name}</h2>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
-            {editedProfile.industry&&<span style={{padding:"3px 10px",borderRadius:99,background:C.accentLight,color:C.accent,fontSize:12,fontWeight:600}}>{editedProfile.industry}</span>}
-            {editedProfile.size&&<span style={{padding:"3px 10px",borderRadius:99,background:"#F3F4F6",color:C.text2,fontSize:12}}>{editedProfile.size}</span>}
-            {editedProfile.founded&&<span style={{padding:"3px 10px",borderRadius:99,background:"#F3F4F6",color:C.text2,fontSize:12}}>Est. {editedProfile.founded}</span>}
-            {editedProfile.tone&&<span style={{padding:"3px 10px",borderRadius:99,background:"#FEF9C3",color:"#92400E",fontSize:12}}>Tone: {editedProfile.tone}</span>}
+          <EditableText value={editedProfile.name} onChange={v=>setEditedProfile(p=>({...p,name:v}))}
+            placeholder="Company name" style={{fontSize:22,fontWeight:800,color:C.text1,marginBottom:4}}/>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+            <EditablePill value={editedProfile.industry} onChange={v=>setEditedProfile(p=>({...p,industry:v}))} placeholder="Industry" bg={C.accentLight} color={C.accent}/>
+            <EditablePill value={editedProfile.size} onChange={v=>setEditedProfile(p=>({...p,size:v}))} placeholder="Company size" bg="#F3F4F6" color={C.text2}/>
+            <EditablePill value={editedProfile.founded} onChange={v=>setEditedProfile(p=>({...p,founded:v}))} placeholder="Year" bg="#F3F4F6" color={C.text2} prefix="Est. "/>
+            <EditablePill value={editedProfile.tone} onChange={v=>setEditedProfile(p=>({...p,tone:v}))} placeholder="Tone" bg="#FEF9C3" color="#92400E" prefix="Tone: "/>
           </div>
-          <p style={{fontSize:14,color:C.text2,lineHeight:1.6,margin:0}}>{editedProfile.description}</p>
+          <EditableTextarea value={editedProfile.description} onChange={v=>setEditedProfile(p=>({...p,description:v}))}
+            placeholder="Company description…" rows={3} style={{fontSize:14,color:C.text2,lineHeight:1.6}}/>
         </div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:28}}>
         <div style={{padding:20,borderRadius:14,border:`1.5px solid ${C.border}`,background:C.card,gridColumn:"1 / -1"}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:12}}>Employer Value Proposition</div>
-          <div style={{fontSize:16,fontWeight:700,color:C.text1,marginBottom:8}}>"{editedProfile.evp?.headline}"</div>
-          <p style={{fontSize:13,color:C.text2,lineHeight:1.6,margin:"0 0 12px"}}>{editedProfile.evp?.statement}</p>
-          {editedProfile.evp?.pillars?.length>0&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {editedProfile.evp.pillars.map((p,i)=><span key={i} style={{padding:"4px 12px",borderRadius:99,background:`${C.accent}12`,color:C.accent,fontSize:12,fontWeight:600}}>{p}</span>)}
-          </div>}
+          <div style={{display:"flex",alignItems:"baseline",gap:2,marginBottom:8}}>
+            <span style={{fontSize:16,fontWeight:700,color:C.text1}}>"</span>
+            <EditableText value={editedProfile.evp?.headline} onChange={v=>setEditedProfile(p=>({...p,evp:{...(p.evp||{}),headline:v}}))}
+              placeholder="EVP headline…" style={{fontSize:16,fontWeight:700,color:C.text1}}/>
+            <span style={{fontSize:16,fontWeight:700,color:C.text1}}>"</span>
+          </div>
+          <EditableTextarea value={editedProfile.evp?.statement} onChange={v=>setEditedProfile(p=>({...p,evp:{...(p.evp||{}),statement:v}}))}
+            placeholder="EVP statement…" rows={2} style={{fontSize:13,color:C.text2,lineHeight:1.6,marginBottom:12}}/>
+          <TagListEditor items={editedProfile.evp?.pillars} addLabel="Add pillar…" tagBg={`${C.accent}12`} tagColor={C.accent}
+            onChange={v=>setEditedProfile(p=>({...p,evp:{...(p.evp||{}),pillars:v}}))}/>
         </div>
         <div style={{padding:20,borderRadius:14,border:`1.5px solid ${C.border}`,background:C.card}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:12}}>Locations</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(editedProfile.locations||[]).map((loc,i)=><LocationPill key={i} loc={loc}/>)}</div>
+          <LocationsEditor locations={editedProfile.locations} onChange={v=>setEditedProfile(p=>({...p,locations:v}))}/>
         </div>
         <div style={{padding:20,borderRadius:14,border:`1.5px solid ${C.border}`,background:C.card}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:12}}>Typical Roles Hired</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(editedProfile.typical_roles||[]).map((r,i)=><span key={i} style={{padding:"4px 10px",borderRadius:99,background:"#F3F4F6",color:C.text2,fontSize:12}}>{r}</span>)}</div>
+          <TagListEditor items={editedProfile.typical_roles} addLabel="Add role…" tagBg="#F3F4F6" tagColor={C.text2}
+            onChange={v=>setEditedProfile(p=>({...p,typical_roles:v}))}/>
         </div>
       </div>
 
       <div style={{padding:"10px 16px",borderRadius:10,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:12,color:"#92400E",marginBottom:28}}>
-        Review the information above — researched by AI and may need adjustments. You can edit everything in Settings after setup.
+        This profile was researched by AI — click any field above to edit it before continuing.
       </div>
       <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
         <button onClick={()=>setStep(0)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
@@ -370,25 +455,6 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {emailTemplates.map((tpl,i)=><EmailTemplateCard key={i} template={tpl} checked={selectedTemplates.has(i)} onChange={()=>{const n=new Set(selectedTemplates);n.has(i)?n.delete(i):n.add(i);setSelectedTemplates(n);}}/>)}
-          </div>
-        </div>
-      )}
-
-      {suggestedFields.length>0&&(
-        <div style={{marginBottom:32}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:C.text1}}>📋 Suggested Fields</div>
-              <div style={{fontSize:12,color:C.text3}}>Industry-specific fields for your People records</div>
-            </div>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setSelectedFields(new Set(suggestedFields.map((_,i)=>i)))} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",fontFamily:F}}>All</button>
-              <span style={{color:C.border}}>|</span>
-              <button onClick={()=>setSelectedFields(new Set())} style={{fontSize:12,color:C.text3,background:"none",border:"none",cursor:"pointer",fontFamily:F}}>None</button>
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {suggestedFields.map((field,i)=><FieldSuggestionRow key={i} field={field} checked={selectedFields.has(i)} onChange={()=>{const n=new Set(selectedFields);n.has(i)?n.delete(i):n.add(i);setSelectedFields(n);}}/>)}
           </div>
         </div>
       )}
@@ -500,10 +566,10 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       </p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:32}}>
         {[
-          {label:"Locations",    value:(editedProfile?.locations||[]).length, icon:"map"},
-          {label:"Templates",    value:selectedTemplates.size,                icon:"mail"},
-          {label:"Fields Added", value:selectedFields.size,                   icon:"star"},
-          {label:"Brand Kit",    value:createBrandKit?"✓":"—",                icon:"palette"},
+          {label:"Locations",    value:(editedProfile?.locations||[]).length,      icon:"map"},
+          {label:"Templates",    value:selectedTemplates.size,                     icon:"mail"},
+          {label:"EVP Pillars",  value:(editedProfile?.evp?.pillars||[]).length,   icon:"star"},
+          {label:"Brand Kit",    value:createBrandKit?"✓":"—",                     icon:"palette"},
         ].map((s,i)=>(
           <div key={i} style={{padding:"16px 12px",borderRadius:12,background:C.card,border:`1.5px solid ${C.border}`}}>
             <Ic n={s.icon} s={20} c={C.accent}/>
