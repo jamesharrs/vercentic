@@ -1037,8 +1037,8 @@ export default function SuperAdminConsole() {
         {section === 'templates' && <TemplateEnvironments/>}
         {section === 'perf' && <Performance/>}
         {section === 'features' && <FeaturePacksSection/>}
-        {section === 'ai_usage' && <AIUsageReport/>}
-        {section === 'ai_credits' && <AiCreditsManager/>}
+        {section === 'ai_usage' && <AIUsageReport onNavigate={setSection}/>}
+        {section === 'ai_credits' && <AiCreditsManager onNavigate={setSection}/>}
         {section === 'activity' && <ActivityReport clientId={clientView==='detail'?selectedClientId:null}/>}
         {section === 'platform_events' && <PlatformEvents/>}
         {section === 'demo' && <DemoDataManager/>}

@@ -11,7 +11,7 @@ const SLA = {
   low:      { response: 24, resolve: 168 },
 };
 
-const PLAN_MULT = { enterprise: 0.5, growth: 0.75, starter: 1, trial: 1.5 };
+const PLAN_MULT = { enterprise: 0.5, pro: 0.6, growth: 0.75, foundation: 1, trial: 1.5 };
 
 function computeSLA(priority, planTier) {
   const base = SLA[priority] || SLA.medium;
@@ -27,7 +27,7 @@ function slaStatus(case_) {
   const now     = Date.now();
   const created = new Date(case_.created_at).getTime();
   const elapsed = (now - created) / 3600000;
-  const { resolve_hours } = computeSLA(case_.priority || 'medium', case_.plan_tier || 'starter');
+  const { resolve_hours } = computeSLA(case_.priority || 'medium', case_.plan_tier || 'foundation');
   if (['resolved','closed'].includes(case_.status)) return 'met';
   if (elapsed > resolve_hours)       return 'breached';
   if (elapsed > resolve_hours * 0.8) return 'at_risk';
@@ -120,12 +120,12 @@ router.post('/', (req, res) => {
       return Math.max(max, n);
     }, 0);
     const case_number = `CASE-${String(lastNum + 1).padStart(4,'0')}`;
-    const sla = computeSLA(priority || 'medium', plan_tier || 'starter');
+    const sla = computeSLA(priority || 'medium', plan_tier || 'foundation');
     const now = new Date().toISOString();
     const case_ = insert('cases', {
       case_number, subject, type, priority: priority||'medium',
       status: 'open', description, client_id, client_name,
-      plan_tier: plan_tier||'starter', reporter_name, reporter_email,
+      plan_tier: plan_tier||'foundation', reporter_name, reporter_email,
       assignee_id, assignee_name, tags: tags||[],
       response_due: new Date(Date.now() + sla.response_hours * 3600000).toISOString(),
       resolve_due:  new Date(Date.now() + sla.resolve_hours  * 3600000).toISOString(),

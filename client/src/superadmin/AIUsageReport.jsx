@@ -2,6 +2,7 @@
 // AI token usage tracking, per-client breakdown, cost estimation, quotas
 import { useState, useEffect, useCallback } from 'react';
 import api from '../apiClient.js';
+import { FEATURE_LABELS, FEATURE_COLORS } from '../utils/aiFeatures.js';
 
 const F = "'Geist','DM Sans',-apple-system,sans-serif";
 const C = {
@@ -31,19 +32,9 @@ const ICONS = {
   clock:    'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2',
 };
 
-const FEATURE_COLORS = {
-  copilot: C.purple, cv_parse: C.green, doc_extract: C.blue,
-  job_match: C.amber, translation: C.cyan, jd_generate: '#F472B6',
-  form_suggest: '#FB923C', interview_schedule: C.green, offer_create: C.amber,
-  unknown: C.text3,
-};
-
-const FEATURE_LABELS = {
-  copilot: 'Copilot', cv_parse: 'CV Parse', doc_extract: 'Doc Extract',
-  job_match: 'Matching', translation: 'Translation', jd_generate: 'JD Generation',
-  form_suggest: 'Form Builder', interview_schedule: 'Interview', offer_create: 'Offer',
-  unknown: 'Other',
-};
+// FEATURE_LABELS / FEATURE_COLORS now imported from ../utils/aiFeatures.js —
+// previously a local copy that had drifted from settings/AiGovernance.jsx's
+// own local copy (different keys for the same real features).
 
 const fmt = (n) => n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : String(n);
 const fmtCost = (n) => '$' + n.toFixed(2);
@@ -111,7 +102,7 @@ const Donut = ({ segments, size = 100 }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function AIUsageReport() {
+export default function AIUsageReport({ onNavigate }) {
   const [data, setData] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -178,7 +169,14 @@ export default function AIUsageReport() {
           <div style={{ fontSize:18, fontWeight:800 }}>AI Usage & Costs</div>
           <div style={{ fontSize:12, color:C.text3 }}>Current billing period · All environments</div>
         </div>
-        <div style={{ display:'flex', gap:6 }}>
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          {onNavigate && (
+            <button onClick={() => onNavigate('ai_credits')}
+              style={{ padding:'6px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:F,
+                border:`1px solid ${C.border}`, background:'transparent', color:C.text2, cursor:'pointer', whiteSpace:'nowrap', marginRight:4 }}>
+              Manage budgets &amp; quotas →
+            </button>
+          )}
           {[['overview','Overview'],['logs','Usage Log'],['clients','By User']].map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)}
               style={{ padding:'6px 14px', borderRadius:8, fontSize:12, fontWeight:tab===id?700:400, fontFamily:F,
@@ -307,7 +305,7 @@ export default function AIUsageReport() {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr style={{ borderBottom:`1px solid ${C.border}`, position:'sticky', top:0, background:C.surface }}>
-                  {['Time', 'Feature', 'User', 'Tokens In', 'Tokens Out', 'Cost'].map(h => (
+                  {['Time', 'Feature', 'User', 'Prompt', 'Tokens In', 'Tokens Out', 'Cost'].map(h => (
                     <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase' }}>{h}</th>
                   ))}
                 </tr>
@@ -329,6 +327,13 @@ export default function AIUsageReport() {
                       </td>
                       <td style={{ padding:'8px 12px', color:C.text2, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {log.user_name || log.user_email || 'System'}
+                      </td>
+                      <td style={{ padding:'8px 12px', color:log.prompt_snippet ? C.text2 : C.text3, maxWidth:280, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontStyle:log.prompt_snippet ? 'normal' : 'italic' }}
+                        title={log.prompt_snippet || ''}>
+                        {/* Already redacted server-side (server/lib/redactPrompt.js) before storage —
+                            names/emails/phones are tagged, never raw. Rows logged before this feature
+                            shipped have no snippet at all, hence the graceful "—" fallback below. */}
+                        {log.prompt_snippet || '—'}
                       </td>
                       <td style={{ padding:'8px 12px', color:C.text2 }}>{fmt(log.tokens_in||0)}</td>
                       <td style={{ padding:'8px 12px', color:C.text2 }}>{fmt(log.tokens_out||0)}</td>

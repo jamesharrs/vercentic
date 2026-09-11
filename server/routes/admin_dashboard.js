@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { query, insert, getStore } = require('../db/init');
 const { MODEL_DEFAULT } = require('../config/ai_models');
+const { FEATURE_LABELS } = require('../config/ai_features');
+const { calcCost } = require('./ai_credits');
 
 // ── AI usage tracking helper ────────────────────────────────────────────────
 // Call from ai-proxy.js, cv_parse.js, doc_extract.js, translate.js etc.
@@ -17,6 +19,11 @@ function trackAIUsage(data) {
       model: data.model || MODEL_DEFAULT,
       environment_id: data.environment_id || '',
       metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+      // Redacted, truncated prompt snippet (see server/lib/redactPrompt.js).
+      // Never the raw prompt — names/emails/phones are replaced with tags
+      // before this ever reaches trackAIUsage(). Optional; null if the
+      // caller (e.g. cv_parse/translate) has no free-text user prompt.
+      prompt_snippet: data.prompt_snippet || null,
       created_at: new Date().toISOString()
     });
   } catch (e) {
@@ -24,19 +31,9 @@ function trackAIUsage(data) {
   }
 }
 
-// Cost per million tokens
-const CPM = { input: 3.0, output: 15.0 };
-function calcCost(ti, to) {
-  return ((ti / 1_000_000) * CPM.input) + ((to / 1_000_000) * CPM.output);
-}
-
-const FEATURE_LABELS = {
-  copilot: 'Copilot Chat', cv_parse: 'CV Parsing',
-  doc_extract: 'Document Extract', job_match: 'Job Matching',
-  translation: 'Translation', form_suggest: 'Form Builder',
-  interview_schedule: 'Interview Schedule', offer_create: 'Offer Creation',
-  jd_generate: 'JD Generation', unknown: 'Other'
-};
+// Cost/label constants now live in ./ai_credits and ../config/ai_features —
+// required above. calcCost() defaults to ANTHROPIC_CPM (raw cost) when
+// called with 2 args, matching this route's prior behavior exactly.
 
 // ── GET /api/admin/dashboard ────────────────────────────────────────────────
 router.get('/dashboard', (req, res) => {

@@ -50,7 +50,7 @@ async function provisionClient(clientData, envData, adminUser, templateKey) {
   // ── 1. Master store: client record + environment reference only ─────────────
   const client = {
     id: uuidv4(), name: clientData.name, industry: clientData.industry||'',
-    region: clientData.region||'', plan: clientData.plan||'starter', size: clientData.size||'',
+    region: clientData.region||'', plan: clientData.plan||'foundation', size: clientData.size||'',
     status: 'active', tenant_slug: tenantSlug,
     primary_contact_name:  clientData.contact_name||'',
     primary_contact_email: clientData.contact_email||'',

@@ -15,9 +15,9 @@ const C = {
 
 const PLANS = [
   {
-    id: "starter", name: "Starter", price: 500, period: "mo",
-    desc: "Perfect for small teams getting started",
-    features: ["Up to 5 users", "500 candidate records", "Core ATS features", "Email support"],
+    id: "foundation", name: "Foundation", price: 500, period: "mo",
+    desc: "Full AI-native hiring platform for growing teams",
+    features: ["Up to 25 users", "AI Copilot & matching", "CV parsing & JD generation", "1,000 AI credits/mo"],
     color: "#3B82F6", popular: false,
   },
   {

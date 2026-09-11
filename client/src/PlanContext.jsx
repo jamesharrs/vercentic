@@ -9,11 +9,12 @@ const PLAN_FEATURES = {
   trial: [
     'core_records','basic_search','email_templates','portals_basic',
   ],
-  starter: [
+  foundation: [
     'core_records','basic_search','email_templates','portals_basic',
     'workflows','forms','bulk_actions','csv_export','saved_views',
     'communications_log','tasks','onboarding_checklist',
     'interview_types','org_chart_basic',
+    'ai_copilot','ai_matching','ai_cv_parse','ai_doc_extract','offers',
   ],
   growth: [
     'core_records','basic_search','email_templates','portals_basic',
@@ -24,6 +25,16 @@ const PLAN_FEATURES = {
     'campaigns','engagement_scoring','sourcing','skills_ontology',
     'reports_advanced','portals_advanced','scorecards','offers',
     'org_chart_full','duplicate_detection','chrome_extension',
+  ],
+  pro: [
+    'core_records','basic_search','email_templates','portals_basic',
+    'workflows','forms','bulk_actions','csv_export','saved_views',
+    'communications_log','tasks','onboarding_checklist',
+    'interview_types','org_chart_basic',
+    'ai_copilot','ai_matching','ai_cv_parse','ai_doc_extract',
+    'campaigns','engagement_scoring','sourcing','skills_ontology',
+    'reports_advanced','portals_advanced','scorecards','offers',
+    'org_chart_full','duplicate_detection','chrome_extension','api_access',
   ],
   enterprise: [
     'core_records','basic_search','email_templates','portals_basic',
@@ -40,25 +51,25 @@ const PLAN_FEATURES = {
   ],
 };
 
-const PlanContext = createContext({ plan:'starter', features:PLAN_FEATURES.starter, can:()=>true, loading:false });
+const PlanContext = createContext({ plan:'foundation', features:PLAN_FEATURES.foundation, can:()=>true, loading:false });
 
 export function PlanProvider({ children, environmentId }) {
-  const [plan, setPlan]       = useState('starter');
-  const [features, setFeatures] = useState(PLAN_FEATURES.starter);
+  const [plan, setPlan]       = useState('foundation');
+  const [features, setFeatures] = useState(PLAN_FEATURES.foundation);
   const [loading, setLoading] = useState(false);
 
   useEffect(()=>{
     if (!environmentId) return;
     setLoading(true);
     // tFetch (apiClient) already resolves to parsed JSON — calling .json() here threw
-    // and the silent catch pinned every environment to the starter feature set.
+    // and the silent catch pinned every environment to the foundation feature set.
     tFetch(`/api/plan/features?environment_id=${environmentId}`)
       .then(d=>{
         if (d.plan) setPlan(d.plan);
         if (d.features) setFeatures(d.features);
-        else setFeatures(PLAN_FEATURES[d.plan]||PLAN_FEATURES.starter);
+        else setFeatures(PLAN_FEATURES[d.plan]||PLAN_FEATURES.foundation);
       })
-      .catch(()=>{ /* silently fall back to starter */ })
+      .catch(()=>{ /* silently fall back to foundation */ })
       .finally(()=>setLoading(false));
   },[environmentId]);
 
