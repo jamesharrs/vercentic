@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import WizardRenderer from './WizardRenderer.jsx'
 import { sanitizeInline } from '../sanitize.js'
+import { mergePortalBranding } from './portalBranding.js'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -2678,7 +2679,8 @@ const PortalNav = ({ portal, theme, currentPage, onNav, pages }) => {
 }
 
 export default function PortalPageRenderer({ portal, api }) {
-  const theme = portal.theme || portal.branding || {}
+  // Merge rather than pick one wholesale — see portalBranding.js for why.
+  const theme = mergePortalBranding(portal)
   const pages = portal.pages || []
   const [currentPage,   setCurrentPage]   = useState(pages[0]||null)
   const [consentGiven,  setConsentGiven]  = useState(()=>!!localStorage.getItem('vc_consent_'+portal.id))

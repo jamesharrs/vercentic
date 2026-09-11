@@ -23,40 +23,72 @@
 // synthesise a fake brand.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function resolveBrandKit(store, environmentId, explicitKitId = null) {
+// `surface` lets a caller ask "which kit should auto-apply to email /
+// career_site / hiring_manager for this environment?" — a kit opts in to a
+// surface via its `auto_apply_surfaces` array (e.g. ['email','career_site']).
+// Priority is unchanged for existing callers that don't pass a surface:
+// explicit id → is_default kit → null. When a surface IS passed, a kit that
+// has opted into that surface wins over the plain is_default kit (but an
+// explicit id still always wins over both).
+function resolveBrandKit(store, environmentId, explicitKitId = null, surface = null) {
   if (!environmentId) return null;
   const kits = (store.brand_kits || []).filter(k => !k.deleted_at && k.environment_id === environmentId);
   if (!kits.length) return null;
-  const kit = (explicitKitId && kits.find(k => k.id === explicitKitId))
-    || kits.find(k => k.is_default)
-    || null;
-  return kit;
+  if (explicitKitId) {
+    const explicit = kits.find(k => k.id === explicitKitId);
+    if (explicit) return explicit;
+  }
+  if (surface) {
+    const autoKit = kits.find(k => Array.isArray(k.auto_apply_surfaces) && k.auto_apply_surfaces.includes(surface));
+    if (autoKit) return autoKit;
+  }
+  return kits.find(k => k.is_default) || null;
 }
 
 // Shapes a raw brand_kits row into the flat snake_case object every public
 // page consumes (matches the shape InterviewSession.jsx already expects).
+//
+// Brand kits exist in the store in two different shapes depending on how
+// they were created:
+//   - wizard-created (CompanySetupWizard.handleApply): flat camelCase fields
+//     directly on the kit — kit.primaryColor, kit.fontFamily, kit.logo_url...
+//   - BrandKitAgent-created (Portals.jsx saveKit): everything nested under
+//     kit.theme — kit.theme.primaryColor, kit.theme.fontFamily... plus a
+//     top-level kit.logo for the extracted logo URL.
+// Every reader in the app (email builder, portal renderer, interview pages,
+// this file) should go through toBrandPayload() rather than reaching into a
+// kit directly, so both shapes resolve identically. `pick` returns the first
+// defined/non-empty value it's given, so a value on the flat kit always wins
+// over the same field nested under kit.theme if somehow both are set.
 function toBrandPayload(kit) {
   if (!kit) return null;
+  const t = kit.theme || {};
+  const pick = (...vals) => {
+    for (const v of vals) if (v !== undefined && v !== null && v !== '') return v;
+    return null;
+  };
   return {
-    company_name:    kit.company_name  || kit.name || null,
-    logo_url:        kit.logo_url      || null,
-    logo_dark_url:   kit.logo_dark_url || null,
-    favicon_url:     kit.favicon_url   || null,
-    primary_color:   kit.primaryColor   || '#4361EE',
-    secondary_color: kit.secondaryColor || null,
-    accent_color:    kit.accentColor    || null,
-    bg_color:        kit.bgColor        || null,
-    text_color:      kit.textColor      || null,
-    font_family:     kit.fontFamily     || null,
-    button_style:    kit.buttonStyle    || 'filled',
-    button_radius:   kit.buttonRadius   || '8px',
-    border_radius:   kit.borderRadius   || '8px',
+    company_name:    pick(kit.company_name, t.companyName, kit.name),
+    company_website: pick(kit.company_website, t.companyWebsite),
+    logo_url:        pick(kit.logo_url, kit.logo, t.logo, t.logoUrl),
+    logo_dark_url:   pick(kit.logo_dark_url, t.logoDarkUrl),
+    favicon_url:     pick(kit.favicon_url, t.faviconUrl),
+    primary_color:   pick(kit.primaryColor, t.primaryColor) || '#4361EE',
+    secondary_color: pick(kit.secondaryColor, t.secondaryColor),
+    accent_color:    pick(kit.accentColor, t.accentColor),
+    bg_color:        pick(kit.bgColor, t.bgColor),
+    text_color:      pick(kit.textColor, t.textColor),
+    font_family:     pick(kit.fontFamily, t.fontFamily),
+    heading_font:    pick(kit.headingFont, t.headingFont),
+    button_style:    pick(kit.buttonStyle, t.buttonStyle) || 'filled',
+    button_radius:   pick(kit.buttonRadius, t.buttonRadius) || '8px',
+    border_radius:   pick(kit.borderRadius, t.borderRadius) || '8px',
   };
 }
 
 // Convenience: resolve + shape in one call — what most routes actually want.
-function resolveBrand(store, environmentId, explicitKitId = null) {
-  return toBrandPayload(resolveBrandKit(store, environmentId, explicitKitId));
+function resolveBrand(store, environmentId, explicitKitId = null, surface = null) {
+  return toBrandPayload(resolveBrandKit(store, environmentId, explicitKitId, surface));
 }
 
 module.exports = { resolveBrandKit, toBrandPayload, resolveBrand };
