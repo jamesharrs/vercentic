@@ -13,9 +13,22 @@ const { getDefaultTemplateKey, resolveTemplate, buildStandardConfig } = require(
 const { runSeed, findTenantForEnv } = require('./demo_seed');
 
 const PLAN_LIMITS = {
-  starter: { max_users: 5,  max_records: 500,   label: 'Starter', price: 49  },
-  growth:  { max_users: 20, max_records: 5000,  label: 'Growth',  price: 149 },
-  pro:     { max_users: -1, max_records: -1,    label: 'Pro',     price: 399 },
+  foundation: { max_users: 25, max_records: 5000,  label: 'Foundation', price: 500  },
+  growth:     { max_users: 20, max_records: 5000,  label: 'Growth',     price: 1500 },
+  pro:        { max_users: -1, max_records: -1,    label: 'Pro',        price: 4000 },
+};
+
+// Monthly AI credit budgets by plan, in real USD (client-facing rate, i.e.
+// Anthropic cost x CLIENT_MARGIN — see server/routes/ai_credits.js).
+// Marketed on-site as "credits" at a rate of 1 credit ≈ $0.05.
+// hard_cap:false — soft/monitoring only for now: usage is tracked and visible,
+// but never blocked, since there's no automatic overage billing built yet.
+// Revisit hard_cap once real metered billing exists.
+const PLAN_CREDIT_BUDGETS = {
+  foundation: 50,   // 1,000 credits/mo
+  growth:     200,  // 4,000 credits/mo
+  pro:        500,  // 10,000 credits/mo
+  // enterprise: intentionally omitted — no allocation created, uncapped
 };
 
 
@@ -191,6 +204,20 @@ router.post('/', async (req, res) => {
       }
 
       ts.security_settings = { password_min_length:8, session_timeout_minutes:60, max_login_attempts:5, lockout_duration_minutes:30, mfa_enabled:0, updated_at:now };
+
+      // Auto-assign a monthly AI credit allocation based on plan (soft cap — see
+      // PLAN_CREDIT_BUDGETS above for rationale). No entry = uncapped.
+      const creditBudget = PLAN_CREDIT_BUDGETS[plan];
+      if (creditBudget != null) {
+        if (!ts.ai_credit_allocations) ts.ai_credit_allocations = [];
+        ts.ai_credit_allocations.push({
+          id: uuidv4(), environment_id: envId,
+          monthly_budget_usd: creditBudget, hard_cap: false, rollover: false,
+          alert_threshold_pct: 20,
+          notes: `Auto-assigned on signup for plan: ${plan}`,
+          created_at: now, updated_at: now, deleted_at: null,
+        });
+      }
       saveStoreNow(tenantSlug); // synchronous — ensures data is written before response
     });
 

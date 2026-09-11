@@ -49,7 +49,7 @@ const StatusBadge = ({status}) => {
 };
 
 const PlanBadge = ({plan}) => {
-  const m={enterprise:[C.purple,'#f5f3ff'],growth:[C.accent,'#eff6ff'],starter:[C.text2,C.surface2],trial:[C.amber,'#fffbeb']};
+  const m={enterprise:[C.purple,'#f5f3ff'],growth:[C.accent,'#eff6ff'],foundation:[C.text2,C.surface2],trial:[C.amber,'#fffbeb']};
   const [color,bg]=m[plan?.toLowerCase()]||[C.text2,C.surface2];
   return <span style={{padding:'3px 8px',borderRadius:99,fontSize:10,fontWeight:800,background:bg,color,textTransform:'uppercase',letterSpacing:'0.05em'}}>{plan}</span>;
 };
@@ -1349,7 +1349,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
 const STEPS=[{id:'client',label:'Client'},{id:'env',label:'Environment'},{id:'admin',label:'Admin User'},{id:'template',label:'Template'},{id:'review',label:'Review'}];
 const INDUSTRIES=['Technology','Finance','Healthcare','Professional Services','Manufacturing','Retail','Construction','Education','Other'];
 const REGIONS=['Middle East','EMEA','North America','APAC','Latin America','Global'];
-const PLANS=['trial','starter','growth','enterprise'];
+const PLANS=['trial','foundation','growth','enterprise'];
 const TIMEZONES=['UTC','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','Asia/Dubai','Asia/Singapore','Asia/Tokyo'];
 
 export function ProvisionWizard({ onDone, onCancel }) {
@@ -1358,7 +1358,7 @@ export function ProvisionWizard({ onDone, onCancel }) {
   const [errors,setErrors]=useState({});
   const [loadingTD,setLoadingTD]=useState(false); const [tdResult,setTdResult]=useState(null);
   const [form,setForm]=useState({
-    client_name:'',industry:'',region:'Middle East',plan:'starter',size:'',
+    client_name:'',industry:'',region:'Middle East',plan:'foundation',size:'',
     contact_name:'',contact_email:'',contact_phone:'',website:'',notes:'',
     env_name:'',env_type:'production',locale:'en',timezone:'Asia/Dubai',
     admin_first:'',admin_last:'',admin_email:'',admin_password:'Admin1234!',
