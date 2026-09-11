@@ -1128,6 +1128,43 @@ initDB().then(async () => {
     }, 60_000);
     // ── End AI Interview scheduler ────────────────────────────────────────────
 
+    // ── AI usage log retention (90-day auto-purge) ──────────────────────────
+    // Prompt snippets in ai_usage_log are already redacted (server/lib/redactPrompt.js)
+    // before they're ever stored — names/emails/phones replaced with tags — but we
+    // still don't keep them indefinitely. Runs daily, sweeps master + every tenant,
+    // deletes any usage-log row older than 90 days. Each tenant is wrapped in
+    // tenantStorage.run(slug, ...) so getStore()/query()/remove() below resolve
+    // against THAT tenant's store — this job runs outside any request, so there's
+    // no ambient tenant context otherwise (getCurrentTenant() would fall back to
+    // 'master' for every iteration without this).
+    function purgeOldAIUsageLogs() {
+      const { remove, getStore, tenantStorage, listTenants } = require('./db/init');
+      const RETENTION_DAYS = 90;
+      const cutoffIso = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const slugs = ['master', ...listTenants()];
+      for (const slug of slugs) {
+        try {
+          tenantStorage.run(slug, () => {
+            const store = getStore();
+            // remove() indexes store[table] directly with no existence guard, so
+            // skip tenants that have never had an ai_usage_log entry (insert()
+            // lazily creates the array on first write; a fresh/quiet tenant won't
+            // have it at all).
+            if (!Array.isArray(store.ai_usage_log) || !store.ai_usage_log.length) return;
+            const removedCount = remove('ai_usage_log', l => l.created_at && l.created_at < cutoffIso);
+            if (removedCount > 0) {
+              console.log(`[AI Usage Purge] ${slug}: removed ${removedCount} log(s) older than ${RETENTION_DAYS}d`);
+            }
+          });
+        } catch (e) {
+          console.warn(`[AI Usage Purge] ${slug} error:`, e.message);
+        }
+      }
+    }
+    setInterval(purgeOldAIUsageLogs, 24 * 60 * 60 * 1000);
+    setTimeout(purgeOldAIUsageLogs, 30_000);
+    // ── End AI usage log retention ──────────────────────────────────────────
+
     const { startDigestScheduler } = require('./services/digestScheduler');
     startDigestScheduler();
     // Email sequencer — detect milestones and send onboarding emails hourly

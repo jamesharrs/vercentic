@@ -305,7 +305,7 @@ export default function AIUsageReport({ onNavigate }) {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr style={{ borderBottom:`1px solid ${C.border}`, position:'sticky', top:0, background:C.surface }}>
-                  {['Time', 'Feature', 'User', 'Tokens In', 'Tokens Out', 'Cost'].map(h => (
+                  {['Time', 'Feature', 'User', 'Prompt', 'Tokens In', 'Tokens Out', 'Cost'].map(h => (
                     <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase' }}>{h}</th>
                   ))}
                 </tr>
@@ -327,6 +327,13 @@ export default function AIUsageReport({ onNavigate }) {
                       </td>
                       <td style={{ padding:'8px 12px', color:C.text2, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {log.user_name || log.user_email || 'System'}
+                      </td>
+                      <td style={{ padding:'8px 12px', color:log.prompt_snippet ? C.text2 : C.text3, maxWidth:280, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontStyle:log.prompt_snippet ? 'normal' : 'italic' }}
+                        title={log.prompt_snippet || ''}>
+                        {/* Already redacted server-side (server/lib/redactPrompt.js) before storage —
+                            names/emails/phones are tagged, never raw. Rows logged before this feature
+                            shipped have no snippet at all, hence the graceful "—" fallback below. */}
+                        {log.prompt_snippet || '—'}
                       </td>
                       <td style={{ padding:'8px 12px', color:C.text2 }}>{fmt(log.tokens_in||0)}</td>
                       <td style={{ padding:'8px 12px', color:C.text2 }}>{fmt(log.tokens_out||0)}</td>

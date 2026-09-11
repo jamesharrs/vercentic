@@ -19,6 +19,11 @@ function trackAIUsage(data) {
       model: data.model || MODEL_DEFAULT,
       environment_id: data.environment_id || '',
       metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+      // Redacted, truncated prompt snippet (see server/lib/redactPrompt.js).
+      // Never the raw prompt — names/emails/phones are replaced with tags
+      // before this ever reaches trackAIUsage(). Optional; null if the
+      // caller (e.g. cv_parse/translate) has no free-text user prompt.
+      prompt_snippet: data.prompt_snippet || null,
       created_at: new Date().toISOString()
     });
   } catch (e) {
