@@ -360,11 +360,18 @@ function renderBlock(block, data, brandKit) {
     : (typeof block.content === 'object' && block.content !== null ? block.content : {});
 
   switch (block.type) {
-    case 'header': {
-      const logoHtml = bk.logo_url ? `<img src="${bk.logo_url}" alt="${bk.company_name || ''}" style="height:40px;max-width:200px;object-fit:contain;" />` : '';
-      const nameHtml = (cfg.showCompanyName !== false && bk.company_name) ? `<span style="font-size:18px;font-weight:700;color:${primary};font-family:${headingFont};">${bk.company_name}</span>` : '';
-      return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;"><tr><td style="padding:20px 0;border-bottom:2px solid ${primary}10;">${logoHtml}${logoHtml && nameHtml ? '&nbsp;&nbsp;' : ''}${nameHtml}</td></tr></table>`;
-    }
+    case 'header':
+      // buildEmailHtml() always renders its own branded letterhead (logo/company
+      // banner, or a thin accent bar) as the first row of the outer wrapper table
+      // — see the `headerHtml` block below. Every blocks-based system template
+      // also carries an explicit `header` content block as blocks[0], which
+      // duplicated that same logo + company name a second time inside the body,
+      // producing two stacked headers in every composed/sent email (reported as
+      // "email templates got 2 headers"). The wrapper header is now the single
+      // source of truth for branding, so this block type is a deliberate no-op —
+      // kept (rather than stripped from stored templates) so old template data
+      // keeps loading/editing cleanly in the builder.
+      return '';
 
     case 'text': {
       const content = resolveTags(rawContent, data);
