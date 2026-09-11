@@ -141,13 +141,109 @@ const TopupModal = ({ env, onSave, onClose }) => {
   );
 };
 
+// ── Usage Detail Modal ──────────────────────────────────────────────────────
+// Per-environment feature breakdown — pulls the same GET /ai-credits/usage/:id
+// endpoint the (now-fixed) client-facing AiGovernance dashboard uses. This is
+// real, already-computed data (this_month.by_feature, monthly[]) that was
+// previously only visible if you opened that one environment's own settings —
+// surfacing it here means an operator debugging a budget spike doesn't have to
+// leave the credits table to see which feature is driving it.
+const UsageDetailModal = ({ env, onClose, onNavigate }) => {
+  const [detail, setDetail]   = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    api.get(`/ai-credits/usage/${env.environment_id}?months=6`)
+      .then(d => { if (live) setDetail(d); })
+      .catch(() => { if (live) setDetail(null); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [env.environment_id]);
+
+  const thisMonth = detail?.this_month || {};
+  const byFeature = thisMonth.by_feature || [];
+  const monthly   = detail?.monthly || [];
+  const maxTok    = byFeature.reduce((m, f) => Math.max(m, (f.tokens_in || 0) + (f.tokens_out || 0)), 0) || 1;
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, width:560, maxHeight:'85vh', overflow:'auto', boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text1, fontFamily:F }}>Usage Detail</div>
+            <div style={{ fontSize:12, color:C.text3, fontFamily:F, marginTop:3 }}>{env.environment_name}</div>
+          </div>
+          {onNavigate && (
+            <button onClick={() => onNavigate('ai_usage')} style={{ padding:'6px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>Global usage log →</button>
+          )}
+        </div>
+        <div style={{ padding:'20px 24px' }}>
+          {loading ? (
+            <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontFamily:F }}>Loading…</div>
+          ) : byFeature.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontFamily:F, fontSize:13 }}>No AI usage recorded this month for this environment</div>
+          ) : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:20 }}>
+                <StatCard label="Requests" value={fmt(thisMonth.requests)} color={C.text1}/>
+                <StatCard label="Tokens" value={fmt((thisMonth.tokens_in||0)+(thisMonth.tokens_out||0))} color={C.accent}/>
+                <StatCard label="Client cost" value={fmtU(thisMonth.cost_client)} sub={`Anthropic cost: ${fmtU(thisMonth.cost_anthropic)}`} color={C.green}/>
+              </div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, fontFamily:F }}>By feature — this month</div>
+              {byFeature.map(f => {
+                const total = (f.tokens_in||0) + (f.tokens_out||0);
+                const pct   = Math.round((total/maxTok)*100);
+                return (
+                  <div key={f.feature} style={{ marginBottom:12 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, fontSize:12, fontFamily:F }}>
+                      <span style={{ color:C.text1, fontWeight:600 }}>{f.feature}</span>
+                      <span style={{ color:C.text3 }}>{f.requests} req · {fmt(total)} tok</span>
+                    </div>
+                    <div style={{ height:6, borderRadius:99, background:'#0F1729', overflow:'hidden' }}>
+                      <div style={{ width:`${pct}%`, height:'100%', borderRadius:99, background:C.accent }}/>
+                    </div>
+                  </div>
+                );
+              })}
+              {monthly.length > 1 && (
+                <div style={{ marginTop:22 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.text3, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, fontFamily:F }}>Monthly trend</div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:F }}>
+                    <thead><tr style={{ borderBottom:`1px solid ${C.border}` }}>{['Month','Requests','Tokens','Client cost'].map(h=><th key={h} style={{ textAlign:'left', padding:'6px 0', fontSize:10, fontWeight:700, color:C.text3, textTransform:'uppercase' }}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {monthly.map(m => (
+                        <tr key={m.month} style={{ borderBottom:`1px solid ${C.border}30` }}>
+                          <td style={{ padding:'6px 0', fontSize:12, color:C.text2 }}>{m.month}</td>
+                          <td style={{ padding:'6px 0', fontSize:12, color:C.text2 }}>{fmt(m.requests)}</td>
+                          <td style={{ padding:'6px 0', fontSize:12, color:C.text2 }}>{fmt((m.tokens_in||0)+(m.tokens_out||0))}</td>
+                          <td style={{ padding:'6px 0', fontSize:12, color:C.green }}>{fmtU(m.cost_client)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ padding:'16px 24px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'9px 18px', borderRadius:9, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:F }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function AiCreditsManager() {
+export default function AiCreditsManager({ onNavigate }) {
   const [data,     setData]     = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [selected, setSelected] = useState(null);
   const [allocModal, setAllocModal] = useState(null);
   const [topupModal, setTopupModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
   const [search,   setSearch]   = useState('');
   const [tab,      setTab]      = useState('environments');
 
@@ -172,11 +268,17 @@ export default function AiCreditsManager() {
       {/* Modals */}
       {allocModal && <AllocationModal env={allocModal} existing={allocModal.allocation} onSave={handleModalClose} onClose={()=>setAllocModal(null)}/>}
       {topupModal && <TopupModal      env={topupModal} onSave={handleModalClose} onClose={()=>setTopupModal(null)}/>}
+      {detailModal && <UsageDetailModal env={detailModal} onClose={()=>setDetailModal(null)} onNavigate={onNavigate}/>}
 
       {/* Header */}
-      <div style={{ marginBottom:24 }}>
-        <div style={{ fontSize:20, fontWeight:800, color:C.text1, fontFamily:F, marginBottom:4 }}>AI Credit Management</div>
-        <div style={{ fontSize:13, color:C.text3, fontFamily:F }}>Vercentic master pool · {stats.total_environments} environments · 5× margin applied</div>
+      <div style={{ marginBottom:24, display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:800, color:C.text1, fontFamily:F, marginBottom:4 }}>AI Credit Management</div>
+          <div style={{ fontSize:13, color:C.text3, fontFamily:F }}>Vercentic master pool · {stats.total_environments} environments · 5× margin applied</div>
+        </div>
+        {onNavigate && (
+          <button onClick={() => onNavigate('ai_usage')} style={{ padding:'8px 14px', borderRadius:9, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap', flexShrink:0 }}>View global usage &amp; logs →</button>
+        )}
       </div>
 
       {/* Warning strip */}
@@ -243,6 +345,7 @@ export default function AiCreditsManager() {
                     <td style={{ padding:'14px 16px', fontSize:13, color:C.text2 }}>{fmt(env.usage?.requests)}</td>
                     <td style={{ padding:'14px 16px' }}>
                       <div style={{ display:'flex', gap:6 }}>
+                        <button onClick={()=>setDetailModal(env)} style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, cursor:'pointer', fontFamily:F }}>Details</button>
                         <button onClick={()=>setTopupModal(env)} style={{ padding:'5px 10px', borderRadius:7, border:'none', background:C.green, color:'white', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>+ Top Up</button>
                         <button onClick={()=>setAllocModal(env)} style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.text2, fontSize:11, cursor:'pointer', fontFamily:F }}>Allocate</button>
                       </div>

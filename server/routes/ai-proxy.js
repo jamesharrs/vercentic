@@ -41,13 +41,19 @@ router.post('/chat', async (req, res) => {
       }
       return res.status(response.status || 400).json({ error: detail });
     }
-    // Track AI usage
+    // Track AI usage — prefer the verified session/header identity (req.currentUser,
+    // set globally by attachUser before this route runs) over anything a client could
+    // put in the request body. Body fields remain as a fallback only for the rare case
+    // a caller has no resolvable session (e.g. a background job hitting this route
+    // directly), so usage still gets attributed to *something* rather than dropped.
     try {
       const b = req.body || {};
+      const u = req.currentUser || null;
+      const userName = u ? [u.first_name, u.last_name].filter(Boolean).join(' ').trim() : '';
       trackAIUsage({
-        user_id:        b.user_id        || b.userId        || 'anonymous',
-        user_name:      b.user_name      || b.userName      || 'Unknown',
-        user_email:     b.user_email     || b.userEmail     || '',
+        user_id:        u?.id    || b.user_id    || b.userId    || 'anonymous',
+        user_name:      userName || b.user_name  || b.userName  || 'Unknown',
+        user_email:     u?.email || b.user_email || b.userEmail || '',
         feature:        b.feature        || 'copilot',
         tokens_in:      data.usage?.input_tokens  || 0,
         tokens_out:     data.usage?.output_tokens || 0,

@@ -3426,7 +3426,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       const d2 = await tFetch("/api/ai/chat", {
         method:"POST",
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ messages: apiMessages, system: SYSTEM_PROMPT })
+        body: JSON.stringify({ messages: apiMessages, system: SYSTEM_PROMPT, environment_id: environment?.id, feature: 'copilot' })
       });
       const reply = d2.content?.[0]?.text || d2.content || "I couldn't process that file.";
 
@@ -3620,7 +3620,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
       // First AI call
       const response = await tFetch("/api/ai/chat",{
         method:"POST", headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({system:systemFull,messages:newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content}))}),
+        body:JSON.stringify({system:systemFull,messages:newMessages.filter(m=>m.role!=="system_notice").map(m=>({role:m.role,content:m.content})),environment_id:environment?.id,feature:'copilot'}),
       });
       // tFetch already resolves to JSON — do not call .json() again
       const data = response;
@@ -3655,7 +3655,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           {role:"assistant", content:reply},
           {role:"user", content:`[SEARCH_RESULTS] Found: ${searchHits.length} record${searchHits.length!==1?"s":""}\n${resultsWithIds}\n\nIMPORTANT: You found exactly ${searchHits.length} record${searchHits.length!==1?"s":""}. Do NOT say you found a different number. The record_id values above are the actual database IDs — use them directly in action blocks. Now answer based on exactly these ${searchHits.length} results.`}
         ];
-        const d2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:followUp})});
+        const d2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:followUp,environment_id:environment?.id,feature:'copilot'})});
         reply = d2.content || reply;
       }
 
@@ -3680,7 +3680,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
             {role:"assistant", content: reply},
             {role:"user", content:`[DB_QUERY_RESULTS for: ${dbQ.description||'query'}]\nTotal matches: ${total}\n${summaryLines}${countNote}\n\nSummarise these results clearly for the user. Include the count, key details, and any patterns you notice. Do not include record_ids in your response text.`},
           ];
-          const d3 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:dbFollowUp})});
+          const d3 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:dbFollowUp,environment_id:environment?.id,feature:'copilot'})});
           reply = d3.content || reply;
         } catch(e) { console.warn('[db_query] parse error:', e); }
       }
@@ -3703,7 +3703,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
           {role:"assistant", content: reply},
           {role:"user", content:`Here are the tasks from the system:\n\n${taskText}\n\nNow summarise these tasks clearly. Group as: overdue → due today → upcoming. For each task include its linked record name. Do NOT include <SEARCH_TASKS> in your response.`}
         ];
-        const taskD2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:taskFollowUp})});
+        const taskD2 = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:taskFollowUp,environment_id:environment?.id,feature:'copilot'})});
         reply = taskD2.content || reply;
       }
 
@@ -3740,7 +3740,7 @@ export const AICopilot = ({ environment, currentRecord, currentObject, onNavigat
               {role:"assistant", content:reply},
               {role:"user", content:`Here are relevant excerpts from the company knowledge base:\n\n${snippets}\n\nNow rewrite your response incorporating this information naturally. Cite document names where appropriate (e.g. "According to our Benefits Guide..."). Do NOT include <DOC_SEARCH> tags in your response.`}
             ];
-            const dd = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:docFollowUp})});
+            const dd = await tFetch("/api/ai/chat",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemFull,messages:docFollowUp,environment_id:environment?.id,feature:'copilot'})});
             reply = dd.content || reply;
           }
         } catch(e) { console.warn('Doc search failed:', e); }

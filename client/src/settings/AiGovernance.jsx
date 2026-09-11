@@ -5,8 +5,9 @@
  * C) Risk Register — create/edit/close risks with owner, review date, regs
  * D) AI Usage Dashboard — requests, tokens, cost, per-feature breakdown
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../apiClient";
+import { FEATURE_LABELS, FEATURE_COLORS } from "../utils/aiFeatures.js";
 
 const F = "var(--t-font,'Plus Jakarta Sans',sans-serif)";
 const C = {
@@ -638,33 +639,66 @@ function AiUsageDashboard({ environment }) {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("month"); // month | week | all
 
+  // Real endpoint is GET /ai-credits/usage/:environmentId?months=N (not the
+  // ?environment_id=&period= shape this used to call, which 404'd silently
+  // behind a .catch(()=>null), always rendering the empty state). Fetch a
+  // 12-month window once; the period tabs below just re-slice the same
+  // payload client-side (this_month / daily / monthly), no refetch needed.
   const load = useCallback(async () => {
     if (!environment?.id) return;
     setLoading(true);
     try {
-      const [usage, credits] = await Promise.all([
-        api.get(`/ai-credits/usage?environment_id=${environment.id}&period=${period}`).catch(() => null),
-        api.get(`/ai-credits/allocation?environment_id=${environment.id}`).catch(() => null),
-      ]);
-      setData({ usage, credits });
+      const res = await api.get(`/ai-credits/usage/${environment.id}?months=12`).catch(() => null);
+      setData(res);
     } catch { setData(null); }
     setLoading(false);
-  }, [environment?.id, period]);
+  }, [environment?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  const FEATURE_LABELS = {
-    copilot: "AI Copilot", matching: "AI Matching", cv_parsing: "CV Parsing",
-    bias_scan: "Bias Scanner", jd_generation: "JD Generator", email_draft: "Email Drafting",
-    screening: "Screening", interview_questions: "Interview Q's", summary: "Record Summary",
-  };
-  const FEAT_COLOR = ["#4361EE","#7C3AED","#0CA678","#F59F00","#E03131","#0EA5E9","#EC4899","#14B8A6","#F97316"];
+  // FEATURE_LABELS / FEATURE_COLORS imported from ../utils/aiFeatures.js —
+  // previously a local dict with a typo'd key ("cv_parsing" instead of the
+  // real "cv_parse") and missing "doc_extract"/"translation" entirely, so
+  // those three real, commonly logged features rendered as raw untranslated
+  // keys below instead of readable labels.
 
   const fmt = (n) => n >= 1000000 ? `${(n/1000000).toFixed(1)}M` : n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n || 0);
   const fmtCost = (n) => n ? `$${Number(n).toFixed(3)}` : "$0.000";
 
-  const usage = data?.usage;
-  const credits = data?.credits;
+  // Real /ai-credits/usage/:id response shape: { allocation, status, this_month,
+  // monthly:[{month,requests,tokens_in,tokens_out,cost_anthropic,cost_client}],
+  // daily:[{date,requests,tokens_in,tokens_out,cost_client}], pricing }.
+  // this_month already carries by_feature; the daily/monthly arrays don't, so
+  // the feature-breakdown chart below is only populated for the "month" tab —
+  // that's a real gap in what the backend aggregates at those granularities,
+  // not a bug here.
+  const status = data?.status || null; // checkCredits() result: budget_usd/used_usd/pct_remaining/uncapped/hard_cap
+
+  const usage = useMemo(() => {
+    if (!data) return null;
+    if (period === "month") return data.this_month || null;
+    if (period === "week") {
+      const days = [...(data.daily || [])].sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-7);
+      if (!days.length) return null;
+      return {
+        requests:       days.reduce((s, d) => s + (d.requests || 0), 0),
+        tokens_in:      days.reduce((s, d) => s + (d.tokens_in || 0), 0),
+        tokens_out:     days.reduce((s, d) => s + (d.tokens_out || 0), 0),
+        cost_anthropic: days.reduce((s, d) => s + (d.cost_anthropic || d.cost_client || 0), 0),
+        by_feature: [],
+      };
+    }
+    // all
+    const months = data.monthly || [];
+    if (!months.length) return null;
+    return {
+      requests:       months.reduce((s, m) => s + (m.requests || 0), 0),
+      tokens_in:      months.reduce((s, m) => s + (m.tokens_in || 0), 0),
+      tokens_out:     months.reduce((s, m) => s + (m.tokens_out || 0), 0),
+      cost_anthropic: months.reduce((s, m) => s + (m.cost_anthropic || m.cost_client || 0), 0),
+      by_feature: [],
+    };
+  }, [data, period]);
 
   // Build chart bars
   const features = usage?.by_feature || [];
@@ -718,29 +752,37 @@ function AiUsageDashboard({ environment }) {
             ))}
           </div>
 
-          {/* Credit allocation */}
-          {credits && (
+          {/* Credit allocation — driven by checkCredits() via `status`, not the
+              nonexistent credits.used_credits/allocated_credits this used to read. */}
+          {status && !status.uncapped && (
             <div style={{ background: C.surface, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "16px 20px", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text1 }}>Credit Allocation</div>
                 <div style={{ fontSize: 12, color: C.text3 }}>
-                  {credits.used_credits != null ? `${fmtCost(credits.used_credits)} of ${fmtCost(credits.allocated_credits)} used` : "No allocation set"}
+                  {fmtCost(status.used_usd)} of {fmtCost(status.budget_usd)} used (this month)
                 </div>
               </div>
-              {credits.allocated_credits > 0 && (
+              {status.budget_usd > 0 && (
                 <>
                   <div style={{ height: 8, borderRadius: 99, background: C.border, overflow: "hidden", marginBottom: 8 }}>
                     <div style={{
                       height: "100%", borderRadius: 99, transition: "width .5s",
-                      width: `${Math.min(100, (credits.used_credits / credits.allocated_credits) * 100)}%`,
-                      background: credits.used_credits / credits.allocated_credits > 0.9 ? C.red : credits.used_credits / credits.allocated_credits > 0.7 ? C.amber : C.green,
+                      width: `${Math.min(100, (status.used_usd / status.budget_usd) * 100)}%`,
+                      background: status.pct_remaining <= 10 ? C.red : status.pct_remaining <= 30 ? C.amber : C.green,
                     }} />
                   </div>
                   <div style={{ fontSize: 11, color: C.text3 }}>
-                    {Math.round((credits.used_credits / credits.allocated_credits) * 100)}% of monthly allocation used
+                    {Math.round((status.used_usd / status.budget_usd) * 100)}% of monthly allocation used
+                    {status.hard_cap && status.pct_remaining <= 0 ? " — budget exhausted, new AI requests are being blocked" : ""}
                   </div>
                 </>
               )}
+            </div>
+          )}
+          {status?.uncapped && (
+            <div style={{ background: C.surface, borderRadius: 12, border: `1.5px dashed ${C.border}`, padding: "14px 20px", marginBottom: 16, fontSize: 12, color: C.text3, display: "flex", alignItems: "center", gap: 8 }}>
+              <Ic n="info" s={14} c={C.text3} />
+              No monthly budget cap configured for this environment — usage is uncapped.
             </div>
           )}
 
@@ -751,7 +793,7 @@ function AiUsageDashboard({ environment }) {
               {features.slice(0, 10).map((f, i) => {
                 const total = (f.tokens_in || 0) + (f.tokens_out || 0);
                 const pct   = Math.round((total / maxTokens) * 100);
-                const col   = FEAT_COLOR[i % FEAT_COLOR.length];
+                const col   = FEATURE_COLORS[f.feature] || FEATURE_COLORS.unknown;
                 return (
                   <div key={f.feature} style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
