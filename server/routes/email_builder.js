@@ -341,8 +341,12 @@ function renderBlock(block, data, brandKit) {
   const primary = bk.primaryColor || '#4361EE';
   const textColor = bk.textColor || '#374151';
   const bgColor = bk.bgColor || '#ffffff';
-  const fontFamily = bk.fontFamily || "'Inter', Arial, sans-serif";
-  const headingFont = bk.headingFont || fontFamily;
+  const fontFamily = bk.fontFamily
+    ? `'${bk.fontFamily}', Arial, Helvetica, sans-serif`
+    : "'Inter', Arial, sans-serif";
+  const headingFont = bk.headingFont
+    ? `'${bk.headingFont}', Arial, Helvetica, sans-serif`
+    : fontFamily;
   const btnRadius = bk.buttonRadius || '8px';
   const btnStyle = bk.buttonStyle || 'filled';
 
