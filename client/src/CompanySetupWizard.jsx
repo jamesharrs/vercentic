@@ -45,6 +45,46 @@ const Ic = ({ n, s=16, c="currentColor" }) => {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
 };
 
+// Renders <img>, but falls back to `fallback` on load failure — tracked in
+// React state (keyed off `src`) rather than by imperatively mutating the DOM
+// node's style. The old `onError={e=>{e.target.style.display="none"}}`
+// pattern left the element hidden forever even after `src` changed to a
+// working URL, since React never re-applies a style it doesn't own — this
+// was why the logo preview box could get "stuck" empty after a failed load.
+const SafeImg = ({ src, alt="", style, fallback=null }) => {
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => { setFailed(false); }, [src]);
+  if (!src || failed) return fallback;
+  return <img src={src} alt={alt} style={style} onError={()=>setFailed(true)}/>;
+};
+
+// Dynamically loads a Google Font stylesheet at runtime (idempotent — checks
+// for an existing <link> by id first). Some fonts offered in the Brand Kit
+// font picker (Poppins, Lato, Nunito, Roboto, Geist) aren't loaded anywhere
+// else in the app, so without this the picker's live preview silently fell
+// back to the browser default sans-serif for those choices.
+function loadGoogleFont(fontName) {
+  if (!fontName || typeof document === "undefined") return;
+  const clean = fontName.replace(/'/g, "").split(",")[0].trim();
+  const id = "gf-" + clean.replace(/\s+/g, "-").toLowerCase();
+  if (document.getElementById(id)) return;
+  const link = document.createElement("link");
+  link.id = id; link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(clean) + ":wght@300;400;500;600;700;800&display=swap";
+  document.head.appendChild(link);
+}
+const FONT_OPTIONS = ["Inter","DM Sans","Space Grotesk","Geist","Roboto","Poppins","Lato","Nunito"];
+
+// Kept in sync with the identical list in BrandKitSettings.jsx / Portals.jsx's
+// BrandKitAgent — resolved server-side via resolveBrandKit(..., surface) in
+// server/utils/brandKit.js whenever a template/portal doesn't have an
+// explicit brand_kit_id of its own.
+const AUTO_APPLY_SURFACES = [
+  { id: "email", label: "Email templates" },
+  { id: "career_site", label: "Career site" },
+  { id: "hiring_manager", label: "Hiring manager portal" },
+];
+
 const PulseLoader = ({ label="Researching..." }) => (
   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20,padding:"60px 0"}}>
     <div style={{position:"relative",width:80,height:80}}>
@@ -102,23 +142,34 @@ const EmailTemplateCard = ({ template, checked, onChange }) => (
   </label>
 );
 
-const LogoCandidate = ({ candidate, selected, onSelect }) => {
+const LogoCandidate = ({ candidate, selected, onSelect, onEnlarge }) => {
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
+  const [hover, setHover] = React.useState(false);
   if (failed) return null;
   return (
-    <div onClick={() => loaded && onSelect(candidate.url)}
-      title={candidate.label}
-      style={{ width:52,height:52,borderRadius:10,border:`2px solid ${selected?"#4361EE":"#E5E7EB"}`,
-        background:selected?"#EEF0FD":"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",
-        overflow:"hidden",cursor:loaded?"pointer":"default",transition:"all 0.15s",
-        opacity:loaded?1:0.4,
-        boxShadow:selected?"0 0 0 3px rgba(67,97,238,0.15)":"none",
-        transform:selected?"scale(1.05)":"scale(1)" }}>
-      <img src={candidate.url} alt={candidate.label}
-        style={{width:"100%",height:"100%",objectFit:"contain",padding:4}}
-        onLoad={()=>setLoaded(true)}
-        onError={()=>setFailed(true)}/>
+    <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{position:"relative",flexShrink:0}}>
+      <div onClick={() => loaded && onSelect(candidate.url)}
+        title={candidate.label}
+        style={{ width:64,height:64,borderRadius:10,border:`2px solid ${selected?"#4361EE":"#E5E7EB"}`,
+          background:selected?"#EEF0FD":"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",
+          overflow:"hidden",cursor:loaded?"pointer":"default",transition:"all 0.15s",
+          opacity:loaded?1:0.4,
+          boxShadow:selected?"0 0 0 3px rgba(67,97,238,0.15)":"none",
+          transform:selected?"scale(1.05)":"scale(1)" }}>
+        <img src={candidate.url} alt={candidate.label}
+          style={{width:"100%",height:"100%",objectFit:"contain",padding:5}}
+          onLoad={()=>setLoaded(true)}
+          onError={()=>setFailed(true)}/>
+      </div>
+      {loaded && hover && (
+        <button onClick={e=>{e.stopPropagation(); onEnlarge?.(candidate.url);}} title="View larger"
+          style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",border:"1.5px solid white",
+            background:C.text1,color:"white",display:"flex",alignItems:"center",justifyContent:"center",
+            cursor:"pointer",padding:0,boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
+          <Ic n="search" s={11} c="white"/>
+        </button>
+      )}
     </div>
   );
 };
@@ -240,6 +291,22 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
   const [editedProfile, setEditedProfile] = useState(null);
   const [selectedTemplates, setSelectedTemplates] = useState(new Set());
   const [createBrandKit, setCreateBrandKit] = useState(true);
+  const [lightboxLogo, setLightboxLogo] = useState(null);
+
+  // Which surfaces the new brand kit should auto-apply to (server resolves
+  // this via resolveBrandKit(..., surface) whenever a template/portal has no
+  // explicit brand_kit_id of its own — see server/utils/brandKit.js). Default
+  // to all three so the wizard's out-of-the-box behaviour matches what an
+  // is_default kit already did implicitly, but now it's visible and the user
+  // can opt individual surfaces out before anything is created.
+  const [autoApplySurfaces, setAutoApplySurfaces] = useState(["email","career_site","hiring_manager"]);
+  // Deliberately overwrite an already-published career site's theme with this
+  // kit. Portal branding only fills in fields the portal doesn't already have
+  // a value for (see server/utils/portalBranding.js), so a portal seeded with
+  // default colours at creation time never picks up a new kit on its own —
+  // this is the explicit, opt-in escape hatch for that.
+  const [overwriteCareerSite, setOverwriteCareerSite] = useState(false);
+  const [existingPortals, setExistingPortals] = useState([]);
 
   // Brand kit state — pre-filled from research data
   const [brandKit, setBrandKit] = useState({
@@ -248,12 +315,28 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     fontFamily:"Inter", logo_url:"",
   });
 
-  const STEPS = ["Search","Company Profile","Configure","Brand Kit","Apply"];
+  const STEPS = ["Search","Company Profile","Brand Kit","Apply"];
 
   useEffect(() => {
     if (!environmentId) return;
     api.get(`/company-research?environment_id=${environmentId}`)
       .then(data => { if (data?.name) setQuery(data.name); })
+      .catch(() => {});
+  }, [environmentId]);
+
+  // Load every font offered in the Brand Kit picker up front so the picker's
+  // live preview is accurate the moment the user reaches that step, not just
+  // for whichever fonts happen to already be loaded elsewhere in the app.
+  useEffect(() => { FONT_OPTIONS.forEach(loadGoogleFont); }, []);
+
+  // Fetch any career-site portals already published for this environment, so
+  // the Brand Kit step can offer to overwrite their theme — and so we know
+  // whether that offer is even relevant (no point showing it with nothing to
+  // apply to).
+  useEffect(() => {
+    if (!environmentId) return;
+    api.get(`/portals?environment_id=${environmentId}`)
+      .then(rows => setExistingPortals(Array.isArray(rows) ? rows.filter(p => (p.type||"career_site")==="career_site") : []))
       .catch(() => {});
   }, [environmentId]);
 
@@ -306,10 +389,27 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             is_default: true,
             ai_generated: true,
             source: 'setup_wizard',
+            auto_apply_surfaces: autoApplySurfaces,
           });
+          // Explicit, opt-in overwrite of already-published career sites —
+          // mergePortalBranding() is fallback-only, so a portal that already
+          // has (even default, unpicked) colours never adopts a new kit's
+          // styling on its own. This deliberately replaces those fields.
+          if (overwriteCareerSite && existingPortals.length) {
+            const kitThemeFields = {
+              primaryColor: brandKit.primaryColor, secondaryColor: brandKit.secondaryColor,
+              accentColor: brandKit.accentColor, bgColor: brandKit.bgColor,
+              textColor: brandKit.textColor, fontFamily: brandKit.fontFamily,
+            };
+            for (const portal of existingPortals) {
+              try {
+                await api.patch(`/portals/${portal.id}`, { theme: { ...(portal.theme||{}), ...kitThemeFields } });
+              } catch (pErr) { console.warn('[Wizard] Failed to apply brand kit to portal', portal.id, pErr); }
+            }
+          }
         } catch(bkErr) { console.warn('[Wizard] Brand kit creation failed:', bkErr); }
       }
-      setStep(4);
+      setStep(3);
     } catch(e) { setError(e.message); }
     finally { setSaving(false); }
   };
@@ -349,28 +449,30 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:24}}>
 
         {/* Logo picker — left column */}
-        <div style={{flexShrink:0,width:88}}>
+        <div style={{flexShrink:0,width:168}}>
           <div style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Logo</div>
 
           {/* Preview box — clicking a candidate updates this */}
           <div style={{width:88,height:88,borderRadius:16,border:`1.5px solid ${C.border}`,background:"#F9FAFB",
             display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:10,
             boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-            {editedProfile.logo_url
-              ? <img src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:10}}
-                  onError={e=>{e.target.style.display="none";}}/>
-              : <Ic n="building" s={32} c={C.text3}/>}
+            <SafeImg src={editedProfile.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:10}}
+              fallback={<Ic n="building" s={32} c={C.text3}/>}/>
           </div>
 
-          {/* Candidate thumbnails — click to set preview */}
+          {/* Candidate thumbnails — horizontally scrollable row, click to select, hover 🔍 to enlarge */}
           {(editedProfile.logo_candidates||[]).length > 0 && (
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,width:88,marginBottom:8}}>
-              {(editedProfile.logo_candidates||[]).map((cand,i)=>(
-                <LogoCandidate key={i} candidate={cand}
-                  selected={editedProfile.logo_url===cand.url}
-                  onSelect={url=>setEditedProfile(p=>({...p,logo_url:url}))}/>
-              ))}
-            </div>
+            <>
+              <div style={{fontSize:9,color:C.text3,marginBottom:6}}>Click to use · hover 🔍 to enlarge</div>
+              <div style={{display:"flex",gap:8,overflowX:"auto",width:168,paddingBottom:6,marginBottom:8}}>
+                {(editedProfile.logo_candidates||[]).map((cand,i)=>(
+                  <LogoCandidate key={i} candidate={cand}
+                    selected={editedProfile.logo_url===cand.url}
+                    onSelect={url=>setEditedProfile(p=>({...p,logo_url:url}))}
+                    onEnlarge={setLightboxLogo}/>
+                ))}
+              </div>
+            </>
           )}
 
           {/* Paste logo URL */}
@@ -428,17 +530,29 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
       </div>
       <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
         <button onClick={()=>setStep(0)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
-        <button onClick={()=>setStep(2)} style={{padding:"10px 24px",borderRadius:10,border:"none",background:C.accent,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F}}>Looks good → Configure</button>
+        <button onClick={()=>setStep(2)} style={{padding:"10px 24px",borderRadius:10,border:"none",background:C.accent,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F}}>Looks good → Brand Kit</button>
       </div>
+
+      {/* Click-to-enlarge lightbox for logo candidates */}
+      {lightboxLogo && (
+        <div onClick={()=>setLightboxLogo(null)}
+          style={{position:"fixed",inset:0,background:"rgba(15,23,41,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,cursor:"zoom-out",padding:40}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:"white",borderRadius:16,padding:24,maxWidth:"90vw",maxHeight:"90vh",display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
+            <img src={lightboxLogo} alt="Logo preview" style={{maxWidth:"70vw",maxHeight:"60vh",objectFit:"contain"}}/>
+            <button onClick={()=>setLightboxLogo(null)} style={{padding:"8px 20px",borderRadius:8,border:"none",background:C.accent,color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:F}}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
-  // ── Step 2: Configure ──────────────────────────────────────────────────────
+  // ── Step 2: Brand Kit & Templates ──────────────────────────────────────────
   if (step===2) return (
     <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
       <StepIndicator steps={STEPS} current={2}/>
-      <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Configure your workspace</h2>
-      <p style={{fontSize:14,color:C.text3,margin:"0 0 32px"}}>Choose which AI-generated content to apply. You can change these any time in Settings.</p>
+      <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Brand Kit & Email Templates</h2>
+      <p style={{fontSize:14,color:C.text3,margin:"0 0 24px"}}>We've pre-filled your brand colours and logo from our research, and drafted email templates in your company's voice. Adjust anything before finishing — you can change all of this any time in Settings.</p>
 
       {emailTemplates.length>0&&(
         <div style={{marginBottom:32}}>
@@ -459,21 +573,6 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
         </div>
       )}
 
-      {error&&<div style={{padding:"12px 16px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",color:C.red,fontSize:13,marginBottom:20}}>{error}</div>}
-      <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
-        <button onClick={()=>setStep(1)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
-        <button onClick={()=>setStep(3)} style={{padding:"10px 24px",borderRadius:10,border:"none",background:C.accent,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F}}>Next → Brand Kit</button>
-      </div>
-    </div>
-  );
-
-  // ── Step 3: Brand Kit ──────────────────────────────────────────────────────
-  if (step===3) return (
-    <div style={{padding:"24px 28px",fontFamily:F,background:"#ffffff",minHeight:"100%"}}>
-      <StepIndicator steps={STEPS} current={3}/>
-      <h2 style={{fontSize:20,fontWeight:800,color:C.text1,margin:"0 0 6px"}}>Brand Kit</h2>
-      <p style={{fontSize:14,color:C.text3,margin:"0 0 24px"}}>We've pre-filled your brand colours and logo from our research. Adjust anything before saving to Brand Kits.</p>
-
       {/* Toggle */}
       <label style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:12,border:`1.5px solid ${createBrandKit?C.accent:C.border}`,background:createBrandKit?C.accentLight:C.card,cursor:"pointer",marginBottom:24,transition:"all 0.15s"}}>
         <input type="checkbox" checked={createBrandKit} onChange={e=>setCreateBrandKit(e.target.checked)} style={{accentColor:C.accent,width:18,height:18}}/>
@@ -488,9 +587,8 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
           {/* Logo preview + name */}
           <div style={{display:"flex",alignItems:"center",gap:16,padding:"16px",borderRadius:12,background:"#F9FAFB",border:`1.5px solid ${C.border}`,marginBottom:24}}>
             <div style={{width:60,height:60,borderRadius:12,border:`1.5px solid ${C.border}`,background:"white",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
-              {brandKit.logo_url
-                ? <img src={brandKit.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:6}} onError={e=>e.target.style.display="none"}/>
-                : <Ic n="building" s={28} c={C.text3}/>}
+              <SafeImg src={brandKit.logo_url} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain",padding:6}}
+                fallback={<Ic n="building" s={28} c={C.text3}/>}/>
             </div>
             <div style={{flex:1}}>
               <label style={{fontSize:11,fontWeight:700,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:4}}>Kit Name</label>
@@ -521,7 +619,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
               <Ic n="type" s={15} c={C.accent}/> Font Family
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {["Inter","DM Sans","Space Grotesk","Geist","Roboto","Poppins","Lato","Nunito"].map(font=>(
+              {FONT_OPTIONS.map(font=>(
                 <button key={font} onClick={()=>setBrandKit(p=>({...p,fontFamily:font}))}
                   style={{padding:"6px 14px",borderRadius:8,border:`1.5px solid ${brandKit.fontFamily===font?C.accent:C.border}`,background:brandKit.fontFamily===font?C.accentLight:"transparent",color:brandKit.fontFamily===font?C.accent:C.text2,fontSize:13,fontWeight:brandKit.fontFamily===font?700:400,cursor:"pointer",fontFamily:font,transition:"all 0.1s"}}>
                   {font}
@@ -530,10 +628,46 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
             </div>
           </div>
 
+          {/* Where this applies automatically */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text1,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>
+              <Ic n="sparkle" s={15} c={C.accent}/> Apply automatically to
+            </div>
+            <div style={{fontSize:12,color:C.text3,marginBottom:14}}>Choose where this brand kit should be used without you having to select it manually each time.</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {AUTO_APPLY_SURFACES.map(s=>{
+                const on = autoApplySurfaces.includes(s.id);
+                return (
+                  <button key={s.id} type="button"
+                    onClick={()=>setAutoApplySurfaces(prev=>prev.includes(s.id)?prev.filter(x=>x!==s.id):[...prev,s.id])}
+                    style={{padding:"7px 14px",borderRadius:99,fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:F,
+                      border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accentLight:"transparent",color:on?C.accent:C.text2,
+                      display:"flex",alignItems:"center",gap:6}}>
+                    {on&&<Ic n="check" s={12} c={C.accent}/>}{s.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {autoApplySurfaces.includes("career_site") && existingPortals.length > 0 && (
+              <label style={{display:"flex",alignItems:"flex-start",gap:10,marginTop:14,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${overwriteCareerSite?C.accent:C.border}`,background:overwriteCareerSite?C.accentLight:"#F9FAFB",cursor:"pointer"}}>
+                <input type="checkbox" checked={overwriteCareerSite} onChange={e=>setOverwriteCareerSite(e.target.checked)} style={{accentColor:C.accent,width:16,height:16,marginTop:2,flexShrink:0}}/>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text1}}>
+                    Also update {existingPortals.length===1?"your existing career site":`your ${existingPortals.length} existing career sites`} now
+                  </div>
+                  <div style={{fontSize:11,color:C.text3,lineHeight:1.5,marginTop:2}}>
+                    {(existingPortals.map(p=>p.name).filter(Boolean).join(", "))||"Your published career site"} already has its own saved colours, so opting in above won't change {existingPortals.length===1?"it":"them"} automatically — check this to overwrite {existingPortals.length===1?"its":"their"} colours and font with this brand kit right now.
+                  </div>
+                </div>
+              </label>
+            )}
+          </div>
+
           {/* Preview strip */}
           <div style={{padding:16,borderRadius:12,border:`1.5px solid ${C.border}`,background:brandKit.bgColor||"#fff",marginBottom:24}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-              {brandKit.logo_url&&<img src={brandKit.logo_url} alt="" style={{height:24,maxWidth:80,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>}
+              <SafeImg src={brandKit.logo_url} alt="" style={{height:24,maxWidth:80,objectFit:"contain"}} fallback={null}/>
               <span style={{fontSize:16,fontWeight:700,color:brandKit.primaryColor,fontFamily:brandKit.fontFamily}}>{brandKit.name||editedProfile?.name}</span>
             </div>
             <p style={{fontSize:13,color:brandKit.textColor,fontFamily:brandKit.fontFamily,margin:"0 0 12px",lineHeight:1.5}}>This is how your brand will look in emails and portals.</p>
@@ -545,7 +679,7 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
 
       {error&&<div style={{padding:"12px 16px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",color:C.red,fontSize:13,marginBottom:20}}>{error}</div>}
       <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
-        <button onClick={()=>setStep(2)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
+        <button onClick={()=>setStep(1)} style={{padding:"10px 20px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"transparent",color:C.text2,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>← Back</button>
         <button onClick={handleApply} disabled={saving} style={{padding:"10px 28px",borderRadius:10,border:"none",background:C.green,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:8}}>
           {saving?<><Ic n="loader" s={14} c="white"/>Applying…</>:<><Ic n="check" s={14} c="white"/>Apply & Finish</>}
         </button>
@@ -553,8 +687,8 @@ export default function CompanySetupWizard({ environmentId, environmentName, onC
     </div>
   );
 
-  // ── Step 4: Success ────────────────────────────────────────────────────────
-  if (step===4) return (
+  // ── Step 3: Success ────────────────────────────────────────────────────────
+  if (step===3) return (
     <div style={{padding:"24px 28px",fontFamily:F,textAlign:"center",background:"#ffffff",minHeight:"100%"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#D1FAE5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
         <Ic n="check" s={36} c={C.green}/>
