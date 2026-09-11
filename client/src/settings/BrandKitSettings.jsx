@@ -73,6 +73,17 @@ const FONT_OPTIONS = [
   'Playfair Display', 'Merriweather', 'Georgia', 'Arial', 'Helvetica',
 ];
 
+// Kept in sync with the identical list in Portals.jsx's BrandKitAgent —
+// both surfaces read/write the same `auto_apply_surfaces` field on a kit,
+// resolved server-side via resolveBrandKit(..., surface) in
+// server/utils/brandKit.js whenever a template/portal doesn't have an
+// explicit brand_kit_id of its own.
+const AUTO_APPLY_SURFACES = [
+  { id: 'email', label: 'Email templates' },
+  { id: 'career_site', label: 'Career site' },
+  { id: 'hiring_manager', label: 'Hiring manager portal' },
+];
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function BrandKitSettings({ environment }) {
   const [kits, setKits] = useState([]);
@@ -103,6 +114,7 @@ export default function BrandKitSettings({ environment }) {
       fontSize: '16px', borderRadius: '8px', buttonStyle: 'filled', buttonRadius: '8px', maxWidth: '1200px',
       social_links: {}, footer_text: '', privacy_url: '', unsubscribe_text: 'Unsubscribe',
       is_default: kits.length === 0,
+      auto_apply_surfaces: [],
       environment_id: envId,
     });
   };
@@ -139,6 +151,20 @@ export default function BrandKitSettings({ environment }) {
     load();
   };
 
+  // Inline toggle from the list-view card — mirrors the same pattern as
+  // Portals.jsx's BrandKitAgent "Saved Kits" tab so this can be managed
+  // from either place without the two drifting apart in behaviour.
+  const handleToggleListAutoApply = async (kit, surfaceId) => {
+    const current = kit.auto_apply_surfaces || [];
+    const next = current.includes(surfaceId) ? current.filter(s => s !== surfaceId) : [...current, surfaceId];
+    setKits(ks => ks.map(k => k.id === kit.id ? { ...k, auto_apply_surfaces: next } : k)); // optimistic
+    try {
+      await api.patch(`/brand-kits/${kit.id}`, { auto_apply_surfaces: next });
+    } catch (err) {
+      setKits(ks => ks.map(k => k.id === kit.id ? { ...k, auto_apply_surfaces: current } : k)); // revert on failure
+    }
+  };
+
   const handleAiGenerate = async () => {
     if (!aiUrl.trim()) return;
     setAiLoading(true);
@@ -166,6 +192,11 @@ export default function BrandKitSettings({ environment }) {
   const setSocial = (key, value) => setEditing(prev => ({
     ...prev, social_links: { ...(prev.social_links || {}), [key]: value }
   }));
+  const toggleAutoApply = (surfaceId) => setEditing(prev => {
+    const current = prev.auto_apply_surfaces || [];
+    const next = current.includes(surfaceId) ? current.filter(s => s !== surfaceId) : [...current, surfaceId];
+    return { ...prev, auto_apply_surfaces: next };
+  });
 
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.text3 }}>Loading brand kits…</div>;
 
@@ -259,6 +290,30 @@ export default function BrandKitSettings({ environment }) {
                 ))}
               </div>
             </div>
+          </div>
+        </Section>
+
+        {/* Automatic application */}
+        <Section title="Automatic Application" icon="zap">
+          <div style={{ fontSize: 12, color: C.text3, marginBottom: 12, lineHeight: 1.6 }}>
+            Opt this kit in to a surface to have it used there automatically, even when it isn't your environment's default kit — useful for a channel-specific brand (e.g. a career site that should look different from your internal emails). A surface with no explicit assignment and no kit opted in here falls back to whichever kit is set as default.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {AUTO_APPLY_SURFACES.map(s => {
+              const on = (editing.auto_apply_surfaces || []).includes(s.id);
+              return (
+                <button key={s.id} type="button" onClick={() => toggleAutoApply(s.id)} style={{
+                  padding: "7px 14px", borderRadius: 99, fontSize: 12, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: F,
+                  border: `1.5px solid ${on ? C.accent : C.border}`,
+                  background: on ? C.accentLight : "white",
+                  color: on ? C.accent : C.text2,
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  {on && <Ic n="check" s={12} c={C.accent} />}
+                  {s.label}
+                </button>
+              );
+            })}
           </div>
         </Section>
 
@@ -384,6 +439,26 @@ export default function BrandKitSettings({ environment }) {
                 {/* Font preview */}
                 <div style={{ fontSize: 11, color: C.text4, marginBottom: 8 }}>
                   {kit.fontFamily || 'Inter'} · {kit.buttonStyle || 'filled'} buttons
+                </div>
+
+                {/* Auto-apply pills */}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }} onClick={e => e.stopPropagation()}>
+                  {AUTO_APPLY_SURFACES.map(s => {
+                    const on = (kit.auto_apply_surfaces || []).includes(s.id);
+                    return (
+                      <button key={s.id} type="button" title={`Auto-apply to ${s.label}`}
+                        onClick={() => handleToggleListAutoApply(kit, s.id)}
+                        style={{
+                          padding: "3px 9px", borderRadius: 99, fontSize: 10, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: F,
+                          border: `1.5px solid ${on ? C.accent : C.border}`,
+                          background: on ? C.accentLight : "transparent",
+                          color: on ? C.accent : C.text4,
+                          display: "flex", alignItems: "center", gap: 3,
+                        }}>
+                        {on && <Ic n="check" s={9} c={C.accent} />}{s.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Actions */}

@@ -11,47 +11,6 @@ function ensureCollection() {
   if (!store.email_templates) { store.email_templates = []; saveStore(store); }
 }
 
-const INDUSTRY_FIELD_SUGGESTIONS = {
-  technology: [
-    { name: 'GitHub Profile', api_key: 'github_profile', field_type: 'url' },
-    { name: 'Tech Stack', api_key: 'tech_stack', field_type: 'multi_select', options: ['React','Node','Python','Java','Go','Rust','TypeScript','AWS','Azure','GCP'] },
-    { name: 'Years of Experience', api_key: 'years_experience', field_type: 'number' },
-    { name: 'Open Source Contributions', api_key: 'open_source', field_type: 'url' },
-    { name: 'Certifications', api_key: 'certifications', field_type: 'multi_select' },
-  ],
-  finance: [
-    { name: 'CFA/CPA Status', api_key: 'qualification_status', field_type: 'select', options: ['CFA Level 1','CFA Level 2','CFA Charterholder','CPA','None'] },
-    { name: 'Series Licenses', api_key: 'series_licenses', field_type: 'multi_select', options: ['Series 3','Series 7','Series 63','Series 65','Series 66'] },
-    { name: 'Regulatory Clearance', api_key: 'regulatory_clearance', field_type: 'boolean' },
-    { name: 'AUM Experience', api_key: 'aum_experience', field_type: 'select', options: ['<$100M','$100M-$1B','$1B-$10B','>$10B'] },
-  ],
-  healthcare: [
-    { name: 'Medical License', api_key: 'medical_license', field_type: 'text' },
-    { name: 'Specialisation', api_key: 'specialisation', field_type: 'select' },
-    { name: 'DBS Check Status', api_key: 'dbs_check', field_type: 'select', options: ['Clear','Enhanced Clear','Pending','Not Checked'] },
-    { name: 'GMC/NMC Number', api_key: 'registration_number', field_type: 'text' },
-    { name: 'CPD Hours', api_key: 'cpd_hours', field_type: 'number' },
-  ],
-  legal: [
-    { name: 'Bar Admission', api_key: 'bar_admission', field_type: 'text' },
-    { name: 'Practice Areas', api_key: 'practice_areas', field_type: 'multi_select' },
-    { name: 'PQE (Years)', api_key: 'pqe_years', field_type: 'number' },
-    { name: 'Law Society Number', api_key: 'law_society_number', field_type: 'text' },
-  ],
-  consulting: [
-    { name: 'Consulting Focus', api_key: 'consulting_focus', field_type: 'multi_select', options: ['Strategy','Operations','Technology','HR','Finance','Risk','Digital'] },
-    { name: 'Industry Verticals', api_key: 'industry_verticals', field_type: 'multi_select' },
-    { name: 'Project Scale', api_key: 'project_scale', field_type: 'select', options: ['SME','Mid-market','Enterprise','Government'] },
-    { name: 'Travel Willingness', api_key: 'travel_willingness', field_type: 'select', options: ['None','25%','50%','75%','100%'] },
-  ],
-  default: [
-    { name: 'LinkedIn Profile', api_key: 'linkedin_profile', field_type: 'url' },
-    { name: 'Portfolio', api_key: 'portfolio_url', field_type: 'url' },
-    { name: 'Languages', api_key: 'languages', field_type: 'multi_select', options: ['English','Arabic','French','Spanish','German','Mandarin','Hindi'] },
-    { name: 'Visa Status', api_key: 'visa_status', field_type: 'select', options: ['Citizen','Permanent Resident','Work Visa','Requires Sponsorship'] },
-  ]
-};
-
 router.post('/research', async (req, res) => {
   const { company_name, environment_id } = req.body;
   if (!company_name || !environment_id) return res.status(400).json({ error: 'company_name and environment_id required' });
@@ -115,28 +74,42 @@ router.post('/research', async (req, res) => {
         .toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
     }
 
-    // Multiple logo sources — client will try each and show working ones
+    // Multiple logo sources — client will try each and show working ones.
+    // NOTE: Clearbit's public Logo API (logo.clearbit.com) was shut down after
+    // HubSpot's acquisition and no longer resolves at all (confirmed: every
+    // request fails at the connection level, not even a 404) — it must not be
+    // used, and must never be the thing `profile.logo_url` defaults to, since
+    // a dead default is worse than no default (the user sees a blank/broken
+    // logo instead of a working best-effort one). unavatar.io is a maintained
+    // aggregator (falls back across multiple providers itself) and was
+    // verified working for real domains; it's listed first as the best-odds
+    // default. Google/DuckDuckGo/favicon.ico remain as further fallbacks.
     const logoCandidates = domain ? [
-      { source: 'clearbit',    url: `https://logo.clearbit.com/${domain}`,                    label: 'Primary' },
+      { source: 'unavatar',    url: `https://unavatar.io/${domain}`,                          label: 'Best match' },
       { source: 'google',      url: `https://www.google.com/s2/favicons?domain=${domain}&sz=256`, label: 'Google' },
       { source: 'duckduckgo',  url: `https://icons.duckduckgo.com/ip3/${domain}.ico`,         label: 'DuckDuckGo' },
       { source: 'favicon',     url: `https://${domain}/favicon.ico`,                          label: 'Site favicon' },
     ] : [];
 
-    // Always use Clearbit when available — more reliable than AI-returned URLs
-    if (domain) {
-      profile.logo_url = `https://logo.clearbit.com/${domain}`;
+    // The AI's own research pass sometimes surfaces a real, high-quality logo
+    // URL from the company's own site (e.g. a press-kit or /assets/logo.svg)
+    // that outranks any generic favicon aggregator — but it can also just
+    // hallucinate a plausible-looking non-existent URL, so it's offered as an
+    // extra *candidate* for the user to pick (never trusted as the default).
+    const aiLogoUrl = typeof profile.logo_url === 'string' ? profile.logo_url.trim() : '';
+    const looksLikeImageUrl = /^https?:\/\/\S+\.(png|jpe?g|svg|webp|gif)(\?\S*)?$/i.test(aiLogoUrl);
+    if (looksLikeImageUrl) {
+      logoCandidates.unshift({ source: 'ai_research', url: aiLogoUrl, label: 'AI research' });
     }
+
+    profile.logo_url = logoCandidates[0]?.url || '';
     profile.domain = domain;
     profile.logo_candidates = logoCandidates;
 
     // Template generation removed — use Email Templates section instead
     const emailTemplates = [];
 
-    const industryKey = (profile.industry||'default').toLowerCase();
-    const suggestedFields = INDUSTRY_FIELD_SUGGESTIONS[industryKey] || INDUSTRY_FIELD_SUGGESTIONS.default;
-
-    res.json({ profile, email_templates: emailTemplates, suggested_fields: suggestedFields, research_date: new Date().toISOString() });
+    res.json({ profile, email_templates: emailTemplates, research_date: new Date().toISOString() });
   } catch(err) { console.error('Company research error:', err); res.status(500).json({ error: err.message }); }
 });
 

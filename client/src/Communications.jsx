@@ -433,6 +433,7 @@ export function ComposeModal({
         const wrapped = await api.post("/email-builder/preview", {
           blocks: [{ type: "html", content: bodyWithSignature }],
           brand_kit_id: selectedKitId,
+          environment_id: environment?.id,
           subject,
         });
         if (wrapped?.html) finalHtml = wrapped.html;
