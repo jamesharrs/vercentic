@@ -24,8 +24,10 @@ function mapCommToUnified(c) {
 }
 
 // Resolves a single unified-inbox item by id from either backing source:
-// store.inbound_messages (email, via the /inbound webhook), or an inbound
-// sms/whatsapp/web/email row in store.communications that ISN'T a mirror of
+// store.inbound_messages (historic rows — nothing writes new ones since the
+// dead SendGrid /inbound webhook was removed, see the note above DELETE
+// /:id below), or an inbound sms/whatsapp/web/email row in store.communications
+// that ISN'T a mirror of
 // an inbound_messages row (mirrors carry inbound_message_id and are excluded
 // from the list — see the "2. Inbound..." block in GET / below — so they're
 // never looked up by their own id here either). Every route below previously
@@ -64,8 +66,10 @@ router.get('/', (req, res) => {
 
   // 2. Inbound SMS / WhatsApp / web / not-yet-mirrored email from communications.
   // A communications row with inbound_message_id is a *mirror* of an
-  // inbound_messages row (created by the /inbound webhook or PATCH /:id/link
-  // purely so GET /:id can reconstruct a full thread) — it must be excluded
+  // inbound_messages row (historically created by the now-removed SendGrid
+  // /inbound webhook, or still today by PATCH /:id/link) purely so GET /:id
+  // can reconstruct a full thread — see the note above DELETE /:id below —
+  // it must be excluded
   // here or every such email would be double-counted against its source
   // inbound_messages row. Any inbound email written directly into
   // communications with no inbound_message_id (e.g. demo/seed data, or any
@@ -441,166 +445,20 @@ router.post('/:id/reply', async (req, res) => {
   res.json({ ...comm, dispatch_error: dispatchResult.error || null });
 });
 
-// POST /api/inbox/inbound — SendGrid/Postmark webhook
-// Synchronous handler — environment resolution and store writes below are
-// all synchronous (no dispatch calls happen here, unlike /:id/reply), so
-// this isn't declared `async` (an `async` function with no `await` trips
-// eslint's require-await, which this repo's lint config treats as an error).
-router.post('/inbound', (req, res) => {
-  try {
-    const payload = req.body;
-    const from_email = (payload.from || '').match(/<(.+)>/)?.[1] || payload.from || '';
-    const from_name = (payload.from || '').replace(/<.+>/, '').trim().replace(/^"|"$/g, '');
-    const subject = payload.subject || '(no subject)';
-    const body_text = payload.text || payload['body-plain'] || '';
-    const message_id = payload['Message-Id'] || uuidv4();
-    const in_reply_to = payload['In-Reply-To'] || null;
-    const store = getStore();
-    if (!store.inbound_messages) store.inbound_messages = [];
-
-    // ── Resolve environment_id ────────────────────────────────────────────
-    // Previously this always grabbed `(store.environments || [])[0]?.id` —
-    // every inbound email landed in whichever environment happened to be
-    // created first on this tenant, regardless of who it was actually to or
-    // from. Resolve using the strongest signal available, falling back only
-    // when nothing more specific matches:
-    //   1. Reply to an existing thread — inherit that thread's environment.
-    //   2. Recipient address's domain matches a client's configured/
-    //      auto-provisioned sending domain (services/mailer.js registers
-    //      these per environment in store.email_domain_configs) — the normal
-    //      case once a client has a domain set up.
-    //   3. Sender's email uniquely matches a Person record in exactly one
-    //      environment, searched across all environments (the old code could
-    //      never find this, since it only ever looked inside the already-
-    //      wrongly-guessed environment).
-    //   4. Last resort — first environment, same as before, but now logged
-    //      so a misattribution here is visible instead of silent, and the
-    //      method used is stored on the message for later diagnosis.
-    let environment_id = null;
-    let resolution_method = null;
-
-    if (in_reply_to) {
-      const prevForThread = store.inbound_messages.find(m => m.message_id === in_reply_to);
-      if (prevForThread) { environment_id = prevForThread.environment_id; resolution_method = 'thread'; }
-    }
-
-    // Recipient address — inbound-parse providers vary in field naming
-    // (SendGrid: `to`; Postmark: `To`/`ToFull`; others: `recipient`/`envelope.to`).
-    const to_raw = payload.to || payload.To || payload.recipient || payload.envelope?.to || '';
-    const to_email = (String(to_raw).match(/<(.+)>/)?.[1] || String(to_raw)).trim();
-    const to_domain = to_email.split('@')[1]?.toLowerCase() || null;
-
-    if (!environment_id && to_domain) {
-      const domainCfg = (store.email_domain_configs || [])
-        .find(c => (c.domain || '').toLowerCase() === to_domain);
-      if (domainCfg) { environment_id = domainCfg.environment_id; resolution_method = 'domain'; }
-    }
-
-    if (!environment_id && from_email) {
-      const matchingEnvIds = new Set(
-        (store.records || [])
-          .filter(r => (r.data?.email || '').toLowerCase() === from_email.toLowerCase())
-          .map(r => r.environment_id)
-      );
-      if (matchingEnvIds.size === 1) { environment_id = [...matchingEnvIds][0]; resolution_method = 'sender_match'; }
-    }
-
-    if (!environment_id) {
-      environment_id = (store.environments || [])[0]?.id || null;
-      resolution_method = 'fallback_first';
-      console.warn(`[inbox] /inbound: could not confidently resolve environment for inbound email from "${from_email}" to "${to_email || '(unknown)'}" — falling back to the first environment (${environment_id}). This may misfile the message; check store.email_domain_configs for the receiving domain.`);
-    }
-
-    let matched_record_id = null;
-    const matched = (store.records || []).find(r =>
-      r.environment_id === environment_id &&
-      (r.data?.email || '').toLowerCase() === from_email.toLowerCase()
-    );
-    if (matched) matched_record_id = matched.id;
-    let thread_id = null;
-    if (in_reply_to) {
-      const prev = store.inbound_messages.find(m => m.message_id === in_reply_to);
-      thread_id = prev?.thread_id || prev?.id || in_reply_to;
-    }
-    if (!thread_id) thread_id = uuidv4();
-
-    // Inherit related_record_id and context from the original outbound thread
-    let related_record_id = null;
-    let context = 'general';
-    if (thread_id) {
-      const origComm = (store.communications || []).find(c => c.thread_id === thread_id && c.direction === 'outbound');
-      if (origComm?.related_record_id) {
-        related_record_id = origComm.related_record_id;
-        context = 'application';
-      }
-    }
-    const msg = {
-      id: uuidv4(), environment_id, message_id, thread_id, from_email,
-      from_name: from_name || from_email, subject, body_text,
-      matched_record_id, related_record_id, context,
-      // Purely diagnostic — how environment_id above was resolved, so a
-      // misfiled message (env resolved via the 'fallback_first' last resort)
-      // can be found and understood later rather than looking identical to
-      // a confidently-resolved one.
-      environment_resolution: resolution_method,
-      read: false, assigned_to: null,
-      received_at: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-    };
-    store.inbound_messages.push(msg);
-    if (matched_record_id) {
-      if (!store.communications) store.communications = [];
-      store.communications.push({
-        id: uuidv4(), record_id: matched_record_id, environment_id, type: 'email',
-        direction: 'inbound', subject, body: body_text, from_email,
-        from_name: from_name || from_email, status: 'received', thread_id,
-        related_record_id, context,
-        inbound_message_id: msg.id, sent_at: msg.received_at, created_at: new Date().toISOString()
-      });
-    }
-    saveStore(store);
-    res.status(200).json({ received: true, matched: !!matched_record_id, environment_resolution: resolution_method });
-  } catch (err) {
-    res.status(200).json({ received: true, error: err.message });
-  }
-});
-
-// POST /api/inbox/seed-test — simulate inbound for dev/testing
-router.post('/seed-test', (req, res) => {
-  const { environment_id, from_email, from_name, subject, body } = req.body;
-  if (!environment_id) return res.status(400).json({ error: 'environment_id required' });
-  const store = getStore();
-  if (!store.inbound_messages) store.inbound_messages = [];
-  let matched_record_id = null;
-  if (from_email) {
-    const rec = (store.records || []).find(r =>
-      r.environment_id === environment_id &&
-      (r.data?.email || '').toLowerCase() === from_email.toLowerCase()
-    );
-    if (rec) matched_record_id = rec.id;
-  }
-  const thread_id = uuidv4();
-  const msg = {
-    id: uuidv4(), environment_id, message_id: `test-${uuidv4()}`, thread_id,
-    from_email: from_email || 'candidate@example.com',
-    from_name: from_name || 'Test Candidate',
-    subject: subject || 'Re: Your application at Vercentic',
-    body_text: body || 'Hi, thanks for reaching out. I am very interested in the position and would love to schedule a call.',
-    matched_record_id, read: false, assigned_to: null,
-    received_at: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-  };
-  store.inbound_messages.push(msg);
-  if (matched_record_id) {
-    if (!store.communications) store.communications = [];
-    store.communications.push({
-      id: uuidv4(), record_id: matched_record_id, environment_id, type: 'email',
-      direction: 'inbound', subject: msg.subject, body: msg.body_text,
-      from_email: msg.from_email, from_name: msg.from_name, status: 'received',
-      thread_id, inbound_message_id: msg.id, sent_at: msg.received_at, created_at: new Date().toISOString()
-    });
-  }
-  saveStore(store);
-  res.json({ message: msg, matched: !!matched_record_id });
-});
+// Note: this router used to also expose POST /inbound (a SendGrid/Postmark
+// inbound-parse webhook) and POST /seed-test (a dev-only fake-inbound
+// generator for demoing it). Both were removed 2026-09-12 — /inbound was
+// never reachable in production (missing from index.js's AUTH_EXEMPT and
+// middleware/csrf.js's exemption list, and no SendGrid Inbound Parse DNS/MX
+// setup ever existed to call it), and nothing else in the repo referenced
+// either route. Live inbound email now arrives exclusively via
+// routes/communications.js's POST /webhook/email (MailerSend), which writes
+// straight into store.communications with direction:'inbound' — already
+// merged into the unified inbox by the "2. Inbound SMS / WhatsApp / web /
+// not-yet-mirrored email from communications" block in GET / above. Historic
+// rows already in store.inbound_messages (from either removed route, back
+// when they were live) are untouched and still display normally; nothing
+// writes new ones anymore.
 
 // DELETE /api/inbox/:id
 router.delete('/:id', (req, res) => {
