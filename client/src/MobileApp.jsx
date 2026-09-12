@@ -69,6 +69,30 @@ const api = {
       return { ok: false, error: err?.message || 'Network error', data: null };
     }
   },
+  async delete(p) {
+    try {
+      const d = await _apiClient.delete(p);
+      if (d && typeof d === 'object' && d.error) {
+        return { ok: false, error: d.error, data: null };
+      }
+      return { ok: true, data: d, error: null };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Network error', data: null };
+    }
+  },
+};
+
+const relTime = (iso) => {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 };
 
 const statusColor = (s = "") => {
@@ -106,6 +130,7 @@ const PATHS = {
   wifi:      "M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01",
   inbox:     "M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z",
   monitor:   "M2 4a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2zM8 22h8M12 18v4",
+  link:      "M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
 };
 
 const Ic = ({ n, s = 20, c = V.muted, style = {} }) => (
@@ -159,6 +184,51 @@ const Badge = ({ label, color }) => (
     borderRadius: 99, fontSize: 11, fontWeight: 600, background: `${color}18`,
     color, fontFamily: F, whiteSpace: "nowrap", letterSpacing: "0.01em" }}>{label}</span>
 );
+
+// Compact pill toggle — used for the "All / Mine / My Jobs" slider.
+const Segmented = ({ options, value, onChange }) => (
+  <div style={{ display: "flex", background: "rgba(0,0,0,0.05)", borderRadius: 12, padding: 3, gap: 2 }}>
+    {options.map(opt => (
+      <button key={opt.id} onClick={() => onChange(opt.id)}
+        style={{
+          flex: 1, padding: "8px 6px", borderRadius: 9, border: "none", cursor: "pointer",
+          background: value === opt.id ? V.cardSolid : "transparent",
+          color: value === opt.id ? V.inkMid : V.muted,
+          fontSize: 12.5, fontWeight: 700, fontFamily: F,
+          boxShadow: value === opt.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+          transition: "all .18s", whiteSpace: "nowrap",
+        }}>
+        {opt.label}{opt.count != null ? ` (${opt.count})` : ""}
+      </button>
+    ))}
+  </div>
+);
+
+// "Mine" ownership check — mirrors Dashboard.jsx's DashFilterBtn.myJobs logic exactly,
+// so "my jobs" means the same thing on mobile as it does on desktop: the logged-in
+// user's name appears (as a substring match on first name) in any people-type
+// ownership field on the job, or a legacy text-field equivalent.
+const PEOPLE_OWNER_FIELDS = ["hiring_manager", "recruiter", "coordinator", "sourcing_partner", "interviewers", "approved_by", "interviewer"];
+const computeMyJobIds = (jobs, session) => {
+  const me = ((session?.first_name || "") + " " + (session?.last_name || "")).trim().toLowerCase();
+  if (!me) return new Set();
+  const firstName = me.split(" ")[0];
+  const mine = jobs.filter(j => {
+    const d = j.data || {};
+    const textFields = [d.owner, d.recruiter_name, d.coordinator_name].filter(Boolean).map(v => v.toLowerCase());
+    if (textFields.some(v => v.includes(firstName))) return true;
+    return PEOPLE_OWNER_FIELDS.some(key => {
+      const v = d[key];
+      if (!v) return false;
+      const arr = Array.isArray(v) ? v : [v];
+      return arr.some(p => {
+        const name = typeof p === "object" ? (p.name || "") : String(p);
+        return name.toLowerCase().includes(firstName);
+      });
+    });
+  });
+  return new Set(mine.map(j => j.id));
+};
 
 const Sheet = ({ open, onClose, title, children, height = "88vh" }) => {
   if (!open) return null;
@@ -741,8 +811,252 @@ const CandidateDetail = ({ record, onUpdate }) => {
   );
 };
 
+// ─── JOB PIPELINE DETAIL (self-contained; used by the "My Jobs" list below) ───
+// Mirrors JobsScreen's own pipeline-loading logic but is fully independent, so
+// this addition cannot affect the existing, already-shipped Jobs tab.
+const JobPipelineDetail = ({ job, environment }) => {
+  const toast = useToast();
+  const [pipelineStages, setPipelineStages] = useState([]);
+  const [pipelineLinks, setPipelineLinks] = useState([]);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [selStage, setSelStage] = useState(null);
+  const [moveCandidate, setMoveCandidate] = useState(null);
+  const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    if (!job?.id) return;
+    let cancelled = false;
+    setPipelineLoading(true);
+    (async () => {
+      const [assignRes, linksRes] = await Promise.all([
+        api.get(`/workflows/assignments?record_id=${job.id}`),
+        api.get(`/workflows/people-links?target_record_id=${job.id}`),
+      ]);
+      if (cancelled) return;
+      let stageList = [];
+      if (assignRes.ok && Array.isArray(assignRes.data) && assignRes.data.length > 0) {
+        const pipelineAssignment =
+          assignRes.data.find(a => a.type === "pipeline" || a.type === "people_link") ||
+          assignRes.data[0];
+        stageList = pipelineAssignment?.workflow?.steps || [];
+      }
+      if (!stageList.length && linksRes.ok) {
+        const firstLink = Array.isArray(linksRes.data) && linksRes.data[0];
+        if (firstLink?.workflow_steps?.length) stageList = firstLink.workflow_steps;
+      }
+      if (!stageList.length && environment?.id) {
+        const catRes = await api.get(`/stage-categories?environment_id=${environment.id}`);
+        if (!cancelled && catRes.ok && Array.isArray(catRes.data)) {
+          stageList = catRes.data.map(c => ({ id: c.id, name: c.name, color: c.color }));
+        }
+      }
+      setPipelineStages(stageList);
+      setPipelineLinks(Array.isArray(linksRes.data) ? linksRes.data : []);
+      setPipelineLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [job?.id, environment?.id]);
+
+  const handleMoveStage = async (targetStage) => {
+    if (!moveCandidate) return;
+    setMoving(true);
+    const res = await api.patch(`/workflows/people-links/${moveCandidate.id}`, {
+      stage_id: targetStage.id !== targetStage.name ? targetStage.id : undefined,
+      stage_name: targetStage.name,
+    });
+    if (res.ok) {
+      toast?.success?.(`Moved to ${targetStage.name}`);
+      setPipelineLinks(prev => prev.map(l =>
+        l.id === moveCandidate.id
+          ? { ...l, stage_id: targetStage.id, stage_name: targetStage.name }
+          : l
+      ));
+      if (selStage) {
+        const updatedLinks = pipelineLinks.map(l =>
+          l.id === moveCandidate.id ? { ...l, stage_name: targetStage.name } : l
+        );
+        setSelStage(prev => ({
+          ...prev,
+          candidates: updatedLinks.filter(l => (l.stage_name || "Unassigned") === prev.stage.name),
+        }));
+      }
+      setMoveCandidate(null);
+    } else {
+      toast?.error?.(res.error || "Could not move candidate");
+    }
+    setMoving(false);
+  };
+
+  const getStatus = j => j.data?.status || "Open";
+
+  return (
+    <div style={{ paddingBottom: 40, overflowY: "auto" }}>
+      <div style={{ padding: "20px 22px 0" }}>
+        {[
+          { l: "Department", v: job.data?.department, i: "layers" },
+          { l: "Location", v: job.data?.location, i: "map" },
+          { l: "Status", v: getStatus(job), i: "check" },
+          { l: "Type", v: job.data?.employment_type, i: "briefcase" },
+        ].filter(f => f.v).map((row, i, arr) => (
+          <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
+            <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div>
+              <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div>
+            </div>
+          </div>
+        ))}
+        {job.data?.description && (
+          <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12, marginBottom: 4 }}>
+            <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div>
+            <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{job.data.description}</div>
+          </div>
+        )}
+      </div>
+
+      <JobPipelineSection
+        job={job}
+        environment={environment}
+        stages={pipelineStages}
+        links={pipelineLinks}
+        loading={pipelineLoading}
+        onStageSelect={(stage, candidates) => setSelStage({ stage, candidates })}
+      />
+
+      <Sheet
+        open={!!selStage}
+        onClose={() => { setSelStage(null); setMoveCandidate(null); }}
+        title={selStage ? `${selStage.stage.name} (${pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name).length})` : ""}
+        height="82vh">
+        {selStage && (
+          <StageCandidateList
+            candidates={pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name)}
+            stages={pipelineStages}
+            currentStageName={selStage.stage.name}
+            onMoveRequest={(link) => setMoveCandidate(link)}
+          />
+        )}
+      </Sheet>
+
+      <Sheet
+        open={!!moveCandidate}
+        onClose={() => setMoveCandidate(null)}
+        title="Move to stage"
+        height="auto">
+        {moveCandidate && (
+          <div style={{ padding: "12px 16px 40px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {pipelineStages.filter(s => s.name !== moveCandidate.stage_name).map((stage, idx) => {
+              const col = stage.color || statusColor(stage.name);
+              return (
+                <button key={stage.id || idx}
+                  onClick={() => handleMoveStage(stage)}
+                  disabled={moving}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "15px 16px",
+                    background: V.cardSolid, borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+                    cursor: moving ? "default" : "pointer", textAlign: "left",
+                    opacity: moving ? 0.6 : 1, boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                  onTouchStart={e => { if (!moving) e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                  onTouchEnd={e => { e.currentTarget.style.background = V.cardSolid; }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%",
+                    background: col, flexShrink: 0, boxShadow: `0 0 0 2px ${col}28` }} />
+                  <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: V.inkMid, fontFamily: F }}>{stage.name}</span>
+                  {moving && <Ic n="refresh" s={14} c={V.muted} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
+    </div>
+  );
+};
+
+// Shared job card — used by both "My Jobs" and (in future) other job lists.
+const JobCard = ({ job, onClick }) => {
+  const getTitle = j => j.data?.job_title || j.data?.title || "Untitled Role";
+  const status = job.data?.status || "Open";
+  const col = statusColor(status);
+  return (
+    <button onClick={onClick}
+      style={{ background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}`, padding: 18, textAlign: "left", cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderLeft: `4px solid ${col}`, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: V.inkMid, fontFamily: FD, flex: 1, marginRight: 10, letterSpacing: "-0.03em", lineHeight: 1.2 }}>{getTitle(job)}</div>
+        <Badge label={status} color={col} />
+      </div>
+      {job.data?.department && <div style={{ fontSize: 13, color: V.muted, fontFamily: F, marginBottom: 5 }}>{job.data.department}</div>}
+      {job.data?.location && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Ic n="map" s={11} c={V.muted} /><span style={{ fontSize: 12, color: V.muted, fontFamily: F }}>{job.data.location}</span></div>}
+    </button>
+  );
+};
+
+// "My Jobs" — the jobs slice of the mobile Candidates/Jobs slider.
+const MyJobsList = ({ jobs, environment }) => {
+  const [selJob, setSelJob] = useState(null);
+  if (!jobs.length) {
+    return <EmptyState icon="briefcase" title="No jobs assigned to you"
+      body="Jobs where you're listed as hiring manager, recruiter or coordinator will show up here" />;
+  }
+  return (
+    <>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {jobs.map(j => <JobCard key={j.id} job={j} onClick={() => setSelJob(j)} />)}
+      </div>
+      <Sheet open={!!selJob} onClose={() => setSelJob(null)}
+        title={selJob ? (selJob.data?.job_title || selJob.data?.title || "Untitled Role") : ""} height="90vh">
+        {selJob && <JobPipelineDetail job={selJob} environment={environment} />}
+      </Sheet>
+    </>
+  );
+};
+
+// "My Candidates" — grouped by workflow-stage category (or "Not in a pipeline
+// yet" for candidates added directly rather than via a job pipeline).
+const MyCandidatesList = ({ groups, onSelect }) => {
+  if (!groups.length) {
+    return <EmptyState icon="users" title="No candidates yet"
+      body="Candidates you've added, or applicants to your jobs, will show up here" />;
+  }
+  const getName = r => [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.email || "Unnamed";
+  const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
+  const colorFor = n => { let h = 0; for (let c of n) h += c.charCodeAt(0); return palette[h % palette.length]; };
+  return (
+    <div style={{ padding: "14px 14px 4px" }}>
+      {groups.map(group => (
+        <div key={group.category.id} style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", marginBottom: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: group.category.color || V.muted }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: V.muted, fontFamily: F, letterSpacing: "0.04em", textTransform: "uppercase" }}>{group.category.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: V.faint, fontFamily: F }}>({group.candidates.length})</span>
+          </div>
+          <div style={{ background: V.cardSolid, borderRadius: 16, border: `1px solid ${V.cardBorder}`, overflow: "hidden" }}>
+            {group.candidates.map((r, i) => {
+              const name = getName(r);
+              const col = colorFor(name);
+              return (
+                <button key={r.id} onClick={() => onSelect(r)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: i < group.candidates.length - 1 ? `1px solid ${V.cardBorder}` : "none" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: col, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "white", fontFamily: F, flexShrink: 0 }}>
+                    {name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.01em" }}>{name}</div>
+                    <div style={{ fontSize: 12, color: V.muted, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.data?.current_title || r.data?.job_title || r.data?.email || "No title"}</div>
+                  </div>
+                  <Ic n="chevR" s={14} c={V.muted} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── CANDIDATES SCREEN ────────────────────────────────────────────────────────
-const CandidatesScreen = ({ environment }) => {
+const CandidatesScreen = ({ environment, session }) => {
   const toast = useToast();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -750,6 +1064,16 @@ const CandidatesScreen = ({ environment }) => {
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState(null);
   const [objectId, setObjectId] = useState(null);
+
+  // "My Candidates" / "My Jobs" slider — lazily loaded on first switch away
+  // from "All" so the default view (unchanged behaviour) never pays for it.
+  const [mode, setMode] = useState("all"); // 'all' | 'mine' | 'myjobs'
+  const [mineLoaded, setMineLoaded] = useState(false);
+  const [mineLoading, setMineLoading] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  const [peopleLinks, setPeopleLinks] = useState([]);
+  const [stageCategories, setStageCategories] = useState([]);
+  const [myAddedCandidates, setMyAddedCandidates] = useState([]);
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
@@ -775,6 +1099,104 @@ const CandidatesScreen = ({ environment }) => {
     setSel(updated);
   };
 
+  // Lazily load everything "My Candidates" / "My Jobs" need, the first time
+  // either mode is selected. Deliberately kept separate from `records`/`load`
+  // above so the default "All" tab's payload and behaviour never change.
+  useEffect(() => {
+    if (mode === "all" || mineLoaded || !environment?.id || !objectId) return;
+    let cancelled = false;
+    setMineLoading(true);
+    (async () => {
+      const objsRes = await api.get(`/objects?environment_id=${environment.id}`);
+      const objs = objsRes.ok && Array.isArray(objsRes.data) ? objsRes.data : [];
+      const jobsObj = objs.find(o => o.slug === "jobs" || o.name?.toLowerCase().includes("job"));
+      const [jobsRes, linksRes, catRes, addedRes] = await Promise.all([
+        jobsObj
+          ? api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`)
+          : Promise.resolve({ ok: false }),
+        api.get(`/workflows/people-links?environment_id=${environment.id}`),
+        api.get(`/stage-categories?environment_id=${environment.id}`),
+        api.get(`/records?object_id=${objectId}&environment_id=${environment.id}&limit=200&sort=created_at&order=desc`),
+      ]);
+      if (cancelled) return;
+      setJobs(jobsRes.ok ? (jobsRes.data?.records || []) : []);
+      setPeopleLinks(linksRes.ok ? (Array.isArray(linksRes.data) ? linksRes.data : []) : []);
+      setStageCategories(catRes.ok && Array.isArray(catRes.data) ? catRes.data : []);
+      const addedAll = addedRes.ok ? (addedRes.data?.records || []) : [];
+      setMyAddedCandidates(session?.id ? addedAll.filter(r => r.created_by === session.id) : []);
+      setMineLoaded(true);
+      setMineLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [mode, mineLoaded, environment?.id, objectId, session?.id]);
+
+  const myJobIds = useMemo(() => computeMyJobIds(jobs, session), [jobs, session]);
+  const myJobsFiltered = useMemo(() => jobs.filter(j => myJobIds.has(j.id)), [jobs, myJobIds]);
+
+  // Candidates who are either applicants to one of "my" jobs, or that I
+  // personally added — the explicit OR condition requested — grouped by the
+  // category of their current workflow stage (people_link.stage → step →
+  // category_id → stage_categories). Candidates with no stage/category (e.g.
+  // added directly, not yet in a pipeline) fall into a synthetic last group.
+  const myCandidateGroups = useMemo(() => {
+    if (!mineLoaded) return [];
+    const byId = new Map();
+    peopleLinks.forEach(link => {
+      const targetId = link.target_record_id || link.job_id || link.record_id;
+      if (!targetId || !myJobIds.has(targetId)) return;
+      const personId = link.person_record_id || link.person_id;
+      if (!personId) return;
+      const linkUpdated = link.updated_at || link.created_at || "";
+      const existing = byId.get(personId);
+      if (!existing || linkUpdated > existing._linkUpdated) {
+        byId.set(personId, {
+          id: personId,
+          data: link.person_data || {},
+          _stageId: link.stage_id ?? link.current_stage_id,
+          _stageName: link.stage_name || link.current_stage_name,
+          _steps: link.workflow_steps || [],
+          _linkUpdated: linkUpdated,
+        });
+      }
+    });
+    myAddedCandidates.forEach(r => {
+      if (byId.has(r.id)) return;
+      byId.set(r.id, { id: r.id, data: r.data || {}, _stageId: null, _stageName: null, _steps: [], _linkUpdated: "" });
+    });
+
+    const catById = new Map(stageCategories.map(c => [c.id, c]));
+    const stagePalette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E", "#7BA5C9"];
+    const colorForStage = n => { let h = 0; for (const c of n) h += c.charCodeAt(0); return stagePalette[h % stagePalette.length]; };
+    const NONE_CATEGORY = { id: "_none", name: "Not in a pipeline yet", color: V.muted, sort_order: Infinity };
+    const groupsById = new Map();
+    byId.forEach(entry => {
+      let category = null;
+      let step = null;
+      if (entry._stageId != null && entry._steps?.length) {
+        step = entry._steps.find(s => s.id === entry._stageId || s.name === entry._stageName);
+        if (step?.category_id) category = catById.get(step.category_id);
+      }
+      if (!category) {
+        // No formal stage-category configured for this workflow step (common
+        // until an admin sets one up) — fall back to grouping by the stage's
+        // own name, in its pipeline order, so "grouped by category of
+        // workflow stage" still means something useful today. Only
+        // candidates with no stage/link at all land in "Not in a pipeline yet".
+        const stageLabel = entry._stageName || (step && step.name);
+        category = stageLabel
+          ? { id: `stage:${stageLabel}`, name: stageLabel, color: colorForStage(stageLabel), sort_order: step?.sort_order ?? step?.order ?? 500 }
+          : NONE_CATEGORY;
+      }
+      if (!groupsById.has(category.id)) groupsById.set(category.id, { category, candidates: [] });
+      groupsById.get(category.id).candidates.push(entry);
+    });
+    return Array.from(groupsById.values()).sort((a, b) =>
+      (a.category.sort_order ?? 999) - (b.category.sort_order ?? 999)
+    );
+  }, [mineLoaded, peopleLinks, myJobIds, myAddedCandidates, stageCategories]);
+
+  const totalMineCount = myCandidateGroups.reduce((s, g) => s + g.candidates.length, 0);
+
   const getName = r => [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.email || "Unnamed";
   const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
   const colorFor = n => { let h = 0; for (let c of n) h += c.charCodeAt(0); return palette[h % palette.length]; };
@@ -787,15 +1209,42 @@ const CandidatesScreen = ({ environment }) => {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
-      <div style={{ padding: "12px 16px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px" }}>
-          <Ic n="search" s={15} c={V.muted} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search candidates…"
-            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
-        </div>
+      <div style={{ padding: "12px 16px 10px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { id: "all", label: "All", count: records.length },
+            { id: "mine", label: "My Candidates", count: mineLoaded ? totalMineCount : null },
+            { id: "myjobs", label: "My Jobs", count: mineLoaded ? myJobsFiltered.length : null },
+          ]}
+        />
+        {mode === "all" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px", marginTop: 10 }}>
+            <Ic n="search" s={15} c={V.muted} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search candidates…"
+              style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
+          </div>
+        )}
       </div>
 
-      <PullToRefresh onRefresh={refresh} disabled={loading}>
+      {mode === "mine" && (
+        mineLoading && !mineLoaded
+          ? <div style={{ padding: "16px 22px" }}><Skeleton count={5} /></div>
+          : <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <MyCandidatesList groups={myCandidateGroups} onSelect={r => setSel(r)} />
+            </div>
+      )}
+
+      {mode === "myjobs" && (
+        mineLoading && !mineLoaded
+          ? <div style={{ padding: "16px 22px" }}><Skeleton count={5} type="card" /></div>
+          : <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <MyJobsList jobs={myJobsFiltered} environment={environment} />
+            </div>
+      )}
+
+      {mode === "all" && <PullToRefresh onRefresh={refresh} disabled={loading}>
         {loading ? <Skeleton count={8} />
           : error ? <ErrorState message={error} onRetry={load} />
           : filtered.length === 0 ? (
@@ -827,7 +1276,7 @@ const CandidatesScreen = ({ environment }) => {
               </SwipeRow>
             );
           })}
-      </PullToRefresh>
+      </PullToRefresh>}
 
       {!loading && !error && (
         <FAB icon="plus" label="Add candidate"
@@ -1390,8 +1839,304 @@ const JobsScreen = ({ environment }) => {
   );
 };
 
+// ─── INBOX ────────────────────────────────────────────────────────────────────
+const INBOX_FILTERS = [
+  { id: "mine", label: "Mine" },
+  { id: "all", label: "All" },
+  { id: "unread", label: "Unread" },
+  { id: "unmatched", label: "Unmatched" },
+];
+const INBOX_CHANNELS = [
+  { id: "all", label: "All" },
+  { id: "email", label: "Email" },
+  { id: "sms", label: "SMS" },
+  { id: "whatsapp", label: "WhatsApp" },
+];
+
+const InboxLinkSheet = ({ environmentId, onLink, onClose }) => {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      const res = await api.get(`/records/search?q=${encodeURIComponent(search)}&environment_id=${environmentId}&limit=10`);
+      if (res.ok) {
+        const recs = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        setResults(recs.filter(r => (r.object_slug || "").includes("people") || (r.object_name || "").toLowerCase().includes("person")));
+      } else setResults([]);
+      setLoading(false);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search, environmentId]);
+
+  return (
+    <Sheet open onClose={onClose} title="Link to Person" height="70vh">
+      <div style={{ padding: "16px 20px 40px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px", marginBottom: 16 }}>
+          <Ic n="search" s={15} c={V.muted} />
+          <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or email…"
+            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
+        </div>
+        {loading && <div style={{ textAlign: "center", padding: 20, color: V.muted, fontSize: 13, fontFamily: F }}>Searching…</div>}
+        {!loading && search && results.length === 0 && <div style={{ textAlign: "center", padding: 20, color: V.muted, fontSize: 13, fontFamily: F }}>No results</div>}
+        {results.map(r => (
+          <button key={r.id} onClick={() => onLink(r.id)}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, border: `1px solid ${V.cardBorder}`, background: "none", marginBottom: 8, cursor: "pointer", textAlign: "left" }}>
+            <Avatar name={r.display_name || r.data?.email || "?"} size={36} color={V.lavender} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: V.inkMid, fontFamily: F }}>{r.display_name || r.data?.email || "Unnamed"}</div>
+              <div style={{ fontSize: 12, color: V.muted, fontFamily: F }}>{r.data?.email || ""}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  );
+};
+
+const InboxDetail = ({ msgId, environment, onUpdate, onClose }) => {
+  const toast = useToast();
+  const [msg, setMsg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [showLink, setShowLink] = useState(false);
+  const [sent, setSent] = useState(false);
+  const threadEndRef = useRef(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await api.get(`/inbox/${msgId}`);
+    if (!res.ok) { setMsg(null); setLoading(false); return; }
+    setMsg(res.data);
+    if (res.data && !res.data.read) {
+      await api.patch(`/inbox/${msgId}/read`, { read: true });
+      onUpdate?.();
+    }
+    setLoading(false);
+  }, [msgId]);
+
+  useEffect(() => { if (msgId) load(); }, [msgId, load]);
+  useEffect(() => { threadEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msg?.thread]);
+
+  const handleReply = async () => {
+    if (!reply.trim() || !msg) return;
+    setSending(true);
+    const res = await api.post(`/inbox/${msgId}/reply`, { body: reply, subject: `Re: ${msg.subject || ""}` });
+    if (res.ok) { setReply(""); setSent(true); setTimeout(() => setSent(false), 2000); load(); }
+    else toast?.error?.(res.error || "Could not send reply");
+    setSending(false);
+  };
+
+  const handleLink = async (recordId) => {
+    await api.patch(`/inbox/${msgId}/link`, { record_id: recordId });
+    setShowLink(false); load(); onUpdate?.();
+  };
+
+  const handleDelete = async () => {
+    if (!(await window.__confirm?.({ title: "Delete this message?", danger: true }))) return;
+    const res = await api.delete(`/inbox/${msgId}`);
+    if (res.ok) { toast?.success?.("Message deleted"); onUpdate?.({ deleted: true }); onClose?.(); }
+    else toast?.error?.(res.error || "Could not delete");
+  };
+
+  if (loading) return <div style={{ padding: 22 }}><Skeleton count={4} type="card" /></div>;
+  if (!msg) return <ErrorState message="Message not found" onRetry={load} />;
+
+  const thread = Array.isArray(msg.thread) && msg.thread.length ? msg.thread : [
+    { direction: "inbound", body: msg.body_text, received_at: msg.received_at, from_name: msg.from_name, from_contact: msg.from_contact, from_email: msg.from_email },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ padding: "16px 20px", borderBottom: `1px solid ${V.cardBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          {msg.matched_record ? (
+            <Badge label={`✓ Linked to ${msg.matched_record.name}`} color={V.success} />
+          ) : (
+            <Badge label="Unmatched" color={V.warning} />
+          )}
+          {msg.channel && msg.channel !== "email" && <Badge label={msg.channel.toUpperCase()} color={V.lavender} />}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowLink(true)}
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 12, border: `1px solid ${V.cardBorder}`, background: "transparent", color: V.inkMid, fontSize: 12, fontWeight: 700, fontFamily: F, cursor: "pointer" }}>
+            <Ic n="link" s={13} c={V.inkMid} /> {msg.matched_record ? "Re-link" : "Link to person"}
+          </button>
+          <button onClick={handleDelete}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 14px", borderRadius: 12, border: `1px solid ${V.danger}30`, background: "transparent", cursor: "pointer" }}>
+            <Ic n="trash" s={14} c={V.danger} />
+          </button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.inkMid, fontFamily: FD, marginBottom: 16 }}>{msg.subject || "(no subject)"}</div>
+        {thread.map((t, i) => {
+          const isInbound = t.direction !== "outbound";
+          return (
+            <div key={i} style={{ display: "flex", justifyContent: isInbound ? "flex-start" : "flex-end", marginBottom: 14 }}>
+              <div style={{ maxWidth: "82%" }}>
+                <div style={{ padding: "11px 15px", borderRadius: isInbound ? "4px 16px 16px 16px" : "16px 4px 16px 16px",
+                  background: isInbound ? "rgba(0,0,0,0.045)" : V.ink, color: isInbound ? V.inkMid : "white",
+                  fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: F }}>
+                  {t.body || t.body_text}
+                </div>
+                <div style={{ fontSize: 10.5, color: V.muted, marginTop: 4, fontFamily: F, textAlign: isInbound ? "left" : "right" }}>
+                  {isInbound ? (t.from_name || t.from_contact || t.from_email || "Them") : "You"} · {relTime(t.sent_at || t.received_at)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={threadEndRef} />
+      </div>
+
+      <div style={{ padding: "12px 16px", borderTop: `1px solid ${V.cardBorder}`, display: "flex", gap: 8, alignItems: "flex-end", paddingBottom: "calc(12px + env(safe-area-inset-bottom))" }}>
+        <textarea value={reply} onChange={e => setReply(e.target.value)} placeholder="Type a reply…" rows={1}
+          style={{ flex: 1, resize: "none", border: `1.5px solid ${V.cardBorder}`, borderRadius: 14, padding: "11px 14px", fontSize: 14, fontFamily: F, color: V.inkMid, outline: "none", maxHeight: 90 }} />
+        <button onClick={handleReply} disabled={sending || !reply.trim()}
+          style={{ width: 42, height: 42, borderRadius: 14, border: "none", flexShrink: 0,
+            background: sent ? V.success : reply.trim() ? V.ink : "rgba(0,0,0,0.08)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: reply.trim() ? "pointer" : "default" }}>
+          {sent ? <Ic n="check" s={16} c="white" /> : <Ic n="arrowR" s={16} c={reply.trim() ? "white" : V.muted} />}
+        </button>
+      </div>
+
+      {showLink && <InboxLinkSheet environmentId={environment?.id} onLink={handleLink} onClose={() => setShowLink(false)} />}
+    </div>
+  );
+};
+
+const InboxScreen = ({ environment, session }) => {
+  const toast = useToast();
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState("mine");
+  const [channel, setChannel] = useState("all");
+  const [channelCounts, setChannelCounts] = useState({});
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState(null);
+  const searchRef = useRef("");
+  const userId = session?.id || "";
+
+  const load = useCallback(async () => {
+    if (!environment?.id) return;
+    setError(null);
+    const params = new URLSearchParams({
+      environment_id: environment.id, filter, channel,
+      search: searchRef.current,
+      ...(userId ? { user_id: userId } : {}),
+    });
+    const res = await api.get(`/inbox?${params}`);
+    if (!res.ok) { setError(res.error); setLoading(false); return; }
+    setMessages(res.data?.messages || []);
+    setChannelCounts(res.data?.channel_counts || {});
+    setLoading(false);
+  }, [environment?.id, filter, channel, userId]);
+
+  useEffect(() => { setLoading(true); load(); }, [load]);
+  useEffect(() => { searchRef.current = search; const t = setTimeout(() => load(), 300); return () => clearTimeout(t); }, [search, load]);
+  useEffect(() => { const i = setInterval(load, 30000); return () => clearInterval(i); }, [load]);
+
+  const refresh = async () => { await load(); toast?.success?.("Refreshed"); };
+
+  const unreadCount = messages.filter(m => !m.read).length;
+  const filterTabs = INBOX_FILTERS.map(f => f.id === "unread" && unreadCount ? { ...f, label: `Unread (${unreadCount})` } : f);
+
+  const handleUpdate = (payload) => {
+    if (payload?.deleted) setSel(null);
+    load();
+  };
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
+      <div style={{ padding: "12px 16px 0", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px", marginBottom: 10 }}>
+          <Ic n="search" s={15} c={V.muted} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search messages…"
+            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
+        </div>
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10 }}>
+          {filterTabs.map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              style={{ padding: "7px 14px", borderRadius: 99, border: "none",
+                background: filter === f.id ? V.ink : "rgba(0,0,0,0.05)",
+                color: filter === f.id ? "white" : V.muted, fontSize: 12, fontWeight: 700,
+                fontFamily: F, cursor: "pointer", letterSpacing: "0.01em", whiteSpace: "nowrap" }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10 }}>
+          {INBOX_CHANNELS.map(c => {
+            const cnt = c.id !== "all" ? channelCounts[c.id] : null;
+            return (
+              <button key={c.id} onClick={() => setChannel(c.id)}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 99,
+                  border: `1.5px solid ${channel === c.id ? V.lavender : V.cardBorder}`,
+                  background: channel === c.id ? `${V.lavender}18` : "transparent",
+                  color: channel === c.id ? V.lavender : V.muted, fontSize: 11, fontWeight: 700,
+                  fontFamily: F, cursor: "pointer", whiteSpace: "nowrap" }}>
+                {c.label}{cnt > 0 && <span style={{ fontSize: 9, background: channel === c.id ? V.lavender : V.muted, color: "white", borderRadius: 99, padding: "1px 5px" }}>{cnt}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <PullToRefresh onRefresh={refresh} disabled={loading}>
+        {loading ? <Skeleton count={7} />
+          : error ? <ErrorState message={error} onRetry={load} />
+          : messages.length === 0 ? (
+            <EmptyState icon="inbox"
+              title={search ? "No matches" : "Inbox zero"}
+              body={search ? "Try a different search term" : "Nothing here right now."} />
+          )
+          : messages.map(m => {
+            const isUnread = !m.read;
+            const name = m.from_name || m.from_contact || m.from_email || "Unknown";
+            return (
+              <button key={m.id} onClick={() => setSel(m)}
+                style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 18px", background: isUnread ? "rgba(139,124,246,0.05)" : "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${V.cardBorder}` }}>
+                <Avatar name={name} size={40} color={isUnread ? V.lavender : V.muted} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: isUnread ? 800 : 600, color: V.inkMid, fontFamily: FD, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{name}</span>
+                    <span style={{ fontSize: 11, color: V.muted, fontFamily: F, flexShrink: 0 }}>{relTime(m.received_at)}</span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: isUnread ? 700 : 500, color: V.inkMid, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>
+                    {m.subject || "(no subject)"}
+                  </div>
+                  <div style={{ fontSize: 12, color: V.muted, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }}>
+                    {(m.body_text || "").slice(0, 90)}
+                  </div>
+                  <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                    {isUnread && <Badge label="NEW" color={V.lavender} />}
+                    {m.channel && m.channel !== "email" && <Badge label={m.channel.toUpperCase()} color={V.success} />}
+                    {m.matched_record
+                      ? <Badge label={`✓ ${m.matched_record.name}`} color={V.success} />
+                      : <Badge label="Unmatched" color={V.warning} />}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+      </PullToRefresh>
+
+      <Sheet open={!!sel} onClose={() => setSel(null)} title={sel ? (sel.from_name || sel.from_contact || sel.from_email || "Message") : ""} height="88vh">
+        {sel && <InboxDetail msgId={sel.id} environment={environment} onUpdate={handleUpdate} onClose={() => setSel(null)} />}
+      </Sheet>
+    </div>
+  );
+};
+
 // ─── MORE SCREEN ──────────────────────────────────────────────────────────────
-const MoreScreen = ({ session, onLogout }) => {
+const MoreScreen = ({ session, onLogout, onNavigate }) => {
   const toast = useToast();
   const [showDesktopConfirm, setShowDesktopConfirm] = useState(false);
 
@@ -1403,7 +2148,7 @@ const MoreScreen = ({ session, onLogout }) => {
 
   const items = [
     { icon: "user",    label: "Profile",          action: () => toast?.info?.("Profile editing coming soon") },
-    { icon: "inbox",   label: "Inbox",             action: () => toast?.info?.("Inbox coming soon to mobile") },
+    { icon: "inbox",   label: "Inbox",             action: () => onNavigate?.("inbox") },
     { icon: "refresh", label: "Sync data",         action: () => window.location.reload() },
     { icon: "monitor", label: "Switch to Desktop", action: () => setShowDesktopConfirm(true) },
     { icon: "alert",   label: "Report a problem",  action: () => { window.location.href = "mailto:support@vercentic.com?subject=Mobile%20app%20issue"; } },
@@ -1533,7 +2278,7 @@ export const MobileShell = ({ session, environment, envError, onRetryEnv, object
     { id: "jobs",       icon: "briefcase",label: "Jobs" },
     { id: "more",       icon: "more",     label: "More" },
   ];
-  const titles = { copilot: "Vercentic", candidates: "People", interviews: "Interviews", jobs: "Jobs", more: "More" };
+  const titles = { copilot: "Vercentic", candidates: "People", interviews: "Interviews", jobs: "Jobs", more: "More", inbox: "Inbox" };
 
   const NavIcon = ({ id, active }) => {
     if (id === "copilot") {
@@ -1601,10 +2346,11 @@ export const MobileShell = ({ session, environment, envError, onRetryEnv, object
 
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" }}>
         {screen === "copilot"    && <CopilotScreen session={session} environment={environment} onNavigate={setScreen} />}
-        {screen === "candidates" && <CandidatesScreen environment={environment} />}
+        {screen === "candidates" && <CandidatesScreen environment={environment} session={session} />}
         {screen === "interviews" && <InterviewsScreen environment={environment} />}
         {screen === "jobs"       && <JobsScreen environment={environment} />}
-        {screen === "more"       && <MoreScreen session={session} onLogout={() => {
+        {screen === "inbox"      && <InboxScreen environment={environment} session={session} />}
+        {screen === "more"       && <MoreScreen session={session} onNavigate={setScreen} onLogout={() => {
           localStorage.removeItem(_sessionKey());
           window.location.href = "/";
         }} />}
