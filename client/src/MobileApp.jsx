@@ -185,6 +185,51 @@ const Badge = ({ label, color }) => (
     color, fontFamily: F, whiteSpace: "nowrap", letterSpacing: "0.01em" }}>{label}</span>
 );
 
+// Compact pill toggle — used for the "All / Mine / My Jobs" slider.
+const Segmented = ({ options, value, onChange }) => (
+  <div style={{ display: "flex", background: "rgba(0,0,0,0.05)", borderRadius: 12, padding: 3, gap: 2 }}>
+    {options.map(opt => (
+      <button key={opt.id} onClick={() => onChange(opt.id)}
+        style={{
+          flex: 1, padding: "8px 6px", borderRadius: 9, border: "none", cursor: "pointer",
+          background: value === opt.id ? V.cardSolid : "transparent",
+          color: value === opt.id ? V.inkMid : V.muted,
+          fontSize: 12.5, fontWeight: 700, fontFamily: F,
+          boxShadow: value === opt.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+          transition: "all .18s", whiteSpace: "nowrap",
+        }}>
+        {opt.label}{opt.count != null ? ` (${opt.count})` : ""}
+      </button>
+    ))}
+  </div>
+);
+
+// "Mine" ownership check — mirrors Dashboard.jsx's DashFilterBtn.myJobs logic exactly,
+// so "my jobs" means the same thing on mobile as it does on desktop: the logged-in
+// user's name appears (as a substring match on first name) in any people-type
+// ownership field on the job, or a legacy text-field equivalent.
+const PEOPLE_OWNER_FIELDS = ["hiring_manager", "recruiter", "coordinator", "sourcing_partner", "interviewers", "approved_by", "interviewer"];
+const computeMyJobIds = (jobs, session) => {
+  const me = ((session?.first_name || "") + " " + (session?.last_name || "")).trim().toLowerCase();
+  if (!me) return new Set();
+  const firstName = me.split(" ")[0];
+  const mine = jobs.filter(j => {
+    const d = j.data || {};
+    const textFields = [d.owner, d.recruiter_name, d.coordinator_name].filter(Boolean).map(v => v.toLowerCase());
+    if (textFields.some(v => v.includes(firstName))) return true;
+    return PEOPLE_OWNER_FIELDS.some(key => {
+      const v = d[key];
+      if (!v) return false;
+      const arr = Array.isArray(v) ? v : [v];
+      return arr.some(p => {
+        const name = typeof p === "object" ? (p.name || "") : String(p);
+        return name.toLowerCase().includes(firstName);
+      });
+    });
+  });
+  return new Set(mine.map(j => j.id));
+};
+
 const Sheet = ({ open, onClose, title, children, height = "88vh" }) => {
   if (!open) return null;
   return (
@@ -766,8 +811,252 @@ const CandidateDetail = ({ record, onUpdate }) => {
   );
 };
 
+// ─── JOB PIPELINE DETAIL (self-contained; used by the "My Jobs" list below) ───
+// Mirrors JobsScreen's own pipeline-loading logic but is fully independent, so
+// this addition cannot affect the existing, already-shipped Jobs tab.
+const JobPipelineDetail = ({ job, environment }) => {
+  const toast = useToast();
+  const [pipelineStages, setPipelineStages] = useState([]);
+  const [pipelineLinks, setPipelineLinks] = useState([]);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [selStage, setSelStage] = useState(null);
+  const [moveCandidate, setMoveCandidate] = useState(null);
+  const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    if (!job?.id) return;
+    let cancelled = false;
+    setPipelineLoading(true);
+    (async () => {
+      const [assignRes, linksRes] = await Promise.all([
+        api.get(`/workflows/assignments?record_id=${job.id}`),
+        api.get(`/workflows/people-links?target_record_id=${job.id}`),
+      ]);
+      if (cancelled) return;
+      let stageList = [];
+      if (assignRes.ok && Array.isArray(assignRes.data) && assignRes.data.length > 0) {
+        const pipelineAssignment =
+          assignRes.data.find(a => a.type === "pipeline" || a.type === "people_link") ||
+          assignRes.data[0];
+        stageList = pipelineAssignment?.workflow?.steps || [];
+      }
+      if (!stageList.length && linksRes.ok) {
+        const firstLink = Array.isArray(linksRes.data) && linksRes.data[0];
+        if (firstLink?.workflow_steps?.length) stageList = firstLink.workflow_steps;
+      }
+      if (!stageList.length && environment?.id) {
+        const catRes = await api.get(`/stage-categories?environment_id=${environment.id}`);
+        if (!cancelled && catRes.ok && Array.isArray(catRes.data)) {
+          stageList = catRes.data.map(c => ({ id: c.id, name: c.name, color: c.color }));
+        }
+      }
+      setPipelineStages(stageList);
+      setPipelineLinks(Array.isArray(linksRes.data) ? linksRes.data : []);
+      setPipelineLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [job?.id, environment?.id]);
+
+  const handleMoveStage = async (targetStage) => {
+    if (!moveCandidate) return;
+    setMoving(true);
+    const res = await api.patch(`/workflows/people-links/${moveCandidate.id}`, {
+      stage_id: targetStage.id !== targetStage.name ? targetStage.id : undefined,
+      stage_name: targetStage.name,
+    });
+    if (res.ok) {
+      toast?.success?.(`Moved to ${targetStage.name}`);
+      setPipelineLinks(prev => prev.map(l =>
+        l.id === moveCandidate.id
+          ? { ...l, stage_id: targetStage.id, stage_name: targetStage.name }
+          : l
+      ));
+      if (selStage) {
+        const updatedLinks = pipelineLinks.map(l =>
+          l.id === moveCandidate.id ? { ...l, stage_name: targetStage.name } : l
+        );
+        setSelStage(prev => ({
+          ...prev,
+          candidates: updatedLinks.filter(l => (l.stage_name || "Unassigned") === prev.stage.name),
+        }));
+      }
+      setMoveCandidate(null);
+    } else {
+      toast?.error?.(res.error || "Could not move candidate");
+    }
+    setMoving(false);
+  };
+
+  const getStatus = j => j.data?.status || "Open";
+
+  return (
+    <div style={{ paddingBottom: 40, overflowY: "auto" }}>
+      <div style={{ padding: "20px 22px 0" }}>
+        {[
+          { l: "Department", v: job.data?.department, i: "layers" },
+          { l: "Location", v: job.data?.location, i: "map" },
+          { l: "Status", v: getStatus(job), i: "check" },
+          { l: "Type", v: job.data?.employment_type, i: "briefcase" },
+        ].filter(f => f.v).map((row, i, arr) => (
+          <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${V.cardBorder}` : "none", alignItems: "flex-start" }}>
+            <Ic n={row.i} s={15} c={V.muted} style={{ marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 2, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{row.l}</div>
+              <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, fontWeight: 500 }}>{row.v}</div>
+            </div>
+          </div>
+        ))}
+        {job.data?.description && (
+          <div style={{ marginTop: 18, padding: 14, background: "rgba(0,0,0,0.02)", borderRadius: 12, marginBottom: 4 }}>
+            <div style={{ fontSize: 10, color: V.muted, fontFamily: F, marginBottom: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Description</div>
+            <div style={{ fontSize: 14, color: V.inkMid, fontFamily: F, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{job.data.description}</div>
+          </div>
+        )}
+      </div>
+
+      <JobPipelineSection
+        job={job}
+        environment={environment}
+        stages={pipelineStages}
+        links={pipelineLinks}
+        loading={pipelineLoading}
+        onStageSelect={(stage, candidates) => setSelStage({ stage, candidates })}
+      />
+
+      <Sheet
+        open={!!selStage}
+        onClose={() => { setSelStage(null); setMoveCandidate(null); }}
+        title={selStage ? `${selStage.stage.name} (${pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name).length})` : ""}
+        height="82vh">
+        {selStage && (
+          <StageCandidateList
+            candidates={pipelineLinks.filter(l => (l.stage_name || "Unassigned") === selStage.stage.name)}
+            stages={pipelineStages}
+            currentStageName={selStage.stage.name}
+            onMoveRequest={(link) => setMoveCandidate(link)}
+          />
+        )}
+      </Sheet>
+
+      <Sheet
+        open={!!moveCandidate}
+        onClose={() => setMoveCandidate(null)}
+        title="Move to stage"
+        height="auto">
+        {moveCandidate && (
+          <div style={{ padding: "12px 16px 40px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {pipelineStages.filter(s => s.name !== moveCandidate.stage_name).map((stage, idx) => {
+              const col = stage.color || statusColor(stage.name);
+              return (
+                <button key={stage.id || idx}
+                  onClick={() => handleMoveStage(stage)}
+                  disabled={moving}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "15px 16px",
+                    background: V.cardSolid, borderRadius: 14, border: `1px solid ${V.cardBorder}`,
+                    cursor: moving ? "default" : "pointer", textAlign: "left",
+                    opacity: moving ? 0.6 : 1, boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                  onTouchStart={e => { if (!moving) e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                  onTouchEnd={e => { e.currentTarget.style.background = V.cardSolid; }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%",
+                    background: col, flexShrink: 0, boxShadow: `0 0 0 2px ${col}28` }} />
+                  <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: V.inkMid, fontFamily: F }}>{stage.name}</span>
+                  {moving && <Ic n="refresh" s={14} c={V.muted} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
+    </div>
+  );
+};
+
+// Shared job card — used by both "My Jobs" and (in future) other job lists.
+const JobCard = ({ job, onClick }) => {
+  const getTitle = j => j.data?.job_title || j.data?.title || "Untitled Role";
+  const status = job.data?.status || "Open";
+  const col = statusColor(status);
+  return (
+    <button onClick={onClick}
+      style={{ background: V.cardSolid, borderRadius: 18, border: `1px solid ${V.cardBorder}`, padding: 18, textAlign: "left", cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderLeft: `4px solid ${col}`, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: V.inkMid, fontFamily: FD, flex: 1, marginRight: 10, letterSpacing: "-0.03em", lineHeight: 1.2 }}>{getTitle(job)}</div>
+        <Badge label={status} color={col} />
+      </div>
+      {job.data?.department && <div style={{ fontSize: 13, color: V.muted, fontFamily: F, marginBottom: 5 }}>{job.data.department}</div>}
+      {job.data?.location && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Ic n="map" s={11} c={V.muted} /><span style={{ fontSize: 12, color: V.muted, fontFamily: F }}>{job.data.location}</span></div>}
+    </button>
+  );
+};
+
+// "My Jobs" — the jobs slice of the mobile Candidates/Jobs slider.
+const MyJobsList = ({ jobs, environment }) => {
+  const [selJob, setSelJob] = useState(null);
+  if (!jobs.length) {
+    return <EmptyState icon="briefcase" title="No jobs assigned to you"
+      body="Jobs where you're listed as hiring manager, recruiter or coordinator will show up here" />;
+  }
+  return (
+    <>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {jobs.map(j => <JobCard key={j.id} job={j} onClick={() => setSelJob(j)} />)}
+      </div>
+      <Sheet open={!!selJob} onClose={() => setSelJob(null)}
+        title={selJob ? (selJob.data?.job_title || selJob.data?.title || "Untitled Role") : ""} height="90vh">
+        {selJob && <JobPipelineDetail job={selJob} environment={environment} />}
+      </Sheet>
+    </>
+  );
+};
+
+// "My Candidates" — grouped by workflow-stage category (or "Not in a pipeline
+// yet" for candidates added directly rather than via a job pipeline).
+const MyCandidatesList = ({ groups, onSelect }) => {
+  if (!groups.length) {
+    return <EmptyState icon="users" title="No candidates yet"
+      body="Candidates you've added, or applicants to your jobs, will show up here" />;
+  }
+  const getName = r => [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.email || "Unnamed";
+  const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
+  const colorFor = n => { let h = 0; for (let c of n) h += c.charCodeAt(0); return palette[h % palette.length]; };
+  return (
+    <div style={{ padding: "14px 14px 4px" }}>
+      {groups.map(group => (
+        <div key={group.category.id} style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", marginBottom: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: group.category.color || V.muted }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: V.muted, fontFamily: F, letterSpacing: "0.04em", textTransform: "uppercase" }}>{group.category.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: V.faint, fontFamily: F }}>({group.candidates.length})</span>
+          </div>
+          <div style={{ background: V.cardSolid, borderRadius: 16, border: `1px solid ${V.cardBorder}`, overflow: "hidden" }}>
+            {group.candidates.map((r, i) => {
+              const name = getName(r);
+              const col = colorFor(name);
+              return (
+                <button key={r.id} onClick={() => onSelect(r)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: i < group.candidates.length - 1 ? `1px solid ${V.cardBorder}` : "none" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: col, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "white", fontFamily: F, flexShrink: 0 }}>
+                    {name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: V.inkMid, fontFamily: FD, letterSpacing: "-0.01em" }}>{name}</div>
+                    <div style={{ fontSize: 12, color: V.muted, fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.data?.current_title || r.data?.job_title || r.data?.email || "No title"}</div>
+                  </div>
+                  <Ic n="chevR" s={14} c={V.muted} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── CANDIDATES SCREEN ────────────────────────────────────────────────────────
-const CandidatesScreen = ({ environment }) => {
+const CandidatesScreen = ({ environment, session }) => {
   const toast = useToast();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -775,6 +1064,16 @@ const CandidatesScreen = ({ environment }) => {
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState(null);
   const [objectId, setObjectId] = useState(null);
+
+  // "My Candidates" / "My Jobs" slider — lazily loaded on first switch away
+  // from "All" so the default view (unchanged behaviour) never pays for it.
+  const [mode, setMode] = useState("all"); // 'all' | 'mine' | 'myjobs'
+  const [mineLoaded, setMineLoaded] = useState(false);
+  const [mineLoading, setMineLoading] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  const [peopleLinks, setPeopleLinks] = useState([]);
+  const [stageCategories, setStageCategories] = useState([]);
+  const [myAddedCandidates, setMyAddedCandidates] = useState([]);
 
   const load = useCallback(async () => {
     if (!environment?.id) return;
@@ -800,6 +1099,104 @@ const CandidatesScreen = ({ environment }) => {
     setSel(updated);
   };
 
+  // Lazily load everything "My Candidates" / "My Jobs" need, the first time
+  // either mode is selected. Deliberately kept separate from `records`/`load`
+  // above so the default "All" tab's payload and behaviour never change.
+  useEffect(() => {
+    if (mode === "all" || mineLoaded || !environment?.id || !objectId) return;
+    let cancelled = false;
+    setMineLoading(true);
+    (async () => {
+      const objsRes = await api.get(`/objects?environment_id=${environment.id}`);
+      const objs = objsRes.ok && Array.isArray(objsRes.data) ? objsRes.data : [];
+      const jobsObj = objs.find(o => o.slug === "jobs" || o.name?.toLowerCase().includes("job"));
+      const [jobsRes, linksRes, catRes, addedRes] = await Promise.all([
+        jobsObj
+          ? api.get(`/records?object_id=${jobsObj.id}&environment_id=${environment.id}&limit=200`)
+          : Promise.resolve({ ok: false }),
+        api.get(`/workflows/people-links?environment_id=${environment.id}`),
+        api.get(`/stage-categories?environment_id=${environment.id}`),
+        api.get(`/records?object_id=${objectId}&environment_id=${environment.id}&limit=200&sort=created_at&order=desc`),
+      ]);
+      if (cancelled) return;
+      setJobs(jobsRes.ok ? (jobsRes.data?.records || []) : []);
+      setPeopleLinks(linksRes.ok ? (Array.isArray(linksRes.data) ? linksRes.data : []) : []);
+      setStageCategories(catRes.ok && Array.isArray(catRes.data) ? catRes.data : []);
+      const addedAll = addedRes.ok ? (addedRes.data?.records || []) : [];
+      setMyAddedCandidates(session?.id ? addedAll.filter(r => r.created_by === session.id) : []);
+      setMineLoaded(true);
+      setMineLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [mode, mineLoaded, environment?.id, objectId, session?.id]);
+
+  const myJobIds = useMemo(() => computeMyJobIds(jobs, session), [jobs, session]);
+  const myJobsFiltered = useMemo(() => jobs.filter(j => myJobIds.has(j.id)), [jobs, myJobIds]);
+
+  // Candidates who are either applicants to one of "my" jobs, or that I
+  // personally added — the explicit OR condition requested — grouped by the
+  // category of their current workflow stage (people_link.stage → step →
+  // category_id → stage_categories). Candidates with no stage/category (e.g.
+  // added directly, not yet in a pipeline) fall into a synthetic last group.
+  const myCandidateGroups = useMemo(() => {
+    if (!mineLoaded) return [];
+    const byId = new Map();
+    peopleLinks.forEach(link => {
+      const targetId = link.target_record_id || link.job_id || link.record_id;
+      if (!targetId || !myJobIds.has(targetId)) return;
+      const personId = link.person_record_id || link.person_id;
+      if (!personId) return;
+      const linkUpdated = link.updated_at || link.created_at || "";
+      const existing = byId.get(personId);
+      if (!existing || linkUpdated > existing._linkUpdated) {
+        byId.set(personId, {
+          id: personId,
+          data: link.person_data || {},
+          _stageId: link.stage_id ?? link.current_stage_id,
+          _stageName: link.stage_name || link.current_stage_name,
+          _steps: link.workflow_steps || [],
+          _linkUpdated: linkUpdated,
+        });
+      }
+    });
+    myAddedCandidates.forEach(r => {
+      if (byId.has(r.id)) return;
+      byId.set(r.id, { id: r.id, data: r.data || {}, _stageId: null, _stageName: null, _steps: [], _linkUpdated: "" });
+    });
+
+    const catById = new Map(stageCategories.map(c => [c.id, c]));
+    const stagePalette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E", "#7BA5C9"];
+    const colorForStage = n => { let h = 0; for (const c of n) h += c.charCodeAt(0); return stagePalette[h % stagePalette.length]; };
+    const NONE_CATEGORY = { id: "_none", name: "Not in a pipeline yet", color: V.muted, sort_order: Infinity };
+    const groupsById = new Map();
+    byId.forEach(entry => {
+      let category = null;
+      let step = null;
+      if (entry._stageId != null && entry._steps?.length) {
+        step = entry._steps.find(s => s.id === entry._stageId || s.name === entry._stageName);
+        if (step?.category_id) category = catById.get(step.category_id);
+      }
+      if (!category) {
+        // No formal stage-category configured for this workflow step (common
+        // until an admin sets one up) — fall back to grouping by the stage's
+        // own name, in its pipeline order, so "grouped by category of
+        // workflow stage" still means something useful today. Only
+        // candidates with no stage/link at all land in "Not in a pipeline yet".
+        const stageLabel = entry._stageName || (step && step.name);
+        category = stageLabel
+          ? { id: `stage:${stageLabel}`, name: stageLabel, color: colorForStage(stageLabel), sort_order: step?.sort_order ?? step?.order ?? 500 }
+          : NONE_CATEGORY;
+      }
+      if (!groupsById.has(category.id)) groupsById.set(category.id, { category, candidates: [] });
+      groupsById.get(category.id).candidates.push(entry);
+    });
+    return Array.from(groupsById.values()).sort((a, b) =>
+      (a.category.sort_order ?? 999) - (b.category.sort_order ?? 999)
+    );
+  }, [mineLoaded, peopleLinks, myJobIds, myAddedCandidates, stageCategories]);
+
+  const totalMineCount = myCandidateGroups.reduce((s, g) => s + g.candidates.length, 0);
+
   const getName = r => [r.data?.first_name, r.data?.last_name].filter(Boolean).join(" ") || r.data?.email || "Unnamed";
   const palette = [V.lavender, V.rose, V.sage, V.lilac, "#C8A87E"];
   const colorFor = n => { let h = 0; for (let c of n) h += c.charCodeAt(0); return palette[h % palette.length]; };
@@ -812,15 +1209,42 @@ const CandidatesScreen = ({ environment }) => {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
-      <div style={{ padding: "12px 16px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px" }}>
-          <Ic n="search" s={15} c={V.muted} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search candidates…"
-            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
-        </div>
+      <div style={{ padding: "12px 16px 10px", background: V.cardSolid, borderBottom: `1px solid ${V.cardBorder}` }}>
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { id: "all", label: "All", count: records.length },
+            { id: "mine", label: "My Candidates", count: mineLoaded ? totalMineCount : null },
+            { id: "myjobs", label: "My Jobs", count: mineLoaded ? myJobsFiltered.length : null },
+          ]}
+        />
+        {mode === "all" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 14, padding: "10px 14px", marginTop: 10 }}>
+            <Ic n="search" s={15} c={V.muted} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search candidates…"
+              style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontFamily: F, color: V.inkMid, outline: "none" }} />
+          </div>
+        )}
       </div>
 
-      <PullToRefresh onRefresh={refresh} disabled={loading}>
+      {mode === "mine" && (
+        mineLoading && !mineLoaded
+          ? <div style={{ padding: "16px 22px" }}><Skeleton count={5} /></div>
+          : <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <MyCandidatesList groups={myCandidateGroups} onSelect={r => setSel(r)} />
+            </div>
+      )}
+
+      {mode === "myjobs" && (
+        mineLoading && !mineLoaded
+          ? <div style={{ padding: "16px 22px" }}><Skeleton count={5} type="card" /></div>
+          : <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <MyJobsList jobs={myJobsFiltered} environment={environment} />
+            </div>
+      )}
+
+      {mode === "all" && <PullToRefresh onRefresh={refresh} disabled={loading}>
         {loading ? <Skeleton count={8} />
           : error ? <ErrorState message={error} onRetry={load} />
           : filtered.length === 0 ? (
@@ -852,7 +1276,7 @@ const CandidatesScreen = ({ environment }) => {
               </SwipeRow>
             );
           })}
-      </PullToRefresh>
+      </PullToRefresh>}
 
       {!loading && !error && (
         <FAB icon="plus" label="Add candidate"
@@ -1922,7 +2346,7 @@ export const MobileShell = ({ session, environment, envError, onRetryEnv, object
 
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" }}>
         {screen === "copilot"    && <CopilotScreen session={session} environment={environment} onNavigate={setScreen} />}
-        {screen === "candidates" && <CandidatesScreen environment={environment} />}
+        {screen === "candidates" && <CandidatesScreen environment={environment} session={session} />}
         {screen === "interviews" && <InterviewsScreen environment={environment} />}
         {screen === "jobs"       && <JobsScreen environment={environment} />}
         {screen === "inbox"      && <InboxScreen environment={environment} session={session} />}
