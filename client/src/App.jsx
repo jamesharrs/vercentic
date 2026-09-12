@@ -122,7 +122,30 @@ function _sessionKey() {
 })();
 
 const MatchingEngine    = lazyWithRetry(() => import("./AI.jsx").then(m => ({ default: m.MatchingEngine })));
-const useInboxUnreadCount = () => 0; // lightweight stub until Inbox lazy-loads
+// Real polling hook for the sidebar badge. Inbox.jsx also exports its own
+// (identical in spirit) useInboxUnreadCount, but that module is loaded via
+// React.lazy()/dynamic import() for the heavy InboxModule component — hooks
+// can't be pulled out of a lazy-loaded module and called unconditionally at
+// the top of App's render, so this was previously stubbed to always return 0,
+// meaning the sidebar badge never showed a count. This is a small, self
+// contained duplicate that polls the same endpoint directly.
+function useInboxUnreadCount(environmentId) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!environmentId) { setCount(0); return; }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const d = await api.get(`/inbox/unread-count?environment_id=${environmentId}`);
+        if (!cancelled) setCount(d.count || 0);
+      } catch {}
+    };
+    poll();
+    const i = setInterval(poll, 30000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, [environmentId]);
+  return count;
+}
 const useIsMobile       = () => {
   if (typeof window === 'undefined') return false;
   // Allow the mobile app's "Switch to Desktop" action to override detection
