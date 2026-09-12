@@ -158,13 +158,18 @@ router.post('/', async (req, res) => {
 
 // ─── Update / delete ──────────────────────────────────────────────────────────
 router.patch('/:id', (req, res) => {
-  const updated = update('communications', req.params.id, { ...req.body, updated_at: new Date().toISOString() });
+  // update()/remove() (server/db/init.js) take a *predicate function*, not a
+  // bare id — passing req.params.id directly used to throw a TypeError inside
+  // Array.prototype.findIndex/filter (predicate is not a function) any time
+  // either route was hit. Fixed 2026-09-12; see other routes (e.g. records.js,
+  // roles.js) for the same r => r.id === req.params.id convention.
+  const updated = update('communications', r => r.id === req.params.id, { ...req.body, updated_at: new Date().toISOString() });
   if (!updated) return res.status(404).json({ error: 'Not found' });
   res.json(updated);
 });
 
 router.delete('/:id', (req, res) => {
-  remove('communications', req.params.id);
+  remove('communications', r => r.id === req.params.id);
   res.json({ ok: true });
 });
 
