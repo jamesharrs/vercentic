@@ -91,7 +91,8 @@ router.get('/', (req, res) => {
   });
   let messages = Array.from(threadMap.values());
 
-  // 4. "Mine" — threads I replied to, OR candidates linked to jobs I own.
+  // 4. "Mine" — threads I replied to, candidates linked to jobs I own, OR
+  // messages explicitly assigned to me via PATCH /:id/assign.
   // "Own" mirrors the app-wide convention used on desktop/mobile (see
   // MobileApp.jsx computeMyJobIds / Dashboard.jsx peopleFields): the user's
   // first name appears as a substring match in a job's owner-type fields.
@@ -132,7 +133,7 @@ router.get('/', (req, res) => {
     const myPersonIds = new Set(
       (store.people_links || []).filter(l => myJobIds.has(l.record_id)).map(l => l.person_id)
     );
-    messages = messages.filter(m => myThreads.has(m.thread_id) || myPersonIds.has(m.matched_record_id));
+    messages = messages.filter(m => myThreads.has(m.thread_id) || myPersonIds.has(m.matched_record_id) || m.assigned_to === user_id);
   }
 
   // 5. Standard filters
