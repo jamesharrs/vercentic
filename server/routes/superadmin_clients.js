@@ -5,9 +5,30 @@ const { v4: uuidv4 } = require('uuid');
 const crypto  = require('crypto');
 const { getStore, saveStore, saveStoreNow, tenantStorage, provisionTenant, loadTenantStore } = require('../db/init');
 const { requireSuperAdmin } = require('../middleware/rbac');
+const { calcCost } = require('./ai_credits');
+const { FEATURE_LABELS } = require('../config/ai_features');
 
 const bcrypt = require('bcryptjs');
 const hashPassword = (pw) => bcrypt.hashSync(pw, 12);
+
+// Every route in this file operates on the MASTER store (clients, environments,
+// provisioned users) and only ever touches a specific tenant's own data
+// explicitly via getTenantStore(slug) above — never via the ambient tenant
+// context. But tenantMiddleware (server/middleware/tenant.js) only pins the
+// AsyncLocalStorage tenant context to the session's own tenantSlug when that
+// slug is a *non-master* tenant; a session with tenantSlug==='master' (exactly
+// what a real superadmin login produces) falls through to that middleware's
+// "no active session" branch, which resolves the tenant from DEV_TENANT/host
+// inference instead. In local dev with DEV_TENANT set to a real tenant slug,
+// that silently pins EVERY request here to the wrong tenant store, so
+// requireSuperAdmin's resolveUser() can never find the super admin's own user
+// record (it only exists in master) and every route 401s despite a valid,
+// correctly-authenticated session. Force master explicitly, mirroring the
+// identical guard superadmin.js already uses for its own routes (e.g. /auth).
+router.use((req, res, next) => {
+  req.session.tenantSlug = 'master';
+  tenantStorage.run('master', next);
+});
 
 // Client provisioning, impersonation-token minting, user PATCH (incl. password
 // reset for any tenant user), and tenant deletion all live in this router with
@@ -543,6 +564,111 @@ router.get('/:id/activity', (req, res) => {
   const total = events.length;
   const sliced = events.slice((pageNum-1)*limitNum, pageNum*limitNum);
   res.json({ events: sliced, items: sliced, total });
+});
+
+// ── GET /:id/ai-usage — AI usage scoped to this client's own tenant store ─────
+// Mirrors the cross-tenant computation in superadmin_perf.js's /ai-usage route
+// (same calcCost/FEATURE_LABELS helpers, same totals/daily/by_feature shape)
+// but reads only this client's tenant store instead of aggregating every
+// tenant — ai_usage_log entries have no inherent client_id/tenant_slug field
+// of their own (see trackAIUsage() in admin_dashboard.js), they're isolated
+// purely by which tenant store they were insert()-ed into at request time.
+router.get('/:id/ai-usage', (req, res) => {
+  try {
+    const s = getStore(); ensureCollections();
+    const client = (s.clients||[]).find(c=>c.id===req.params.id&&!c.deleted_at);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const { page=1, limit=30, feature, search } = req.query;
+    const pageNum = parseInt(page), limitNum = parseInt(limit);
+
+    const logs = client.tenant_slug ? (getTenantStore(client.tenant_slug).ai_usage_log || []) : [];
+
+    const now = Date.now();
+    const nowIso = new Date().toISOString();
+    const d30ago = new Date(now - 30 * 86400000).toISOString();
+    const d7ago  = new Date(now - 7  * 86400000).toISOString();
+    const monthStart     = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    const lastMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString();
+    const lastMonthEnd   = monthStart;
+
+    const recent30   = logs.filter(l => l.created_at >= d30ago);
+    const recent7    = logs.filter(l => l.created_at >= d7ago);
+    const thisMonth  = logs.filter(l => l.created_at >= monthStart);
+    const lastMonth  = logs.filter(l => l.created_at >= lastMonthStart && l.created_at < lastMonthEnd);
+
+    const totals = arr => ({
+      calls: arr.length,
+      tokens_in:  arr.reduce((sum,l)=>sum+(l.tokens_in ||0),0),
+      tokens_out: arr.reduce((sum,l)=>sum+(l.tokens_out||0),0),
+      cost: calcCost(
+        arr.reduce((sum,l)=>sum+(l.tokens_in ||0),0),
+        arr.reduce((sum,l)=>sum+(l.tokens_out||0),0)
+      ),
+    });
+
+    // Daily breakdown — last 30 days
+    const daily = [];
+    for (let d = 29; d >= 0; d--) {
+      const dayStart = new Date(now - (d+1) * 86400000).toISOString();
+      const dayEnd   = new Date(now - d     * 86400000).toISOString();
+      const slice = logs.filter(l => l.created_at >= dayStart && l.created_at < dayEnd);
+      daily.push({
+        date: new Date(now - d * 86400000).toISOString().slice(0,10),
+        calls: slice.length,
+        cost: calcCost(
+          slice.reduce((sum,l)=>sum+(l.tokens_in ||0),0),
+          slice.reduce((sum,l)=>sum+(l.tokens_out||0),0)
+        ),
+      });
+    }
+
+    // By feature (last 30 days)
+    const featureMap = {};
+    recent30.forEach(l => {
+      const f = l.feature || 'unknown';
+      if (!featureMap[f]) featureMap[f] = { feature:f, label:FEATURE_LABELS[f]||f, calls:0, tokens_in:0, tokens_out:0 };
+      featureMap[f].calls++;
+      featureMap[f].tokens_in  += l.tokens_in  || 0;
+      featureMap[f].tokens_out += l.tokens_out || 0;
+    });
+    const by_feature = Object.values(featureMap)
+      .map(f => ({ ...f, cost: calcCost(f.tokens_in, f.tokens_out) }))
+      .sort((a,b)=>b.calls-a.calls);
+
+    // Paginated, filterable log list (newest first) — same fields as the
+    // global report's Usage Log tab, including the redacted prompt_snippet
+    let filtered = logs;
+    if (feature && feature !== 'all') filtered = filtered.filter(l => l.feature === feature);
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(l =>
+        (l.user_email||'').toLowerCase().includes(q) ||
+        (l.feature||'').toLowerCase().includes(q) ||
+        (l.prompt_snippet||'').toLowerCase().includes(q)
+      );
+    }
+    filtered = [...filtered].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const total = filtered.length;
+    const pagedLogs = filtered.slice((pageNum-1)*limitNum, pageNum*limitNum);
+
+    res.json({
+      this_month: totals(thisMonth),
+      last_month: totals(lastMonth),
+      last_7d:    totals(recent7),
+      last_30d:   totals(recent30),
+      daily,
+      by_feature,
+      logs: pagedLogs,
+      total,
+      page: pageNum,
+      total_logs: logs.length,
+      generated_at: nowIso,
+    });
+  } catch(err) {
+    console.error('[clients/:id/ai-usage]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── POST /:id/add-environment — add env to existing client ────────────────────

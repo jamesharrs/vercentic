@@ -621,6 +621,139 @@ function ClientActivityTab({ clientId }) {
   );
 }
 
+// ── Client AI Usage Tab ────────────────────────────────────────────────────────
+// Same computation shape as the cross-tenant AIUsageReport.jsx (totals/daily/
+// by_feature/cost via calcCost — see server/routes/superadmin_perf.js), but
+// scoped server-side to just this client's own tenant store, via
+// GET /api/superadmin/clients/:id/ai-usage.
+function ClientAIUsageTab({ clientId, hasTenant }) {
+  const [data, setData] = useState(null);
+  const [logs, setLogs] = useState([]); const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [feature, setFeature] = useState(''); const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState(null);
+  const LIMIT = 25;
+  const fmtN = n => n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${(n/1e3).toFixed(1)}K`:String(n||0);
+  const fmtCost = n => `$${(n||0).toFixed(2)}`;
+
+  const load = () => {
+    if (!hasTenant) { setLoading(false); return; }
+    setLoading(true);
+    const q = new URLSearchParams({ page, limit: LIMIT, ...(feature&&{feature}), ...(search&&{search}) });
+    saFetch(`/api/superadmin/clients/${clientId}/ai-usage?${q}`)
+      .then(r=>r.json()).then(d=>{
+        if (d.error) { setLoading(false); return; }
+        setData(d); setLogs(d.logs||[]); setTotal(d.total||0); setLoading(false);
+      })
+      .catch(()=>setLoading(false));
+  };
+  useEffect(()=>{ load(); },[clientId,page,feature]);
+  useEffect(()=>{ setPage(1); },[search,feature]);
+
+  if (!hasTenant) return <div style={{...cardSt,padding:40,textAlign:'center',color:C.text3}}>This client has no tenant environment yet — AI usage can't be tracked until one is provisioned.</div>;
+  if (loading && !data) return <div style={{padding:40,textAlign:'center',color:C.text3}}>Loading…</div>;
+  if (!data) return <div style={{padding:40,textAlign:'center',color:C.red}}>Failed to load usage data.</div>;
+
+  const maxDaily = Math.max(...(data.daily||[]).map(d=>d.calls), 1);
+
+  return (
+    <div>
+      {/* KPI row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:16}}>
+        {[
+          ['Calls this month', fmtN(data.this_month.calls), C.accent],
+          ['Tokens (in/out)', `${fmtN(data.this_month.tokens_in)} / ${fmtN(data.this_month.tokens_out)}`, C.cyan],
+          ['Est. cost this month', fmtCost(data.this_month.cost), C.amber],
+          ['Total logs (all time)', fmtN(data.total_logs), C.purple],
+        ].map(([label,val,color])=>(
+          <div key={label} style={{...cardSt,padding:'14px 16px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>{label}</div>
+            <div style={{fontSize:20,fontWeight:800,color}}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Daily calls (30d) + By feature */}
+      <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:16,marginBottom:16}}>
+        <div style={cardSt}>
+          <div style={{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em'}}>Daily calls — last 30 days</div>
+          <div style={{padding:'16px 18px'}}>
+            <div style={{display:'flex',gap:1,alignItems:'flex-end',height:60}}>
+              {(data.daily||[]).map((d,i)=>(
+                <div key={i} title={`${d.date}: ${d.calls} calls · ${fmtCost(d.cost)}`}
+                  style={{flex:1,background:d.calls>0?C.accent:`${C.accent}20`,height:`${Math.max((d.calls/maxDaily)*100, d.calls>0?4:1)}%`,borderRadius:'2px 2px 0 0',minHeight:d.calls>0?2:1}}/>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={cardSt}>
+          <div style={{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:700,color:C.text3,textTransform:'uppercase',letterSpacing:'0.06em'}}>By feature (30d)</div>
+          {!data.by_feature?.length ? <div style={{padding:20,textAlign:'center',color:C.text3,fontSize:12}}>No usage yet.</div>
+          : data.by_feature.map(f=>(
+            <div key={f.feature} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 18px',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+              <span style={{flex:1,color:C.text1,fontWeight:600}}>{f.label}</span>
+              <span style={{color:C.text3}}>{f.calls} calls</span>
+              <span style={{color:C.amber,fontWeight:700,width:56,textAlign:'right'}}>{fmtCost(f.cost)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Usage log */}
+      <div style={cardSt}>
+        <div style={{display:'flex',gap:8,padding:'12px 18px',borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&load()} placeholder="Search user, feature, prompt…"
+            style={{flex:1,padding:'7px 11px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text1,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+          <select value={feature} onChange={e=>setFeature(e.target.value)}
+            style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#1e2433',color:C.text2,fontSize:12,fontFamily:'inherit'}}>
+            <option value="">All features</option>
+            {(data.by_feature||[]).map(f=><option key={f.feature} value={f.feature}>{f.label}</option>)}
+          </select>
+          <span style={{fontSize:11,color:C.text3,whiteSpace:'nowrap'}}>{total} logs</span>
+        </div>
+        {!logs.length ? <div style={{padding:40,textAlign:'center',color:C.text3}}>No usage logs found.</div>
+        : logs.map((l,i)=>{
+          // ai_usage_log entries have no `id` field (insert()/trackAIUsage() never
+          // assign one — confirmed against live data), so key on a composite of
+          // stable fields + position instead, unique within this paginated,
+          // stably-sorted (by created_at desc) page.
+          const rowKey = l.id || `${l.created_at}_${l.user_id}_${l.feature}_${i}`;
+          const isActive = selected===l;
+          return (
+            <div key={rowKey} onClick={()=>setSelected(isActive?null:l)} style={{padding:'10px 18px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',background:isActive?`${C.accent}10`:undefined}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:`${C.purple}20`,color:C.purple,border:`1px solid ${C.purple}40`,flexShrink:0}}>{l.feature||'unknown'}</span>
+                <span style={{fontSize:12,color:C.text2,flexShrink:0}}>{l.user_email||l.user_name||'system'}</span>
+                <span style={{fontSize:11,color:C.text3,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.prompt_snippet||'—'}</span>
+                <span style={{fontSize:11,color:C.cyan,flexShrink:0}}>{fmtN(l.tokens_in)}→{fmtN(l.tokens_out)}</span>
+                <span style={{fontSize:11,color:C.amber,fontWeight:700,flexShrink:0,width:48,textAlign:'right'}}>{fmtCost(calcCostClient(l.tokens_in,l.tokens_out))}</span>
+                <span style={{fontSize:10,color:C.text3,flexShrink:0,width:110,textAlign:'right'}}>{new Date(l.created_at).toLocaleString()}</span>
+              </div>
+              {isActive && l.prompt_snippet && (
+                <div style={{marginTop:8,padding:'8px 10px',borderRadius:6,background:C.surface2,border:`1px solid ${C.border}`,fontSize:11,color:C.text2,fontFamily:'monospace',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{l.prompt_snippet}</div>
+              )}
+            </div>
+          );
+        })}
+        {total>LIMIT&&(
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 18px'}}>
+            <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page>1?'pointer':'default',fontFamily:'inherit'}}>← Prev</button>
+            <span style={{fontSize:11,color:C.text3}}>Page {page} of {Math.ceil(total/LIMIT)}</span>
+            <button disabled={page>=Math.ceil(total/LIMIT)} onClick={()=>setPage(p=>p+1)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.text2,fontSize:12,cursor:page<Math.ceil(total/LIMIT)?'pointer':'default',fontFamily:'inherit'}}>Next →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+// Client-side cost estimate for a single log row — mirrors calcCost()'s default
+// (Anthropic raw cost) server-side formula so per-row costs match the totals
+// above without a round-trip per row.
+function calcCostClient(tokensIn, tokensOut) {
+  return ((tokensIn||0)/1e6)*3 + ((tokensOut||0)/1e6)*15;
+}
+
 // ── Create Client User Modal ──────────────────────────────────────────────────
 function CreateClientUserModal({ client, onClose, onCreated }) {
   const [form, setForm] = useState({ first_name:'', last_name:'', email:'', role_id:'', environment_id:'', password:'' });
@@ -941,7 +1074,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
       )}
 
       <div style={{display:'flex',gap:4,marginBottom:16,background:C.surface2,borderRadius:10,padding:4,width:'fit-content'}}>
-        {[['overview','Overview'],['environments','Environments'],['users','Users'],['demo','Demo Data'],['errors','Error Logs'],['activity','Activity'],['log','Provision Log'],['diagnose','✦ AI Diagnose']].map(([id,label])=>(
+        {[['overview','Overview'],['environments','Environments'],['users','Users'],['demo','Demo Data'],['errors','Error Logs'],['activity','Activity'],['ai_usage','AI Usage'],['log','Provision Log'],['diagnose','✦ AI Diagnose']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={TAB(id)}>{label}</button>
         ))}
       </div>
@@ -1303,6 +1436,7 @@ export function ClientDetail({ clientId, onBack, onProvisionEnv }) {
 
       {tab==='errors' && <ClientErrorLogsTab clientId={clientId}/>}
       {tab==='activity' && <ClientActivityTab clientId={clientId}/>}
+      {tab==='ai_usage' && <ClientAIUsageTab clientId={clientId} hasTenant={!!client.tenant_slug}/>}
 
       {tab==='log' && (
         <div style={cardSt}>

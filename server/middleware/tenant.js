@@ -38,7 +38,22 @@ function tenantMiddleware(req, res, next) {
   // If the session has a tenantSlug, the user already authenticated into a specific
   // tenant. Lock them to it — do not allow headers or query params to override.
   const sessionTenant = req.session?.tenantSlug;
-  if (sessionTenant && sessionTenant !== 'master') {
+  if (sessionTenant) {
+    // A session pinned to 'master' (e.g. a super admin login) is always locked
+    // to the master store — never re-derived from X-Tenant-Slug/host/DEV_TENANT.
+    // Previously this case (sessionTenant === 'master') fell through to branch 2
+    // below ("no active session"), which in local dev (DEV_TENANT set) — or in
+    // prod via host-based subdomain inference — silently re-pinned an already-
+    // authenticated master session to the wrong tenant. resolveUser() could then
+    // never find the super admin's own user record (it only exists in master),
+    // so every super-admin-gated route 401'd despite a fully valid session.
+    // This contradicts this file's own documented security model above
+    // ("Authenticated requests → tenant is locked to req.session.tenantSlug").
+    if (sessionTenant === 'master') {
+      req.tenantSlug = 'master';
+      return tenantStorage.run('master', next);
+    }
+
     // Check if this is a Vercentic internal admin (can switch tenants for support)
     const userId = req.session.userId || req.headers['x-user-id'];
     const masterStore = storeCache['master'] || loadTenantStore(null);
