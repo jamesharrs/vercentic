@@ -281,7 +281,7 @@ const MessageDetail = ({ msgId, environmentId, onUpdate, onNavigate }) => {
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#F8FAFF' }}>
         {thread.length > 0
           ? thread.map((t, i) => <ThreadBubble key={i} msg={t} isInbound={t.direction === 'inbound' || (!!t.from_email && !t.to_email)} />)
-          : <ThreadBubble msg={{ ...msg, body: msg.body_text }} isInbound={true} />
+          : <ThreadBubble msg={msg} isInbound={true} />
         }
         <div ref={threadEndRef} />
       </div>
