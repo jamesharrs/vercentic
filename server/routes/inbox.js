@@ -219,7 +219,25 @@ router.get('/:id', (req, res) => {
     const inbound = (store.inbound_messages || []).filter(m =>
       m.thread_id === thread_id && !coveredInboundIds.has(m.id)
     );
-    thread = [...comms, ...inbound].sort((a, b) =>
+    thread = [...comms, ...inbound];
+    // Guard against the original message vanishing the instant someone replies.
+    // A communication-sourced message's own row may never have had thread_id
+    // backfilled (older rows, or a reply sent before the backfill fix below
+    // existed) — on such a row, `thread_id` above is only a *computed*
+    // fallback (msg.id), which doesn't equal the row's actual (falsy) stored
+    // thread_id, so the filters above can never match msg's own row. Before
+    // any reply exists this goes unnoticed because thread.length is 0 and the
+    // caller falls back to rendering `msg` directly (see below); the instant
+    // a reply is sent, thread.length becomes >0 (the reply matches, since it
+    // was created with thread_id = msg.thread_id || msg.id) — that fallback
+    // stops firing, and the original message disappears entirely. Reported
+    // verbatim as "when i reply the original message disappears". Explicitly
+    // re-including msg here (deduped) fixes that regardless of backfill state.
+    const alreadyIncluded = thread.some(t =>
+      t.id === msg.id || t.inbound_message_id === msg.id
+    );
+    if (!alreadyIncluded) thread.push(msg);
+    thread.sort((a, b) =>
       new Date(a.sent_at || a.received_at) - new Date(b.sent_at || b.received_at));
   }
   const matched_record_id = source === 'inbound_message' ? msg.matched_record_id : msg.record_id;
@@ -390,6 +408,12 @@ router.post('/:id/reply', async (req, res) => {
     if (idx !== -1) {
       store.inbound_messages[idx].read = true;
       store.inbound_messages[idx].read_at = new Date().toISOString();
+      // Backfill thread_id onto the original row if it never had one — see
+      // the matching comment in GET /:id for why an unbackfilled row makes
+      // the original message vanish the instant a reply is sent.
+      if (!store.inbound_messages[idx].thread_id) {
+        store.inbound_messages[idx].thread_id = comm.thread_id;
+      }
     }
     saveStore(store);
     return res.json({ ...comm, dispatch_error: dispatchResult.error || null });
@@ -441,6 +465,12 @@ router.post('/:id/reply', async (req, res) => {
   if (idx !== -1) {
     store.communications[idx].read = true;
     store.communications[idx].read_at = new Date().toISOString();
+    // Backfill thread_id onto the original row if it never had one — see
+    // the matching comment in GET /:id for why an unbackfilled row makes
+    // the original message vanish the instant a reply is sent.
+    if (!store.communications[idx].thread_id) {
+      store.communications[idx].thread_id = comm.thread_id;
+    }
   }
   saveStore(store);
   res.json({ ...comm, dispatch_error: dispatchResult.error || null });
