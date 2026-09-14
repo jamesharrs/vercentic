@@ -6,7 +6,7 @@ import RichTextEditor, { htmlToText } from "./RichTextEditor.jsx";
 
 // ─── Shared helpers (inline to avoid circular imports) ───────────────────────
 import api from './apiClient.js';
-import { tFetch } from './apiClient.js';
+import { tFetch, authHeaders, API_ORIGIN } from './apiClient.js';
 
 
 
@@ -194,6 +194,13 @@ export function ComposeModal({
   const [aiLength,   setAiLength]  = useState("concise");
   const [saving,     setSaving]    = useState(false);
   const [linkedJobs, setLinkedJobs] = useState([]);
+  // Tracks whether the linked-jobs fetch below has settled (success OR failure).
+  // A plain ref, not state — nothing needs to re-render off this, and
+  // applyTemplate (called from an inline onClick, not memoized) just needs to
+  // read the *current* value synchronously, closing the race where a template
+  // is applied before the fetch resolves and every job-derived tag (job_title,
+  // company_name, etc.) silently substitutes blank.
+  const linkedJobsLoadedRef = useRef(false);
   const [relatedRecordId, setRelated] = useState(defaultRelatedRecordId || "");
   const [providerStatus,  setProviderStatus] = useState(null);
   const [brandColor, setBrandColor] = useState("#4361EE");
@@ -224,9 +231,14 @@ export function ComposeModal({
   }, []);
 
   // Load user signature preferences (and org fallback)
+  // NOTE: deliberately plain fetch() (not api.get()) — kept silent-failure on 401
+  // so a stale/expired session on this purely cosmetic lookup never triggers the
+  // app-wide 'vercentic:unauthenticated' logout event that api.get() dispatches.
+  // Still needs the API_ORIGIN prefix + authHeaders() like every other call here,
+  // otherwise in production it hits the app's own host instead of the API host.
   useEffect(() => {
-    fetch("/api/users/me/preferences", { credentials: "include" })
-      .then(r => r.json())
+    fetch(`${API_ORIGIN}/api/users/me/preferences`, { credentials: "include", headers: authHeaders() })
+      .then(r => r.ok ? r.json() : null)
       .then(prefs => {
         if (prefs?.email_footer) {
           setUserSignature(prefs.email_footer);
@@ -234,8 +246,8 @@ export function ComposeModal({
           setOrgSignature(environment.default_email_footer);
         } else if (environment?.id) {
           // Fetch org default from environment
-          fetch(`/api/environments/${environment.id}`, { credentials: "include" })
-            .then(r => r.json())
+          fetch(`${API_ORIGIN}/api/environments/${environment.id}`, { credentials: "include", headers: authHeaders() })
+            .then(r => r.ok ? r.json() : null)
             .then(env => { if (env?.default_email_footer) setOrgSignature(env.default_email_footer); })
             .catch(() => {});
         }
@@ -244,13 +256,18 @@ export function ComposeModal({
   }, [environment?.id]); // eslint-disable-line
 
   useEffect(() => {
-    if (!record?.id || !environment?.id) return;
+    if (!record?.id || !environment?.id) {
+      linkedJobsLoadedRef.current = true;
+      return;
+    }
+    linkedJobsLoadedRef.current = false;
     // open_only=false — the Linked Records panel shows every link regardless of job
     // status, so the "Related to" picker must offer the same set or they disagree.
     // NOTE: tFetch (apiClient) already resolves to parsed JSON — never call .json() on it.
     tFetch(`/api/records/linked-jobs?person_id=${record.id}&environment_id=${environment.id}&open_only=false`)
       .then(d => setLinkedJobs(Array.isArray(d) ? d : []))
-      .catch(e => { console.warn('[compose] linked-jobs load failed', e); setLinkedJobs([]); });
+      .catch(e => { console.warn('[compose] linked-jobs load failed', e); setLinkedJobs([]); })
+      .finally(() => { linkedJobsLoadedRef.current = true; });
   }, [record?.id, environment?.id]);
 
   useEffect(() => {
@@ -290,9 +307,27 @@ export function ComposeModal({
   }, [type]); // eslint-disable-line
 
   // ── Helpers ──────────────────────────────────────────────────────────────
-  const buildVars = () => {
+  // Company name isn't a Jobs field at all (the standard Jobs schema has no
+  // `company`/`entity` field — `entity` only exists on People, conditional on
+  // person_type === 'Employee') — so it was never resolvable via jd.company /
+  // jd.entity. The correct source is the environment's brand kit, same
+  // `company_name || theme.companyName || name` fallback chain the server
+  // already uses for public-facing pages (server/utils/brandKit.js,
+  // ai_interview.js, bot.js). brandKits here is loaded raw (GET /api/brand-kits
+  // does not run it through toBrandPayload), so replicate the fallback chain.
+  const resolveBrandCompanyName = () => {
+    const kit = brandKits.find(k => k.id === selectedKitId) || brandKits.find(k => k.is_default) || brandKits[0];
+    if (!kit) return "";
+    return kit.company_name || kit.theme?.companyName || kit.name || "";
+  };
+  // jobIdOverride / jobRecordOverride let callers (e.g. confirmTplContext, which
+  // may pick a job from the "search all jobs" fallback list that isn't in
+  // linkedJobs) resolve against a specific job without depending on component
+  // state having caught up yet.
+  const buildVars = (jobIdOverride, jobRecordOverride) => {
     const d = record?.data || {};
-    const selectedJob = linkedJobs.find(j => j.id === relatedRecordId) || linkedJobs[0];
+    const targetJobId = jobIdOverride !== undefined ? jobIdOverride : relatedRecordId;
+    const selectedJob = jobRecordOverride || linkedJobs.find(j => j.id === targetJobId) || linkedJobs[0];
     const jd = selectedJob?.data || {};
     return {
       candidate_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
@@ -300,13 +335,21 @@ export function ComposeModal({
       full_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
       email: d.email || d.email_address || "", phone: d.phone || d.mobile || "",
       current_title: d.current_title || d.job_title || "", location: d.location || "",
-      job_title: jd.job_title || jd.title || jd.name || "", job_location: jd.location || "",
-      department: jd.department || "", company_name: jd.company || jd.entity || "",
+      job_title: jd.job_title || jd.title || jd.name || "",
+      job_name: jd.job_title || jd.title || jd.name || "",
+      job_location: jd.location || "",
+      job_department: jd.department || "",
+      job_work_type: jd.work_type || jd.employment_type || "",
+      job_salary_min: jd.salary_min != null ? String(jd.salary_min) : "",
+      job_salary_max: jd.salary_max != null ? String(jd.salary_max) : "",
+      job_description: jd.description || jd.job_description || "",
+      department: jd.department || "",
+      company_name: resolveBrandCompanyName(),
       recruiter_name: "",
     };
   };
-  const substitute = (text) =>
-    (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => { const v = buildVars(); return v[k] !== undefined ? v[k] : m; });
+  const substitute = (text, jobIdOverride, jobRecordOverride) =>
+    (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => { const v = buildVars(jobIdOverride, jobRecordOverride); return v[k] !== undefined ? v[k] : m; });
 
   const applyTemplate = async (tpl) => {
     if (!tpl) return;
@@ -321,6 +364,23 @@ export function ComposeModal({
       }).join(" ");
     const usedVars = (templateText.match(/\{\{(\w+)\}\}/g) || []).map(m => m.slice(2,-2));
     const needsJob = usedVars.some(v => JOB_VARS.includes(v));
+
+    // A job is already related (e.g. this compose modal was opened with
+    // defaultRelatedRecordId pre-set, so the picker branch below never runs) but
+    // the mount-time linked-jobs fetch may not have resolved yet. Applying the
+    // template immediately in that state was the root cause of every job tag
+    // (job_title, company_name, etc.) silently substituting blank at once —
+    // linkedJobs.find(...) || linkedJobs[0] both evaluate against an empty
+    // array. Wait briefly (fails open after 1.5s so a slow/broken fetch can
+    // never block sending) rather than substituting against nothing.
+    if (needsJob && relatedRecordId && !linkedJobsLoadedRef.current) {
+      await new Promise(resolve => {
+        const started = Date.now();
+        const iv = setInterval(() => {
+          if (linkedJobsLoadedRef.current || Date.now() - started > 1500) { clearInterval(iv); resolve(); }
+        }, 40);
+      });
+    }
 
     // If template needs job data and none is selected yet — show picker
     if (needsJob && !relatedRecordId) {
@@ -355,24 +415,14 @@ export function ComposeModal({
     // Re-run applyTemplate with the job now set — use a microtask so state settles
     setTimeout(() => {
       setSelTpl(tpl);
-      // Rebuild vars with the newly selected job
+      // The picker can offer a job from the "search all jobs" fallback list
+      // (tplCtxAllJobs) that isn't in linkedJobs yet — resolve it explicitly and
+      // pass it straight into the shared buildVars/substitute rather than
+      // maintaining a second, separately-drifting copy of the vars object.
       const selectedJob = linkedJobs.find(j => j.id === jobId) || tplCtxAllJobs.find(j => j.id === jobId);
-      const d = record?.data || {};
-      const jd = selectedJob?.data || {};
-      const vars = {
-        candidate_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
-        first_name: d.first_name || "Candidate", last_name: d.last_name || "",
-        full_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
-        email: d.email || d.email_address || "", phone: d.phone || d.mobile || "",
-        current_title: d.current_title || d.job_title || "", location: d.location || "",
-        job_title: jd.job_title || jd.title || jd.name || jd.job_title || "",
-        job_location: jd.location || jd.job_location || "",
-        department: jd.department || "", company_name: jd.company || jd.entity || "",
-        recruiter_name: "",
-      };
-      const sub = (text) => (text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => vars[k] !== undefined ? vars[k] : m);
-      setSubject(sub(tpl.subject || ""));
-      setBody(sub(tpl.body || ""));
+      setSubject(substitute(tpl.subject || "", jobId, selectedJob));
+      setBody(substitute(tpl.body || "", jobId, selectedJob));
+      if (tpl.brand_kit_id) setSelectedKitId(tpl.brand_kit_id);
       setMode("write");
     }, 0);
   };
