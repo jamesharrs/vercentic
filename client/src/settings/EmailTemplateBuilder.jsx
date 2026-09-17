@@ -89,11 +89,23 @@ const BLOCK_TYPES = [
   { type: 'ai_content', label: '✦ AI Content', icon: 'zap', description: 'AI-generated personalised content — write a prompt, Claude fills it in at send time using the candidate and job data' },
 ];
 
-const MERGE_TAGS = {
+// Static base tags. Candidate/Job are extended at render time with whatever
+// custom fields an admin has added via Settings → Data Model — see
+// dynamicFields state + the live MERGE_TAGS built inside the component below
+// (same candidate_<api_key>/job_<api_key> convention as the compose modal's
+// buildVars() in Communications.jsx, so a tag copied from here always
+// resolves the same way there). interview_link and offer_url are included
+// now that both genuinely resolve in that modal (offer_url via the existing
+// Candidate Hub self-service portal, interview_link via the interview's
+// meeting_link). feedback_url and reschedule_url are deliberately still
+// omitted — no interviewer-feedback subsystem exists yet, and reschedule_url
+// isn't resolvable from ad-hoc compose (it's generated server-side today for
+// automated emails only).
+const BASE_MERGE_TAGS = {
   'Candidate': ['first_name', 'last_name', 'email', 'phone', 'current_title', 'current_company', 'location', 'skills'],
   'Job': ['job_title', 'job_department', 'job_location', 'job_salary_min', 'job_salary_max', 'job_work_type'],
-  'Interview': ['interview_date', 'interview_time', 'interview_format', 'interview_location'],
-  'Offer': ['offer_salary', 'offer_start_date', 'offer_expiry_date'],
+  'Interview': ['interview_date', 'interview_time', 'interview_format', 'interview_location', 'interview_link'],
+  'Offer': ['offer_salary', 'offer_start_date', 'offer_expiry_date', 'offer_url'],
   'Company': ['company_name', 'company_website', 'current_year'],
   'Links': ['portal_link', 'unsubscribe_link', 'privacy_link'],
 };
@@ -133,6 +145,37 @@ export default function EmailTemplateBuilder({ environment }) {
   const htmlFileRef = useRef(null);
 
   const envId = environment?.id;
+
+  // Admin-added custom fields on People/Jobs, surfaced as extra
+  // candidate_<api_key>/job_<api_key> merge tags — same technique and same
+  // resulting tag names as buildVars() in Communications.jsx, so anything
+  // copied from this picker resolves correctly there. Resolved via
+  // /api/objects rather than a hardcoded object id, since a tenant's
+  // People/Jobs object could in principle be renamed/re-slugged.
+  const [dynamicFields, setDynamicFields] = useState({ candidate: [], job: [] });
+  useEffect(() => {
+    if (!envId) { setDynamicFields({ candidate: [], job: [] }); return; }
+    api.get(`/objects?environment_id=${envId}`).then(objs => {
+      const arr = Array.isArray(objs) ? objs : [];
+      const peopleObj = arr.find(o => o.slug === 'people');
+      const jobsObj = arr.find(o => o.slug === 'jobs');
+      if (peopleObj) {
+        api.get(`/fields?object_id=${peopleObj.id}&environment_id=${envId}`)
+          .then(d => setDynamicFields(prev => ({ ...prev, candidate: (Array.isArray(d) ? d : []).filter(f => f?.api_key).map(f => `candidate_${f.api_key}`) })))
+          .catch(() => {});
+      }
+      if (jobsObj) {
+        api.get(`/fields?object_id=${jobsObj.id}&environment_id=${envId}`)
+          .then(d => setDynamicFields(prev => ({ ...prev, job: (Array.isArray(d) ? d : []).filter(f => f?.api_key).map(f => `job_${f.api_key}`) })))
+          .catch(() => {});
+      }
+    }).catch(() => {});
+  }, [envId]);
+  const MERGE_TAGS = {
+    ...BASE_MERGE_TAGS,
+    Candidate: [...BASE_MERGE_TAGS.Candidate, ...dynamicFields.candidate],
+    Job: [...BASE_MERGE_TAGS.Job, ...dynamicFields.job],
+  };
 
   const load = useCallback(async () => {
     if (!envId) { setLoading(false); return; }

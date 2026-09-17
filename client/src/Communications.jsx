@@ -202,6 +202,31 @@ export function ComposeModal({
   // company_name, etc.) silently substitutes blank.
   const linkedJobsLoadedRef = useRef(false);
   const [relatedRecordId, setRelated] = useState(defaultRelatedRecordId || "");
+  // Interview/offer context — deliberately separate from relatedRecordId (the
+  // job picker) rather than generalizing that state into a tri-type union.
+  // relatedRecordId feeds a delicate, already-hardened flow (needsJob /
+  // linkedJobsLoadedRef / the template context-picker modal — see the
+  // race-condition comment above and PR #211) and rewiring it to also branch
+  // on interview/offer would risk regressing something that was just fixed in
+  // production. These are purely additive: if unset, every interview_*/offer_*
+  // tag below simply resolves to "" (same safe-degrade behavior job_* tags
+  // already have when linkedJobs is empty) instead of blocking send.
+  const [linkedInterviews, setLinkedInterviews] = useState([]);
+  const [linkedOffers,     setLinkedOffers]     = useState([]);
+  const [relatedInterviewId, setRelatedInterview] = useState("");
+  const [relatedOfferId,     setRelatedOffer]     = useState("");
+  // Dynamic custom fields for candidate_*/job_* tags — the actual fix for
+  // "the platform has a variable data model": whatever fields an admin adds to
+  // People/Jobs via Settings become merge tags automatically, no code change.
+  const [candidateFields, setCandidateFields] = useState([]);
+  const [jobFields,       setJobFields]       = useState([]);
+  // Offer acceptance link (Candidate Hub) — resolved async via the existing,
+  // already-shipped /api/candidate-hub/token endpoint (recruiter-authenticated,
+  // token-authenticated-thereafter — see server/routes/candidate_hub.js and
+  // client/src/CandidateHub.jsx). Kept out of buildVars() itself since that
+  // function is called synchronously/inline elsewhere; this is populated by an
+  // effect below whenever relatedOfferId changes.
+  const [offerHubUrl, setOfferHubUrl] = useState("");
   const [providerStatus,  setProviderStatus] = useState(null);
   const [brandColor, setBrandColor] = useState("#4361EE");
   const [brandLogo,  setBrandLogo]  = useState("");
@@ -270,6 +295,71 @@ export function ComposeModal({
       .finally(() => { linkedJobsLoadedRef.current = true; });
   }, [record?.id, environment?.id]);
 
+  // Candidate's interviews/offers — for the "Related to" interview/offer
+  // pickers below and for interview_*/offer_* merge-tag resolution. Best-effort:
+  // a 403 (e.g. a role without interview/offer view permission) just leaves the
+  // picker hidden rather than blocking compose entirely.
+  useEffect(() => {
+    if (!record?.id || !environment?.id) { setLinkedInterviews([]); setLinkedOffers([]); return; }
+    api.get(`/interviews?environment_id=${environment.id}&candidate_id=${record.id}`)
+      .then(d => setLinkedInterviews(Array.isArray(d) ? d : []))
+      .catch(() => setLinkedInterviews([]));
+    api.get(`/offers?environment_id=${environment.id}&candidate_id=${record.id}`)
+      .then(d => setLinkedOffers(Array.isArray(d) ? d : []))
+      .catch(() => setLinkedOffers([]));
+  }, [record?.id, environment?.id]);
+
+  // Dynamic candidate_*/job_* custom-field tags — query the real field
+  // definitions for the People and Jobs objects (same technique already proven
+  // in server/agent-engine.js:executeAgentForRecord for AI prompt context: pull
+  // every field for an object_id, system and admin-added alike, then key off
+  // its api_key). Resolves the object ids from /api/objects rather than
+  // hardcoding, since a tenant's People/Jobs object could in principle be
+  // renamed/re-sluggged.
+  useEffect(() => {
+    if (!environment?.id) { setCandidateFields([]); setJobFields([]); return; }
+    api.get(`/objects?environment_id=${environment.id}`).then(objs => {
+      const arr = Array.isArray(objs) ? objs : [];
+      const peopleObj = arr.find(o => o.slug === 'people');
+      const jobsObj   = arr.find(o => o.slug === 'jobs');
+      if (peopleObj) {
+        api.get(`/fields?object_id=${peopleObj.id}&environment_id=${environment.id}`)
+          .then(d => setCandidateFields(Array.isArray(d) ? d : [])).catch(() => setCandidateFields([]));
+      }
+      if (jobsObj) {
+        api.get(`/fields?object_id=${jobsObj.id}&environment_id=${environment.id}`)
+          .then(d => setJobFields(Array.isArray(d) ? d : [])).catch(() => setJobFields([]));
+      }
+    }).catch(() => {});
+  }, [environment?.id]);
+
+  // Offer acceptance link — refresh (or issue) a Candidate Hub token whenever a
+  // specific offer becomes the "related to" context. Reuses the existing,
+  // already-shipped self-service portal rather than inventing a new
+  // token/public-page scheme; see server/routes/candidate_hub.js. Best-effort:
+  // if this call fails (e.g. permission, network), offer_url just stays blank
+  // and the rest of the compose flow is unaffected.
+  //
+  // Deliberately gated on an EXPLICIT relatedOfferId (not defaulted to
+  // linkedOffers[0] the way offer_salary/offer_start_date/offer_expiry_date
+  // are in buildVars() below) — POST /candidate-hub/token revokes the
+  // candidate's existing active hub token before issuing a new one. This is
+  // a live, real, candidate-facing credential on a production system: minting
+  // one as a passive side effect of merely opening this modal (e.g. to send
+  // an unrelated SMS reminder) would silently invalidate a link the
+  // candidate may already have saved/bookmarked. Requiring the recruiter to
+  // actively pick the offer from the dropdown below means a token is only
+  // (re)issued when someone genuinely intends to reference it — one extra
+  // click versus the job/interview pickers, but the safer trade-off here.
+  useEffect(() => {
+    if (!relatedOfferId || !record?.id || !environment?.id) { setOfferHubUrl(""); return; }
+    let cancelled = false;
+    api.post('/candidate-hub/token', { candidate_id: record.id, environment_id: environment.id })
+      .then(d => { if (!cancelled) setOfferHubUrl(d?.hub_url || ""); })
+      .catch(() => { if (!cancelled) setOfferHubUrl(""); });
+    return () => { cancelled = true; };
+  }, [relatedOfferId, record?.id, environment?.id]);
+
   useEffect(() => {
     if (type === "email" && environment?.id) {
       api.get(`/email-templates?environment_id=${environment.id}`)
@@ -320,16 +410,58 @@ export function ComposeModal({
     if (!kit) return "";
     return kit.company_name || kit.theme?.companyName || kit.name || "";
   };
+  // Render a field's raw stored value as merge-tag text, per its configured
+  // field_type — used for the dynamic candidate_*/job_* custom-field tags
+  // below. Kept deliberately simple/defensive since this runs against
+  // whatever an admin has put in Settings → Data Model, not a fixed schema.
+  const formatFieldValue = (value, field_type) => {
+    if (value === null || value === undefined || value === "") return "";
+    if (Array.isArray(value)) {
+      return value.map(v => (v && typeof v === "object" ? (v.name || v.label || v.id || "") : v)).filter(Boolean).join(", ");
+    }
+    if (field_type === "boolean") return value ? "Yes" : "No";
+    if (field_type === "date" && typeof value === "string") {
+      const dt = new Date(value);
+      return isNaN(dt.getTime()) ? value : dt.toLocaleDateString();
+    }
+    if (typeof value === "object") return value.name || value.label || value.id || "";
+    return String(value);
+  };
   // jobIdOverride / jobRecordOverride let callers (e.g. confirmTplContext, which
   // may pick a job from the "search all jobs" fallback list that isn't in
   // linkedJobs) resolve against a specific job without depending on component
-  // state having caught up yet.
+  // state having caught up yet. There's no equivalent override for
+  // interview/offer — those aren't routed through the tplCtxPicker confirm
+  // flow (see the "Related interview"/"Related offer" pickers below), they
+  // just read current relatedInterviewId/relatedOfferId state directly.
   const buildVars = (jobIdOverride, jobRecordOverride) => {
     const d = record?.data || {};
     const targetJobId = jobIdOverride !== undefined ? jobIdOverride : relatedRecordId;
     const selectedJob = jobRecordOverride || linkedJobs.find(j => j.id === targetJobId) || linkedJobs[0];
     const jd = selectedJob?.data || {};
+    const selectedInterview = linkedInterviews.find(i => i.id === relatedInterviewId) || linkedInterviews[0];
+    const selectedOffer = linkedOffers.find(o => o.id === relatedOfferId) || linkedOffers[0];
+
+    // Dynamic candidate_*/job_* tags — the actual "variable data model" fix:
+    // whatever fields an admin has added to the People/Jobs objects via
+    // Settings show up here automatically as candidate_<api_key>/job_<api_key>,
+    // no code change required. Spread first so the curated named keys below
+    // (which encode real fallback/composition logic, e.g. candidate_name
+    // joining first+last) always win on any key collision.
+    const dynamicCandidateVars = {};
+    (candidateFields || []).forEach(f => {
+      if (!f?.api_key) return;
+      dynamicCandidateVars[`candidate_${f.api_key}`] = formatFieldValue(d[f.api_key], f.field_type);
+    });
+    const dynamicJobVars = {};
+    (jobFields || []).forEach(f => {
+      if (!f?.api_key) return;
+      dynamicJobVars[`job_${f.api_key}`] = formatFieldValue(jd[f.api_key], f.field_type);
+    });
+
     return {
+      ...dynamicCandidateVars,
+      ...dynamicJobVars,
       candidate_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
       first_name: d.first_name || "Candidate", last_name: d.last_name || "",
       full_name: [d.first_name, d.last_name].filter(Boolean).join(" ") || "Candidate",
@@ -346,6 +478,35 @@ export function ComposeModal({
       department: jd.department || "",
       company_name: resolveBrandCompanyName(),
       recruiter_name: "",
+      // Interview — resolved from the real Interview record (see the
+      // "Related interview" picker below). No location field exists on
+      // interviews today (confirmed against server/routes/interviews.js), so
+      // interview_location falls back to the meeting link rather than a
+      // field that doesn't exist.
+      interview_date: selectedInterview?.date || "",
+      interview_time: selectedInterview?.time || "",
+      interview_format: selectedInterview?.format || "",
+      interview_location: selectedInterview?.meeting_link || "",
+      interview_link: selectedInterview?.meeting_link || "",
+      // Offer — resolved from the real Offer record (see the "Related offer"
+      // picker below). offer_url reuses the existing, already-shipped
+      // Candidate Hub self-service portal (server/routes/candidate_hub.js) —
+      // not a new page or token scheme — kept in sync by the effect above
+      // whenever relatedOfferId changes.
+      offer_salary: selectedOffer?.base_salary != null
+        ? (selectedOffer.currency ? `${selectedOffer.currency} ${Number(selectedOffer.base_salary).toLocaleString()}` : String(selectedOffer.base_salary))
+        : "",
+      offer_start_date: selectedOffer?.start_date || "",
+      offer_expiry_date: selectedOffer?.expiry_date || "",
+      offer_url: offerHubUrl || "",
+      // feedback_url / reschedule_url intentionally NOT defined here — no
+      // interviewer-feedback/scorecard subsystem exists yet (feedback_url),
+      // and reschedule_url isn't resolvable from this ad-hoc compose modal
+      // (it's generated server-side today for automated emails — see
+      // server/routes/reschedule.js). Leaving them undefined means
+      // substitute() leaves "{{feedback_url}}" literally in the text rather
+      // than silently blanking it — the safer failure mode until/unless
+      // those features get built.
     };
   };
   const substitute = (text, jobIdOverride, jobRecordOverride) =>
@@ -353,8 +514,20 @@ export function ComposeModal({
 
   const applyTemplate = async (tpl) => {
     if (!tpl) return;
-    // Detect which variable groups the template needs
-    const JOB_VARS = ["job_title","job_location","job_department","job_salary_min","job_salary_max","job_work_type","job_name","job_description","interview_date","interview_time","interview_format","interview_location","offer_salary","offer_start_date","offer_expiry_date","offer_url","feedback_url","reschedule_url","interview_link"];
+    // Detect which variable groups the template needs. "Needs job" is defined
+    // structurally — the job_* tag namespace, plus the one curated exception
+    // "department" — rather than as a fixed tag list, so any admin-added
+    // custom field on the Jobs object (which becomes job_<api_key> via the
+    // dynamic tags in buildVars() above) automatically triggers the "pick a
+    // job" flow too, not just the handful of fields that were hardcoded
+    // before. Interview/offer tags are deliberately excluded from this check:
+    // they resolve independently via the "Related interview"/"Related offer"
+    // pickers below (falling back to the candidate's only interview/offer
+    // when there's just one). Previously lumping them into this same list
+    // meant a template using ONLY interview_date, say, would still pop the
+    // "which job?" picker for no reason — selecting a job never did anything
+    // for an interview/offer tag.
+    const JOB_VARS_EXTRA = ["department"];
     const templateText = (tpl.subject || "") + " " + (tpl.body || "") + " " +
       (tpl.html_body || "") + " " +
       (tpl.blocks || []).map(b => {
@@ -363,7 +536,7 @@ export function ComposeModal({
         return ct + " " + pr;
       }).join(" ");
     const usedVars = (templateText.match(/\{\{(\w+)\}\}/g) || []).map(m => m.slice(2,-2));
-    const needsJob = usedVars.some(v => JOB_VARS.includes(v));
+    const needsJob = usedVars.some(v => v.startsWith("job_") || JOB_VARS_EXTRA.includes(v));
 
     // A job is already related (e.g. this compose modal was opened with
     // defaultRelatedRecordId pre-set, so the picker branch below never runs) but
@@ -387,7 +560,7 @@ export function ComposeModal({
       setTplCtxLoading(true);
       setTplCtxSearch("");
       setTplCtxAllJobs([]);
-      setTplCtxPicker({ tpl, missingVars: usedVars.filter(v => JOB_VARS.includes(v)) });
+      setTplCtxPicker({ tpl, missingVars: usedVars.filter(v => v.startsWith("job_") || JOB_VARS_EXTRA.includes(v)) });
       // Load all jobs in background for the "search all" fallback
       try {
         const allRecs = await api.get(`/records?object_slug=jobs&environment_id=${environment?.id}&limit=100`);
@@ -619,6 +792,48 @@ export function ComposeModal({
               fontSize:12, background: relatedRecordId ? `${accent}08` : bg, outline:"none", cursor:"pointer", fontFamily:"inherit" }}>
             <option value="">General</option>
             {linkedJobs.map(j => <option key={j.id} value={j.id}>{j.title || j.name}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Related interview — additive sibling to the job picker above, not
+          routed through tplCtxPicker (see buildVars/applyTemplate comments).
+          Only shown when the candidate actually has interviews; defaults to
+          the most recent one via buildVars()'s linkedInterviews[0] fallback
+          so single-interview candidates (the common case) need no picker
+          interaction at all for interview_* tags to resolve. */}
+      {linkedInterviews.length > 0 && (
+        <div>
+          <label style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", display:"block", marginBottom:4 }}>Related interview</label>
+          <select value={relatedInterviewId} onChange={e => setRelatedInterview(e.target.value)}
+            style={{ width:"100%", padding:"7px 10px", borderRadius:8, border:`1.5px solid ${relatedInterviewId ? accent : border}`,
+              fontSize:12, background: relatedInterviewId ? `${accent}08` : bg, outline:"none", cursor:"pointer", fontFamily:"inherit" }}>
+            <option value="">{linkedInterviews.length > 1 ? "Most recent" : "This interview"}</option>
+            {linkedInterviews.map(iv => (
+              <option key={iv.id} value={iv.id}>
+                {iv.interview_type_name || iv.job_name || "Interview"}{iv.date ? ` · ${iv.date}` : ""}{iv.time ? ` ${iv.time}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Related offer — same pattern. Selecting/defaulting an offer also
+          (re)issues a Candidate Hub token for offer_url via the effect above
+          (reuses the existing candidate self-service portal, not a new
+          page/token scheme — see server/routes/candidate_hub.js). */}
+      {linkedOffers.length > 0 && (
+        <div>
+          <label style={{ fontSize:10, fontWeight:700, color:C.text3, textTransform:"uppercase", letterSpacing:".05em", display:"block", marginBottom:4 }}>Related offer</label>
+          <select value={relatedOfferId} onChange={e => setRelatedOffer(e.target.value)}
+            style={{ width:"100%", padding:"7px 10px", borderRadius:8, border:`1.5px solid ${relatedOfferId ? accent : border}`,
+              fontSize:12, background: relatedOfferId ? `${accent}08` : bg, outline:"none", cursor:"pointer", fontFamily:"inherit" }}>
+            <option value="">{linkedOffers.length > 1 ? "Most recent" : "This offer"}</option>
+            {linkedOffers.map(o => (
+              <option key={o.id} value={o.id}>
+                {o.job_name || "Offer"}{o.base_salary != null ? ` · ${o.currency || ""} ${Number(o.base_salary).toLocaleString()}` : ""}
+              </option>
+            ))}
           </select>
         </div>
       )}
